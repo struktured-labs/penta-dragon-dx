@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+
+# ROMs (never commit originals)
+rom/
+*.gb
+*.gbc
+
+# Build / Dist
+/dist/
+
+# Editors
+.vscode/
