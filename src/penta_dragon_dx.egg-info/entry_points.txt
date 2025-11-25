@@ -1,0 +1,2 @@
+[console_scripts]
+penta-colorize = penta_dragon_dx.cli:main

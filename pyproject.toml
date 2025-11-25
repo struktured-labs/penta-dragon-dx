@@ -1,0 +1,26 @@
+[project]
+name = "penta-dragon-dx"
+version = "0.1.0"
+description = "Colorization toolkit for Penta Dragon (GB to GBC)"
+authors = [ { name = "Your Name" } ]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "click>=8.1",
+  "Pillow>=10.0",
+  "numpy>=1.26",
+  "PyYAML>=6.0"
+]
+
+[project.scripts]
+penta-colorize = "penta_dragon_dx.cli:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100

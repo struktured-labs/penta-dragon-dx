@@ -1,0 +1,8 @@
+bg_palettes:
+  HUD: ["7FFF", "4210", "2108", "0000"]
+  TitleScreen: ["033F", "0216", "000F", "0000"]
+obj_palettes:
+  Player: ["7C1F", "3C0F", "1C07", "0000"]
+  EnemyBasic: ["03FF", "02D5", "0192", "0000"]
+notes: |
+  Colors are placeholder BGR555 hex values. Refine after tile analysis.
