@@ -1,8 +1,13 @@
 bg_palettes:
-  HUD: ["7FFF", "4210", "2108", "0000"]
-  TitleScreen: ["033F", "0216", "000F", "0000"]
+  HUD: ["7FFF", "001F", "03E0", "7C00"]
+  TitleScreen: ["7FFF", "001F", "03E0", "7C00"]
 obj_palettes:
-  Player: ["7C1F", "3C0F", "1C07", "0000"]
-  EnemyBasic: ["03FF", "02D5", "0192", "0000"]
+  Player: ["7FFF", "001F", "03E0", "7C00"]
+  EnemyBasic: ["7FFF", "001F", "03E0", "7C00"]
 notes: |
-  Colors are placeholder BGR555 hex values. Refine after tile analysis.
+  Highly saturated test set to verify palette application:
+  - 7FFF: white
+  - 001F: pure blue
+  - 03E0: pure green
+  - 7C00: pure red
+  Replace with scene-accurate colors after confirming stub runs.

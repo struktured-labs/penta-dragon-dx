@@ -1,5 +1,8 @@
 import click
-from . import rom_utils, palette_injector, patch_builder, injector
+from pathlib import Path
+import subprocess
+import shutil
+from . import rom_utils, palette_injector, patch_builder, display_patcher
 
 @click.group()
 def main():
@@ -31,47 +34,43 @@ def verify(rom):
 @click.option("--rom", type=click.Path(exists=True), required=True)
 @click.option("--palette-file", type=click.Path(exists=True), required=True)
 @click.option("--out", type=click.Path(dir_okay=False), required=True, help="Output modified ROM copy")
-def inject(rom, palette_file, out):
-    """Inject GBC palette data and init stub into ROM."""
+@click.option("--hook-offset", type=str, default=None, help="File offset (hex like 0x1234 or dec) to patch CALL to stub")
+@click.option("--vblank", is_flag=True, help="Hook stub into VBlank interrupt vector (0x0040) instead of code offset")
+@click.option("--boot", is_flag=True, help="Hook stub into boot entry point (0x0100) - runs once at startup")
+@click.option("--late-init", is_flag=True, help="Hook after LCD init, before main loop (0x015F) - most compatible")
+@click.option("--fix-display", is_flag=True, default=True, help="Apply CGB display compatibility patches (default: enabled)")
+def inject(rom, palette_file, out, hook_offset, vblank, boot, late_init, fix_display):
+    """Inject GBC palette data and optional init stub into ROM."""
     data = rom_utils.read_rom_bytes(rom)
+    
+    # Apply display compatibility patches first if requested
+    if fix_display:
+        click.echo("Applying CGB display compatibility patches...")
+        data, display_patches = display_patcher.apply_all_display_patches(data)
+        for addr, orig, patched in display_patches:
+            click.echo(f"  Patched @0x{addr:04X}: {len(patched)} bytes")
     palettes = palette_injector.load_palettes(palette_file)
-    
-    # Build palette binary data
-    bg_bytes, obj_bytes, manifest = palette_injector.build_palette_blocks(palettes)
-    click.echo(f"Built palettes: {len(bg_bytes)} BG bytes, {len(obj_bytes)} OBJ bytes")
-    click.echo(f"Manifest: {len(manifest['bg'])} BG palettes, {len(manifest['obj'])} OBJ palettes")
-    
-    # Find best free space region
-    free_regions = rom_utils.find_free_space(data, min_len=128)
-    if not free_regions:
-        click.echo("ERROR: No suitable free space found in ROM", err=True)
-        return
-    
-    best_region = free_regions[0]
-    needed = len(bg_bytes) + len(obj_bytes) + 64  # stub code ~50 bytes + data
-    if best_region["length"] < needed:
-        click.echo(f"ERROR: Largest free region ({best_region['length']} bytes) too small for {needed} bytes", err=True)
-        return
-    
-    click.echo(f"Using free space: bank {best_region['bank']} @0x{best_region['bank_addr']:04X}, {best_region['length']} bytes")
-    
-    # Inject palette system
-    modified, info = injector.inject_palette_system(data, bg_bytes, obj_bytes, best_region["offset"])
-    click.echo(f"Injected stub at file offset 0x{info['stub_offset']:06X} (GB addr 0x{info['stub_gb_addr']:04X})")
-    click.echo(f"  Stub size: {info['stub_size']} bytes")
-    click.echo(f"  Total injected: {info['total_size']} bytes")
-    
-    # Set CGB flag in header
-    modified = injector.patch_cgb_flag(modified)
-    click.echo("Patched CGB compatibility flag in header")
-    
+    hook = None
+    if hook_offset:
+        try:
+            hook = int(hook_offset, 0)
+        except ValueError:
+            raise click.BadParameter("hook-offset must be a number (e.g., 0x1234 or 4660)")
+    modified, modifications = palette_injector.apply_palettes(data, palettes, hook_offset=(None if (vblank or boot or late_init) else hook), vblank_hook=vblank, boot_hook=boot, late_init_hook=late_init)
+    # Ensure CGB support flag is set so emulator runs in color mode
+    modified = rom_utils.set_cgb_supported(modified)
     rom_utils.write_rom_bytes(out, modified)
-    click.echo(f"\nModified ROM written to: {out}")
-    click.echo("\nNEXT STEPS:")
-    click.echo(f"1. Disassemble to find init hook point (after boot, before main loop)")
-    click.echo(f"2. Patch a CALL 0x{info['stub_gb_addr']:04X} instruction into init sequence")
-    click.echo(f"3. Generate IPS patch with: penta-colorize build-patch --original '{rom}' --modified '{out}' --out dist/penta-dx.ips")
-    click.echo(f"4. Test in SameBoy/BGB with CGB mode enabled")
+    click.echo(f"Wrote modified ROM → {out}")
+    for m in modifications:
+        if m["type"] == "inject-palettes":
+            r = m["region"]
+            click.echo(
+                f"Palette data in bank {r['bank']:02d} @0x{r['bank_addr']:04X} (file 0x{r['offset']:06X}), bg={m['bg_block']['length']} obj={m['obj_block']['length']}"
+            )
+        if m["type"] == "hook-stub":
+            click.echo(
+                f"Patched CALL at file 0x{m['hook_offset']:06X} to stub bank {m['stub_bank']:02d} @0x{m['stub_addr']:04X}"
+            )
 
 @main.command("build-patch")
 @click.option("--original", type=click.Path(exists=True), required=True)
@@ -121,3 +120,48 @@ def analyze(rom, free_min):
             bank = off // 0x4000
             bank_addr = 0x4000 + (off % 0x4000) if off >= 0x4000 else off
             click.echo(f"    bank {bank:02d} @0x{bank_addr:04X} (file 0x{off:06X})")
+
+@main.command("dev-loop")
+@click.option("--rom", type=click.Path(exists=True, dir_okay=False), required=True, help="Path to original ROM")
+@click.option("--palette-file", type=click.Path(exists=True), required=True)
+@click.option("--hook-offset", type=str, required=False, help="File offset to patch CALL to stub (hex like 0x4000); ignored if --vblank")
+@click.option("--emu", type=str, default="mgba-qt", help="Emulator command (mgba-qt, sameboy, etc.)")
+@click.option("--vblank", is_flag=True, help="Use VBlank interrupt hook instead of code offset")
+def dev_loop(rom, palette_file, hook_offset, emu, vblank):
+    """Inject palettes and stub, write working ROM, then launch emulator."""
+    hook = None
+    if not vblank:
+        if not hook_offset:
+            raise click.BadParameter("hook-offset required unless --vblank specified")
+        try:
+            hook = int(hook_offset, 0)
+        except ValueError:
+            raise click.BadParameter("hook-offset must be numeric (e.g., 0x4000)")
+
+    out_path = Path("rom/working/penta_dx.gb")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = rom_utils.read_rom_bytes(rom)
+    palettes = palette_injector.load_palettes(palette_file)
+    modified, modifications = palette_injector.apply_palettes(data, palettes, hook_offset=hook, vblank_hook=vblank)
+    # Ensure CGB support flag is set so emulator runs in color mode
+    modified = rom_utils.set_cgb_supported(modified)
+    rom_utils.write_rom_bytes(out_path, modified)
+    click.echo(f"Wrote modified ROM → {out_path}")
+    for m in modifications:
+        if m["type"] == "inject-palettes":
+            r = m["region"]
+            click.echo(
+                f"Palette data in bank {r['bank']:02d} @0x{r['bank_addr']:04X} (file 0x{r['offset']:06X}), bg={m['bg_block']['length']} obj={m['obj_block']['length']}"
+            )
+        if m["type"] == "hook-stub":
+            click.echo(
+                f"Patched CALL at file 0x{m['hook_offset']:06X} to stub bank {m['stub_bank']:02d} @0x{m['stub_addr']:04X}"
+            )
+
+    cmd = shutil.which(emu) or emu
+    try:
+        subprocess.Popen([cmd, str(out_path)])
+        click.echo(f"Launched {emu} {out_path}")
+    except Exception as e:
+        raise click.ClickException(f"Failed to launch emulator '{emu}': {e}")

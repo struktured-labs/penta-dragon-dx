@@ -118,6 +118,21 @@ def parse_header(data: bytes) -> dict:
     return header
 
 
+def set_cgb_supported(data: bytes) -> bytes:
+    """Set CGB support flag in header (0x143) to 0x80 if not already, and fix header checksum."""
+    rom = bytearray(data)
+    if len(rom) < 0x150:
+        return data
+    # Set CGB supported bit (not CGB-only)
+    rom[0x0143] = rom[0x0143] | 0x80
+    # Recompute header checksum over 0x0134-0x014C
+    calc = 0
+    for i in range(0x0134, 0x014D):
+        calc = (calc - rom[i] - 1) & 0xFF
+    rom[0x014D] = calc
+    return bytes(rom)
+
+
 def inspect_rom(path: str | Path) -> dict:
     data = read_rom_bytes(path)
     size = len(data)
@@ -170,3 +185,30 @@ def find_free_space(data: bytes, min_len: int = 64, pad_bytes: Iterable[int] = (
             i += 1
     regions.sort(key=lambda r: r["length"], reverse=True)
     return regions
+
+
+def find_nop_runs_in_bank(data: bytes, bank: int, min_len: int = 4) -> list[dict]:
+    """Find sequences of NOP (0x00) within a specific bank suitable for replacing with CALL.
+    Returns dicts with offset, bank_addr, length.
+    """
+    start_file = bank * 0x4000
+    end_file = start_file + 0x4000
+    if bank == 0:
+        # Bank 0 is 0x0000-0x3FFF
+        start_file = 0
+        end_file = 0x4000
+    runs = []
+    i = start_file
+    while i < end_file:
+        if data[i] == 0x00:
+            s = i
+            while i < end_file and data[i] == 0x00:
+                i += 1
+            l = i - s
+            if l >= min_len:
+                bank_addr = s if bank == 0 else 0x4000 + (s % 0x4000)
+                runs.append({"offset": s, "bank_addr": bank_addr, "length": l, "bank": bank})
+        else:
+            i += 1
+    runs.sort(key=lambda r: r["length"], reverse=True)
+    return runs
