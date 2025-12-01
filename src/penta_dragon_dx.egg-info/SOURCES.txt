@@ -2,9 +2,14 @@ README.md
 pyproject.toml
 src/penta_dragon_dx/__init__.py
 src/penta_dragon_dx/cli.py
+src/penta_dragon_dx/display_patcher.py
+src/penta_dragon_dx/injector.py
 src/penta_dragon_dx/palette_injector.py
+src/penta_dragon_dx/palette_loader.py
+src/penta_dragon_dx/palette_wrapper.py
 src/penta_dragon_dx/patch_builder.py
 src/penta_dragon_dx/rom_utils.py
+src/penta_dragon_dx/vblank_injector.py
 src/penta_dragon_dx.egg-info/PKG-INFO
 src/penta_dragon_dx.egg-info/SOURCES.txt
 src/penta_dragon_dx.egg-info/dependency_links.txt

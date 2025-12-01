@@ -1,13 +1,135 @@
+# Penta Dragon DX - Palette Configuration
+# Format: BGR555 hex colors (15-bit: BBBBBGGGGGRRRRR)
+# Each palette has 4 colors: [color0, color1, color2, color3]
+# For sprites: color0 = transparent (usually 0000)
+
 bg_palettes:
-  HUD: ["7FFF", "001F", "03E0", "7C00"]
-  TitleScreen: ["7FFF", "001F", "03E0", "7C00"]
+  # Palette 0: Main gameplay backgrounds
+  Dungeon:
+    name: "Dungeon Floors"
+    colors: ["7FFF", "03E0", "0280", "0000"]  # White→Green→Dark Green→Black
+    
+  # Palette 1: Lava/danger areas
+  LavaZone:
+    name: "Lava & Danger Areas"
+    colors: ["7FFF", "7C00", "5000", "2000"]  # White→Red→Dark Red→Darker
+    
+  # Palette 2: Water/ice areas
+  WaterZone:
+    name: "Water & Ice Areas"
+    colors: ["7FFF", "001F", "0014", "0008"]  # White→Blue→Dark Blue→Darker
+    
+  # Palette 3: Desert/sand areas
+  DesertZone:
+    name: "Desert & Sand Areas"
+    colors: ["7FFF", "7FE0", "5CC0", "2980"]  # White→Yellow→Orange→Brown
+    
+  # Palette 4: Forest/nature areas
+  ForestZone:
+    name: "Forest & Nature Areas"
+    colors: ["7FFF", "03FF", "02BF", "015F"]  # White→Cyan→Teal→Dark
+    
+  # Palette 5: Castle/stone areas
+  CastleZone:
+    name: "Castle & Stone Areas"
+    colors: ["7FFF", "7C1F", "5010", "2808"]  # White→Magenta→Purple→Dark
+    
+  # Palette 6: Sky/clouds
+  SkyZone:
+    name: "Sky & Clouds"
+    colors: ["7FFF", "5EF7", "3DEF", "1CE7"]  # White→Light Cyan→Cyan→Blue
+    
+  # Palette 7: Special/boss areas
+  BossZone:
+    name: "Boss & Special Areas"
+    colors: ["7FFF", "6F7B", "4E73", "2D6B"]  # White→Pink→Purple→Dark
+
 obj_palettes:
-  Player: ["7FFF", "001F", "03E0", "7C00"]
-  EnemyBasic: ["7FFF", "001F", "03E0", "7C00"]
+  # Palette 0: Main character (Penta Dragon)
+  MainCharacter:
+    name: "Penta Dragon (Player)"
+    colors: ["0000", "7FFF", "7E00", "4800"]  # Trans→White→Orange→Brown
+    notes: "Warm colors for hero character"
+    
+  # Palette 1: Basic enemies (green creatures)
+  EnemyBasic:
+    name: "Basic Enemies"
+    colors: ["0000", "7FFF", "03E0", "0100"]  # Trans→White→Green→Dark
+    notes: "Standard green enemies"
+    
+  # Palette 2: Fire enemies
+  EnemyFire:
+    name: "Fire Enemies"
+    colors: ["0000", "7FFF", "7C00", "2000"]  # Trans→White→Red→Dark
+    notes: "Red/orange for fire creatures"
+    
+  # Palette 3: Ice/water enemies
+  EnemyIce:
+    name: "Ice/Water Enemies"
+    colors: ["0000", "7FFF", "001F", "0008"]  # Trans→White→Blue→Dark
+    notes: "Blue for ice/water creatures"
+    
+  # Palette 4: Flying enemies
+  EnemyFlying:
+    name: "Flying Enemies"
+    colors: ["0000", "7FFF", "7FE0", "2980"]  # Trans→White→Yellow→Brown
+    notes: "Yellow/gold for flying creatures"
+    
+  # Palette 5: Poison/toxic enemies
+  EnemyPoison:
+    name: "Poison/Toxic Enemies"
+    colors: ["0000", "7FFF", "03FF", "015F"]  # Trans→White→Cyan→Dark
+    notes: "Cyan/green for poison creatures"
+    
+  # Palette 6: Mini-bosses
+  MiniBoss:
+    name: "Mini-Bosses"
+    colors: ["0000", "7FFF", "7C1F", "2808"]  # Trans→White→Magenta→Dark
+    notes: "Magenta/purple for mini-bosses"
+    
+  # Palette 7: Main bosses
+  MainBoss:
+    name: "Main Bosses"
+    colors: ["0000", "7FFF", "7FE0", "4A00"]  # Trans→White→Yellow→Orange
+    notes: "Bright colors for final bosses"
+
+powerup_palettes:
+  # Power-ups typically use sprite palettes, map to specific palette indices
+  health: 2      # Use EnemyFire palette (red)
+  weapon: 4      # Use EnemyFlying palette (yellow/gold)
+  shield: 3      # Use EnemyIce palette (blue)
+  special: 6     # Use MiniBoss palette (magenta)
+
+palette_mapping:
+  # Default mappings - game uses palette attributes to assign these
+  # BG palette 0 is typically used for most tiles
+  # Sprites cycle through OBJ palettes based on type
+  notes: |
+    To change which palette is used for specific elements:
+    1. Edit the colors in the palette definition above
+    2. Palettes are loaded in order: BG 0-7, then OBJ 0-7
+    3. Game code determines which palette index each sprite/tile uses
+    4. Fine-tuning requires ROM analysis to find palette attribute writes
+
 notes: |
-  Highly saturated test set to verify palette application:
-  - 7FFF: white
-  - 001F: pure blue
-  - 03E0: pure green
-  - 7C00: pure red
-  Replace with scene-accurate colors after confirming stub runs.
+  Color Format: BGR555 (15-bit color, little-endian in ROM)
+  - Bits 0-4:   Red (0-31)
+  - Bits 5-9:   Green (0-31)
+  - Bits 10-14: Blue (0-31)
+  - Bit 15:     Unused (always 0)
+  
+  Common colors:
+  - 0000: Black (or transparent for sprites)
+  - 7FFF: White
+  - 001F: Pure Red
+  - 03E0: Pure Green
+  - 7C00: Pure Blue
+  - 7FE0: Yellow (Red + Green)
+  - 7C1F: Magenta (Red + Blue)
+  - 03FF: Cyan (Green + Blue)
+  
+  To customize:
+  1. Edit colors in hex BGR555 format
+  2. Run: python3 scripts/create_dx_rom.py
+  3. Test in emulator to see results
+  4. Iterate until satisfied!
