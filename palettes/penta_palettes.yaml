@@ -57,69 +57,79 @@ bg_palettes:
     - 2D6B
 obj_palettes:
   MainCharacter:
-    name: 'TEST 0: PURE RED'
+    name: Shared Sprite Palette
     colors:
     - transparent
-    - red
-    - red
-    - red
-    notes: RED = palette 0
+    - 7C1F
+    - 7C1F
+    - 7C1F
+    notes: 'Player: pure magenta for clear differentiation'
   EnemyBasic:
-    name: 'TEST 1: PURE GREEN'
+    name: Enemy Basic
     colors:
     - transparent
-    - green
-    - green
-    - green
-    notes: GREEN = palette 1
+    - 7FE0
+    - 7FE0
+    - 7FE0
+    notes: Pure yellow
   EnemyFire:
-    name: 'TEST 2: PURE BLUE'
+    name: Enemy Fire
     colors:
     - transparent
-    - blue
-    - blue
-    - blue
-    notes: BLUE = palette 2
+    - 001F
+    - 001F
+    - 001F
+    notes: Pure red
   EnemyIce:
-    name: 'TEST 3: PURE CYAN'
+    name: Enemy Ice
     colors:
     - transparent
-    - cyan
-    - cyan
-    - cyan
-    notes: CYAN = palette 3
+    - 03FF
+    - 03FF
+    - 03FF
+    notes: Pure cyan
   EnemyFlying:
-    name: 'TEST 4: PURE MAGENTA'
+    name: Enemy Flying
     colors:
     - transparent
-    - magenta
-    - magenta
-    - magenta
-    notes: MAGENTA = palette 4
+    - 03E0
+    - 03E0
+    - 03E0
+    notes: Pure green
   EnemyPoison:
-    name: 'TEST 5: PURE YELLOW'
+    name: Enemy Poison
     colors:
     - transparent
-    - yellow
-    - yellow
-    - yellow
-    notes: YELLOW = palette 5
+    - 7C00
+    - 7C00
+    - 7C00
+    notes: Pure blue
   MiniBoss:
-    name: 'TEST 6: PURE WHITE'
+    name: Mini Boss
     colors:
     - transparent
-    - white
-    - white
-    - white
-    notes: WHITE = palette 6
+    - 7FFF
+    - 7FFF
+    - 7FFF
+    notes: Pure white
   MainBoss:
-    name: 'TEST 7: PURE ORANGE'
+    name: Main Boss
     colors:
     - transparent
-    - orange
-    - orange
-    - orange
-    notes: ORANGE = palette 7
+    - 7FE0
+    - 4A00
+    - 2100
+    notes: Yellow/orange
+
+obj_palette_map:
+  MainCharacter: 0
+  EnemyBasic: 1
+  EnemyFire: 2
+  EnemyIce: 3
+  EnemyFlying: 4
+  EnemyPoison: 5
+  MiniBoss: 6
+  MainBoss: 7
 powerup_palettes:
   health: 2
   weapon: 4

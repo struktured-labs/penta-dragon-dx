@@ -36,63 +36,115 @@ COLOR_NAMES = {
     'olive': 0x0210,
     'transparent': 0x0000,
 }
+COMMON_COLOR_NAMES = {
+    'BLACK': 0x0000,
+    'WHITE': 0x7FFF,
+    'RED':   0x001F,
+    'GREEN': 0x03E0,
+    'BLUE':  0x7C00,
+    'YELLOW':0x03FF,
+    'MAGENTA':0x7C1F,
+    'CYAN':  0x7FE0,
+}
+
+# Merge into COLOR_NAMES if it exists, else define it
+try:
+    COLOR_NAMES.update(COMMON_COLOR_NAMES)
+except NameError:
+    COLOR_NAMES = dict(COMMON_COLOR_NAMES)
 
 # Modifiers for color intensity
 DARK_SCALE = 0.5
 LIGHT_SCALE = 1.5
 
 
-def parse_color(color_str: str) -> int:
-    """Parse color string - supports hex values like '7FFF' or color names like 'red', 'dark red', 'light blue'"""
-    color_str = color_str.strip().lower()
-    
-    # Try hex format first (4 hex digits)
-    if len(color_str) == 4:
-        try:
-            return int(color_str, 16)
-        except ValueError:
-            pass
-    
-    # Check for modifiers
-    is_dark = color_str.startswith('dark ')
-    is_light = color_str.startswith('light ')
-    
-    if is_dark:
-        base_color = color_str[5:].strip()
-        modifier = DARK_SCALE
-    elif is_light:
-        base_color = color_str[6:].strip()
-        modifier = LIGHT_SCALE
-    else:
-        base_color = color_str
-        modifier = 1.0
-    
-    # Look up base color
-    if base_color in COLOR_NAMES:
-        bgr555 = COLOR_NAMES[base_color]
-        
-        # Apply modifier if not default
-        if modifier != 1.0:
-            # Extract RGB components (5 bits each)
-            r = bgr555 & 0x1F
-            g = (bgr555 >> 5) & 0x1F
-            b = (bgr555 >> 10) & 0x1F
-            
-            # Scale components
-            r = int(min(31, r * modifier))
-            g = int(min(31, g * modifier))
-            b = int(min(31, b * modifier))
-            
-            # Repack
-            bgr555 = (b << 10) | (g << 5) | r
-        
-        return bgr555
-    
-    # If all else fails, try parsing as hex with error message
-    try:
-        return int(color_str, 16)
-    except ValueError:
-        raise ValueError(f"Invalid color: '{color_str}'. Use 4-digit hex (e.g., '7FFF') or color name (e.g., 'red', 'dark blue', 'light green')")
+def parse_color(color_val) -> int:
+    """Parse color value from hex string/name/dict/int to BGR555 int."""
+    # Dict support
+    if isinstance(color_val, dict):
+        color_val = color_val.get('hex') or color_val.get('value') or color_val.get('color')
+    # Int support
+    if isinstance(color_val, int):
+        return color_val & 0x7FFF
+    if color_val is None:
+        raise ValueError("Color value is None")
+
+    s = str(color_val).strip()
+    # Strip quotes
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        s = s[1:-1].strip()
+    # Normalize 0x prefix
+    if s.lower().startswith('0x'):
+        s = s[2:]
+
+    # Named colors with optional modifiers 'light ' / 'dark '
+    # Work in lowercase for lookup
+    sl = s.lower()
+    scale = 1.0
+    if sl.startswith('light '):
+        sl = sl[6:].strip()
+        scale = 1.3
+    elif sl.startswith('dark '):
+        sl = sl[5:].strip()
+        scale = 0.7
+    if sl in COLOR_NAMES:
+        bgr = COLOR_NAMES[sl] & 0x7FFF
+        if scale != 1.0:
+            r = bgr & 0x1F
+            g = (bgr >> 5) & 0x1F
+            b = (bgr >> 10) & 0x1F
+            r = min(31, int(r * scale))
+            g = min(31, int(g * scale))
+            b = min(31, int(b * scale))
+            bgr = (b << 10) | (g << 5) | r
+        return bgr
+
+    # Hex 4 digits
+    if len(s) == 4 and all(ch in '0123456789abcdefABCDEF' for ch in s):
+        return int(s, 16) & 0x7FFF
+
+    raise ValueError(f"Invalid color: {color_val}. Use 4-hex BGR555 (e.g., '7FFF') or a known name.")
+    def parse_color(c):
+        """Parse a color which may be a hex string (e.g., '7C1F') or a name.
+
+        Accepts:
+        - plain strings: '7C1F', 'magenta', '0x7C1F', '"7C1F"'
+        - dicts with keys: 'hex', 'value', 'color'
+        Returns integer BGR555 (0..0x7FFF).
+        """
+        # Support dicts like {'hex': '7C1F'} or plain strings
+        if isinstance(c, dict):
+            c = c.get('hex') or c.get('value') or c.get('color')
+        if c is None:
+            raise ValueError(f"Invalid color entry: {c}")
+
+        if not isinstance(c, str):
+            # Allow integers directly
+            try:
+                return int(c) & 0x7FFF
+            except Exception:
+                raise ValueError(f"Invalid color entry type: {type(c)} value={c}")
+
+        s = c.strip()
+        # Strip quotes
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+            s = s[1:-1]
+        s = s.strip()
+        # Normalize 0x prefix
+        if s.lower().startswith('0x'):
+            s = s[2:]
+
+        # Named colors
+        base_upper = s.upper()
+        if base_upper in COLOR_NAMES:
+            return COLOR_NAMES[base_upper]
+
+        # Hex validation (4 hex digits for BGR555)
+        hex_chars = '0123456789abcdefABCDEF'
+        if len(s) != 4 or any(ch not in hex_chars for ch in s):
+            raise ValueError(f"Color must be 4 hex chars (BGR555) or known name, got: {c}")
+
+        return int(s, 16) & 0x7FFF
 
 
 def create_palette(c0: int, c1: int, c2: int, c3: int) -> bytes:
@@ -308,6 +360,11 @@ def main():
         chk = (chk - rom[i] - 1) & 0xFF
     rom[0x14D] = chk
     print(f"  Checksum: 0x{chk:02X}")
+
+    # NOTE: VBlank OAM palette fixer disabled for start-menu stability.
+    # The ISR hook can conflict with the game's initialization sequence.
+    # We'll set palette indices using a safer non-ISR path later.
+    print("\nVBlank OAM palette fixer is DISABLED for stability.")
     
     # Write output ROM
     output_rom.parent.mkdir(parents=True, exist_ok=True)

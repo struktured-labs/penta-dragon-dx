@@ -25,11 +25,12 @@ def _bgr555_hex_to_le_bytes(h: str) -> bytes:
 def build_palette_blocks(palettes: dict[str, Any]) -> Tuple[bytes, bytes, dict]:
     """Return (bg_bytes, obj_bytes, manifest) where bytes are LE BGR555 stream for GBC registers.
 
-    The manifest maps palette names to index ranges for potential runtime switching.
+    The manifest maps palette names to indices and byte ranges for potential runtime switching.
+    Also propagates optional `obj_palette_map` from YAML to help assign OAM palette indices per entity.
     """
     bg = bytearray()
     obj = bytearray()
-    manifest: dict[str, Any] = {"bg": {}, "obj": {}}
+    manifest: dict[str, Any] = {"bg": {}, "obj": {}, "obj_palette_map": {}}
 
     def pack_group(group: dict[str, Any], out: bytearray, section: str):
         idx = 0
@@ -60,6 +61,14 @@ def build_palette_blocks(palettes: dict[str, Any]) -> Tuple[bytes, bytes, dict]:
         pack_group(palettes["bg_palettes"], bg, "bg")
     if palettes.get("obj_palettes"):
         pack_group(palettes["obj_palettes"], obj, "obj")
+    # Optional mapping: name -> palette index (0-7)
+    opm = palettes.get("obj_palette_map")
+    if isinstance(opm, dict):
+        # Validate indices and store verbatim
+        for k, v in opm.items():
+            if not isinstance(v, int) or not (0 <= v <= 7):
+                raise ValueError(f"obj_palette_map for '{k}' must be int in [0,7], got {v!r}")
+        manifest["obj_palette_map"] = dict(opm)
     return bytes(bg), bytes(obj), manifest
 
 
