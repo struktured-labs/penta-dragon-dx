@@ -123,45 +123,73 @@ def main():
     rom[palette_data_offset:palette_data_offset+len(bg_palettes)] = bg_palettes
     rom[palette_data_offset+len(bg_palettes):palette_data_offset+len(bg_palettes)+len(obj_palettes)] = obj_palettes
     
-    # Safer VBlank wrapper approach: put wrapper at 0x07A0 that calls FF80 then loads palettes,
-    # and patch VBlank to CALL 0x07A0 in place of CALL FF80.
-    print("Installing VBlank wrapper (calls FF80, then loads palettes)...")
-    wrapper_addr = 0x07A0
-    loader_addr = 0x07B0
-    # Wrapper: one-shot guard using WRAM C0A0. If already ran, return.
-    # Otherwise CALL FF80, set flag, then CALL loader.
-    vblank_wrapper = bytes([
+    # Revert to proven input-handler trampoline (no VBlank patch):
+    # - Save original input handler (46 bytes) at bank 13 `0x6D00`.
+    # - Minimal trampoline at `0x0824` switches to bank 13 and CALLs `0x6D00`.
+    # - The bank-13 combined function runs original input inline, then loads
+    #   palettes once using a WRAM one-shot guard at `C0A0` and an optional
+    #   frame delay via `C0A1`.
+    print("Installing minimal input trampoline and combined bank-13 loader (one-shot late-init)...")
+    # 1) Save original input handler (46 bytes) into bank 13 at 0x6D00
+    original_input = bytes(rom[0x0824:0x0824+46])
+    rom[0x036D00:0x036D00+46] = original_input
+
+    # 2) Build combined function in bank 13:
+    #    - One-shot guard at C0A0; optional frame delay using C0A1 (< 60)
+    #    - Run original input inline
+    #    - Load BG+OBJ palettes from 6C80
+    combined_bank13 = original_input + bytes([
+        # One-shot: if already loaded, RET
         0xFA, 0xA0, 0xC0,      # LD A,[C0A0]
         0xFE, 0x01,            # CP 1
-        0x28, 0x07,            # JR Z, +7 (skip to RET)
-        0xCD, 0x80, 0xFF,      # CALL FF80
+        0x28, 0x2A,            # JR Z,+42 -> RET
+        # Optional late-init: wait ~60 frames
+        0xFA, 0xA1, 0xC0,      # LD A,[C0A1]
+        0x3C,                  # INC A
+        0xEA, 0xA1, 0xC0,      # LD [C0A1],A
+        0xFE, 0x3C,            # CP 60
+        0x38, 0x22,            # JR C,+34 -> RET if not yet
+        # Set loaded flag
         0x3E, 0x01,            # LD A,1
         0xEA, 0xA0, 0xC0,      # LD [C0A0],A
-        0xCD, 0xB0, 0x07,      # CALL 07B0
+        # Load palettes
+        0x21, 0x80, 0x6C,      # LD HL,6C80
+        0x3E, 0x80,            # LD A,80h
+        0xE0, 0x68,            # LDH [FF68],A
+        0x0E, 0x40,            # LD C,64
+        0x2A, 0xE0, 0x69,      # loop: LD A,[HL+]; LDH [FF69],A
+        0x0D,                  # DEC C
+        0x20, 0xFA,            # JR NZ,loop
+        0x3E, 0x80,            # LD A,80h
+        0xE0, 0x6A,            # LDH [FF6A],A
+        0x0E, 0x40,            # LD C,64
+        0x2A, 0xE0, 0x6B,      # loop: LD A,[HL+]; LDH [FF6B],A
+        0x0D,                  # DEC C
+        0x20, 0xFA,            # JR NZ,loop
+        0xC9,                  # RET
+        # Early RET targets
+        0xC9,                  # RET (already loaded)
+        0xC9,                  # RET (not yet reached frame threshold)
+    ])
+    rom[0x036D00:0x036D00+len(combined_bank13)] = combined_bank13
+
+    # 3) Minimal trampoline at 0x0824 (18 bytes): switch bank, call 6D00, restore bank
+    new_0824 = bytes([
+        0xF5,                  # PUSH AF
+        0x3E, 0x0D,            # LD A,13
+        0xEA, 0x00, 0x20,      # LD [2000],A
+        0xF1,                  # POP AF
+        0xCD, 0x00, 0x6D,      # CALL 6D00
+        0xF5,                  # PUSH AF
+        0x3E, 0x01,            # LD A,1
+        0xEA, 0x00, 0x20,      # LD [2000],A
+        0xF1,                  # POP AF
         0xC9,                  # RET
     ])
-    # Loader: bank 13 -> write BG+OBJ (128 bytes) via auto-inc ports -> restore bank 1 -> RET
-    vblank_loader = bytes([
-        0xF5, 0xC5, 0xE5,
-        0x3E, 0x0D, 0xEA, 0x00, 0x20,
-        0x21, 0x80, 0x6C,
-        0x3E, 0x80, 0xE0, 0x68,
-        0x0E, 0x40,
-        0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
-        0x3E, 0x80, 0xE0, 0x6A,
-        0x0E, 0x40,
-        0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-        0x3E, 0x01, 0xEA, 0x00, 0x20,
-        0xE1, 0xC1, 0xF1,
-        0xC9,
-    ])
-    rom[wrapper_addr:wrapper_addr+len(vblank_wrapper)] = vblank_wrapper
-    rom[loader_addr:loader_addr+len(vblank_loader)] = vblank_loader
-    # Replace CALL FF80 at 0x06D6 with CALL 07A0
-    rom[0x06D6:0x06D9] = bytes([0xCD, 0xA0, 0x07])
-    print(f"  VBlank wrapper @0x{wrapper_addr:04X} ({len(vblank_wrapper)} bytes)")
-    print(f"  Loader @0x{loader_addr:04X} ({len(vblank_loader)} bytes)")
-    print("  Patched VBlank: CALL 07A0 instead of CALL FF80")
+    rom[0x0824:0x0824+len(new_0824)] = new_0824
+    if len(new_0824) < 46:
+        rom[0x0824+len(new_0824):0x0824+46] = bytes([0x00] * (46 - len(new_0824)))
+    print("  Trampoline @0x0824 -> bank13:0x6D00; palettes load once after ~1s")
 
     # Restore original boot entry to avoid startup instability
     # JP 0x0150 from 0x0100 and leave 0x0150 bytes untouched if previously modified
@@ -186,7 +214,7 @@ def main():
     print(f"  Size: {len(rom)} bytes")
     print("\nROM modifications:")
     print("  - Display patch at 0x0067 (CGB detection)")
-    print("  - VBlank wrapper at 0x07A0; palette loader at 0x07B0")
+    print("  - Minimal trampoline at 0x0824; combined input+palette in bank 13 @0x6D00")
     print("  - Palette data in bank 13 at 0x6C80 (128 bytes)")
     print("\nFeatures:")
     print("  - Preserves original input handling")

@@ -16,3 +16,8 @@ rom/
 
 # Editors
 .vscode/
+*.swp
+
+# CMake build artifacts
+CMakeCache.txt
+CMakeFiles/
