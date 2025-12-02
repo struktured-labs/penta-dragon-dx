@@ -73,7 +73,7 @@ def build_combined_function_with_obp(obp_value: int, original_input: bytes) -> b
 def main():
     # Paths
     input_rom = Path("rom/Penta Dragon (J).gb")
-    output_rom = Path("rom/working/penta_dragon_dx_FIXED.gb")
+    output_rom = Path("rom/working/penta_dragon_dx_WORKING.gb")
     
     if not input_rom.exists():
         print(f"ERROR: Input ROM not found: {input_rom}")
@@ -123,44 +123,49 @@ def main():
     rom[palette_data_offset:palette_data_offset+len(bg_palettes)] = bg_palettes
     rom[palette_data_offset+len(bg_palettes):palette_data_offset+len(bg_palettes)+len(obj_palettes)] = obj_palettes
     
-    # Save original input handler (46 bytes at 0x0824)
-    print("Preserving original input handler...")
-    original_input = rom[0x0824:0x0824+46]
-    print(f"  Original input handler: {original_input.hex()}")
-    
-    # Create combined function in bank 13 at 0x6D00:
-    # - Run original input handler code inline
-    # - Then load CGB palettes
-    print("Creating combined input+palette function in bank 13...")
-    combined_function = build_combined_function_with_obp(0xAA, original_input)
-    
-    combined_offset = 0x036D00  # Bank 13 at 0x6D00
-    rom[combined_offset:combined_offset+len(combined_function)] = combined_function
-    print(f"  Combined function: {len(combined_function)} bytes at bank 13:0x6D00")
-    
-    # Create minimal trampoline at 0x0824 (only 18 bytes - well under 46-byte limit)
-    # This switches to bank 13, calls combined function, restores bank 1
-    print("Creating minimal trampoline at 0x0824...")
-    trampoline = bytes([
-        0xF5,                          # PUSH AF - save A register
-        0x3E, 0x0D,                    # LD A,13 - bank 13
-        0xEA, 0x00, 0x20,              # LD [2000],A - switch to bank 13
-        0xF1,                          # POP AF - restore A register
-        0xCD, 0x00, 0x6D,              # CALL 6D00 - call combined function
-        0xF5,                          # PUSH AF - save A register
-        0x3E, 0x01,                    # LD A,1 - bank 1
-        0xEA, 0x00, 0x20,              # LD [2000],A - restore bank 1
-        0xF1,                          # POP AF - restore A register
-        0xC9,                          # RET
+    # Safer VBlank wrapper approach: put wrapper at 0x07A0 that calls FF80 then loads palettes,
+    # and patch VBlank to CALL 0x07A0 in place of CALL FF80.
+    print("Installing VBlank wrapper (calls FF80, then loads palettes)...")
+    wrapper_addr = 0x07A0
+    loader_addr = 0x07B0
+    # Wrapper: one-shot guard using WRAM C0A0. If already ran, return.
+    # Otherwise CALL FF80, set flag, then CALL loader.
+    vblank_wrapper = bytes([
+        0xFA, 0xA0, 0xC0,      # LD A,[C0A0]
+        0xFE, 0x01,            # CP 1
+        0x28, 0x07,            # JR Z, +7 (skip to RET)
+        0xCD, 0x80, 0xFF,      # CALL FF80
+        0x3E, 0x01,            # LD A,1
+        0xEA, 0xA0, 0xC0,      # LD [C0A0],A
+        0xCD, 0xB0, 0x07,      # CALL 07B0
+        0xC9,                  # RET
     ])
-    
-    rom[0x0824:0x0824+len(trampoline)] = trampoline
-    # Pad remaining space with NOPs (0x00)
-    if len(trampoline) < 46:
-        rom[0x0824+len(trampoline):0x0824+46] = bytes([0x00] * (46 - len(trampoline)))
-    
-    print(f"  Trampoline: {len(trampoline)} bytes (max 46)")
-    print(f"  This is the ONLY code modification in bank 0/1")
+    # Loader: bank 13 -> write BG+OBJ (128 bytes) via auto-inc ports -> restore bank 1 -> RET
+    vblank_loader = bytes([
+        0xF5, 0xC5, 0xE5,
+        0x3E, 0x0D, 0xEA, 0x00, 0x20,
+        0x21, 0x80, 0x6C,
+        0x3E, 0x80, 0xE0, 0x68,
+        0x0E, 0x40,
+        0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
+        0x3E, 0x80, 0xE0, 0x6A,
+        0x0E, 0x40,
+        0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
+        0x3E, 0x01, 0xEA, 0x00, 0x20,
+        0xE1, 0xC1, 0xF1,
+        0xC9,
+    ])
+    rom[wrapper_addr:wrapper_addr+len(vblank_wrapper)] = vblank_wrapper
+    rom[loader_addr:loader_addr+len(vblank_loader)] = vblank_loader
+    # Replace CALL FF80 at 0x06D6 with CALL 07A0
+    rom[0x06D6:0x06D9] = bytes([0xCD, 0xA0, 0x07])
+    print(f"  VBlank wrapper @0x{wrapper_addr:04X} ({len(vblank_wrapper)} bytes)")
+    print(f"  Loader @0x{loader_addr:04X} ({len(vblank_loader)} bytes)")
+    print("  Patched VBlank: CALL 07A0 instead of CALL FF80")
+
+    # Restore original boot entry to avoid startup instability
+    # JP 0x0150 from 0x0100 and leave 0x0150 bytes untouched if previously modified
+    rom[0x0100:0x0104] = bytes([0x00, 0xC3, 0x50, 0x01])
     
     # Set CGB compatibility flag
     print("Setting CGB compatibility flag...")
@@ -181,39 +186,16 @@ def main():
     print(f"  Size: {len(rom)} bytes")
     print("\nROM modifications:")
     print("  - Display patch at 0x0067 (CGB detection)")
-    print("  - Trampoline at 0x0824 (18 bytes)")
+    print("  - VBlank wrapper at 0x07A0; palette loader at 0x07B0")
     print("  - Palette data in bank 13 at 0x6C80 (128 bytes)")
-    print("  - Combined function in bank 13 at 0x6D00 (74 bytes)")
     print("\nFeatures:")
     print("  - Preserves original input handling")
-    print("  - Loads CGB color palettes every frame")
-    print("  - No code overwrites in bank 0 (except 0x0824 slot)")
+    print("  - Loads CGB color palettes every frame via VBlank")
+    print("  - Avoids boot-time hooks and input handler replacement")
 
     # Build three index variants to defeat DMG mapping uncertainty
-    print("\nBuilding sweep variants (IDX1/IDX2/IDX3)...")
-    sweeps = [
-        (0x55, 1, "IDX1"),  # all nonzero shades -> index 1
-        (0xAA, 2, "IDX2"),  # all nonzero shades -> index 2
-        (0xFF, 3, "IDX3"),  # all nonzero shades -> index 3
-    ]
-    # Target color: orange (0x7E00) for high visibility
-    target_color = 0x7E00
-    for obp, idx, tag in sweeps:
-        variant = bytearray(rom)
-        # Rewrite OBJ palettes with target color at requested index
-        obj_variant = build_obj_data_with_target_color(idx, target_color)
-        variant[palette_data_offset+len(bg_palettes):palette_data_offset+len(bg_palettes)+len(obj_variant)] = obj_variant
-        # Replace combined function with OBP value
-        combined_var = build_combined_function_with_obp(obp, original_input)
-        variant[combined_offset:combined_offset+len(combined_var)] = combined_var
-        # Fix header checksum
-        c = 0
-        for i in range(0x134, 0x14D):
-            c = (c - variant[i] - 1) & 0xFF
-        variant[0x14D] = c
-        outp = Path(f"rom/working/penta_dragon_dx_FIXED_{tag}.gb")
-        outp.write_bytes(variant)
-        print(f"  ✓ {outp} | OBP=0x{obp:02X}, target color at index {idx}")
+    # Omit OBP sweep variants in this safer build to minimize changes
+    print("\nSkipped IDX sweep variants for stability (can re-enable later).")
 
 
 if __name__ == "__main__":
