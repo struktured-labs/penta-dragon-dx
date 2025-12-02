@@ -17,7 +17,7 @@ bg_palettes:
   # Palette 2: Water/ice areas
   WaterZone:
     name: "Water & Ice Areas"
-    colors: ["7FFF", "001F", "0014", "0008"]  # White→Blue→Dark Blue→Darker
+    colors: ["white", "light blue", "blue", "dark blue"]  # Demonstrating color names with modifiers
     
   # Palette 3: Desert/sand areas
   DesertZone:
@@ -45,11 +45,12 @@ bg_palettes:
     colors: ["7FFF", "6F7B", "4E73", "2D6B"]  # White→Pink→Purple→Dark
 
 obj_palettes:
-  # Palette 0: PURE MAGENTA TEST
+  # Palette 0: Main character palette
   MainCharacter:
-    name: "TEST 0: MAGENTA"
-    colors: ["0000", "7C1F", "7C1F", "7C1F"]  # Trans→Pure Magenta (ALL MAGENTA)
-    notes: "TEST: All pure magenta - if player uses this, they'll be BRIGHT MAGENTA"
+    name: "Main Character"
+    # You can use color names instead of hex!
+    colors: ["transparent", "light magenta", "purple", "pink"]
+    notes: "Main character - yellow/orange color scheme (using color names!)"
     
   # Palette 1: PURE YELLOW TEST
   EnemyBasic:
@@ -118,7 +119,10 @@ notes: |
   - Bits 10-14: Blue (0-31)
   - Bit 15:     Unused (always 0)
   
-  Common colors:
+  Color Specification:
+  You can use either hex values OR color names:
+  
+  Hex format (4 digits):
   - 0000: Black (or transparent for sprites)
   - 7FFF: White
   - 001F: Pure Red
@@ -128,8 +132,18 @@ notes: |
   - 7C1F: Magenta (Red + Blue)
   - 03FF: Cyan (Green + Blue)
   
+  Color names (case-insensitive):
+  - Basic: red, green, blue, yellow, cyan, magenta, orange, purple, brown, 
+           gray/grey, pink, lime, teal, navy, maroon, olive, black, white
+  - Modifiers: "dark red", "light blue", "dark green", etc.
+  
+  Examples:
+    colors: ["0000", "red", "dark red", "7FFF"]        # Mix hex and names
+    colors: ["transparent", "yellow", "orange", "brown"]  # All names
+    colors: ["0000", "light blue", "blue", "dark blue"]   # With modifiers
+  
   To customize:
-  1. Edit colors in hex BGR555 format
-  2. Run: python3 scripts/create_dx_rom.py
+  1. Edit colors in hex BGR555 format OR use color names
+  2. Run: python scripts/create_dx_rom.py
   3. Test in emulator to see results
   4. Iterate until satisfied!

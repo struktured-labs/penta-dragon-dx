@@ -13,6 +13,88 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 from penta_dragon_dx.display_patcher import apply_all_display_patches
 
 
+# Color name to BGR555 mapping
+COLOR_NAMES = {
+    'black': 0x0000,
+    'white': 0x7FFF,
+    'red': 0x001F,
+    'green': 0x03E0,
+    'blue': 0x7C00,
+    'yellow': 0x03FF,
+    'cyan': 0x7FE0,
+    'magenta': 0x7C1F,
+    'orange': 0x021F,
+    'purple': 0x6010,
+    'brown': 0x0215,
+    'gray': 0x4210,
+    'grey': 0x4210,  # Alternative spelling
+    'pink': 0x5C1F,
+    'lime': 0x03E7,
+    'teal': 0x7CE0,
+    'navy': 0x5000,
+    'maroon': 0x0010,
+    'olive': 0x0210,
+    'transparent': 0x0000,
+}
+
+# Modifiers for color intensity
+DARK_SCALE = 0.5
+LIGHT_SCALE = 1.5
+
+
+def parse_color(color_str: str) -> int:
+    """Parse color string - supports hex values like '7FFF' or color names like 'red', 'dark red', 'light blue'"""
+    color_str = color_str.strip().lower()
+    
+    # Try hex format first (4 hex digits)
+    if len(color_str) == 4:
+        try:
+            return int(color_str, 16)
+        except ValueError:
+            pass
+    
+    # Check for modifiers
+    is_dark = color_str.startswith('dark ')
+    is_light = color_str.startswith('light ')
+    
+    if is_dark:
+        base_color = color_str[5:].strip()
+        modifier = DARK_SCALE
+    elif is_light:
+        base_color = color_str[6:].strip()
+        modifier = LIGHT_SCALE
+    else:
+        base_color = color_str
+        modifier = 1.0
+    
+    # Look up base color
+    if base_color in COLOR_NAMES:
+        bgr555 = COLOR_NAMES[base_color]
+        
+        # Apply modifier if not default
+        if modifier != 1.0:
+            # Extract RGB components (5 bits each)
+            r = bgr555 & 0x1F
+            g = (bgr555 >> 5) & 0x1F
+            b = (bgr555 >> 10) & 0x1F
+            
+            # Scale components
+            r = int(min(31, r * modifier))
+            g = int(min(31, g * modifier))
+            b = int(min(31, b * modifier))
+            
+            # Repack
+            bgr555 = (b << 10) | (g << 5) | r
+        
+        return bgr555
+    
+    # If all else fails, try parsing as hex with error message
+    try:
+        return int(color_str, 16)
+    except ValueError:
+        raise ValueError(f"Invalid color: '{color_str}'. Use 4-digit hex (e.g., '7FFF') or color name (e.g., 'red', 'dark blue', 'light green')")
+
+
 def create_palette(c0: int, c1: int, c2: int, c3: int) -> bytes:
     """Convert 4 BGR555 colors to 8-byte palette data (little-endian)"""
     return bytes([
@@ -42,7 +124,7 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytearray, bytearray]:
             print(f"WARNING: BG palette '{name}' not found in YAML")
             continue
         colors = config['bg_palettes'][name]['colors']
-        color_ints = [int(c, 16) for c in colors]
+        color_ints = [parse_color(c) for c in colors]
         bg_data.extend(create_palette(*color_ints))
     
     obj_data = bytearray()
@@ -51,7 +133,7 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytearray, bytearray]:
             print(f"WARNING: OBJ palette '{name}' not found in YAML")
             continue
         colors = config['obj_palettes'][name]['colors']
-        color_ints = [int(c, 16) for c in colors]
+        color_ints = [parse_color(c) for c in colors]
         obj_data.extend(create_palette(*color_ints))
     
     return bg_data, obj_data
