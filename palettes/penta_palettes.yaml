@@ -1,149 +1,153 @@
-# Penta Dragon DX - Palette Configuration
-# Format: BGR555 hex colors (15-bit: BBBBBGGGGGRRRRR)
-# Each palette has 4 colors: [color0, color1, color2, color3]
-# For sprites: color0 = transparent (usually 0000)
-
 bg_palettes:
-  # Palette 0: Main gameplay backgrounds
   Dungeon:
-    name: "Dungeon Floors"
-    colors: ["7FFF", "03E0", "0280", "0000"]  # White→Green→Dark Green→Black
-    
-  # Palette 1: Lava/danger areas
+    name: Dungeon Floors
+    colors:
+    - 7FFF
+    - 03E0
+    - 0280
+    - '0000'
   LavaZone:
-    name: "Lava & Danger Areas"
-    colors: ["7FFF", "7C00", "5000", "2000"]  # White→Red→Dark Red→Darker
-    
-  # Palette 2: Water/ice areas
+    name: Lava & Danger Areas
+    colors:
+    - 7FFF
+    - 7C00
+    - '5000'
+    - '2000'
   WaterZone:
-    name: "Water & Ice Areas"
-    colors: ["white", "light blue", "blue", "dark blue"]  # Demonstrating color names with modifiers
-    
-  # Palette 3: Desert/sand areas
+    name: Water & Ice Areas
+    colors:
+    - white
+    - light blue
+    - blue
+    - dark blue
   DesertZone:
-    name: "Desert & Sand Areas"
-    colors: ["7FFF", "7FE0", "5CC0", "2980"]  # White→Yellow→Orange→Brown
-    
-  # Palette 4: Forest/nature areas
+    name: Desert & Sand Areas
+    colors:
+    - 7FFF
+    - 7FE0
+    - 5CC0
+    - '2980'
   ForestZone:
-    name: "Forest & Nature Areas"
-    colors: ["7FFF", "03FF", "02BF", "015F"]  # White→Cyan→Teal→Dark
-    
-  # Palette 5: Castle/stone areas
+    name: Forest & Nature Areas
+    colors:
+    - 7FFF
+    - 03FF
+    - 02BF
+    - 015F
   CastleZone:
-    name: "Castle & Stone Areas"
-    colors: ["7FFF", "7C1F", "5010", "2808"]  # White→Magenta→Purple→Dark
-    
-  # Palette 6: Sky/clouds
+    name: Castle & Stone Areas
+    colors:
+    - 7FFF
+    - 7C1F
+    - '5010'
+    - '2808'
   SkyZone:
-    name: "Sky & Clouds"
-    colors: ["7FFF", "5EF7", "3DEF", "1CE7"]  # White→Light Cyan→Cyan→Blue
-    
-  # Palette 7: Special/boss areas
+    name: Sky & Clouds
+    colors:
+    - 7FFF
+    - 5EF7
+    - 3DEF
+    - 1CE7
   BossZone:
-    name: "Boss & Special Areas"
-    colors: ["7FFF", "6F7B", "4E73", "2D6B"]  # White→Pink→Purple→Dark
-
+    name: Boss & Special Areas
+    colors:
+    - 7FFF
+    - 6F7B
+    - 4E73
+    - 2D6B
 obj_palettes:
-  # Palette 0: Main character palette
   MainCharacter:
-    name: "Main Character"
-    # You can use color names instead of hex!
-    colors: ["transparent", "light magenta", "purple", "pink"]
-    notes: "Main character - yellow/orange color scheme (using color names!)"
-    
-  # Palette 1: PURE YELLOW TEST
+    name: 'TEST 0: PURE RED'
+    colors:
+    - transparent
+    - red
+    - red
+    - red
+    notes: RED = palette 0
   EnemyBasic:
-    name: "TEST 1: YELLOW"
-    colors: ["0000", "7FE0", "7FE0", "7FE0"]  # Trans→Pure Yellow (ALL YELLOW)
-    notes: "TEST: All pure yellow - if player uses this, they'll be BRIGHT YELLOW"
-    
-  # Palette 2: PURE RED TEST
+    name: 'TEST 1: PURE GREEN'
+    colors:
+    - transparent
+    - green
+    - green
+    - green
+    notes: GREEN = palette 1
   EnemyFire:
-    name: "TEST 2: RED"
-    colors: ["0000", "001F", "001F", "001F"]  # Trans→Pure Red (ALL RED)
-    notes: "TEST: All pure red - if player uses this, they'll be BRIGHT RED"
-    
-  # Palette 3: PURE CYAN TEST
+    name: 'TEST 2: PURE BLUE'
+    colors:
+    - transparent
+    - blue
+    - blue
+    - blue
+    notes: BLUE = palette 2
   EnemyIce:
-    name: "TEST 3: CYAN"
-    colors: ["0000", "7FE0", "03FF", "03FF"]  # Trans→Pure Cyan (ALL CYAN)
-    notes: "TEST: All pure cyan - if player uses this, they'll be BRIGHT CYAN"
-    
-  # Palette 4: PURE GREEN TEST
+    name: 'TEST 3: PURE CYAN'
+    colors:
+    - transparent
+    - cyan
+    - cyan
+    - cyan
+    notes: CYAN = palette 3
   EnemyFlying:
-    name: "TEST 4: GREEN"
-    colors: ["0000", "03E0", "03E0", "03E0"]  # Trans→Pure Green (ALL GREEN)
-    notes: "TEST: All pure green - if player uses this, they'll be BRIGHT GREEN"
-    
-  # Palette 5: PURE BLUE TEST
+    name: 'TEST 4: PURE MAGENTA'
+    colors:
+    - transparent
+    - magenta
+    - magenta
+    - magenta
+    notes: MAGENTA = palette 4
   EnemyPoison:
-    name: "TEST 5: BLUE"
-    colors: ["0000", "7C00", "7C00", "7C00"]  # Trans→Pure Blue (ALL BLUE)
-    notes: "TEST: All pure blue - if player uses this, they'll be BRIGHT BLUE"
-    
-  # Palette 6: PURE WHITE TEST
+    name: 'TEST 5: PURE YELLOW'
+    colors:
+    - transparent
+    - yellow
+    - yellow
+    - yellow
+    notes: YELLOW = palette 5
   MiniBoss:
-    name: "TEST 6: WHITE"
-    colors: ["0000", "7FFF", "7FFF", "7FFF"]  # Trans→Pure White (ALL WHITE)
-    notes: "TEST: All pure white - if player uses this, they'll be BRIGHT WHITE"
-    
-  # Palette 7: ORANGE TEST
+    name: 'TEST 6: PURE WHITE'
+    colors:
+    - transparent
+    - white
+    - white
+    - white
+    notes: WHITE = palette 6
   MainBoss:
-    name: "TEST 7: ORANGE"
-    colors: ["0000", "03FF", "03FF", "03FF"]  # Trans→Orange (ALL ORANGE)
-    notes: "TEST: All orange - if player uses this, they'll be ORANGE"
-
+    name: 'TEST 7: PURE ORANGE'
+    colors:
+    - transparent
+    - orange
+    - orange
+    - orange
+    notes: ORANGE = palette 7
 powerup_palettes:
-  # Power-ups typically use sprite palettes, map to specific palette indices
-  health: 2      # Use EnemyFire palette (red)
-  weapon: 4      # Use EnemyFlying palette (yellow/gold)
-  shield: 3      # Use EnemyIce palette (blue)
-  special: 6     # Use MiniBoss palette (magenta)
-
+  health: 2
+  weapon: 4
+  shield: 3
+  special: 6
 palette_mapping:
-  # Default mappings - game uses palette attributes to assign these
-  # BG palette 0 is typically used for most tiles
-  # Sprites cycle through OBJ palettes based on type
-  notes: |
-    To change which palette is used for specific elements:
+  notes: 'To change which palette is used for specific elements:
+
     1. Edit the colors in the palette definition above
+
     2. Palettes are loaded in order: BG 0-7, then OBJ 0-7
+
     3. Game code determines which palette index each sprite/tile uses
+
     4. Fine-tuning requires ROM analysis to find palette attribute writes
 
-notes: |
-  Color Format: BGR555 (15-bit color, little-endian in ROM)
-  - Bits 0-4:   Red (0-31)
-  - Bits 5-9:   Green (0-31)
-  - Bits 10-14: Blue (0-31)
-  - Bit 15:     Unused (always 0)
-  
-  Color Specification:
-  You can use either hex values OR color names:
-  
-  Hex format (4 digits):
-  - 0000: Black (or transparent for sprites)
-  - 7FFF: White
-  - 001F: Pure Red
-  - 03E0: Pure Green
-  - 7C00: Pure Blue
-  - 7FE0: Yellow (Red + Green)
-  - 7C1F: Magenta (Red + Blue)
-  - 03FF: Cyan (Green + Blue)
-  
-  Color names (case-insensitive):
-  - Basic: red, green, blue, yellow, cyan, magenta, orange, purple, brown, 
-           gray/grey, pink, lime, teal, navy, maroon, olive, black, white
-  - Modifiers: "dark red", "light blue", "dark green", etc.
-  
-  Examples:
-    colors: ["0000", "red", "dark red", "7FFF"]        # Mix hex and names
-    colors: ["transparent", "yellow", "orange", "brown"]  # All names
-    colors: ["0000", "light blue", "blue", "dark blue"]   # With modifiers
-  
-  To customize:
-  1. Edit colors in hex BGR555 format OR use color names
-  2. Run: python scripts/create_dx_rom.py
-  3. Test in emulator to see results
-  4. Iterate until satisfied!
+    '
+notes: "Color Format: BGR555 (15-bit color, little-endian in ROM)\n- Bits 0-4:   Red\
+  \ (0-31)\n- Bits 5-9:   Green (0-31)\n- Bits 10-14: Blue (0-31)\n- Bit 15:     Unused\
+  \ (always 0)\n\nColor Specification:\nYou can use either hex values OR color names:\n\
+  \nHex format (4 digits):\n- 0000: Black (or transparent for sprites)\n- 7FFF: White\n\
+  - 001F: Pure Red\n- 03E0: Pure Green\n- 7C00: Pure Blue\n- 7FE0: Yellow (Red + Green)\n\
+  - 7C1F: Magenta (Red + Blue)\n- 03FF: Cyan (Green + Blue)\n\nColor names (case-insensitive):\n\
+  - Basic: red, green, blue, yellow, cyan, magenta, orange, purple, brown, \n    \
+  \     gray/grey, pink, lime, teal, navy, maroon, olive, black, white\n- Modifiers:\
+  \ \"dark red\", \"light blue\", \"dark green\", etc.\n\nExamples:\n  colors: [\"\
+  0000\", \"red\", \"dark red\", \"7FFF\"]        # Mix hex and names\n  colors: [\"\
+  transparent\", \"yellow\", \"orange\", \"brown\"]  # All names\n  colors: [\"0000\"\
+  , \"light blue\", \"blue\", \"dark blue\"]   # With modifiers\n\nTo customize:\n\
+  1. Edit colors in hex BGR555 format OR use color names\n2. Run: python scripts/create_dx_rom.py\n\
+  3. Test in emulator to see results\n4. Iterate until satisfied!\n"
