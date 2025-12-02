@@ -31,15 +31,29 @@ def build_palette_blocks(palettes: dict[str, Any]) -> Tuple[bytes, bytes, dict]:
     obj = bytearray()
     manifest: dict[str, Any] = {"bg": {}, "obj": {}}
 
-    def pack_group(group: dict[str, list[str]], out: bytearray, section: str):
+    def pack_group(group: dict[str, Any], out: bytearray, section: str):
         idx = 0
-        for name, colors in group.items():
+        for name, entry in group.items():
+            # Support two YAML styles:
+            # 1) name: ["7FFF", "03E0", "0280", "0000"]
+            # 2) name: { name: "Display Name", colors: ["7FFF", ...] }
+            if isinstance(entry, dict):
+                colors = entry.get("colors")
+                display_name = entry.get("name", name)
+            else:
+                colors = entry
+                display_name = name
+
+            if not isinstance(colors, list):
+                raise ValueError(f"Palette '{name}' must define a 'colors' list")
             if len(colors) != 4:
                 raise ValueError(f"Palette '{name}' must have 4 colors (got {len(colors)})")
+
             start_byte = len(out)
             for c in colors:
                 out.extend(_bgr555_hex_to_le_bytes(c))
-            manifest[section][name] = {"index": idx, "byte_offset": start_byte}
+            # Use display_name in manifest, but keep key association with original name
+            manifest[section][name] = {"index": idx, "byte_offset": start_byte, "display": display_name}
             idx += 1
 
     if palettes.get("bg_palettes"):

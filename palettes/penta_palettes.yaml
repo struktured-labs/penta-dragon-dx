@@ -45,53 +45,53 @@ bg_palettes:
     colors: ["7FFF", "6F7B", "4E73", "2D6B"]  # White→Pink→Purple→Dark
 
 obj_palettes:
-  # Palette 0: Main character (Penta Dragon)
+  # Palette 0: PURE MAGENTA TEST
   MainCharacter:
-    name: "Penta Dragon (Player)"
-    colors: ["0000", "7FFF", "7E00", "4800"]  # Trans→White→Orange→Brown
-    notes: "Warm colors for hero character"
+    name: "TEST 0: MAGENTA"
+    colors: ["0000", "7C1F", "7C1F", "7C1F"]  # Trans→Pure Magenta (ALL MAGENTA)
+    notes: "TEST: All pure magenta - if player uses this, they'll be BRIGHT MAGENTA"
     
-  # Palette 1: Basic enemies (green creatures)
+  # Palette 1: PURE YELLOW TEST
   EnemyBasic:
-    name: "Basic Enemies"
-    colors: ["0000", "7FFF", "03E0", "0100"]  # Trans→White→Green→Dark
-    notes: "Standard green enemies"
+    name: "TEST 1: YELLOW"
+    colors: ["0000", "7FE0", "7FE0", "7FE0"]  # Trans→Pure Yellow (ALL YELLOW)
+    notes: "TEST: All pure yellow - if player uses this, they'll be BRIGHT YELLOW"
     
-  # Palette 2: Fire enemies
+  # Palette 2: PURE RED TEST
   EnemyFire:
-    name: "Fire Enemies"
-    colors: ["0000", "7FFF", "7C00", "2000"]  # Trans→White→Red→Dark
-    notes: "Red/orange for fire creatures"
+    name: "TEST 2: RED"
+    colors: ["0000", "001F", "001F", "001F"]  # Trans→Pure Red (ALL RED)
+    notes: "TEST: All pure red - if player uses this, they'll be BRIGHT RED"
     
-  # Palette 3: Ice/water enemies
+  # Palette 3: PURE CYAN TEST
   EnemyIce:
-    name: "Ice/Water Enemies"
-    colors: ["0000", "7FFF", "001F", "0008"]  # Trans→White→Blue→Dark
-    notes: "Blue for ice/water creatures"
+    name: "TEST 3: CYAN"
+    colors: ["0000", "7FE0", "03FF", "03FF"]  # Trans→Pure Cyan (ALL CYAN)
+    notes: "TEST: All pure cyan - if player uses this, they'll be BRIGHT CYAN"
     
-  # Palette 4: Flying enemies
+  # Palette 4: PURE GREEN TEST
   EnemyFlying:
-    name: "Flying Enemies"
-    colors: ["0000", "7FFF", "7FE0", "2980"]  # Trans→White→Yellow→Brown
-    notes: "Yellow/gold for flying creatures"
+    name: "TEST 4: GREEN"
+    colors: ["0000", "03E0", "03E0", "03E0"]  # Trans→Pure Green (ALL GREEN)
+    notes: "TEST: All pure green - if player uses this, they'll be BRIGHT GREEN"
     
-  # Palette 5: Poison/toxic enemies
+  # Palette 5: PURE BLUE TEST
   EnemyPoison:
-    name: "Poison/Toxic Enemies"
-    colors: ["0000", "7FFF", "03FF", "015F"]  # Trans→White→Cyan→Dark
-    notes: "Cyan/green for poison creatures"
+    name: "TEST 5: BLUE"
+    colors: ["0000", "7C00", "7C00", "7C00"]  # Trans→Pure Blue (ALL BLUE)
+    notes: "TEST: All pure blue - if player uses this, they'll be BRIGHT BLUE"
     
-  # Palette 6: Mini-bosses
+  # Palette 6: PURE WHITE TEST
   MiniBoss:
-    name: "Mini-Bosses"
-    colors: ["0000", "7FFF", "7C1F", "2808"]  # Trans→White→Magenta→Dark
-    notes: "Magenta/purple for mini-bosses"
+    name: "TEST 6: WHITE"
+    colors: ["0000", "7FFF", "7FFF", "7FFF"]  # Trans→Pure White (ALL WHITE)
+    notes: "TEST: All pure white - if player uses this, they'll be BRIGHT WHITE"
     
-  # Palette 7: Main bosses
+  # Palette 7: ORANGE TEST
   MainBoss:
-    name: "Main Bosses"
-    colors: ["0000", "7FFF", "7FE0", "4A00"]  # Trans→White→Yellow→Orange
-    notes: "Bright colors for final bosses"
+    name: "TEST 7: ORANGE"
+    colors: ["0000", "03FF", "03FF", "03FF"]  # Trans→Orange (ALL ORANGE)
+    notes: "TEST: All orange - if player uses this, they'll be ORANGE"
 
 powerup_palettes:
   # Power-ups typically use sprite palettes, map to specific palette indices
