@@ -4,6 +4,7 @@ Create Penta Dragon DX - Game Boy Color colorization
 Generates a working CGB ROM with proper input handling and palette loading
 """
 import sys
+import yaml
 from pathlib import Path
 
 # Add src to path for imports
@@ -20,6 +21,40 @@ def create_palette(c0: int, c1: int, c2: int, c3: int) -> bytes:
         c2 & 0xFF, (c2 >> 8) & 0xFF,
         c3 & 0xFF, (c3 >> 8) & 0xFF,
     ])
+
+
+def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytearray, bytearray]:
+    """Load BG and OBJ palettes from YAML file."""
+    with open(yaml_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # BG palette order
+    bg_order = ['Dungeon', 'LavaZone', 'WaterZone', 'DesertZone', 
+                'ForestZone', 'CastleZone', 'SkyZone', 'BossZone']
+    
+    # OBJ palette order
+    obj_order = ['MainCharacter', 'EnemyBasic', 'EnemyFire', 'EnemyIce',
+                 'EnemyFlying', 'EnemyPoison', 'MiniBoss', 'MainBoss']
+    
+    bg_data = bytearray()
+    for name in bg_order:
+        if name not in config['bg_palettes']:
+            print(f"WARNING: BG palette '{name}' not found in YAML")
+            continue
+        colors = config['bg_palettes'][name]['colors']
+        color_ints = [int(c, 16) for c in colors]
+        bg_data.extend(create_palette(*color_ints))
+    
+    obj_data = bytearray()
+    for name in obj_order:
+        if name not in config['obj_palettes']:
+            print(f"WARNING: OBJ palette '{name}' not found in YAML")
+            continue
+        colors = config['obj_palettes'][name]['colors']
+        color_ints = [int(c, 16) for c in colors]
+        obj_data.extend(create_palette(*color_ints))
+    
+    return bg_data, obj_data
     
     # Build baseline OBJ palettes; we'll generate variants per OBP mapping
 
@@ -74,42 +109,27 @@ def main():
     # Paths
     input_rom = Path("rom/Penta Dragon (J).gb")
     output_rom = Path("rom/working/penta_dragon_dx_WORKING.gb")
+    palette_yaml = Path("palettes/penta_palettes.yaml")
     
     if not input_rom.exists():
         print(f"ERROR: Input ROM not found: {input_rom}")
+        sys.exit(1)
+    
+    if not palette_yaml.exists():
+        print(f"ERROR: Palette YAML not found: {palette_yaml}")
         sys.exit(1)
     
     # Load ROM
     print(f"Loading ROM: {input_rom}")
     rom = bytearray(input_rom.read_bytes())
     
-    # Apply display compatibility patches (fixes white screen freeze)``
+    # Apply display compatibility patches (fixes white screen freeze)
     print("Applying display compatibility patches...")
     rom, _ = apply_all_display_patches(rom)
     
-    # Create 8 background palettes (saturated colors for visibility)
-    print("Creating background palettes...")
-    bg_palettes = bytearray()
-    bg_palettes.extend(create_palette(0x7FFF, 0x03E0, 0x0280, 0x0000))  # 0: White→green→dark green→black
-    bg_palettes.extend(create_palette(0x7FFF, 0x7C00, 0x5000, 0x2000))  # 1: White→red→dark red→darker
-    bg_palettes.extend(create_palette(0x7FFF, 0x001F, 0x0014, 0x0008))  # 2: White→blue→dark blue→darker
-    bg_palettes.extend(create_palette(0x7FFF, 0x7FE0, 0x5CC0, 0x2980))  # 3: White→yellow→orange→brown
-    bg_palettes.extend(create_palette(0x7FFF, 0x03FF, 0x02BF, 0x015F))  # 4: White→cyan→teal→dark
-    bg_palettes.extend(create_palette(0x7FFF, 0x7C1F, 0x5010, 0x2808))  # 5: White→magenta→purple→dark
-    bg_palettes.extend(create_palette(0x7FFF, 0x5EF7, 0x3DEF, 0x1CE7))  # 6: White→light cyan→cyan→blue
-    bg_palettes.extend(create_palette(0x7FFF, 0x6F7B, 0x4E73, 0x2D6B))  # 7: White→pink→purple→dark
-    
-    # Create 8 object/sprite palettes (baseline)
-    print("Creating object palettes...")
-    obj_palettes = bytearray()
-    obj_palettes.extend(create_palette(0x0000, 0x7FFF, 0x7E00, 0x4800))  # 0: Trans→white→ORANGE→brown
-    obj_palettes.extend(create_palette(0x0000, 0x7FFF, 0x03E0, 0x0100))  # 1: Trans→white→green→dark
-    obj_palettes.extend(create_palette(0x0000, 0x7FFF, 0x7C00, 0x2000))  # 2: Trans→white→red→dark
-    obj_palettes.extend(create_palette(0x0000, 0x7FFF, 0x001F, 0x0008))  # 3: Trans→white→blue→dark
-    obj_palettes.extend(create_palette(0x0000, 0x7FFF, 0x7FE0, 0x2980))  # 4: Trans→white→yellow→brown
-    obj_palettes.extend(create_palette(0x0000, 0x7FFF, 0x03FF, 0x015F))  # 5: Trans→white→cyan→dark
-    obj_palettes.extend(create_palette(0x0000, 0x7FFF, 0x7C1F, 0x2808))  # 6: Trans→white→magenta→dark
-    obj_palettes.extend(create_palette(0x0000, 0x7FFF, 0x7FE0, 0x4A00))  # 7: Trans→white→yellow→orange
+    # Load palettes from YAML
+    print(f"Loading palettes from {palette_yaml}...")
+    bg_palettes, obj_palettes = load_palettes_from_yaml(palette_yaml)
 
     # Write palette data to bank 13 at 0x6C80 (file offset 0x036C80)
     print("Writing palette data to bank 13...")
