@@ -2,12 +2,13 @@
 import subprocess
 import time
 import sys
+import os
 from pathlib import Path
 
 def run_test(rom_path):
-    print(f"🚀 Testing ROM: {rom_path}")
+    print(f"🚀 Verifying ROM: {rom_path}")
     
-    # Check if mGBA is available
+    # Check if mgba-qt is available
     mgba_path = "/usr/local/bin/mgba-qt"
     if not Path(mgba_path).exists():
         mgba_path = subprocess.getoutput("which mgba-qt")
@@ -16,22 +17,53 @@ def run_test(rom_path):
         print("❌ mGBA not found!")
         return False
 
-    # Launch mGBA
-    # We use a timeout to see if it crashes/freezes
+    lua_script = Path("scripts/check_white_screen.lua").absolute()
+    
+    # Launch mGBA with Lua script
+    # Note: mgba-qt -script flag might vary by version. 
+    # If -script doesn't work, we'll try other methods.
     try:
-        proc = subprocess.Popen([mgba_path, rom_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print("⏱️ Running for 10 seconds...")
-        time.sleep(10)
+        # Using a timeout and capturing output
+        cmd = [mgba_path, "-p", str(lua_script), rom_path]
+        print(f"Running command: {' '.join(cmd)}")
         
-        if proc.poll() is not None:
-            print("❌ mGBA exited early! Possible crash.")
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        start_time = time.time()
+        timeout = 15 # 15 seconds max
+        
+        success = False
+        error_detected = False
+        
+        while time.time() - start_time < timeout:
+            line = proc.stdout.readline()
+            if line:
+                print(f"Emulator: {line.strip()}")
+                if "CONTENT_DETECTED" in line:
+                    success = True
+                    break
+                if "WHITE_SCREEN_FREEZE_DETECTED" in line:
+                    error_detected = True
+                    break
+            
+            if proc.poll() is not None:
+                break
+            time.sleep(0.1)
+            
+        proc.terminate()
+        
+        if success:
+            print("✅ Content detected on screen! Game is not frozen.")
+            return True
+        elif error_detected:
+            print("❌ White screen freeze detected by Lua script.")
             return False
         else:
-            print("✅ ROM still running after 10 seconds.")
-            proc.terminate()
-            return True
+            print("❌ Timeout or unknown error during verification.")
+            return False
+            
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Verification Error: {e}")
         return False
 
 if __name__ == "__main__":
@@ -39,11 +71,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         rom = sys.argv[1]
     
-    success = run_test(rom)
-    if success:
-        print("\n✨ Verification successful (Preliminary)")
+    if run_test(rom):
+        print("\n✨ STABILITY VERIFIED: Game is running and rendering content.")
         sys.exit(0)
     else:
-        print("\n💥 Verification failed")
+        print("\n💥 VERIFICATION FAILED: Game is stuck or crashing.")
         sys.exit(1)
-
