@@ -1,0 +1,96 @@
+PENTA DRAGON - INITIAL MEMORY MAP
+======================================================================
+
+CRITICAL ADDRESSES:
+  0x0150: Boot entry - first executed code
+  0x0190: Initialization call - crashes if hooked
+  0x0824: Input handler - crashes if replaced
+  0x06D6: VBlank handler - crashes if hooked
+  0x0A0F: Init function - involved in crashes
+  0x5021: Palette init function
+  0xB8DE: Palette function
+  0x3B69: Level load function - post-menu?
+  0x40A0: VRAM clear function
+
+BOOT SEQUENCE (0x0150-0x01A0):
+0150: F3
+0151: EF
+0152: CD
+0153: 67
+0154: 00
+0155: 31
+0156: FF
+0157: DF
+0158: CD
+0159: 00
+015A: 40
+015B: CD
+015C: C8
+015D: 00
+015E: FB
+015F: CD
+0160: 77
+0161: 3B
+0162: CD
+0163: F1
+0164: 40
+0165: CD
+0166: 7A
+0167: 0F
+0168: AF
+0169: EA
+016A: 09
+016B: DD
+016C: CD
+016D: 5D
+016E: 49
+016F: CD
+0170: 5D
+0171: 49
+0172: CD
+0173: 5D
+0174: 49
+0175: CD
+0176: 5D
+0177: 49
+0178: CD
+0179: E9
+017A: 0D
+017B: CD
+017C: 7C
+017D: 0E
+017E: CD
+017F: E8
+0180: 01
+0181: CD
+0182: BB
+0183: 55
+0184: CD
+0185: 22
+0186: 22
+0187: CD
+0188: 5D
+0189: 4F
+018A: C3
+018B: 6C
+018C: 01
+018D: CD
+018E: 33
+018F: 0F
+0190: CD
+0191: A0
+0192: 40
+0193: 3E
+0194: C8
+0195: EA
+0196: 05
+0197: DD
+0198: 3E
+0199: 00
+019A: EA
+019B: 01
+019C: DD
+019D: 3E
+019E: 56
+019F: EA
+01A0: 02
