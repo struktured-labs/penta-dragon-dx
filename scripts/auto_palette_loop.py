@@ -13,6 +13,7 @@ import time
 import sys
 import signal
 import atexit
+import shutil
 from pathlib import Path
 from collections import defaultdict
 
@@ -198,8 +199,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from mgba_window_utils import move_window_to_monitor
 
-def launch_mgba_with_lua(lua_script_path):
-    """Launch mgba-qt with Lua script and move to 3rd desktop"""
+def launch_mgba_with_lua(lua_script_path, monitor_num=3):
+    """Launch mgba-qt with Lua script and position on specific monitor at spawn"""
     mgba_qt_path = Path("/usr/local/bin/mgba-qt")
     if not mgba_qt_path.exists():
         # Try to find it in PATH
@@ -214,8 +215,7 @@ def launch_mgba_with_lua(lua_script_path):
         print(f"❌ ROM not found: {rom_path}")
         return None
     
-    # Launch mgba-qt with ROM first, then script (matching quick_verify_rom.py pattern)
-    # Use --fastforward to speed up execution
+    # Build command
     cmd = [
         str(mgba_qt_path),
         str(rom_path),
@@ -225,11 +225,24 @@ def launch_mgba_with_lua(lua_script_path):
     
     print(f"   Command: {' '.join(cmd)}")
     
-    # Don't capture stdout/stderr so window can display properly
-    # Use XWayland environment for window positioning
+    # Get environment with positioning hints
     import os
-    from mgba_window_utils import get_mgba_env_for_xwayland
-    env = get_mgba_env_for_xwayland()
+    from mgba_window_utils import get_mgba_env_for_positioning, get_wayland_outputs
+    
+    env, (x_pos, y_pos) = get_mgba_env_for_positioning(monitor_num)
+    
+    # For Wayland (Sway/i3): Use swaymsg rules to position at launch
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+        swaymsg = shutil.which("swaymsg")
+        if swaymsg:
+            outputs = get_wayland_outputs()
+            if monitor_num <= len(outputs):
+                output_name = outputs[monitor_num - 1]
+                # Set up rule BEFORE launching (if possible)
+                # Note: This requires the window to already exist, so we'll do it immediately after
+                pass
+    
+    # Launch process
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
@@ -237,9 +250,83 @@ def launch_mgba_with_lua(lua_script_path):
         env=env
     )
     
-    # Give mgba-qt a moment to initialize, then move to Dell monitor
-    time.sleep(0.5)
-    move_window_to_monitor()
+    # Position window IMMEDIATELY (before it becomes visible)
+    # Use a very short delay and position aggressively
+    time.sleep(0.05)  # Minimal delay - position before window fully appears
+    
+    # Try multiple positioning methods immediately
+    positioned = False
+    
+    # Method 1: Sway/i3 Wayland (fastest for Wayland)
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+        swaymsg = shutil.which("swaymsg")
+        if swaymsg:
+            outputs = get_wayland_outputs()
+            if monitor_num <= len(outputs):
+                output_name = outputs[monitor_num - 1]
+                try:
+                    # Position immediately using swaymsg
+                    subprocess.run(
+                        ["swaymsg", f'[app_id="mgba-qt"]', "move", "to", "output", output_name],
+                        timeout=0.5,
+                        capture_output=True
+                    )
+                    positioned = True
+                    print(f"   ✓ Positioned on output {output_name} (Wayland)")
+                except:
+                    pass
+    
+    # Method 2: xdotool (X11) - position by PID immediately
+    if not positioned:
+        xdotool = shutil.which("xdotool")
+        if xdotool:
+            try:
+                # Find window by PID (fastest method)
+                result = subprocess.run(
+                    ["xdotool", "search", "--pid", str(proc.pid), "--class", "mgba-qt"],
+                    capture_output=True,
+                    text=True,
+                    timeout=0.5
+                )
+                if result.stdout.strip():
+                    win_id = result.stdout.strip().split()[0]
+                    subprocess.run(
+                        ["xdotool", "windowmove", win_id, str(x_pos), str(y_pos)],
+                        timeout=0.5,
+                        capture_output=True
+                    )
+                    positioned = True
+                    print(f"   ✓ Positioned at ({x_pos}, {y_pos}) (X11)")
+            except:
+                pass
+    
+    # Method 3: wmctrl (desktop switching)
+    if not positioned:
+        wmctrl = shutil.which("wmctrl")
+        if wmctrl:
+            try:
+                # Switch to desktop before window appears
+                subprocess.run(
+                    ["wmctrl", "-s", str(monitor_num - 1)],
+                    timeout=0.5,
+                    capture_output=True
+                )
+                # Then try to move window
+                time.sleep(0.1)
+                subprocess.run(
+                    ["wmctrl", "-r", "mGBA", "-t", str(monitor_num - 1)],
+                    timeout=0.5,
+                    capture_output=True
+                )
+                positioned = True
+                print(f"   ✓ Switched to desktop {monitor_num} (wmctrl)")
+            except:
+                pass
+    
+    # Fallback: Try positioning again after a brief delay
+    if not positioned:
+        time.sleep(0.2)
+        move_window_to_monitor("mGBA", monitor_num=monitor_num)
     
     return proc
 
@@ -475,7 +562,7 @@ def main():
             
             # 5. Launch mGBA
             print(f"\n🚀 Launching mgba-qt (5 second capture - window will appear)...")
-            mgba_proc = launch_mgba_with_lua(lua_script_path)
+            mgba_proc = launch_mgba_with_lua(lua_script_path, monitor_num=3)
             if not mgba_proc:
                 print("❌ Failed to launch mGBA")
                 continue

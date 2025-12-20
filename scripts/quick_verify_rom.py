@@ -6,9 +6,6 @@ import yaml
 import shutil
 import sys
 from pathlib import Path
-# Add scripts directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-from mgba_window_utils import move_window_to_monitor
 
 def create_verification_lua(wall_clock_seconds=5, screenshots_per_second=8):
     """Create Lua script to verify sprite palette assignments using screenshots based on wall clock time"""
@@ -232,7 +229,6 @@ def main():
     print(f"   Script: {lua_script}")
     print(f"   Will capture: ~{expected_screenshots} screenshots over {wall_clock_seconds}s wall clock time")
     print(f"   Screenshots will be saved to: {output_file}")
-    print(f"   Note: Window will be positioned on second monitor if possible")
     
     # Clean up old screenshots
     for old_screenshot in output_file.glob("verify_screenshot_*.png"):
@@ -270,16 +266,7 @@ def main():
         )
         
         # Give mgba-qt a moment to initialize and enable fast forward
-        # Wait longer for script menu to appear (script menu can take 3-4 seconds)
-        time.sleep(3)
-        
-        # Move window to default monitor (Dell Monitor 2)
-        # Retry positioning in case window takes longer to appear
-        for attempt in range(5):
-            if move_window_to_monitor():
-                break
-            if attempt < 4:  # Wait between retries
-                time.sleep(1.5)
+        time.sleep(2)
         
         # Wait for wall clock time, then kill mgba-qt
         # Screenshots are taken based on wall clock time, not game frames

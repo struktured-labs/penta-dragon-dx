@@ -1,351 +1,288 @@
 #!/usr/bin/env python3
-"""Shared utilities for positioning mgba-qt windows on specific monitors"""
+"""
+Utilities for positioning mgba-qt windows on specific monitors/desktops
+Supports X11, Wayland (Sway/i3), and various window managers
+"""
 import subprocess
 import time
 import shutil
 import os
+import re
 
-# Default monitor: Monitor 2 (DP-3, second Dell monitor at x=5360)
-# Monitor 0 = DP-1 (LG curved, 3440x1440 at x=0)
-# Monitor 1 = DP-2 (Dell, 1920x1200 at x=3440)
-# Monitor 2 = DP-3 (Dell, 1920x1200 at x=5360) - DEFAULT
-DEFAULT_MONITOR = 2
-
-def get_monitor_positions():
-    """Get monitor positions from xrandr"""
+def get_monitor_geometry(monitor_num=3):
+    """Get geometry of specific monitor using xrandr"""
     try:
         result = subprocess.run(
-            ["xrandr", "--listmonitors"],
+            ["xrandr"],
             capture_output=True,
             text=True,
             timeout=2
         )
-        if result.returncode == 0:
-            monitors = {}
-            for line in result.stdout.strip().split('\n')[1:]:  # Skip header
-                # Format: " 0: +*DP-1 3440/800x1440/335+0+0  DP-1"
-                # Or:     " 1: +DP-2 1920/518x1200/324+3440+0  DP-2"
-                parts = line.split()
-                if len(parts) >= 2:
-                    try:
-                        monitor_num = int(parts[0].rstrip(':'))
-                        # Find the geometry part (contains +X+Y offset)
-                        # Look for part with +X+Y pattern (e.g., "+0+0" or "+3440+0")
-                        for part in parts[1:]:
-                            if '+' in part and part.count('+') >= 2:
-                                # Extract x position from +X+Y format
-                                # Split by + and get the second element (X position)
-                                offset_parts = part.split('+')
-                                if len(offset_parts) >= 2:
-                                    x_pos = int(offset_parts[1])
-                                    monitors[monitor_num] = x_pos
-                                    break
-                    except (ValueError, IndexError):
-                        continue
-            return monitors
-    except:
+        
+        lines = result.stdout.splitlines()
+        connected = [l for l in lines if "connected" in l]
+        
+        if monitor_num <= len(connected):
+            monitor_line = connected[monitor_num - 1]
+            # Parse: DP-1 connected primary 3440x1440+0+0
+            match = re.search(r'(\d+)x(\d+)\+(\d+)\+(\d+)', monitor_line)
+            if match:
+                width, height, x, y = map(int, match.groups())
+                return (x, y, width, height)
+    except Exception:
         pass
-    # Fallback: common monitor setups
-    return {0: 0, 1: 1920, 2: 3840}
+    
+    # Fallback: estimate based on common setup
+    # Assuming 1920px wide monitors side-by-side
+    return ((monitor_num - 1) * 1920, 0, 1920, 1080)
 
-def get_mgba_env_for_xwayland():
-    """Get environment variables to force mgba-qt to run in XWayland mode (so xdotool works)"""
-    env = os.environ.copy()
-    # Force Qt to use X11 backend instead of Wayland
-    env['QT_QPA_PLATFORM'] = 'xcb'
-    env['GDK_BACKEND'] = 'x11'
-    # Keep DISPLAY for XWayland
-    if 'DISPLAY' not in env:
-        env['DISPLAY'] = ':0'
-    return env
-
-def move_window_to_monitor(window_title="mGBA", monitor_number=None):
-    """Move mgba-qt window to a specific monitor
+def get_wayland_outputs():
+    """Get list of Wayland outputs using wlr-randr or swaymsg"""
+    outputs = []
     
-    Supports both X11 (xdotool) and Wayland (KDE qdbus, Sway swaymsg)
-    For Wayland, attempts to force XWayland mode for better compatibility.
+    # Try swaymsg first (Sway/i3)
+    swaymsg = shutil.which("swaymsg")
+    if swaymsg:
+        try:
+            result = subprocess.run(
+                ["swaymsg", "-t", "get_outputs"],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            # Parse JSON output for output names
+            import json
+            data = json.loads(result.stdout)
+            outputs = [out["name"] for out in data]
+        except Exception:
+            pass
     
-    Args:
-        window_title: Window title or class to search for (default: "mGBA")
-        monitor_number: 0 = first monitor, 1 = second monitor (Dell, default), 2 = third monitor
-                       If None, uses DEFAULT_MONITOR
-    
-    Returns:
-        bool: True if window was moved successfully, False otherwise
-    """
-    if monitor_number is None:
-        monitor_number = DEFAULT_MONITOR
-    
-    # Detect session type
-    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    is_wayland = session_type == "wayland"
-    
-    # Detect compositor
-    is_kde = shutil.which("kwin_wayland") is not None
-    is_sway = shutil.which("swaymsg") is not None
-    
-    try:
-        # Get monitor/output name for Wayland
-        monitors = get_monitor_positions()
-        if monitor_number not in monitors:
-            print(f"   ⚠️  Monitor {monitor_number} not found. Available: {list(monitors.keys())}")
-            return False
-        
-        monitor_offset_x = monitors[monitor_number]
-        
-        # For Wayland, get output name (DP-2 for monitor 1)
-        output_name = None
-        if is_wayland:
+    # Try wlr-randr
+    if not outputs:
+        wlr_randr = shutil.which("wlr-randr")
+        if wlr_randr:
             try:
                 result = subprocess.run(
-                    ["xrandr", "--listmonitors"],
+                    ["wlr-randr"],
                     capture_output=True,
                     text=True,
                     timeout=2
                 )
-                if result.returncode == 0:
-                    lines = result.stdout.strip().split('\n')[1:]
-                    for line in lines:
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            try:
-                                mon_num = int(parts[0].rstrip(':'))
-                                if mon_num == monitor_number:
-                                    # Extract output name (last part, e.g., "DP-2")
-                                    output_name = parts[-1]
-                                    break
-                            except:
-                                continue
-            except:
+                # Parse output names from wlr-randr
+                for line in result.stdout.splitlines():
+                    if " connected" in line:
+                        outputs.append(line.split()[0])
+            except Exception:
                 pass
-        
-        # Always try xdotool first (works for X11, XWayland, and some Wayland windows)
-        # Even on Wayland, if app is launched with QT_QPA_PLATFORM=xcb, it will be XWayland
-        if not shutil.which("xdotool"):
-            print(f"   ⚠️  xdotool not found - cannot position window (install with: sudo apt install xdotool)")
-            # Fall back to Wayland methods if available
-            if is_wayland and is_kde:
-                return _move_window_kde_wayland(window_title, output_name or f"DP-{monitor_number + 1}", monitor_number)
-            elif is_wayland and is_sway:
-                return _move_window_sway(window_title, output_name or f"DP-{monitor_number + 1}", monitor_number)
-            return False
-        
-        # Get baseline windows before launch (if we can)
-        baseline_windows = set()
-        try:
-            baseline_result = subprocess.run(
-                ["xdotool", "search", "--all", "--name", "."],
-                capture_output=True,
-                text=True,
-                timeout=1
-            )
-            if baseline_result.returncode == 0:
-                baseline_windows = set(baseline_result.stdout.strip().split('\n'))
-        except:
-            pass
-        
-        # Wait longer on first attempt (window needs time to appear)
-        for attempt in range(8):  # More attempts
-            wait_time = 1.5 if attempt == 0 else 0.8  # Longer initial wait
-            time.sleep(wait_time)
-            
-            # Strategy 1: Search by class/name patterns
-            # Try exact class match first (most reliable for XWayland)
-            search_patterns = [
-                ("--class", "mgba-qt"),  # Most specific
-                ("--class", "mGBA"),
-                ("--class", "mgba"),
-                ("--name", "mGBA"),
-                ("--name", window_title),
-                ("--name", "mgba"),
-            ]
-            
-            for search_type, pattern in search_patterns:
-                try:
-                    result = subprocess.run(
-                        ["xdotool", "search", search_type, pattern],
-                        capture_output=True,
-                        text=True,
-                        timeout=1
-                    )
-                    if result.returncode == 0 and result.stdout.strip():
-                        candidates = result.stdout.strip().split('\n')
-                        # Take the first valid window ID that's not in baseline
-                        for candidate_id in candidates:
-                            if candidate_id and candidate_id not in baseline_windows:
-                                window_id = candidate_id
-                                break
-                        if window_id:
-                            break
-                except:
-                    continue
-            
-            if window_id:
-                break
-            
-            # Strategy 2: Find new windows that appeared after baseline
-            try:
-                current_result = subprocess.run(
-                    ["xdotool", "search", "--all", "--name", "."],
-                    capture_output=True,
-                    text=True,
-                    timeout=1
-                )
-                if current_result.returncode == 0:
-                    current_windows = set(current_result.stdout.strip().split('\n'))
-                    new_windows = current_windows - baseline_windows
-                    
-                    # Check each new window
-                    for win_id in new_windows:
-                        if not win_id:
-                            continue
-                        try:
-                            # Check if it's a reasonable size (not a tiny popup)
-                            name_result = subprocess.run(
-                                ["xdotool", "getwindowname", win_id],
-                                capture_output=True,
-                                text=True,
-                                timeout=0.3
-                            )
-                            class_result = subprocess.run(
-                                ["xdotool", "getwindowclassname", win_id],
-                                capture_output=True,
-                                text=True,
-                                timeout=0.3
-                            )
-                            
-                            name = name_result.stdout.strip().lower() if name_result.returncode == 0 else ""
-                            class_name = class_result.stdout.strip().lower() if class_result.returncode == 0 else ""
-                            
-                            # If name is empty/short or class contains qt/mgba, it might be mgba
-                            if (not name or len(name) < 10) or 'qt' in class_name or 'mgba' in class_name:
-                                window_id = win_id
-                                break
-                        except:
-                            continue
-                    
-                    if window_id:
-                        break
-            except:
-                continue
-            
-            if window_id:
-                break  # Found window, exit retry loop
-        
-        # Move window to specified monitor if found
-        if window_id:
-            try:
-                result = subprocess.run(
-                    ["xdotool", "windowmove", window_id, str(monitor_offset_x), "0"],
-                    timeout=1,
-                    capture_output=True,
-                    text=True
-                )
-                if result.returncode == 0:
-                    print(f"   ✓ Positioned window on monitor {monitor_number} (offset: {monitor_offset_x}px)")
-                    return True
-                else:
-                    print(f"   ⚠️  xdotool windowmove failed: {result.stderr}")
-            except Exception as e:
-                print(f"   ⚠️  Error moving window: {e}")
-        
-        # If we didn't find it, print debug info
-        if not window_id:
-            print(f"   ⚠️  Could not find mgba-qt window after {8} attempts")
-            if is_wayland:
-                print(f"   💡 On Wayland, xdotool may not detect native Wayland windows")
-                print(f"   💡 Try setting QT_QPA_PLATFORM=xcb before launching mgba-qt")
-                if is_kde:
-                    print(f"   💡 Or use KDE window manager (Alt+F3 > More Actions > Move to Output)")
-            print(f"   💡 Window may need to be moved manually to Monitor {monitor_number} (x={monitor_offset_x})")
-    except Exception as e:
-        print(f"   ⚠️  Could not position window: {e}")
-        import traceback
-        traceback.print_exc()
     
-    return False
+    return outputs
 
-def _move_window_kde_wayland(window_title, output_name, monitor_number):
-    """Move window on KDE Wayland
+def try_wmctrl(window_name, desktop_num=3):
+    """Try to move window using wmctrl (X11 desktops/workspaces)"""
+    wmctrl = shutil.which("wmctrl")
+    if not wmctrl:
+        return False
     
-    Note: Native Wayland windows are not accessible via xdotool.
-    This function attempts to use xdotool for XWayland windows.
-    """
     try:
-        monitors = get_monitor_positions()
-        monitor_offset_x = monitors[monitor_number]
-        
-        # Try xdotool (works for XWayland windows)
-        if shutil.which("xdotool"):
-            for attempt in range(6):
-                time.sleep(1.2 if attempt == 0 else 0.8)
-                
-                # Try multiple search patterns
-                for pattern in ["mgba-qt", "mGBA", "mgba"]:
-                    result = subprocess.run(
-                        ["xdotool", "search", "--class", pattern],
-                        capture_output=True,
-                        text=True,
-                        timeout=1
-                    )
-                    if result.returncode == 0 and result.stdout.strip():
-                        win_id = result.stdout.strip().split('\n')[0]
-                        # Verify it's actually mgba by checking name
-                        try:
-                            name_result = subprocess.run(
-                                ["xdotool", "getwindowname", win_id],
-                                capture_output=True,
-                                text=True,
-                                timeout=0.5
-                            )
-                            # If name is empty or short, it might be mgba (Qt apps sometimes have empty names)
-                            name = name_result.stdout.strip()
-                            if not name or len(name) < 20:  # Empty or short name = likely mgba
-                                subprocess.run(
-                                    ["xdotool", "windowmove", win_id, str(monitor_offset_x), "0"],
-                                    timeout=1
-                                )
-                                print(f"   ✓ Positioned window on monitor {monitor_number} (offset: {monitor_offset_x}px)")
-                                return True
-                        except:
-                            # Try moving anyway
-                            subprocess.run(
-                                ["xdotool", "windowmove", win_id, str(monitor_offset_x), "0"],
-                                timeout=1
-                            )
-                            print(f"   ✓ Positioned window on monitor {monitor_number} (offset: {monitor_offset_x}px)")
-                            return True
-        
-        # For native Wayland windows, we can't programmatically move them
-        print(f"   ⚠️  Native Wayland window detected - automatic positioning limited")
-        print(f"   💡 Window should be on Monitor {monitor_number} ({output_name})")
-        print(f"   💡 If not, use KDE window manager (Alt+F3 > More Actions > Move to Output)")
-        print(f"   💡 Or launch with: QT_QPA_PLATFORM=xcb mgba-qt ... to force XWayland mode")
-        return False
-    except Exception as e:
-        return False
-
-def _move_window_sway(window_title, output_name, monitor_number):
-    """Move window on Sway using swaymsg"""
-    try:
-        if not shutil.which("swaymsg"):
-            return False
-        
-        # Wait for window to appear
-        time.sleep(2)
-        
-        # Find window by title/class and move to output
+        # List windows
         result = subprocess.run(
-            ["swaymsg", f"[class=\"mgba-qt\"]", "move", "to", "output", output_name],
+            ["wmctrl", "-l"],
             capture_output=True,
             text=True,
             timeout=2
         )
         
-        if result.returncode == 0:
-            print(f"   ✓ Positioned window on {output_name} (monitor {monitor_number})")
-            return True
+        for line in result.stdout.splitlines():
+            if window_name.lower() in line.lower() or "mgba" in line.lower():
+                win_id = line.split()[0]
+                # Move to desktop (0-indexed)
+                subprocess.run(
+                    ["wmctrl", "-i", "-r", win_id, "-t", str(desktop_num - 1)],
+                    timeout=2
+                )
+                print(f"   ✓ Moved window to desktop {desktop_num} using wmctrl")
+                return True
+    except Exception:
+        pass
+    
+    return False
+
+def try_xdotool(window_name, x_offset=3840, y_offset=0):
+    """Try to move window using xdotool (X11 positioning)"""
+    xdotool = shutil.which("xdotool")
+    if not xdotool:
+        return False
+    
+    try:
+        # Find window by name
+        result = subprocess.run(
+            ["xdotool", "search", "--name", window_name],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
         
+        if not result.stdout.strip():
+            # Try partial match
+            result = subprocess.run(
+                ["xdotool", "search", "--class", "mgba-qt"],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+        
+        if result.stdout.strip():
+            win_id = result.stdout.strip().split()[0]
+            subprocess.run(
+                ["xdotool", "windowmove", win_id, str(x_offset), str(y_offset)],
+                timeout=2
+            )
+            print(f"   ✓ Moved window to position ({x_offset}, {y_offset}) using xdotool")
+            return True
+    except Exception:
+        pass
+    
+    return False
+
+def try_swaymsg(window_name, monitor_num=3):
+    """Try to move window using swaymsg (Sway/i3 Wayland)"""
+    swaymsg = shutil.which("swaymsg")
+    if not swaymsg:
         return False
-    except Exception as e:
-        return False
+    
+    try:
+        # Get output name for monitor
+        outputs = get_wayland_outputs()
+        if monitor_num <= len(outputs):
+            output_name = outputs[monitor_num - 1]
+        else:
+            # Fallback: try DP-{num} naming convention
+            output_name = f"DP-{monitor_num}"
+        
+        # Move window to output
+        subprocess.run(
+            ["swaymsg", f'[app_id="mgba-qt"]', "move", "to", "output", output_name],
+            timeout=2
+        )
+        print(f"   ✓ Moved window to output {output_name} using swaymsg")
+        return True
+    except Exception:
+        pass
+    
+    return False
+
+def move_window_to_monitor(window_name="mGBA", monitor_num=3):
+    """Move window to specific monitor using available tools"""
+    # Get monitor geometry for X11 positioning
+    geo = get_monitor_geometry(monitor_num)
+    x_offset = geo[0]
+    
+    # Try different methods in order of preference
+    methods = [
+        lambda: try_wmctrl(window_name, monitor_num),  # Desktop switching
+        lambda: try_xdotool(window_name, x_offset),    # X11 positioning
+        lambda: try_swaymsg(window_name, monitor_num), # Wayland (Sway/i3)
+    ]
+    
+    for method in methods:
+        if method():
+            return True
+    
+    print(f"   ⚠️  Could not automatically move window")
+    print(f"   💡 Window should appear - please move it to monitor {monitor_num} manually")
+    return False
+
+def get_mgba_env_for_positioning(monitor_num=3):
+    """Get environment variables for launching mgba-qt with initial positioning"""
+    env = os.environ.copy()
+    
+    # Get monitor geometry
+    geo = get_monitor_geometry(monitor_num)
+    x_pos, y_pos = geo[0], geo[1]
+    
+    # Force Qt to use X11 backend (XWayland) for better window control
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+        env.setdefault("QT_QPA_PLATFORM", "xcb")
+        if "DISPLAY" not in env:
+            env["DISPLAY"] = ":0"
+    
+    # Set X11 window position hints (for X11/XWayland)
+    # These are read by window managers before window appears
+    env["_NET_WM_USER_TIME"] = "0"  # Prevent focus stealing
+    
+    # For X11: Set initial position using X11 properties
+    # Note: Qt doesn't directly support geometry env vars, but we can try
+    # Some window managers respect these
+    
+    return env, (x_pos, y_pos)
+
+def get_mgba_env_for_xwayland():
+    """Get environment variables for launching mgba-qt with XWayland support"""
+    env, _ = get_mgba_env_for_positioning()
+    return env
+
+def create_position_wrapper_script(app_cmd, monitor_num=3):
+    """Create a wrapper script that positions window immediately after launch"""
+    import tempfile
+    
+    geo = get_monitor_geometry(monitor_num)
+    x_pos, y_pos = geo[0], geo[1]
+    
+    # Try to get Wayland output name
+    outputs = get_wayland_outputs()
+    output_name = None
+    if monitor_num <= len(outputs):
+        output_name = outputs[monitor_num - 1]
+    
+    wrapper_content = f"""#!/bin/bash
+# Wrapper script to launch app and position window immediately
+
+# Launch app in background
+{' '.join(app_cmd)} &
+APP_PID=$!
+
+# Wait for window to appear (but position immediately)
+sleep 0.1
+
+# Try to position window immediately using multiple methods
+"""
+    
+    # Add swaymsg positioning (Wayland)
+    if output_name:
+        wrapper_content += f"""
+# Method 1: Sway/i3 Wayland
+if command -v swaymsg >/dev/null 2>&1; then
+    swaymsg '[app_id="mgba-qt"] move to output {output_name}' 2>/dev/null || true
+fi
+"""
+    
+    # Add xdotool positioning (X11)
+    wrapper_content += f"""
+# Method 2: xdotool (X11)
+if command -v xdotool >/dev/null 2>&1; then
+    WIN_ID=$(xdotool search --pid $APP_PID --class "mgba-qt" 2>/dev/null | head -1)
+    if [ -n "$WIN_ID" ]; then
+        xdotool windowmove $WIN_ID {x_pos} {y_pos} 2>/dev/null || true
+    fi
+fi
+
+# Method 3: wmctrl (X11 desktops)
+if command -v wmctrl >/dev/null 2>&1; then
+    sleep 0.2
+    wmctrl -r "mGBA" -t {monitor_num - 1} 2>/dev/null || true
+fi
+
+# Wait for app to finish
+wait $APP_PID
+"""
+    
+    # Write wrapper script
+    wrapper_path = tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False)
+    wrapper_path.write(wrapper_content)
+    wrapper_path.close()
+    
+    # Make executable
+    import stat
+    os.chmod(wrapper_path.name, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
+    
+    return wrapper_path.name

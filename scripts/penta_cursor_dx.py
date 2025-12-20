@@ -35,12 +35,17 @@ def main():
     input_rom_path = Path("rom/Penta Dragon (J).gb")
     output_rom_path = Path("rom/working/penta_dragon_cursor_dx.gb")
     palette_yaml_path = Path("palettes/penta_palettes.yaml")
+    monster_map_path = Path("palettes/monster_palette_map.yaml")
 
     rom = bytearray(input_rom_path.read_bytes())
     rom[0x143] = 0x80  # CGB-compatible
     
     with open(palette_yaml_path, 'r') as f:
         config = yaml.safe_load(f)
+    
+    # Load monster palette map
+    with open(monster_map_path, 'r') as f:
+        monster_map = yaml.safe_load(f)
     
     ultra_bg = ['7FFF', '001F', '7C00', '03E0']
     obj_pals = (
@@ -59,11 +64,34 @@ def main():
     rom[palette_data_offset : palette_data_offset + 64] = bg_pals
     rom[palette_data_offset + 64 : palette_data_offset + 128] = obj_pals
     
+    # Generate lookup table FIRST
+    lookup_table = bytearray([0xFF] * 256)
+    if monster_map and 'monster_palette_map' in monster_map:
+        for monster_name, data in monster_map['monster_palette_map'].items():
+            palette_raw = data.get('palette', 0xFF)
+            if isinstance(palette_raw, int):
+                palette = palette_raw & 0x07
+            else:
+                try:
+                    palette = int(palette_raw) & 0x07
+                except:
+                    palette = 0xFF
+            
+            tile_range = data.get('tile_range', [])
+            for tile in tile_range:
+                if isinstance(tile, int) and 0 <= tile < 256:
+                    lookup_table[tile] = palette
+    
     original_input = bytes(rom[0x0824:0x0824+46])
     
-    # HYPER-AGGRESSIVE sprite loop - optimized for maximum Sara W coverage
-    # Strategy: Check EVERY sprite, FORCE palette 1 for tiles 4-7, preserve registers for stability
-    def make_hyper_aggressive_sprite_loop():
+    # Calculate lookup table address (after sprite loop)
+    sprite_loop_start_file = 0x036D00
+    estimated_size = 666  # Working version size
+    lookup_table_file_offset = sprite_loop_start_file + estimated_size
+    lookup_table_bank_addr = ((lookup_table_file_offset - 0x034000) + 0x4000) & 0x7FFF
+    
+    # GENERALIZED sprite loop using lookup table - minimal change from working version
+    def make_lookup_table_sprite_loop(lookup_table_addr):
         """Generate hyper-aggressive sprite loop that forces palette 1 for Sara W"""
         return bytes([
             # Hyper-aggressive single-pass sprite loop for Sara W (tiles 4-7)
@@ -80,66 +108,95 @@ def main():
             0x6F,                  # LD L, A (HL = sprite Y address)
             0x7E,                  # LD A, [HL] (get Y)
             0xA7,                  # AND A (test Y)
-            0x28, 0x1B,            # JR Z, .skip (if Y=0, skip - 27 bytes forward)
+            0x28, 0x1F,            # JR Z, .skip (31 bytes forward - updated for lookup code)
             0xFE, 0x90,            # CP 144
-            0x30, 0x17,            # JR NC, .skip (if Y >= 144, skip - 23 bytes forward)
+            0x30, 0x1B,            # JR NC, .skip (27 bytes forward - updated)
             0x23,                  # INC HL (point to X)
             0x23,                  # INC HL (point to tile)
             0x7E,                  # LD A, [HL] (get tile ID)
             0x23,                  # INC HL (point to flags)
             0xE5,                  # PUSH HL (save flags address)
-            # HYPER-AGGRESSIVE: Check tile and FORCE palette 1 for Sara W (tiles 4-7)
-            0xFE, 0x04,            # CP 4
-            0x38, 0x04,            # JR C, .no_modify (tile < 4, 4 bytes forward)
-            0xFE, 0x08,            # CP 8
-            0x38, 0x03,            # JR C, .sara_w (4 <= tile < 8, Sara W = Pal1, 3 bytes forward)
-            # .no_modify: (tile < 4 or >= 8)
+            # Lookup palette from table (replaces hardcoded tile checks)
+            0x57,                  # LD D, A (save tile ID)
+            0x21, lookup_table_addr & 0xFF, (lookup_table_addr >> 8) & 0xFF,  # LD HL, table_addr
+            0x7A,                  # LD A, D (restore tile ID)
+            0x5F,                  # LD E, A (tile ID in E)
+            0x19,                  # ADD HL, DE (HL = table_base + tile_id)
+            0x7E,                  # LD A, [HL] (get palette)
+            
+            0xFE, 0xFF,            # CP 0xFF
+            0x28, 0x08,            # JR Z, .no_modify (8 bytes forward)
+            
+            # Apply palette from lookup table
             0xE1,                  # POP HL (restore flags address)
-            0x18, 0x07,            # JR .skip (7 bytes forward)
-            # .sara_w: (tiles 4-7) - FORCE palette 1 IMMEDIATELY, NO CHECKS
-            0xE1,                  # POP HL (get flags address)
-            0x7E,                  # LD A, [HL] (get current flags)
-            0xE6, 0xF8,            # AND 0xF8 (clear palette bits 0-2)
-            0xF6, 0x01,            # OR 0x01 (FORCE palette 1 - ALWAYS, NO EXCEPTIONS)
-            0x77,                  # LD [HL], A (write back IMMEDIATELY)
+            0x57,                  # LD D, A (save palette)
+            0x7E,                  # LD A, [HL] (get flags)
+            0xE6, 0xF8,            # AND 0xF8 (clear palette bits)
+            0xB2,                  # OR D (set palette)
+            0x77,                  # LD [HL], A (write back)
+            0x18, 0x03,            # JR .skip (3 bytes forward)
+            
+            # .no_modify:
+            0xE1,                  # POP HL (don't modify)
             # .skip:
             0x21, 0x00, 0xFE,      # LD HL, 0xFE00 (reset OAM base)
             0x0C,                  # INC C (next sprite index)
             0x05,                  # DEC B (decrement counter)
-            0x20, 0xD5,            # JR NZ, .loop (back to loop start - 43 bytes back)
+            0x20, 0xD3,            # JR NZ, .loop (45 bytes back - updated)
             # Loop complete
             0xE1, 0xD1, 0xC1, 0xF1,  # POP HL, DE, BC, AF (restore all - STABILITY)
         ])
     
-    sprite_loop_code = make_hyper_aggressive_sprite_loop()
+    # Build sprite loop with temporary address first to get size
+    temp_sprite_loop = make_lookup_table_sprite_loop(0x6F9A)
     
-    # STABLE but AGGRESSIVE: Run sprite loop 8 TIMES (proven stable, was getting 25% coverage)
-    # Reload palettes to ensure they stay loaded
-    # This approach was working before - let's stick with it but ensure it runs
-    combined_bank13 = bytes([
-        # Load BG palettes FIRST (ensure palettes are loaded)
+    # Build combined function to get actual size
+    temp_combined = bytes([
+        # Load BG palettes
         0x21, 0x80, 0x6C, 0x3E, 0x80, 0xE0, 0x68, 0x0E, 0x40, 0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
-        # Load OBJ palettes (CRITICAL: Palette 1 = green/orange for Sara W)
+        # Load OBJ palettes
         0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-        # AGGRESSIVE: Run sprite loop 8 TIMES in a row (proven to work, got 25% coverage)
-        # This maximizes the chance of catching Sara W sprites before game overwrites OAM
-    ]) + (sprite_loop_code * 8) + bytes([
-        # Reload OBJ palettes AGAIN (game might have overwritten them)
+    ]) + (temp_sprite_loop * 8) + bytes([
+        # Reload OBJ palettes
         0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-        # Run sprite loop 2 MORE TIMES after palette reload (total 10x)
-    ]) + (sprite_loop_code * 2) + bytes([
-        # NOW run original input handler (preserve original behavior)
+    ]) + (temp_sprite_loop * 2) + bytes([
+        # Original input handler
     ]) + original_input + bytes([
         0xC9,  # RET
     ])
     
-    # Check if combined function fits (should be < 2000 bytes for safety)
-    combined_size = len(combined_bank13)
-    if combined_size > 2000:
-        print(f"⚠️  WARNING: Combined function is {combined_size} bytes, may overflow!")
+    combined_size = len(temp_combined)
+    
+    # Calculate actual lookup table address
+    actual_lookup_table_offset = 0x036D00 + combined_size
+    actual_lookup_table_bank_addr = ((actual_lookup_table_offset - 0x034000) + 0x4000) & 0x7FFF
+    
+    # NOW build sprite loop with correct address
+    sprite_loop_code = make_lookup_table_sprite_loop(actual_lookup_table_bank_addr)
+    
+    # Build final combined function with correct sprite loop
+    combined_bank13 = bytes([
+        # Load BG palettes
+        0x21, 0x80, 0x6C, 0x3E, 0x80, 0xE0, 0x68, 0x0E, 0x40, 0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
+        # Load OBJ palettes
+        0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
+    ]) + (sprite_loop_code * 8) + bytes([
+        # Reload OBJ palettes
+        0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
+    ]) + (sprite_loop_code * 2) + bytes([
+        # Original input handler
+    ]) + original_input + bytes([
+        0xC9,  # RET
+    ])
+    
+    if len(combined_bank13) > 2000:
+        print(f"⚠️  WARNING: Combined function is {len(combined_bank13)} bytes!")
     
     # Write combined function
     rom[0x036D00:0x036D00+len(combined_bank13)] = combined_bank13
+    
+    # Write lookup table AFTER sprite loop
+    rom[actual_lookup_table_offset:actual_lookup_table_offset + 256] = lookup_table
 
     # Trampoline: switch bank, call custom code, restore bank
     trampoline = bytes([
@@ -149,7 +206,11 @@ def main():
     if len(trampoline) < 46:
         rom[0x0824+len(trampoline):0x0824+46] = bytes([0x00] * (46 - len(trampoline)))
     
-    print(f"✓ Built ROM with AGGRESSIVE 10x sprite loop (8x + reload + 2x) for Sara W (tiles 4-7) - total size: {combined_size} bytes (stable approach)")
+    mapped_count = sum(1 for x in lookup_table if x != 0xFF)
+    print(f"✓ Built ROM with lookup table sprite loop (10x passes)")
+    print(f"  - Lookup table: {mapped_count} tiles mapped to palettes")
+    print(f"  - Table at: 0x{actual_lookup_table_offset:06X} (bank: 0x{actual_lookup_table_bank_addr:04X})")
+    print(f"  - Total size: {len(combined_bank13)} bytes")
     output_rom_path.write_bytes(rom)
 
 if __name__ == "__main__":
