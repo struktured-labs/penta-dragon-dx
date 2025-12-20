@@ -4,7 +4,11 @@ import time
 import subprocess
 import yaml
 import shutil
+import sys
 from pathlib import Path
+# Add scripts directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+from mgba_window_utils import move_window_to_monitor
 
 def create_verification_lua(wall_clock_seconds=5, screenshots_per_second=8):
     """Create Lua script to verify sprite palette assignments using screenshots based on wall clock time"""
@@ -93,55 +97,11 @@ end)
     script_path.write_text(script_content)
     return script_path, screenshot_dir
 
-def move_window_to_monitor(window_title="mGBA", monitor_offset_x=1920):
-    """Move mgba-qt window to a specific monitor using xdotool"""
-    try:
-        # Check if xdotool is available
-        if not shutil.which("xdotool"):
-            print(f"   ⚠️  xdotool not found - cannot position window (install with: sudo apt install xdotool)")
-            return False
-        
-        # Wait a moment for window to appear
-        time.sleep(0.5)
-        
-        # Find window by title (mGBA typically has this in title)
-        result = subprocess.run(
-            ["xdotool", "search", "--name", window_title],
-            capture_output=True,
-            text=True,
-            timeout=2
-        )
-        
-        if result.returncode == 0 and result.stdout.strip():
-            window_id = result.stdout.strip().split('\n')[0]
-            # Move window to second monitor (assuming 1920px width for first monitor)
-            # Adjust monitor_offset_x based on your setup
-            subprocess.run(
-                ["xdotool", "windowmove", window_id, str(monitor_offset_x), "0"],
-                timeout=1
-            )
-            print(f"   ✓ Positioned window on monitor (offset: {monitor_offset_x}px)")
-            return True
-        else:
-            # Try alternative search
-            result = subprocess.run(
-                ["xdotool", "search", "--class", "mGBA"],
-                capture_output=True,
-                text=True,
-                timeout=2
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                window_id = result.stdout.strip().split('\n')[0]
-                subprocess.run(
-                    ["xdotool", "windowmove", window_id, str(monitor_offset_x), "0"],
-                    timeout=1
-                )
-                print(f"   ✓ Positioned window on monitor (offset: {monitor_offset_x}px)")
-                return True
-    except Exception as e:
-        print(f"   ⚠️  Could not position window: {e}")
-    
-    return False
+import sys
+from pathlib import Path
+# Add scripts directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+from mgba_window_utils import move_window_to_monitor
 
 def analyze_verification(screenshot_dir):
     """Analyze screenshots to check if sprites use different palettes"""
@@ -257,7 +217,7 @@ def main():
         return False
     
     # Quick test: capture screenshots over 5 seconds of wall clock time
-    wall_clock_seconds = 5  # Real time seconds to run
+    wall_clock_seconds = 20  # Real time seconds to run
     screenshots_per_second = 12  # Capture 12 screenshots per second = 60 screenshots in 5 seconds (2x more)
     expected_screenshots = wall_clock_seconds * screenshots_per_second
     
@@ -295,17 +255,25 @@ def main():
     try:
         # Launch mgba-qt (don't capture stdout/stderr so window can display properly)
         # Fast forward might require window to be visible/focused
+        # On Wayland, force XWayland mode so xdotool can position the window
+        import os
+        env = os.environ.copy()
+        if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+            from mgba_window_utils import get_mgba_env_for_xwayland
+            env = get_mgba_env_for_xwayland()
+        
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,  # Don't capture - let window display
-            stderr=subprocess.DEVNULL   # Don't capture - let window display
+            stderr=subprocess.DEVNULL,  # Don't capture - let window display
+            env=env  # Use environment that forces XWayland on Wayland
         )
         
         # Give mgba-qt a moment to initialize and enable fast forward
         time.sleep(1)
         
-        # Try to move window to second monitor (prevents focus stealing)
-        move_window_to_monitor(monitor_offset_x=1920)  # Adjust if your monitor setup differs
+        # Move window to default monitor (Dell monitor, monitor 1)
+        move_window_to_monitor()
         
         # Wait for wall clock time, then kill mgba-qt
         # Screenshots are taken based on wall clock time, not game frames

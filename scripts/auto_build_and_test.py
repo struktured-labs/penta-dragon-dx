@@ -4,6 +4,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+import sys
+from pathlib import Path
+# Add scripts directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+from mgba_window_utils import move_window_to_monitor
 
 def build_rom():
     """Build the ROM"""
@@ -56,14 +61,21 @@ def launch_mgba_qt():
     subprocess.run(["pkill", "-9", "-f", "mgba"], capture_output=True)
     time.sleep(1)
     
-    # Launch mgba-qt in background
+    # Launch mgba-qt in background with XWayland environment (for window positioning)
+    import os
+    from mgba_window_utils import get_mgba_env_for_xwayland
+    env = get_mgba_env_for_xwayland()
     subprocess.Popen(
         ["/usr/local/bin/mgba-qt", str(rom_path)],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stderr=subprocess.DEVNULL,
+        env=env
     )
     
-    time.sleep(2)
+    # Give mgba-qt a moment to initialize, then move to Dell monitor
+    time.sleep(1)
+    move_window_to_monitor()
+    time.sleep(1)
     
     # Verify it's running
     result = subprocess.run(

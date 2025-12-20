@@ -192,76 +192,11 @@ end)
     script_path.write_text(script_content)
     return script_path, screenshot_dir
 
-def move_window_to_desktop(window_name="mgba-qt", desktop_num=3):
-    """Move mgba-qt window to 3rd desktop/monitor using available tools"""
-    import shutil
-    
-    # Wait for window to appear
-    time.sleep(1.5)
-    
-    # Try wmctrl first (for desktop switching)
-    wmctrl_path = shutil.which("wmctrl")
-    if wmctrl_path:
-        try:
-            # Find window by name
-            result = subprocess.run(
-                ["wmctrl", "-l"],
-                capture_output=True,
-                text=True,
-                timeout=2
-            )
-            for line in result.stdout.splitlines():
-                if window_name.lower() in line.lower() or "mGBA" in line:
-                    win_id = line.split()[0]
-                    # Move to desktop 3 (0-indexed, so desktop 2)
-                    subprocess.run(
-                        ["wmctrl", "-i", "-r", win_id, "-t", str(desktop_num - 1)],
-                        timeout=2
-                    )
-                    print(f"   ✓ Moved mgba-qt window to desktop {desktop_num}")
-                    return True
-        except Exception as e:
-            pass
-    
-    # Try xdotool as fallback (for window positioning)
-    xdotool_path = shutil.which("xdotool")
-    if xdotool_path:
-        try:
-            # Find window by name
-            result = subprocess.run(
-                ["xdotool", "search", "--name", window_name],
-                capture_output=True,
-                text=True,
-                timeout=2
-            )
-            if not result.stdout.strip():
-                # Try searching for "mGBA" or partial match
-                result = subprocess.run(
-                    ["xdotool", "search", "--class", "mgba-qt"],
-                    capture_output=True,
-                    text=True,
-                    timeout=2
-                )
-            
-            if result.stdout.strip():
-                win_id = result.stdout.strip().split()[0]
-                # Try to get monitor info and move to 3rd monitor
-                # Common setup: 1920x1080 monitors side-by-side
-                # Monitor 1: x=0, Monitor 2: x=1920, Monitor 3: x=3840
-                subprocess.run(
-                    ["xdotool", "windowmove", win_id, "3840", "0"],
-                    timeout=2
-                )
-                print(f"   ✓ Moved mgba-qt window to 3rd monitor (x=3840)")
-                return True
-        except Exception as e:
-            pass
-    
-    # Try using environment variable for DISPLAY if on X11
-    # This is a fallback - user may need to manually move window
-    print(f"   ⚠️  Could not automatically move window")
-    print(f"   💡 Window should appear - please move it to your 3rd desktop/monitor manually")
-    return False
+import sys
+from pathlib import Path
+# Add scripts directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+from mgba_window_utils import move_window_to_monitor
 
 def launch_mgba_with_lua(lua_script_path):
     """Launch mgba-qt with Lua script and move to 3rd desktop"""
@@ -291,15 +226,20 @@ def launch_mgba_with_lua(lua_script_path):
     print(f"   Command: {' '.join(cmd)}")
     
     # Don't capture stdout/stderr so window can display properly
+    # Use XWayland environment for window positioning
+    import os
+    from mgba_window_utils import get_mgba_env_for_xwayland
+    env = get_mgba_env_for_xwayland()
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stderr=subprocess.DEVNULL,
+        env=env
     )
     
-    # Give mgba-qt a moment to initialize, then move window
+    # Give mgba-qt a moment to initialize, then move to Dell monitor
     time.sleep(0.5)
-    move_window_to_desktop("mgba-qt", desktop_num=3)
+    move_window_to_monitor()
     
     return proc
 

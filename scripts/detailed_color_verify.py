@@ -237,7 +237,20 @@ def main():
         "--script", str(lua_script),
     ]
     
-    process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Use XWayland environment for window positioning
+    import os
+    sys.path.insert(0, str(Path(__file__).parent))
+    from mgba_window_utils import get_mgba_env_for_xwayland
+    env = get_mgba_env_for_xwayland()
+    process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+    
+    # Give mgba-qt a moment to initialize, then move to Dell monitor
+    time.sleep(1)
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from mgba_window_utils import move_window_to_monitor
+    move_window_to_monitor()
     
     # Wait for script to complete (it stops after 10 screenshots)
     print("   Waiting for verification to complete...")

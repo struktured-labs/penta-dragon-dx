@@ -665,6 +665,11 @@ def start_web_server(screenshot_dir):
 
 def launch_mgba_qt_backup(rom_path):
     """Launch mgba-qt for user testing"""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from mgba_window_utils import move_window_to_monitor
+    
     mgba_qt_path = Path("/usr/local/bin/mgba-qt")
     if not mgba_qt_path.exists():
         print(f"⚠️  mgba-qt not found at {mgba_qt_path}")
@@ -673,7 +678,17 @@ def launch_mgba_qt_backup(rom_path):
     cmd = [str(mgba_qt_path), str(rom_path)]
     print(f"🎮 Launching mgba-qt for user testing: {' '.join(cmd)}")
     
-    proc = subprocess.Popen(cmd)
+    # Use XWayland environment for window positioning
+    import os
+    sys.path.insert(0, str(Path(__file__).parent))
+    from mgba_window_utils import get_mgba_env_for_xwayland
+    env = get_mgba_env_for_xwayland()
+    proc = subprocess.Popen(cmd, env=env)
+    
+    # Give mgba-qt a moment to initialize, then move to Dell monitor
+    time.sleep(1)
+    move_window_to_monitor()
+    
     return proc
 
 def main():
