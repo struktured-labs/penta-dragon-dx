@@ -6,7 +6,7 @@ Author: Your Name
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 Requires-Dist: click>=8.1
-Requires-Dist: Pillow>=10.0
+Requires-Dist: pillow>=10.0
 Requires-Dist: numpy>=1.26
 Requires-Dist: pyyaml>=6.0
 
@@ -30,12 +30,33 @@ The colorized ROM is complete and playable. All features implemented:
 
 ### Build the Colorized ROM
 
+**Option 1: Use YAML configuration (recommended)**
 ```bash
-# Requires Python 3.11+ and original ROM in rom/ directory
+# Edit palettes to your liking
+nano palettes/penta_palettes.yaml
+
+# Build ROM with custom palettes
+uv run python scripts/create_dx_rom_from_yaml.py
+```
+
+**Option 2: Use hardcoded palettes**
+```bash
 python3 scripts/create_dx_rom.py
 ```
 
 Output: `rom/working/penta_dragon_dx_FIXED.gb`
+
+### Customize Palettes
+
+```bash
+# Interactive palette color converter
+python3 scripts/palette_tool.py
+
+# Quick conversions
+python3 scripts/palette_tool.py --hex #FF8800  # Orange to BGR555
+python3 scripts/palette_tool.py --rgb 255 128 0  # RGB to BGR555
+python3 scripts/palette_tool.py --examples  # Show common colors
+```
 
 ### Test
 
@@ -78,21 +99,43 @@ The ROM has **zero free space** in bank 0 and bank 1. The only safe approach is:
 
 ### Color Palettes
 
-**Background Palettes (8):**
-- 0: White→Green→Dark Green→Black
-- 1: White→Red→Dark Red→Darker
-- 2: White→Blue→Dark Blue→Darker
-- 3: White→Yellow→Orange→Brown
-- 4: White→Cyan→Teal→Dark
-- 5: White→Magenta→Purple→Dark
-- 6: White→Light Cyan→Cyan→Blue
-- 7: White→Pink→Purple→Dark
+The game uses 16 total palettes (8 background + 8 sprite), fully customizable via `palettes/penta_palettes.yaml`:
 
-**Object/Sprite Palettes (8):**
-- 0: Transparent→White→Orange→Brown (main characters)
-- 1-7: Various saturated color schemes
+**Background Palettes:**
+- 0: Dungeon Floors (default green theme)
+- 1: Lava & Danger Areas (red/fire theme)
+- 2: Water & Ice Areas (blue/ice theme)
+- 3: Desert & Sand Areas (yellow/sand theme)
+- 4: Forest & Nature Areas (cyan/nature theme)
+- 5: Castle & Stone Areas (magenta/purple theme)
+- 6: Sky & Clouds (light blue/sky theme)
+- 7: Boss & Special Areas (pink/special theme)
 
-All colors use BGR555 format (15-bit, little-endian).
+**Sprite/Object Palettes:**
+- 0: Main Character (Penta Dragon) - orange/brown
+- 1: Basic Enemies - green
+- 2: Fire Enemies - red
+- 3: Ice/Water Enemies - blue
+- 4: Flying Enemies - yellow/gold
+- 5: Poison/Toxic Enemies - cyan
+- 6: Mini-Bosses - magenta/purple
+- 7: Main Bosses - bright yellow/orange
+
+Each palette has 4 colors in BGR555 format. Edit `palettes/penta_palettes.yaml` to customize:
+
+```yaml
+obj_palettes:
+  MainCharacter:
+    name: "Penta Dragon (Player)"
+    colors: ["0000", "7FFF", "7E00", "4800"]  # Trans→White→Orange→Brown
+    notes: "Warm colors for hero"
+```
+
+**Color Format:** BGR555 (15-bit)
+- 4-digit hex: BBBBBGGGGGRRRRR (5 bits each)
+- Example: `7FFF` = white, `001F` = red, `03E0` = green, `7C00` = blue
+
+Use `scripts/palette_tool.py` for easy color conversion!
 
 ## Project Structure
 

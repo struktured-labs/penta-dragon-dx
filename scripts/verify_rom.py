@@ -8,14 +8,14 @@ from pathlib import Path
 def run_test(rom_path):
     print(f"🚀 Verifying ROM: {rom_path}")
     
-    # Check if mgba-qt is available
-    mgba_path = "/usr/local/bin/mgba-qt"
+    # Check if mgba (CLI) is available
+    mgba_path = "/usr/local/bin/mgba"
     if not Path(mgba_path).exists():
-        mgba_path = subprocess.getoutput("which mgba-qt")
+        mgba_path = subprocess.getoutput("which mgba")
     
     if not mgba_path:
-        print("❌ mGBA not found!")
-        return False
+        print("❌ CLI mGBA not found! Falling back to mgba-qt.")
+        mgba_path = "/usr/local/bin/mgba-qt"
 
     lua_script = Path("scripts/check_white_screen.lua").absolute()
     

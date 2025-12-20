@@ -60,18 +60,18 @@ obj_palettes:
     name: Shared Sprite Palette
     colors:
     - transparent
-    - 7C1F
-    - 7C1F
-    - 7C1F
-    notes: 'Player: pure magenta for clear differentiation'
+    - 001F
+    - 001F
+    - 001F
+    notes: Sara D - Iteration 1 config 1
   EnemyBasic:
     name: Enemy Basic
     colors:
     - transparent
-    - 7FE0
-    - 7FE0
-    - 7FE0
-    notes: Pure yellow
+    - 03E0
+    - 03E0
+    - 03E0
+    notes: Sara W - Iteration 1 config 1
   EnemyFire:
     name: Enemy Fire
     colors:
@@ -116,11 +116,10 @@ obj_palettes:
     name: Main Boss
     colors:
     - transparent
-    - 7FE0
-    - 4A00
-    - 2100
-    notes: Yellow/orange
-
+    - 7C00
+    - 7C00
+    - 7C00
+    notes: Dragon Fly - Iteration 1 config 1
 obj_palette_map:
   MainCharacter: 0
   EnemyBasic: 1

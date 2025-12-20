@@ -1,37 +1,44 @@
--- mGBA Lua script to detect white screen freeze
+-- mGBA Lua script to verify render status
 local frameCount = 0
-local maxFrames = 600 -- 10 seconds at 60fps
+local maxFrames = 600
 
 function onFrame()
     frameCount = frameCount + 1
     
-    if frameCount > 120 then -- Wait 2 seconds for splash screen to pass
+    if frameCount > 180 then -- After 3 seconds
         local isWhite = true
-        -- Check a few points on the screen
         local points = {
             {40, 40}, {80, 72}, {120, 120}, {20, 130}
         }
         
         for _, p in ipairs(points) do
             local r, g, b = emu:readPixel(p[1], p[2])
-            -- In mGBA, colors are 0-255. Pure white is 255, 255, 255
             if r < 240 or g < 240 or b < 240 then
                 isWhite = false
                 break
             end
         end
         
+        local f = io.open("/tmp/penta_verify.txt", "w")
         if not isWhite then
-            print("CONTENT_DETECTED")
+            f:write("SUCCESS: Content Detected\n")
+        else
+            f:write("FAILURE: White Screen Detected\n")
+        end
+        f:close()
+        
+        if not isWhite then
+            emu:log("Verification successful!")
             os.exit(0)
         end
     end
     
     if frameCount >= maxFrames then
-        print("WHITE_SCREEN_FREEZE_DETECTED")
+        local f = io.open("/tmp/penta_verify.txt", "w")
+        f:write("FAILURE: Freeze Timeout\n")
+        f:close()
         os.exit(1)
     end
 end
 
 emu:addStepCallback(onFrame)
-
