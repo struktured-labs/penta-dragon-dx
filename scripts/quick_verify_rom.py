@@ -258,7 +258,7 @@ def main():
     
     # Quick test: capture screenshots over 5 seconds of wall clock time
     wall_clock_seconds = 5  # Real time seconds to run
-    screenshots_per_second = 6  # Capture 6 screenshots per second = 30 screenshots in 5 seconds (20-40 range)
+    screenshots_per_second = 12  # Capture 12 screenshots per second = 60 screenshots in 5 seconds (2x more)
     expected_screenshots = wall_clock_seconds * screenshots_per_second
     
     print(f"🔍 Creating quick verification Lua script ({wall_clock_seconds}s wall clock time)...")
@@ -327,16 +327,29 @@ def main():
                 print(f"   Progress: {current_count} screenshots captured ({waited:.1f}s elapsed)...")
                 last_count = current_count
         
-        # Kill mgba-qt after wall clock time expires
+        # Kill mgba-qt after wall clock time expires - ALWAYS kill, even if crashed
         print(f"   ✓ {wall_clock_seconds}s elapsed, terminating mgba-qt...")
-        if process.poll() is None:
-            process.terminate()
-            time.sleep(0.5)
+        try:
             if process.poll() is None:
-                process.kill()
+                process.terminate()
+                time.sleep(0.5)
+                if process.poll() is None:
+                    process.kill()
+            else:
+                # Process already dead, but kill anyway to be sure
+                try:
+                    process.kill()
+                except:
+                    pass
             print(f"   Process terminated")
-        else:
-            print(f"   Process already completed")
+        except:
+            pass
+        finally:
+            # Force kill using pkill as fallback - ALWAYS ensure cleanup
+            try:
+                subprocess.run(["pkill", "-9", "mgba-qt"], stderr=subprocess.DEVNULL, timeout=1)
+            except:
+                pass
         
         # Final check
         screenshots_found = list(output_file.glob("verify_screenshot_*.png"))

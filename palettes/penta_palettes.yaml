@@ -57,69 +57,69 @@ bg_palettes:
     - 2D6B
 obj_palettes:
   MainCharacter:
-    name: Shared Sprite Palette
+    name: Sara D Palette
     colors:
     - transparent
-    - 001F
-    - 001F
-    - 001F
-    notes: Sara D - Iteration 1 config 1
+    - 001F  # bright red
+    - 0000  # black
+    - 0010  # dark red
+    notes: Sara D - red and black (more distinct)
   EnemyBasic:
-    name: Enemy Basic
+    name: Sara W Palette
     colors:
     - transparent
-    - 03E0
-    - 03E0
-    - 03E0
-    notes: Sara W - Iteration 1 config 1
+    - 03FF  # bright green
+    - 021F  # orange
+    - 03E0  # green
+    notes: Sara W - green and orange (more distinct)
   EnemyFire:
     name: Enemy Fire
     colors:
     - transparent
-    - 001F
-    - 001F
-    - 001F
-    notes: Pure red
+    - 001F  # bright red
+    - 7C00  # bright blue (contrast)
+    - 0010  # dark red
+    notes: Fire enemies - red and blue (2+ colors)
   EnemyIce:
     name: Enemy Ice
     colors:
     - transparent
-    - 03FF
-    - 03FF
-    - 03FF
-    notes: Pure cyan
+    - 03FF  # bright cyan
+    - 7FFF  # white (contrast)
+    - 021F  # dark cyan
+    notes: Ice enemies - cyan and white (2+ colors)
   EnemyFlying:
     name: Enemy Flying
     colors:
     - transparent
-    - 03E0
-    - 03E0
-    - 03E0
-    notes: Pure green
+    - 03E0  # bright green
+    - 7FE0  # yellow (contrast)
+    - 0280  # dark green
+    notes: Flying enemies - green and yellow (2+ colors)
   EnemyPoison:
     name: Enemy Poison
     colors:
     - transparent
-    - 7C00
-    - 7C00
-    - 7C00
-    notes: Pure blue
+    - 7C00  # bright blue
+    - 7C1F  # purple (contrast)
+    - 5000  # dark blue
+    notes: Poison enemies - blue and purple (2+ colors)
   MiniBoss:
     name: Mini Boss
     colors:
     - transparent
-    - 7FFF
-    - 7FFF
-    - 7FFF
-    notes: Pure white
+    - 7FFF  # white
+    - 7FE0  # yellow (contrast)
+    - 7C1F  # purple (contrast)
+    notes: Mini Boss - white, yellow, purple (3+ colors)
   MainBoss:
-    name: Main Boss
+    name: Dragon Fly Palette
     colors:
     - transparent
-    - 7C00
-    - 7C00
-    - 7C00
-    notes: Dragon Fly - Iteration 1 config 1
+    - 7FFF  # white
+    - 7C1F  # bright blue
+    - 7FE0  # light blue
+    notes: Dragon Fly - white and blue (more distinct)
 obj_palette_map:
   MainCharacter: 0
   EnemyBasic: 1
