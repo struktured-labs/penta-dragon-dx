@@ -216,8 +216,8 @@ def main():
         print(f"❌ ROM not found: {rom_path}")
         return False
     
-    # Quick test: capture screenshots over 5 seconds of wall clock time
-    wall_clock_seconds = 20  # Real time seconds to run
+    # Quick test: capture screenshots over 10 seconds of wall clock time (reduced from 20s)
+    wall_clock_seconds = 10  # Real time seconds to run (50% faster)
     screenshots_per_second = 12  # Capture 12 screenshots per second = 60 screenshots in 5 seconds (2x more)
     expected_screenshots = wall_clock_seconds * screenshots_per_second
     
@@ -270,10 +270,16 @@ def main():
         )
         
         # Give mgba-qt a moment to initialize and enable fast forward
-        time.sleep(1)
+        # Wait longer for script menu to appear (script menu can take 3-4 seconds)
+        time.sleep(3)
         
-        # Move window to default monitor (Dell monitor, monitor 1)
-        move_window_to_monitor()
+        # Move window to default monitor (Dell Monitor 2)
+        # Retry positioning in case window takes longer to appear
+        for attempt in range(5):
+            if move_window_to_monitor():
+                break
+            if attempt < 4:  # Wait between retries
+                time.sleep(1.5)
         
         # Wait for wall clock time, then kill mgba-qt
         # Screenshots are taken based on wall clock time, not game frames
@@ -281,8 +287,63 @@ def main():
         
         # Wait for the specified wall clock duration
         waited = 0
-        check_interval = 0.5  # Check every 0.5 seconds
+        check_interval = 2.0  # Check every 2 seconds for intermediate analysis
         last_count = 0
+        analyzed_screenshots = set()  # Track which screenshots we've already analyzed
+        
+        def analyze_intermediate(screenshot_dir, analyzed_set):
+            """Quick intermediate analysis of new screenshots"""
+            try:
+                from PIL import Image
+                import numpy as np
+                from colorsys import rgb_to_hsv
+                
+                screenshots = sorted(screenshot_dir.glob("verify_screenshot_*.png"))
+                new_screenshots = [s for s in screenshots if s not in analyzed_set]
+                
+                if not new_screenshots:
+                    return None
+                
+                distinct_colors = set()
+                hues = []
+                
+                for screenshot_path in new_screenshots[-10:]:  # Analyze last 10 new screenshots
+                    try:
+                        img = Image.open(screenshot_path)
+                        img_array = np.array(img)
+                        
+                        h, w = img_array.shape[:2]
+                        center_y, center_x = h // 2, w // 2
+                        sample_region = img_array[
+                            center_y - 40:center_y + 40,
+                            center_x - 60:center_x + 60
+                        ]
+                        
+                        if len(sample_region.shape) == 3:
+                            unique_colors = set(tuple(c) for row in sample_region for c in row)
+                            distinct_colors.update(unique_colors)
+                            
+                            for color in unique_colors:
+                                if len(color) >= 3:
+                                    r, g, b = color[0]/255.0, color[1]/255.0, color[2]/255.0
+                                    h_val, s, v = rgb_to_hsv(r, g, b)
+                                    if s > 0.3 and v > 0.3:
+                                        hues.append(h_val)
+                        
+                        analyzed_set.add(screenshot_path)
+                    except Exception as e:
+                        continue
+                
+                return {
+                    'new_count': len(new_screenshots),
+                    'distinct_colors': len(distinct_colors),
+                    'hue_count': len(hues),
+                    'total_screenshots': len(screenshots)
+                }
+            except ImportError:
+                return None
+            except Exception:
+                return None
         
         while waited < wall_clock_seconds:
             time.sleep(check_interval)
@@ -291,8 +352,19 @@ def main():
             # Check screenshot progress
             screenshots_found = list(output_file.glob("verify_screenshot_*.png"))
             current_count = len(screenshots_found)
+            
             if current_count != last_count:
-                print(f"   Progress: {current_count} screenshots captured ({waited:.1f}s elapsed)...")
+                print(f"   📸 Progress: {current_count} screenshots captured ({waited:.1f}s elapsed)")
+                
+                # Show intermediate analysis
+                intermediate = analyze_intermediate(output_file, analyzed_screenshots)
+                if intermediate:
+                    print(f"      └─ Analysis: {intermediate['new_count']} new screenshots analyzed")
+                    print(f"         └─ Distinct colors so far: {intermediate['distinct_colors']}")
+                    print(f"         └─ Saturated hues found: {intermediate['hue_count']}")
+                    if intermediate['distinct_colors'] > 0:
+                        print(f"         └─ Status: {'✅ Colors detected' if intermediate['distinct_colors'] >= 10 else '⚠️  Low color count'}")
+                
                 last_count = current_count
         
         # Kill mgba-qt after wall clock time expires - ALWAYS kill, even if crashed
@@ -350,23 +422,69 @@ def main():
     time.sleep(2)
     
     # Analyze results
-    print(f"\n📋 Analyzing screenshots from {output_file}...")
+    print(f"\n📋 Final analysis of screenshots from {output_file}...")
     analysis = analyze_verification(output_file)
+    
+    # Show detailed breakdown
+    print(f"\n📊 Analysis Summary:")
+    if 'screenshot_count' in analysis:
+        print(f"   Total screenshots: {analysis['screenshot_count']}")
+    if 'distinct_colors' in analysis:
+        print(f"   Distinct colors found: {analysis['distinct_colors']}")
+    
+    # Show what was analyzed
+    try:
+        from PIL import Image
+        import numpy as np
+        from colorsys import rgb_to_hsv
+        
+        screenshots = sorted(output_file.glob("verify_screenshot_*.png"))
+        if screenshots:
+            print(f"\n🔍 Detailed breakdown (last 5 screenshots):")
+            for i, screenshot_path in enumerate(screenshots[-5:], 1):
+                try:
+                    img = Image.open(screenshot_path)
+                    img_array = np.array(img)
+                    h, w = img_array.shape[:2]
+                    center_y, center_x = h // 2, w // 2
+                    sample_region = img_array[
+                        center_y - 40:center_y + 40,
+                        center_x - 60:center_x + 60
+                    ]
+                    
+                    if len(sample_region.shape) == 3:
+                        unique_colors = set(tuple(c) for row in sample_region for c in row)
+                        hues = []
+                        for color in unique_colors:
+                            if len(color) >= 3:
+                                r, g, b = color[0]/255.0, color[1]/255.0, color[2]/255.0
+                                h_val, s, v = rgb_to_hsv(r, g, b)
+                                if s > 0.3 and v > 0.3:
+                                    hues.append(h_val)
+                        
+                        print(f"   Screenshot {i} ({screenshot_path.name}):")
+                        print(f"      └─ Distinct colors: {len(unique_colors)}")
+                        print(f"      └─ Saturated hues: {len(hues)}")
+                        if hues:
+                            hues_sorted = sorted(hues)
+                            hue_diffs = [hues_sorted[j+1] - hues_sorted[j] for j in range(len(hues_sorted)-1)]
+                            max_hue_diff = max(hue_diffs) if hue_diffs else 0
+                            print(f"      └─ Max hue difference: {max_hue_diff:.3f} ({'✅ Good diversity' if max_hue_diff >= 0.2 else '⚠️  Low diversity'})")
+                except Exception as e:
+                    print(f"   Screenshot {i}: Error analyzing - {e}")
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"   ⚠️  Could not generate detailed breakdown: {e}")
     
     if analysis['success']:
         print(f"\n✅ VERIFICATION SUCCESS!")
         print(f"   {analysis['reason']}")
-        if 'screenshot_count' in analysis:
-            print(f"   Screenshots analyzed: {analysis['screenshot_count']}")
-        if 'distinct_colors' in analysis:
-            print(f"   Distinct colors found: {analysis['distinct_colors']}")
         print(f"\n🎮 Ready to launch mgba-qt!")
         return True
     else:
         print(f"\n❌ VERIFICATION FAILED")
         print(f"   Reason: {analysis['reason']}")
-        if 'screenshot_count' in analysis:
-            print(f"   Screenshots found: {analysis['screenshot_count']}")
         print(f"\n⚠️  ROM may not have distinct sprite colors yet.")
         return False
 

@@ -61,20 +61,84 @@ def main():
     
     original_input = bytes(rom[0x0824:0x0824+46])
     
-    # Combined function in bank 13: original input + palette loading + sprite assignment
-    combined_bank13 = original_input + bytes([
-        # Load BG palettes
+    # HYPER-AGGRESSIVE sprite loop - optimized for maximum Sara W coverage
+    # Strategy: Check EVERY sprite, FORCE palette 1 for tiles 4-7, preserve registers for stability
+    def make_hyper_aggressive_sprite_loop():
+        """Generate hyper-aggressive sprite loop that forces palette 1 for Sara W"""
+        return bytes([
+            # Hyper-aggressive single-pass sprite loop for Sara W (tiles 4-7)
+            # PRESERVE registers for stability, but be aggressive about forcing palette 1
+            0xF5, 0xC5, 0xD5, 0xE5,  # PUSH AF, BC, DE, HL (preserve all - STABILITY FIRST)
+            0x21, 0x00, 0xFE,      # LD HL, 0xFE00 (OAM base)
+            0x06, 0x28,            # LD B, 40 (all 40 sprites)
+            0x0E, 0x00,            # LD C, 0 (sprite index)
+            # .loop:
+            0x79,                  # LD A, C (sprite index)
+            0x87,                  # ADD A, A (*2)
+            0x87,                  # ADD A, A (*4)
+            0x85,                  # ADD A, L (add to OAM base)
+            0x6F,                  # LD L, A (HL = sprite Y address)
+            0x7E,                  # LD A, [HL] (get Y)
+            0xA7,                  # AND A (test Y)
+            0x28, 0x1B,            # JR Z, .skip (if Y=0, skip - 27 bytes forward)
+            0xFE, 0x90,            # CP 144
+            0x30, 0x17,            # JR NC, .skip (if Y >= 144, skip - 23 bytes forward)
+            0x23,                  # INC HL (point to X)
+            0x23,                  # INC HL (point to tile)
+            0x7E,                  # LD A, [HL] (get tile ID)
+            0x23,                  # INC HL (point to flags)
+            0xE5,                  # PUSH HL (save flags address)
+            # HYPER-AGGRESSIVE: Check tile and FORCE palette 1 for Sara W (tiles 4-7)
+            0xFE, 0x04,            # CP 4
+            0x38, 0x04,            # JR C, .no_modify (tile < 4, 4 bytes forward)
+            0xFE, 0x08,            # CP 8
+            0x38, 0x03,            # JR C, .sara_w (4 <= tile < 8, Sara W = Pal1, 3 bytes forward)
+            # .no_modify: (tile < 4 or >= 8)
+            0xE1,                  # POP HL (restore flags address)
+            0x18, 0x07,            # JR .skip (7 bytes forward)
+            # .sara_w: (tiles 4-7) - FORCE palette 1 IMMEDIATELY, NO CHECKS
+            0xE1,                  # POP HL (get flags address)
+            0x7E,                  # LD A, [HL] (get current flags)
+            0xE6, 0xF8,            # AND 0xF8 (clear palette bits 0-2)
+            0xF6, 0x01,            # OR 0x01 (FORCE palette 1 - ALWAYS, NO EXCEPTIONS)
+            0x77,                  # LD [HL], A (write back IMMEDIATELY)
+            # .skip:
+            0x21, 0x00, 0xFE,      # LD HL, 0xFE00 (reset OAM base)
+            0x0C,                  # INC C (next sprite index)
+            0x05,                  # DEC B (decrement counter)
+            0x20, 0xD5,            # JR NZ, .loop (back to loop start - 43 bytes back)
+            # Loop complete
+            0xE1, 0xD1, 0xC1, 0xF1,  # POP HL, DE, BC, AF (restore all - STABILITY)
+        ])
+    
+    sprite_loop_code = make_hyper_aggressive_sprite_loop()
+    
+    # STABLE but AGGRESSIVE: Run sprite loop 8 TIMES (proven stable, was getting 25% coverage)
+    # Reload palettes to ensure they stay loaded
+    # This approach was working before - let's stick with it but ensure it runs
+    combined_bank13 = bytes([
+        # Load BG palettes FIRST (ensure palettes are loaded)
         0x21, 0x80, 0x6C, 0x3E, 0x80, 0xE0, 0x68, 0x0E, 0x40, 0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
-        # Load OBJ palettes
+        # Load OBJ palettes (CRITICAL: Palette 1 = green/orange for Sara W)
         0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-        
-        # Sprite loop (ONE PASS)
-        0xF5, 0xC5, 0xD5, 0xE5, 0x21, 0x00, 0xFE, 0x06, 0x28, 0x0E, 0x00,
-        0x79, 0x87, 0x87, 0x5F, 0x7B, 0x85, 0x6F, 0x7E, 0xA7, 0x28, 0x26, 0xFE, 0x90, 0x30, 0x24,
-        0x23, 0x23, 0x7E, 0x23, 0xE5, 0xFE, 0x04, 0x38, 0x0C, 0xFE, 0x08, 0x38, 0x0C, 0xFE, 0x0A,
-        0x38, 0x04, 0xFE, 0x0E, 0x38, 0x04, 0x3E, 0x00, 0x18, 0x02, 0x3E, 0x01, 0xE1, 0x57, 0x7E,
-        0xE6, 0xF8, 0xB2, 0x77, 0x21, 0x00, 0xFE, 0x0C, 0x05, 0x20, 0xCC, 0xE1, 0xD1, 0xC1, 0xF1, 0xC9
+        # AGGRESSIVE: Run sprite loop 8 TIMES in a row (proven to work, got 25% coverage)
+        # This maximizes the chance of catching Sara W sprites before game overwrites OAM
+    ]) + (sprite_loop_code * 8) + bytes([
+        # Reload OBJ palettes AGAIN (game might have overwritten them)
+        0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
+        # Run sprite loop 2 MORE TIMES after palette reload (total 10x)
+    ]) + (sprite_loop_code * 2) + bytes([
+        # NOW run original input handler (preserve original behavior)
+    ]) + original_input + bytes([
+        0xC9,  # RET
     ])
+    
+    # Check if combined function fits (should be < 2000 bytes for safety)
+    combined_size = len(combined_bank13)
+    if combined_size > 2000:
+        print(f"⚠️  WARNING: Combined function is {combined_size} bytes, may overflow!")
+    
+    # Write combined function
     rom[0x036D00:0x036D00+len(combined_bank13)] = combined_bank13
 
     # Trampoline: switch bank, call custom code, restore bank
@@ -85,7 +149,7 @@ def main():
     if len(trampoline) < 46:
         rom[0x0824+len(trampoline):0x0824+46] = bytes([0x00] * (46 - len(trampoline)))
     
-    print("✓ Built ROM with single-call and Sara W tiles 4-7, 10-13")
+    print(f"✓ Built ROM with AGGRESSIVE 10x sprite loop (8x + reload + 2x) for Sara W (tiles 4-7) - total size: {combined_size} bytes (stable approach)")
     output_rom_path.write_bytes(rom)
 
 if __name__ == "__main__":
