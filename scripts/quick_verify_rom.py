@@ -3,38 +3,37 @@
 import time
 import subprocess
 import yaml
+import shutil
 from pathlib import Path
 
-def create_verification_lua():
-    """Create Lua script to verify sprite palette assignments using screenshots"""
+def create_verification_lua(wall_clock_seconds=5, screenshots_per_second=8):
+    """Create Lua script to verify sprite palette assignments using screenshots based on wall clock time"""
     screenshot_dir = Path("rom/working").resolve()
     screenshot_dir.mkdir(parents=True, exist_ok=True)
     script_path = screenshot_dir / "scripts" / f"quick_verify_{int(time.time() * 1000)}.lua"
     script_path.parent.mkdir(parents=True, exist_ok=True)
     
     screenshot_base = str(screenshot_dir / "verify_screenshot_")
-    script_content = f'''-- Quick verification script - screenshot-based
+    # Use frame-based timing - with fast forward, frames run very fast (hundreds/thousands per second)
+    # Target: ~6 screenshots per second = ~30 screenshots in 5 seconds (20-40 range)
+    # With fast forward at ~2000+ fps, need ~300-400 frames between screenshots for 5-6 per second
+    screenshot_interval_frames = 600  # Every 600 frames - with fast forward this gives ~3-4 screenshots per second = ~15-20 in 5s
+    script_content = f'''-- Quick verification script - screenshot-based (Python controls wall clock time)
 local screenshotBase = "{screenshot_base}"
-local frameCount = 0
 local screenshotCount = 0
-local screenshotInterval = 180  -- Every 3 seconds (180 frames = 3s at 60fps)
-local startFrame = 60  -- Start after 1 second (60 frames = 1s at 60fps) - very early for fast capture
-local maxFrames = 900  -- 15 seconds (900 frames = 15s at 60fps) - enough for multiple screenshots with fast forward
+local frameCount = 0
+local screenshotIntervalFrames = {screenshot_interval_frames}  -- Frames between screenshots
 
-console:log("Quick verification: Taking screenshots every 3 seconds (mgba-qt)")
-console:log("Note: Fast forward enabled via -C config flags")
+console:log("Quick verification: Taking screenshots every " .. screenshotIntervalFrames .. " frames")
+console:log("Note: Fast forward enabled - Python will kill after {wall_clock_seconds} seconds")
 
--- Log frame count periodically to verify fast forward is working
-local lastLogFrame = 0
-
--- Function to log sprite tile IDs for center sprites (for identifying characters)
+-- Function to log ALL sprite tile IDs (for monster identification)
 local function logSpriteTiles()
-    -- Log tile IDs for sprites in the center area whenever we take a screenshot
-    -- Center area: roughly where characters appear in demo (around screen center)
+    -- Log ALL visible sprites to identify all monster types
     local logFile = io.open(screenshotBase .. "tile_ids.txt", "a")
     if logFile then
-        logFile:write(string.format("Frame %d (screenshot %d):\\n", frameCount, screenshotCount))
-        local centerCount = 0
+        logFile:write(string.format("Screenshot %d (frame %d):\\n", screenshotCount, frameCount))
+        local spriteCount = 0
         for i = 0, 39 do
             local oamBase = 0xFE00 + (i * 4)
             local y = emu:read8(oamBase)
@@ -43,16 +42,15 @@ local function logSpriteTiles()
             local attr = emu:read8(oamBase + 3)
             local palette = attr & 0x07
             
-            -- Center area where characters appear (expanded to catch all demo sprites)
-            -- Screen is 160x144, center is around 80x72
-            if y >= 50 and y <= 110 and x >= 50 and x <= 110 then
-                centerCount = centerCount + 1
+            -- Log ALL visible sprites (not just center area)
+            if y > 0 and y < 160 and x > 0 and x < 168 then
+                spriteCount = spriteCount + 1
                 logFile:write(string.format("  Sprite[%d]: tile=0x%02X (%d) palette=%d pos=(%d,%d)\\n", 
                     i, tile, tile, palette, x, y))
             end
         end
-        if centerCount == 0 then
-            logFile:write("  (no sprites in center area)\\n")
+        if spriteCount == 0 then
+            logFile:write("  (no visible sprites)\\n")
         end
         logFile:write("\\n")
         logFile:close()
@@ -83,29 +81,67 @@ end
 callbacks:add("frame", function()
     frameCount = frameCount + 1
     
-    -- Log frame count every 60 frames to verify speed
-    if frameCount - lastLogFrame >= 60 then
-        console:log("Frame: " .. frameCount)
-        lastLogFrame = frameCount
-    end
-    
-    -- Take screenshots periodically after start frame
-    if frameCount >= startFrame and (frameCount - startFrame) % screenshotInterval == 0 then
+    -- Take screenshots periodically (Python controls wall clock timing)
+    if frameCount % screenshotIntervalFrames == 0 then
         takeScreenshot()
         -- Log tile IDs after taking screenshot
         logSpriteTiles()
-    end
-    
-    -- Stop after max frames
-    if frameCount >= maxFrames then
-        console:log("Verification complete. Took " .. screenshotCount .. " screenshots.")
-        emu:stop()
     end
 end)
 '''
     
     script_path.write_text(script_content)
     return script_path, screenshot_dir
+
+def move_window_to_monitor(window_title="mGBA", monitor_offset_x=1920):
+    """Move mgba-qt window to a specific monitor using xdotool"""
+    try:
+        # Check if xdotool is available
+        if not shutil.which("xdotool"):
+            print(f"   ⚠️  xdotool not found - cannot position window (install with: sudo apt install xdotool)")
+            return False
+        
+        # Wait a moment for window to appear
+        time.sleep(0.5)
+        
+        # Find window by title (mGBA typically has this in title)
+        result = subprocess.run(
+            ["xdotool", "search", "--name", window_title],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            window_id = result.stdout.strip().split('\n')[0]
+            # Move window to second monitor (assuming 1920px width for first monitor)
+            # Adjust monitor_offset_x based on your setup
+            subprocess.run(
+                ["xdotool", "windowmove", window_id, str(monitor_offset_x), "0"],
+                timeout=1
+            )
+            print(f"   ✓ Positioned window on monitor (offset: {monitor_offset_x}px)")
+            return True
+        else:
+            # Try alternative search
+            result = subprocess.run(
+                ["xdotool", "search", "--class", "mGBA"],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                window_id = result.stdout.strip().split('\n')[0]
+                subprocess.run(
+                    ["xdotool", "windowmove", window_id, str(monitor_offset_x), "0"],
+                    timeout=1
+                )
+                print(f"   ✓ Positioned window on monitor (offset: {monitor_offset_x}px)")
+                return True
+    except Exception as e:
+        print(f"   ⚠️  Could not position window: {e}")
+    
+    return False
 
 def analyze_verification(screenshot_dir):
     """Analyze screenshots to check if sprites use different palettes"""
@@ -220,14 +256,23 @@ def main():
         print(f"❌ ROM not found: {rom_path}")
         return False
     
-    print("🔍 Creating verification Lua script...")
-    lua_script, output_file = create_verification_lua()
+    # Quick test: capture screenshots over 5 seconds of wall clock time
+    wall_clock_seconds = 5  # Real time seconds to run
+    screenshots_per_second = 6  # Capture 6 screenshots per second = 30 screenshots in 5 seconds (20-40 range)
+    expected_screenshots = wall_clock_seconds * screenshots_per_second
     
-    print(f"🚀 Launching mgba-qt for verification (--fastforward flag enabled)...")
+    print(f"🔍 Creating quick verification Lua script ({wall_clock_seconds}s wall clock time)...")
+    lua_script, output_file = create_verification_lua(
+        wall_clock_seconds=wall_clock_seconds,
+        screenshots_per_second=screenshots_per_second
+    )
+    
+    print(f"🚀 Launching mgba-qt for quick verification (--fastforward flag enabled)...")
     print(f"   ROM: {rom_path}")
     print(f"   Script: {lua_script}")
+    print(f"   Will capture: ~{expected_screenshots} screenshots over {wall_clock_seconds}s wall clock time")
     print(f"   Screenshots will be saved to: {output_file}")
-    print(f"   Note: mgba-qt window will open briefly to capture screenshots")
+    print(f"   Note: Window will be positioned on second monitor if possible")
     
     # Clean up old screenshots
     for old_screenshot in output_file.glob("verify_screenshot_*.png"):
@@ -259,27 +304,46 @@ def main():
         # Give mgba-qt a moment to initialize and enable fast forward
         time.sleep(1)
         
-        # Wait for screenshots to be taken
-        # With fast forward: unlimited speed, so 5 seconds real time should be plenty
-        # Screenshots start at frame 60 (1s game time) and happen every 180 frames (3s game time)
-        print(f"   Waiting 5 seconds for screenshots (with fast forward enabled)...")
-        time.sleep(5)
+        # Try to move window to second monitor (prevents focus stealing)
+        move_window_to_monitor(monitor_offset_x=1920)  # Adjust if your monitor setup differs
         
-        # Check if screenshots are being created
-        screenshots_found = list(output_file.glob("verify_screenshot_*.png"))
-        if screenshots_found:
-            print(f"   ✓ Found {len(screenshots_found)} screenshots")
-        else:
-            print(f"   ⚠️  No screenshots found yet")
+        # Wait for wall clock time, then kill mgba-qt
+        # Screenshots are taken based on wall clock time, not game frames
+        print(f"   Running for {wall_clock_seconds} seconds of wall clock time...")
         
-        # Check if process is still running
+        # Wait for the specified wall clock duration
+        waited = 0
+        check_interval = 0.5  # Check every 0.5 seconds
+        last_count = 0
+        
+        while waited < wall_clock_seconds:
+            time.sleep(check_interval)
+            waited += check_interval
+            
+            # Check screenshot progress
+            screenshots_found = list(output_file.glob("verify_screenshot_*.png"))
+            current_count = len(screenshots_found)
+            if current_count != last_count:
+                print(f"   Progress: {current_count} screenshots captured ({waited:.1f}s elapsed)...")
+                last_count = current_count
+        
+        # Kill mgba-qt after wall clock time expires
+        print(f"   ✓ {wall_clock_seconds}s elapsed, terminating mgba-qt...")
         if process.poll() is None:
-            # Process still running - terminate it (we got our screenshots)
-            print(f"   Terminating mgba-qt...")
             process.terminate()
-            time.sleep(1)
+            time.sleep(0.5)
             if process.poll() is None:
                 process.kill()
+            print(f"   Process terminated")
+        else:
+            print(f"   Process already completed")
+        
+        # Final check
+        screenshots_found = list(output_file.glob("verify_screenshot_*.png"))
+        if screenshots_found:
+            print(f"   ✓ Final count: {len(screenshots_found)} screenshots")
+        else:
+            print(f"   ⚠️  No screenshots found")
         
         # Read any output (might have errors and console logs)
         try:
@@ -302,7 +366,7 @@ def main():
         print(f"⚠️  Error launching mgba-qt: {e}")
     
     # Wait a bit for screenshots to be written
-    time.sleep(3)
+    time.sleep(2)
     
     # Analyze results
     print(f"\n📋 Analyzing screenshots from {output_file}...")
