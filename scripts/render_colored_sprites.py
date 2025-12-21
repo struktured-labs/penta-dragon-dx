@@ -122,17 +122,24 @@ def map_grayscale_to_palette(img):
         gray_max = np.max(visible_gray)
         
         if gray_max > gray_min:
+            # Normalize to 0-255
             gray_norm = ((visible_gray - gray_min) / (gray_max - gray_min)) * 255
+            
+            # Use mean as threshold to ensure we get 2 colors
+            # This ensures we always split into two groups
+            threshold = np.mean(gray_norm)
+            
+            # If threshold is too close to min/max, use median instead
+            if abs(threshold - gray_min) < 10 or abs(threshold - gray_max) < 10:
+                threshold = np.median(gray_norm)
+            
+            indices[visible_mask] = np.where(gray_norm < threshold, 1, 2)
         else:
-            # All same brightness, use all as color 1
-            gray_norm = np.full_like(visible_gray, 127)
-        
-        # Split into 2 colors at the median
-        median = np.median(gray_norm)
-        indices[visible_mask] = np.where(gray_norm < median, 1, 2)
-    else:
-        # All transparent
-        pass
+            # All same brightness - use a simple pattern to ensure 2 colors
+            # Alternate between color 1 and 2 based on position
+            h, w = gray.shape
+            for idx, (y, x) in enumerate(zip(*np.where(visible_mask))):
+                indices[y, x] = 1 + (idx % 2)  # Alternate between 1 and 2
     
     return indices
 

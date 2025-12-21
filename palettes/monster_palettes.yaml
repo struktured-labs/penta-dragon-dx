@@ -1,0 +1,258 @@
+# Monster Palettes - 27 Canonical Monsters
+# Each palette defines up to 4 colors (transparent + 3 visible colors)
+# Colors use BGR555 hex format or color names (see notes below)
+
+monster_palettes:
+  SARA_W:
+    name: "Sara W"
+    colors:
+      - transparent
+      - green        # Primary green
+      - orange       # Accent color
+      - dark green   # Shadow/detail
+    notes: "Sara W - green and orange theme"
+
+  SARA_D:
+    name: "Sara D"
+    colors:
+      - transparent
+      - red          # Primary red
+      - black        # Accent
+      - dark red     # Shadow/detail
+    notes: "Sara D - red and black theme"
+
+  DRAGONFLY:
+    name: "Dragonfly"
+    colors:
+      - transparent
+      - white        # Primary white
+      - light blue    # Accent
+      - blue         # Shadow/detail
+    notes: "Dragonfly - white and blue theme"
+
+  HORNET:
+    name: "Hornet"
+    colors:
+      - transparent
+      - yellow       # Primary yellow
+      - black        # Stripes
+      - orange       # Accent
+    notes: "Hornet - yellow and black striped"
+
+  HORSEFLY:
+    name: "Horsefly"
+    colors:
+      - transparent
+      - brown        # Primary brown
+      - dark brown   # Shadow
+      - yellow       # Accent
+    notes: "Horsefly - brown and yellow"
+
+  MOTH:
+    name: "Moth"
+    colors:
+      - transparent
+      - gray         # Primary gray
+      - white        # Accent
+      - dark gray    # Shadow
+    notes: "Moth - gray and white"
+
+  MAGE:
+    name: "Mage"
+    colors:
+      - transparent
+      - purple       # Primary purple
+      - white        # Robes/accents
+      - dark purple  # Shadow
+    notes: "Mage - purple and white robes"
+
+  SOLDIER:
+    name: "Soldier"
+    colors:
+      - transparent
+      - navy         # Primary navy
+      - gray         # Armor
+      - dark navy    # Shadow
+    notes: "Soldier - navy and gray armor"
+
+  SKELTON:
+    name: "Skelton"
+    colors:
+      - transparent
+      - white        # Bones
+      - gray         # Accent
+      - dark gray    # Shadow
+    notes: "Skelton - white bones"
+
+  SNAKE:
+    name: "Snake"
+    colors:
+      - transparent
+      - green        # Primary green
+      - yellow       # Belly/accents
+      - dark green   # Shadow
+    notes: "Snake - green and yellow"
+
+  SLIME:
+    name: "Slime"
+    colors:
+      - transparent
+      - cyan         # Primary cyan
+      - light blue   # Highlights
+      - dark cyan    # Shadow
+    notes: "Slime - cyan and blue"
+
+  CAT_FISH:
+    name: "Cat Fish"
+    colors:
+      - transparent
+      - orange       # Primary orange
+      - yellow       # Accent
+      - dark orange  # Shadow
+    notes: "Cat Fish - orange and yellow"
+
+  ANT:
+    name: "Ant"
+    colors:
+      - transparent
+      - black        # Primary black
+      - red          # Accent
+      - dark gray    # Shadow
+    notes: "Ant - black with red accents"
+
+  PLECO_S:
+    name: "Pleco S"
+    colors:
+      - transparent
+      - brown        # Primary brown
+      - yellow       # Spots/accents
+      - dark brown   # Shadow
+    notes: "Pleco S - brown fish with yellow spots"
+
+  ORC:
+    name: "Orc"
+    colors:
+      - transparent
+      - green        # Primary green skin
+      - brown        # Clothing
+      - dark green   # Shadow
+    notes: "Orc - green skin and brown clothing"
+
+  LARVA:
+    name: "Larva"
+    colors:
+      - transparent
+      - yellow       # Primary yellow
+      - green         # Accent
+      - dark yellow   # Shadow
+    notes: "Larva - yellow and green"
+
+  KOBOLD:
+    name: "Kobold"
+    colors:
+      - transparent
+      - brown        # Primary brown
+      - orange       # Accent
+      - dark brown   # Shadow
+    notes: "Kobold - brown and orange"
+
+  BAT:
+    name: "Bat"
+    colors:
+      - transparent
+      - black        # Primary black
+      - purple        # Accent
+      - dark gray    # Shadow
+    notes: "Bat - black with purple accents"
+
+  ZOPPY:
+    name: "Zoppy"
+    colors:
+      - transparent
+      - yellow       # Primary yellow
+      - orange        # Accent
+      - dark yellow   # Shadow
+    notes: "Zoppy - yellow and orange"
+
+  HALFLING:
+    name: "Halfling"
+    colors:
+      - transparent
+      - brown        # Primary brown
+      - green         # Clothing
+      - dark brown    # Shadow
+    notes: "Halfling - brown and green"
+
+  WRAITH:
+    name: "Wraith"
+    colors:
+      - transparent
+      - purple       # Primary purple
+      - dark purple   # Shadow
+      - black        # Accent
+    notes: "Wraith - purple and black ethereal"
+
+  VAMPIRE:
+    name: "Vampire"
+    colors:
+      - transparent
+      - red          # Primary red
+      - black        # Cape/clothing
+      - dark red     # Shadow
+    notes: "Vampire - red and black"
+
+  TREASURE_B:
+    name: "Treasure B"
+    colors:
+      - transparent
+      - yellow       # Primary yellow (gold)
+      - orange        # Accent
+      - dark yellow   # Shadow
+    notes: "Treasure B - gold/yellow treasure"
+
+  METAL_BALL:
+    name: "Metal Ball"
+    colors:
+      - transparent
+      - gray         # Primary gray (metal)
+      - white        # Highlights
+      - dark gray    # Shadow
+    notes: "Metal Ball - gray metallic"
+
+  DELASOUL:
+    name: "Delasoul"
+    colors:
+      - transparent
+      - purple       # Primary purple
+      - pink         # Accent
+      - dark purple  # Shadow
+    notes: "Delasoul - purple and pink"
+
+  MAHAL_S:
+    name: "Mahal S"
+    colors:
+      - transparent
+      - blue         # Primary blue
+      - cyan         # Accent
+      - dark blue    # Shadow
+    notes: "Mahal S - blue and cyan"
+
+  CROW:
+    name: "Crow"
+    colors:
+      - transparent
+      - black        # Primary black
+      - dark gray    # Accent
+      - gray         # Highlights
+    notes: "Crow - black and gray"
+
+# Notes:
+# - Color format: BGR555 (15-bit color, little-endian)
+# - First color is always "transparent" for sprite color 0
+# - Remaining 3 colors are visible sprite colors
+# - Colors can be specified as:
+#   * Hex values: "7FFF", "001F", "03E0", etc.
+#   * Color names: "red", "green", "blue", "yellow", etc.
+#   * With modifiers: "light blue", "dark red", etc.
+# - See palettes/penta_palettes.yaml for full color name reference
+
