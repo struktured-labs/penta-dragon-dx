@@ -1,0 +1,969 @@
+{
+  "frame_00055.png": {
+    "monster_name": "SARA W",
+    "all_texts": [
+      "SARA W",
+      "SARA",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "SARA W"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "SARA W"
+      },
+      {
+        "region": "full_image",
+        "text": "SARA"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00073.png": {
+    "monster_name": "SARA D",
+    "all_texts": [
+      "SARA D",
+      "SARA",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "SARA D"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "SARA D"
+      },
+      {
+        "region": "full_image",
+        "text": "SARA"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00090.png": {
+    "monster_name": "DRAGONFLY",
+    "all_texts": [
+      "DRAGONFLY",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "DRAGONFLY"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "DRAGONFLY"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00195.png": {
+    "monster_name": "HORNET",
+    "all_texts": [
+      "HORNET",
+      "PERCHA",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "HORNET"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "HORNET"
+      },
+      {
+        "region": "full_image",
+        "text": "PERCHA"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00212.png": {
+    "monster_name": "HORSEFLY",
+    "all_texts": [
+      "HORSEFLY",
+      "PERCHA",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "HORSEFLY"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "HORSEFLY"
+      },
+      {
+        "region": "full_image",
+        "text": "PERCHA"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00230.png": {
+    "monster_name": "MOTH",
+    "all_texts": [
+      "MOTH",
+      "PERCHA",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "MOTH"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "MOTH"
+      },
+      {
+        "region": "full_image",
+        "text": "PERCHA"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00334.png": {
+    "monster_name": "MAGE",
+    "all_texts": [
+      "MAGE",
+      "PERCHA",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "MAGE"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "MAGE"
+      },
+      {
+        "region": "full_image",
+        "text": "PERCHA"
+      },
+      {
+        "region": "full_image",
+        "text": "HAGE"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00352.png": {
+    "monster_name": "SOLDIER",
+    "all_texts": [
+      "SOLDIER",
+      "SOLO",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "SOLDIER"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "SOLDIER"
+      },
+      {
+        "region": "full_image",
+        "text": "SOLO"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00370.png": {
+    "monster_name": "SKELTON",
+    "all_texts": [
+      "SKELTON",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "SKELTON"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "SKELTON"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00474.png": {
+    "monster_name": "SNAKE",
+    "all_texts": [
+      "SNAKE",
+      "SHAKE",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "SNAKE"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "SNAKE"
+      },
+      {
+        "region": "full_image",
+        "text": "SHAKE"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00492.png": {
+    "monster_name": "SLIME",
+    "all_texts": [
+      "SLIME",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "SLIME"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "SLIME"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00509.png": {
+    "monster_name": "CAT FISH",
+    "all_texts": [
+      "CAT FISH",
+      "CAT",
+      "FISH",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "CAT FISH"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "CAT FISH"
+      },
+      {
+        "region": "full_image",
+        "text": "CAT"
+      },
+      {
+        "region": "full_image",
+        "text": "FISH"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00613.png": {
+    "monster_name": "ANT",
+    "all_texts": [
+      "ANT",
+      "PERCHA",
+      "ART",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "ANT"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "ANT"
+      },
+      {
+        "region": "full_image",
+        "text": "PERCHA"
+      },
+      {
+        "region": "full_image",
+        "text": "ART"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00631.png": {
+    "monster_name": "PLECO S",
+    "all_texts": [
+      "PLECO S",
+      "PLECO",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "PLECO S"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "PLECO S"
+      },
+      {
+        "region": "full_image",
+        "text": "PLECO"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00649.png": {
+    "monster_name": "ORC",
+    "all_texts": [
+      "ORC",
+      "ORG",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "ORC"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "ORC"
+      },
+      {
+        "region": "full_image",
+        "text": "ORG"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00753.png": {
+    "monster_name": "LARVA",
+    "all_texts": [
+      "LARVA",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "LARVA"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "LARVA"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00771.png": {
+    "monster_name": "KOBOLD",
+    "all_texts": [
+      "KOBOLD",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "KOBOLD"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "KOBOLD"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00789.png": {
+    "monster_name": "BAT",
+    "all_texts": [
+      "BAT",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "BAT"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "BAT"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00893.png": {
+    "monster_name": "ZOPPY",
+    "all_texts": [
+      "ZOPPY",
+      "7OPPY",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "ZOPPY"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "7OPPY"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00911.png": {
+    "monster_name": "HALFLING",
+    "all_texts": [
+      "HALFLING",
+      "PERCHA",
+      "HALFL",
+      "ING",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "HALFLING"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "HALFLING"
+      },
+      {
+        "region": "full_image",
+        "text": "PERCHA"
+      },
+      {
+        "region": "full_image",
+        "text": "HALFL"
+      },
+      {
+        "region": "full_image",
+        "text": "ING"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_00929.png": {
+    "monster_name": "WRAITH",
+    "all_texts": [
+      "WRAITH",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "WRAITH"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "WRAITH"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_01032.png": {
+    "monster_name": "VAMPIRE",
+    "all_texts": [
+      "VAMPIRE",
+      "DEN",
+      "NPPWRNK",
+      "VAMP",
+      "IRE",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "VAMPIRE"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "VAMPIRE"
+      },
+      {
+        "region": "full_image",
+        "text": "DEN"
+      },
+      {
+        "region": "full_image",
+        "text": "NPPWRNK"
+      },
+      {
+        "region": "full_image",
+        "text": "VAMP"
+      },
+      {
+        "region": "full_image",
+        "text": "IRE"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_01051.png": {
+    "monster_name": "TREASURE B",
+    "all_texts": [
+      "TREASURE B",
+      "WAT",
+      "TREASURE",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "TREASURE B"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "TREASURE B"
+      },
+      {
+        "region": "full_image",
+        "text": "WAT"
+      },
+      {
+        "region": "full_image",
+        "text": "TREASURE"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_01068.png": {
+    "monster_name": "METAL BALL",
+    "all_texts": [
+      "METAL BALL",
+      "HETAL",
+      "BALL",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "METAL BALL"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "METAL BALL"
+      },
+      {
+        "region": "full_image",
+        "text": "HETAL"
+      },
+      {
+        "region": "full_image",
+        "text": "BALL"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_01172.png": {
+    "monster_name": "DELASOUL",
+    "all_texts": [
+      "DELASOUL",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "DELASOUL"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "DELASOUL"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_01190.png": {
+    "monster_name": "MAHAL S",
+    "all_texts": [
+      "MAHAL S",
+      "MAHAL",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "MAHAL S"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "MAHAL S"
+      },
+      {
+        "region": "full_image",
+        "text": "MAHAL"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  },
+  "frame_01207.png": {
+    "monster_name": "CROW",
+    "all_texts": [
+      "CROW",
+      "THEF",
+      "ARE",
+      "FIL"
+    ],
+    "best_result": {
+      "region": "full_image",
+      "text": "CROW"
+    },
+    "all_results": [
+      {
+        "region": "full_image",
+        "text": "CROW"
+      },
+      {
+        "region": "full_image",
+        "text": "THEF"
+      },
+      {
+        "region": "full_image",
+        "text": "ARE"
+      },
+      {
+        "region": "full_image",
+        "text": "FIL"
+      }
+    ]
+  }
+}
