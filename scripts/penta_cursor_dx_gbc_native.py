@@ -14,7 +14,8 @@ def parse_color(c) -> int:
         'transparent': 0x0000, 'light blue': 0x7D00, 'dark blue': 0x4000,
         'orange': 0x021F, 'purple': 0x6010, 'brown': 0x0215, 'gray': 0x4210,
         'grey': 0x4210, 'pink': 0x5C1F, 'lime': 0x03E7, 'teal': 0x7CE0,
-        'navy': 0x5000, 'maroon': 0x0010, 'olive': 0x0210
+        'navy': 0x5000, 'maroon': 0x0010, 'olive': 0x0210,
+        'dark green': 0x0280, 'dark red': 0x0010, 'dark yellow': 0x0210
     }
     if isinstance(c, dict):
         c = c.get('hex') or c.get('value') or c.get('color')
@@ -44,23 +45,58 @@ def main():
     rom = bytearray(input_rom_path.read_bytes())
     rom[0x143] = 0x80  # CGB-compatible
     
-    with open(palette_yaml_path, 'r') as f:
-        config = yaml.safe_load(f)
+    # Load monster palettes (preferred) or fall back to penta_palettes
+    monster_palette_path = Path("palettes/monster_palettes.yaml")
+    if monster_palette_path.exists():
+        with open(monster_palette_path, 'r') as f:
+            monster_palettes = yaml.safe_load(f)
+        
+        # Use monster_palettes.yaml for SARA_W, SARA_D, DRAGONFLY
+        monster_data = monster_palettes.get('monster_palettes', {})
+        
+        # Build OBJ palettes: Palette 0=Dragonfly, 1=Sara W, 2-7 from penta_palettes
+        obj_pals = (
+            create_palette(monster_data.get('DRAGONFLY', {}).get('colors', ['transparent', 'white', 'light blue', 'blue'])) +
+            create_palette(monster_data.get('SARA_W', {}).get('colors', ['transparent', 'green', 'orange', 'dark green'])) +
+            create_palette(monster_data.get('SARA_D', {}).get('colors', ['transparent', 'red', 'orange', 'dark red']))
+        )
+        
+        # Fill remaining palettes from penta_palettes.yaml
+        with open(palette_yaml_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        obj_pals += (
+            create_palette(config['obj_palettes']['EnemyFire']['colors']) +
+            create_palette(config['obj_palettes']['EnemyIce']['colors']) +
+            create_palette(config['obj_palettes']['EnemyFlying']['colors']) +
+            create_palette(config['obj_palettes']['EnemyPoison']['colors']) +
+            create_palette(config['obj_palettes']['MiniBoss']['colors'])
+        )
+    else:
+        # Fall back to original approach
+        with open(palette_yaml_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        obj_pals = (
+            create_palette(config['obj_palettes']['MainCharacter']['colors']) +
+            create_palette(config['obj_palettes']['EnemyBasic']['colors']) +
+            create_palette(config['obj_palettes']['EnemyFire']['colors']) +
+            create_palette(config['obj_palettes']['EnemyIce']['colors']) +
+            create_palette(config['obj_palettes']['EnemyFlying']['colors']) +
+            create_palette(config['obj_palettes']['EnemyPoison']['colors']) +
+            create_palette(config['obj_palettes']['MiniBoss']['colors']) +
+            create_palette(config['obj_palettes']['MainBoss']['colors'])
+        )
     
     with open(monster_map_path, 'r') as f:
         monster_map = yaml.safe_load(f)
     
     ultra_bg = ['7FFF', '001F', '7C00', '03E0']
-    obj_pals = (
-        create_palette(config['obj_palettes']['MainCharacter']['colors']) +
-        create_palette(config['obj_palettes']['EnemyBasic']['colors']) +
-        create_palette(config['obj_palettes']['EnemyFire']['colors']) +
-        create_palette(config['obj_palettes']['EnemyIce']['colors']) +
-        create_palette(config['obj_palettes']['EnemyFlying']['colors']) +
-        create_palette(config['obj_palettes']['EnemyPoison']['colors']) +
-        create_palette(config['obj_palettes']['MiniBoss']['colors']) +
-        create_palette(config['obj_palettes']['MainBoss']['colors'])
-    )
+    
+    # Load BG palettes from penta_palettes
+    if 'config' not in locals():
+        with open(palette_yaml_path, 'r') as f:
+            config = yaml.safe_load(f)
     bg_pals = create_palette(ultra_bg) + b''.join([create_palette(config['bg_palettes'][n]['colors']) for n in ['LavaZone', 'WaterZone', 'DesertZone', 'ForestZone', 'CastleZone', 'SkyZone', 'BossZone']])
 
     palette_data_offset = 0x036C80
