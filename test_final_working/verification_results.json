@@ -1,0 +1,20 @@
+{
+  "SARA_W": {
+    "screenshot": "verify_frame_00001.png",
+    "accuracy": 100.0,
+    "avg_distance": 3.013671875,
+    "total_pixels": 84
+  },
+  "SARA_D": {
+    "screenshot": "verify_frame_00001.png",
+    "accuracy": 100.0,
+    "avg_distance": 2.982421875,
+    "total_pixels": 56
+  },
+  "DRAGONFLY": {
+    "screenshot": "verify_frame_00001.png",
+    "accuracy": 100.0,
+    "avg_distance": 0.80810546875,
+    "total_pixels": 49
+  }
+}
