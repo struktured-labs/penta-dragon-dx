@@ -148,12 +148,12 @@ def create_comparison_image(reference_img, candidate_img, comparison_stats, outp
     cand_pil = Image.fromarray(cand_cropped, 'RGBA')
     diff_pil = Image.fromarray(diff_map, 'RGB')
     
-    # Create composite image - make it wider for wide monitors
-    padding = 40  # More padding for wide layout
-    label_height = 60  # More space for labels
-    img_width = min_w * 2  # Make sprites 2x larger
-    img_height = min_h * 2
-    stats_height = 180  # More space for stats and suggestions
+    # Create composite image - make it much wider for wide monitors
+    padding = 60  # More padding for wide layout
+    label_height = 80  # More space for labels
+    img_width = min_w * 4  # Make sprites 4x larger for better visibility
+    img_height = min_h * 4
+    stats_height = 220  # More space for stats and suggestions
     
     # Scale up the images
     ref_pil = ref_pil.resize((img_width, img_height), Image.NEAREST)
