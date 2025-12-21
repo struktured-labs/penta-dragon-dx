@@ -150,17 +150,15 @@ def main():
     # Build sprite loop with temporary address first to get size
     temp_sprite_loop = make_lookup_table_sprite_loop(0x6F9A)
     
-    # Build combined function to get actual size
+    # Build combined function to get actual size (must match final structure exactly!)
     temp_combined = bytes([
-        # Load BG palettes
+        # Load BG palettes FIRST
         0x21, 0x80, 0x6C, 0x3E, 0x80, 0xE0, 0x68, 0x0E, 0x40, 0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
         # Load OBJ palettes
         0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-    ]) + (temp_sprite_loop * 8) + bytes([
-        # Reload OBJ palettes
-        0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-    ]) + (temp_sprite_loop * 2) + bytes([
-        # Original input handler
+        # Run sprite loop ONCE FIRST (before game code)
+    ]) + temp_sprite_loop + bytes([
+        # Original input handler (game code)
     ]) + original_input + bytes([
         0xC9,  # RET
     ])
@@ -174,20 +172,24 @@ def main():
     # NOW build sprite loop with correct address
     sprite_loop_code = make_lookup_table_sprite_loop(actual_lookup_table_bank_addr)
     
-    # Build final combined function with correct sprite loop
+    # Optimized: Run sprite loop ONCE BEFORE game code - set palettes FIRST so game doesn't overwrite
+    # Keep minimal palette loading (needed for stability) but minimize passes
+    # This ensures our palette assignments happen BEFORE the game can overwrite them
     combined_bank13 = bytes([
-        # Load BG palettes
+        # Load BG palettes FIRST (needed for stability)
         0x21, 0x80, 0x6C, 0x3E, 0x80, 0xE0, 0x68, 0x0E, 0x40, 0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
-        # Load OBJ palettes
+        # Load OBJ palettes (needed - don't skip this!)
         0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-    ]) + (sprite_loop_code * 8) + bytes([
-        # Reload OBJ palettes
-        0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40, 0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-    ]) + (sprite_loop_code * 2) + bytes([
-        # Original input handler
+        # Run sprite loop IMMEDIATELY (before any game code) - this gets there FIRST!
+    ]) + sprite_loop_code + bytes([
+        # NOW run original input handler (game code runs after we've set palettes)
     ]) + original_input + bytes([
         0xC9,  # RET
     ])
+    
+    # Verify sizes match
+    if len(combined_bank13) != combined_size:
+        print(f"⚠️  WARNING: Size mismatch! temp={combined_size}, final={len(combined_bank13)}")
     
     if len(combined_bank13) > 2000:
         print(f"⚠️  WARNING: Combined function is {len(combined_bank13)} bytes!")
@@ -207,10 +209,10 @@ def main():
         rom[0x0824+len(trampoline):0x0824+46] = bytes([0x00] * (46 - len(trampoline)))
     
     mapped_count = sum(1 for x in lookup_table if x != 0xFF)
-    print(f"✓ Built ROM with lookup table sprite loop (10x passes)")
+    print(f"✓ Built ROM with optimized lookup table sprite loop (1x pass BEFORE game code)")
     print(f"  - Lookup table: {mapped_count} tiles mapped to palettes")
     print(f"  - Table at: 0x{actual_lookup_table_offset:06X} (bank: 0x{actual_lookup_table_bank_addr:04X})")
-    print(f"  - Total size: {len(combined_bank13)} bytes")
+    print(f"  - Total size: {len(combined_bank13)} bytes (minimal overhead - sets palettes FIRST)")
     output_rom_path.write_bytes(rom)
 
 if __name__ == "__main__":

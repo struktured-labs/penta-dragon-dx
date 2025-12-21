@@ -5,6 +5,7 @@ No fancy window positioning - just launches the ROM
 """
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 def launch_mgba(rom_path, fastforward=True, script=None):
@@ -23,11 +24,17 @@ def launch_mgba(rom_path, fastforward=True, script=None):
     if script:
         cmd.extend(["--script", str(script)])
     
+    # Use correct environment for better video support
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "xcb"
+    env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+    
     print(f"🚀 Launching mgba-qt: {' '.join(cmd)}")
+    print(f"   Environment: QT_QPA_PLATFORM=xcb, __GLX_VENDOR_LIBRARY_NAME=nvidia")
     
     try:
-        # Simple launch - no window management, no environment tricks
-        subprocess.Popen(cmd)
+        # Launch with proper environment
+        subprocess.Popen(cmd, env=env)
         print(f"✅ mgba-qt launched")
         return True
     except Exception as e:
