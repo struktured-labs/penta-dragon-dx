@@ -17,9 +17,9 @@ monster_palettes:
     colors:
       - transparent
       - red          # Primary red
-      - black        # Accent
+      - orange       # Accent (more visible than black)
       - dark red     # Shadow/detail
-    notes: "Sara D - red and black theme"
+    notes: "Sara D - red and orange theme (more visible)"
 
   DRAGONFLY:
     name: "Dragonfly"
