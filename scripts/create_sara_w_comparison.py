@@ -106,8 +106,8 @@ def find_sprite_in_screenshot(reference_img, screenshot_img, search_region=None,
         return best_pos, best_score
     return None
 
-def create_comparison_image(reference_img, candidate_img, comparison_stats, output_path):
-    """Create a side-by-side comparison image with difference map"""
+def create_comparison_image(reference_img, candidate_img, comparison_stats, output_path, frame_num=None):
+    """Create a side-by-side comparison image with difference map and improvement suggestions"""
     
     # Ensure both images are the same size
     ref_array = np.array(reference_img)
@@ -148,66 +148,113 @@ def create_comparison_image(reference_img, candidate_img, comparison_stats, outp
     cand_pil = Image.fromarray(cand_cropped, 'RGBA')
     diff_pil = Image.fromarray(diff_map, 'RGB')
     
-    # Create composite image
+    # Create composite image with more space for text
     padding = 20
-    label_height = 40
+    label_height = 50
     img_width = min_w
     img_height = min_h
+    stats_height = 120  # More space for stats and suggestions
     
     total_width = img_width * 3 + padding * 4
-    total_height = img_height + label_height + padding * 2
+    total_height = img_height + label_height + padding * 2 + stats_height
     
-    composite = Image.new('RGB', (total_width, total_height), color=(40, 40, 40))
+    composite = Image.new('RGB', (total_width, total_height), color=(30, 30, 30))
     draw = ImageDraw.Draw(composite)
     
-    # Try to load a font, fallback to default if not available
+    # Try to load fonts
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
-        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+        font_label = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
+        font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
+        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
     except:
-        font = ImageFont.load_default()
-        font_small = ImageFont.load_default()
+        font_title = ImageFont.load_default()
+        font_label = font_title
+        font_text = font_title
+        font_small = font_title
+    
+    # Title
+    title_y = 10
+    title_text = "SARA_W Color Comparison"
+    if frame_num:
+        title_text += f" (Frame {frame_num})"
+    draw.text((total_width // 2, title_y), title_text, fill=(255, 255, 255), anchor="mt", font=font_title)
     
     # Draw reference
     x_offset = padding
     y_offset = label_height + padding
     composite.paste(ref_pil, (x_offset, y_offset), ref_pil)
-    draw.text((x_offset + img_width // 2, padding // 2), 
-              "Reference", fill=(255, 255, 255), anchor="mm", font=font)
+    draw.text((x_offset + img_width // 2, label_height - 5), 
+              "Reference Sprite", fill=(200, 255, 200), anchor="mm", font=font_label)
+    draw.text((x_offset + img_width // 2, label_height + 12), 
+              "(Expected Colors)", fill=(150, 200, 150), anchor="mm", font=font_small)
     
     # Draw candidate
     x_offset = padding * 2 + img_width
     composite.paste(cand_pil, (x_offset, y_offset), cand_pil)
-    draw.text((x_offset + img_width // 2, padding // 2), 
-              "Candidate", fill=(255, 255, 255), anchor="mm", font=font)
+    draw.text((x_offset + img_width // 2, label_height - 5), 
+              "ROM Screenshot", fill=(200, 200, 255), anchor="mm", font=font_label)
+    draw.text((x_offset + img_width // 2, label_height + 12), 
+              "(Actual Colors)", fill=(150, 150, 200), anchor="mm", font=font_small)
     
     # Draw difference map
     x_offset = padding * 3 + img_width * 2
     composite.paste(diff_pil, (x_offset, y_offset))
-    draw.text((x_offset + img_width // 2, padding // 2), 
-              "Difference", fill=(255, 255, 255), anchor="mm", font=font)
+    draw.text((x_offset + img_width // 2, label_height - 5), 
+              "Difference Map", fill=(255, 200, 200), anchor="mm", font=font_label)
+    draw.text((x_offset + img_width // 2, label_height + 12), 
+              "(Green=Match, Red=Mismatch)", fill=(200, 150, 150), anchor="mm", font=font_small)
     
-    # Add statistics at the bottom
+    # Statistics section (below images)
+    stats_y = y_offset + img_height + padding + 10
+    
+    # Draw separator line
+    draw.line([padding, stats_y - 5, total_width - padding, stats_y - 5], fill=(100, 100, 100), width=1)
+    
+    # Statistics
+    stats_title = "Comparison Statistics:"
+    draw.text((padding, stats_y), stats_title, fill=(255, 255, 200), font=font_label)
+    
     stats_text = [
-        f"Accuracy: {comparison_stats['accuracy']:.1f}%",
-        f"Avg Distance: {comparison_stats['avg_color_distance']:.1f}",
-        f"Total Pixels: {comparison_stats['total_pixels']}",
-        f"Matches: {comparison_stats['matching_pixels']}"
+        f"• Accuracy: {comparison_stats['accuracy']:.1f}% ({comparison_stats['matching_pixels']}/{comparison_stats['total_pixels']} pixels match)",
+        f"• Average Color Distance: {comparison_stats['avg_color_distance']:.1f} (lower is better)",
+        f"• Total Pixels Compared: {comparison_stats['total_pixels']}"
     ]
     
-    y_text = total_height - padding - 60
+    stats_y += 20
     for i, text in enumerate(stats_text):
-        draw.text((padding, y_text + i * 15), text, fill=(200, 200, 200), font=font_small)
+        draw.text((padding + 10, stats_y + i * 16), text, fill=(220, 220, 220), font=font_text)
     
-    # Add legend for difference map
-    legend_x = padding * 3 + img_width * 2 + 10
-    legend_y = y_offset + img_height + 10
-    draw.rectangle([legend_x, legend_y, legend_x + 20, legend_y + 20], fill=(0, 255, 0))
-    draw.text((legend_x + 25, legend_y + 5), "Match", fill=(255, 255, 255), font=font_small)
+    # Improvement suggestions
+    suggestions_y = stats_y + len(stats_text) * 16 + 15
+    draw.text((padding, suggestions_y), "Next Steps to Improve Colors:", fill=(255, 200, 100), font=font_label)
     
-    legend_y += 25
-    draw.rectangle([legend_x, legend_y, legend_x + 20, legend_y + 20], fill=(255, 0, 0))
-    draw.text((legend_x + 25, legend_y + 5), "Mismatch", fill=(255, 255, 255), font=font_small)
+    suggestions = []
+    if comparison_stats['accuracy'] < 50:
+        suggestions.append("1. Update palette values in palettes/monster_palettes.yaml")
+        suggestions.append("2. Convert expected RGB colors to BGR555 hex format")
+        suggestions.append("3. Rebuild ROM: python3 scripts/penta_cursor_dx_gbc_native.py")
+        suggestions.append("4. Re-run verification: python3 scripts/verify_palette_injection.py")
+    
+    if comparison_stats['avg_color_distance'] > 100:
+        suggestions.append("5. Check that orange color (#FF8400) maps to BGR555: 021F")
+        suggestions.append("6. Verify green color (#00FF00) maps to BGR555: 03E0")
+    
+    suggestions.append("7. Run automated iteration: python3 scripts/auto_verify_color_match.py")
+    
+    suggestions_y += 20
+    for i, suggestion in enumerate(suggestions):
+        draw.text((padding + 10, suggestions_y + i * 14), suggestion, fill=(200, 220, 255), font=font_small)
+    
+    # Add legend for difference map (top right, compact)
+    legend_x = padding * 3 + img_width * 2 + 5
+    legend_y = y_offset + 5
+    draw.rectangle([legend_x, legend_y, legend_x + 15, legend_y + 15], fill=(0, 255, 0))
+    draw.text((legend_x + 18, legend_y + 2), "Match", fill=(255, 255, 255), font=font_small)
+    
+    legend_y += 18
+    draw.rectangle([legend_x, legend_y, legend_x + 15, legend_y + 15], fill=(255, 0, 0))
+    draw.text((legend_x + 18, legend_y + 2), "Mismatch", fill=(255, 255, 255), font=font_small)
     
     composite.save(output_path)
     print(f"✅ Saved comparison to: {output_path}")
@@ -290,7 +337,7 @@ def main():
     # Create comparison image
     output_path = project_root / 'sara_w_pixel_comparison.png'
     print(f"🎨 Creating comparison image...")
-    create_comparison_image(ref_img, candidate_sprite, stats, output_path)
+    create_comparison_image(ref_img, candidate_sprite, stats, output_path, frame_num=frame_num if 'frame_num' in locals() else None)
     
     print(f"\n✅ Done! View: {output_path}")
 
