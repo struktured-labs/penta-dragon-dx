@@ -216,6 +216,157 @@ def main():
     rom[sprite_loop_start:sprite_loop_start+len(combined_bank13)] = combined_bank13
     rom[lookup_table_offset:lookup_table_offset + 256] = lookup_table
     
+    # Hook OAM DMA completion FIRST (before boot loader, to calculate correct offset)
+    # OAM DMA sequence: 0x4190 E0 46 (LDH [FF46], A), then wait loop, then RET at 0x4197
+    oam_dma_ret_addr = 0x4197
+    is_ret = rom[oam_dma_ret_addr] == 0xC9
+    is_already_hooked = rom[oam_dma_ret_addr] == 0xCD
+    
+    hook_code_offset = lookup_table_offset + 256
+    hook_code_size = 0
+    
+    if is_ret or is_already_hooked:
+        sprite_loop_bank_addr = ((sprite_loop_start + 15 - 0x034000) + 0x4000) & 0x7FFF  # After palette load
+        
+        hook_code = bytes([
+            0xF5, 0xC5, 0xD5, 0xE5,
+            0x3E, 0x0D, 0xEA, 0x00, 0x20,
+            0xCD, sprite_loop_bank_addr & 0xFF, (sprite_loop_bank_addr >> 8) & 0xFF,
+            0x3E, 0x01, 0xEA, 0x00, 0x20,
+            0xE1, 0xD1, 0xC1, 0xF1, 0xC9,
+        ])
+        hook_code_size = len(hook_code)
+        
+        rom[hook_code_offset:hook_code_offset+hook_code_size] = hook_code
+        
+        hook_bank_addr = ((hook_code_offset - 0x034000) + 0x4000) & 0x7FFF
+        rom[oam_dma_ret_addr] = 0xCD
+        rom[oam_dma_ret_addr + 1] = hook_bank_addr & 0xFF
+        rom[oam_dma_ret_addr + 2] = (hook_bank_addr >> 8) & 0xFF
+        
+        print(f"✓ Installed OAM DMA completion hook")
+        print(f"  - Hook at RET after DMA (0x{oam_dma_ret_addr:04X})")
+        print(f"  - Hook code at ROM offset 0x{hook_code_offset:06X} (bank 13 addr 0x{hook_bank_addr:04X})")
+        print(f"  - Calls sprite loop at bank 13 addr 0x{sprite_loop_bank_addr:04X}")
+    
+    # Add boot-time palette loading at 0x0150 (AFTER hook code is written)
+    # This ensures palettes are loaded before game starts, not just when input handler runs
+    # Calculate offset after hook code (hook_code_size is set above if hook was installed)
+    boot_palette_loader_offset = lookup_table_offset + 256 + hook_code_size
+    boot_palette_loader_bank_addr = ((boot_palette_loader_offset - 0x034000) + 0x4000) & 0x7FFF
+    
+    # Boot loader: Load palettes, then RET to continue original boot code
+    boot_loader_code = bytes([
+        0xF5,                          # PUSH AF
+        0xC5,                          # PUSH BC
+        0xE5,                          # PUSH HL
+        0x3E, 0x0D,                    # LD A, 13
+        0xEA, 0x00, 0x20,              # LD [2000], A (switch to bank 13)
+        # Load BG palettes
+        0x21, 0x80, 0x6C,              # LD HL, 0x6C80 (BG palette data)
+        0x3E, 0x80,                    # LD A, 0x80 (auto-increment)
+        0xE0, 0x68,                    # LDH [FF68], A (BCPS)
+        0x0E, 0x40,                    # LD C, 64
+        0x2A,                          # .bg_loop: LD A, [HL+]
+        0xE0, 0x69,                    # LDH [FF69], A (BCPD)
+        0x0D,                          # DEC C
+        0x20, 0xFA,                    # JR NZ, .bg_loop
+        # Load OBJ palettes
+        0x3E, 0x80,                    # LD A, 0x80 (auto-increment)
+        0xE0, 0x6A,                    # LDH [FF6A], A (OCPS)
+        0x0E, 0x40,                    # LD C, 64
+        0x2A,                          # .obj_loop: LD A, [HL+]
+        0xE0, 0x6B,                    # LDH [FF6B], A (OCPD)
+        0x0D,                          # DEC C
+        0x20, 0xFA,                    # JR NZ, .obj_loop
+        0x3E, 0x01,                    # LD A, 1 (restore original bank)
+        0xEA, 0x00, 0x20,              # LD [2000], A
+        0xE1,                          # POP HL
+        0xC1,                          # POP BC
+        0xF1,                          # POP AF
+        0xC9,                          # RET (return to continue boot)
+    ])
+    
+    rom[boot_palette_loader_offset:boot_palette_loader_offset+len(boot_loader_code)] = boot_loader_code
+    
+    # Hook boot entry at 0x0150 to call palette loader
+    # CRITICAL: Must switch to bank 13 before CALLing loader code in bank 13!
+    original_boot_0150 = bytes(rom[0x0150:0x0153])  # Save first 3 bytes
+    
+    # Create trampoline that switches to bank 13, calls loader, restores bank
+    boot_trampoline = bytes([
+        0xF5,                          # PUSH AF (save A)
+        0x3E, 0x0D,                    # LD A, 13
+        0xEA, 0x00, 0x20,              # LD [2000], A (switch to bank 13)
+        0xCD, boot_palette_loader_bank_addr & 0xFF, (boot_palette_loader_bank_addr >> 8) & 0xFF,  # CALL loader
+        0x3E, 0x01,                    # LD A, 1 (restore original bank)
+        0xEA, 0x00, 0x20,              # LD [2000], A
+        0xF1,                          # POP AF (restore A)
+    ])
+    
+    # Install trampoline at 0x0150
+    rom[0x0150:0x0150+len(boot_trampoline)] = boot_trampoline
+    # After trampoline, continue with original boot code
+    rom[0x0150+len(boot_trampoline):0x0150+len(boot_trampoline)+len(original_boot_0150)] = original_boot_0150
+    
+    print(f"✓ Installed boot-time palette loader")
+    print(f"  - Boot hook at 0x0150 calls palette loader at bank 13 addr 0x{boot_palette_loader_bank_addr:04X}")
+    print(f"  - Boot loader offset: 0x{boot_palette_loader_offset:06X}")
+    
+    # Hook OAM DMA completion to run sprite loop right after game transfers sprites
+    # OAM DMA sequence: 0x4190 E0 46 (LDH [FF46], A), then wait loop, then RET at 0x4197
+    # We'll hook the RET at 0x4197 to run sprite loop after DMA completes
+    oam_dma_ret_addr = 0x4197
+    
+    # Check if this is RET (original) or already hooked (CALL)
+    is_ret = rom[oam_dma_ret_addr] == 0xC9
+    is_already_hooked = rom[oam_dma_ret_addr] == 0xCD
+    
+    if is_ret or is_already_hooked:
+        hook_code_offset = lookup_table_offset + 256
+        # Sprite loop code starts after palette loading (15 bytes) in combined_bank13
+        palette_load_size = 15
+        sprite_loop_code_start = sprite_loop_start + palette_load_size
+        sprite_loop_bank_addr = ((sprite_loop_code_start - 0x034000) + 0x4000) & 0x7FFF
+        
+        # Debug: Verify address calculation
+        call_lo = sprite_loop_bank_addr & 0xFF
+        call_hi = (sprite_loop_bank_addr >> 8) & 0xFF
+        print(f"  DEBUG: sprite_loop_bank_addr=0x{sprite_loop_bank_addr:04X}, CALL bytes: CD {call_lo:02X} {call_hi:02X}")
+        
+        # Hook code: Run sprite loop, then RET
+        hook_code = bytes([
+            0xF5,                          # PUSH AF
+            0xC5,                          # PUSH BC
+            0xD5,                          # PUSH DE
+            0xE5,                          # PUSH HL
+            0x3E, 0x0D,                    # LD A, 13
+            0xEA, 0x00, 0x20,              # LD [2000], A (switch to bank 13)
+            0xCD, call_lo, call_hi,       # CALL sprite_loop (little-endian: low byte first)
+            0x3E, 0x01,                    # LD A, 1 (restore original bank)
+            0xEA, 0x00, 0x20,              # LD [2000], A
+            0xE1,                          # POP HL
+            0xD1,                          # POP DE
+            0xC1,                          # POP BC
+            0xF1,                          # POP AF
+            0xC9,                          # RET (return to caller)
+        ])
+        
+        rom[hook_code_offset:hook_code_offset+len(hook_code)] = hook_code
+        
+        # Replace RET with CALL to our hook
+        hook_bank_addr = ((hook_code_offset - 0x034000) + 0x4000) & 0x7FFF
+        rom[oam_dma_ret_addr] = 0xCD  # CALL
+        rom[oam_dma_ret_addr + 1] = hook_bank_addr & 0xFF
+        rom[oam_dma_ret_addr + 2] = (hook_bank_addr >> 8) & 0xFF
+        
+        print(f"✓ Installed OAM DMA completion hook")
+        print(f"  - Hook at RET after DMA (0x{oam_dma_ret_addr:04X})")
+        print(f"  - Hook code at ROM offset 0x{hook_code_offset:06X} (bank 13 addr 0x{hook_bank_addr:04X})")
+        print(f"  - Calls sprite loop at bank 13 addr 0x{sprite_loop_bank_addr:04X}")
+    else:
+        print(f"⚠️  RET not found at expected address 0x{oam_dma_ret_addr:04X} (found 0x{rom[oam_dma_ret_addr]:02X})")
+    
     # CRITICAL: Patch DMG palette register writes (FF47/FF48/FF49)
     # In GBC mode, writes to these registers should be no-ops
     # We'll hook these addresses and make them return immediately
@@ -252,7 +403,33 @@ def main():
     if dmg_patch_count > 10:
         print(f"  ... and {dmg_patch_count - 10} more DMG palette writes patched")
     
-    # Trampoline at input handler
+    # Hook VBlank interrupt (0x0040) to run sprite loop every frame
+    # This ensures palette assignments persist even when game updates OAM
+    vblank_hook_addr = sprite_loop_start + len(combined_bank13) + 256  # After lookup table
+    vblank_hook_bank_addr = ((vblank_hook_addr - 0x034000) + 0x4000) & 0x7FFF
+    
+    # VBlank hook: Switch to bank 13, run sprite loop, restore bank, call original VBlank
+    vblank_hook_code = bytes([
+        0xF5,                          # PUSH AF
+        0x3E, 0x0D,                    # LD A, 13
+        0xEA, 0x00, 0x20,              # LD [2000], A (switch to bank 13)
+        0xCD, vblank_hook_bank_addr & 0xFF, (vblank_hook_bank_addr >> 8) & 0xFF,  # CALL sprite_loop
+        0x3E, 0x01,                    # LD A, 1 (restore original bank)
+        0xEA, 0x00, 0x20,              # LD [2000], A
+        0xF1,                          # POP AF
+        # Call original VBlank handler (save original first)
+    ])
+    
+    # Save original VBlank handler
+    original_vblank = bytes(rom[0x0040:0x0043])  # Original JP instruction
+    rom[vblank_hook_addr:vblank_hook_addr+len(vblank_hook_code)] = vblank_hook_code
+    
+    # Install VBlank hook
+    rom[0x0040] = 0xC3  # JP
+    rom[0x0041] = vblank_hook_addr & 0xFF
+    rom[0x0042] = (vblank_hook_addr >> 8) & 0xFF
+    
+    # Also keep input handler trampoline for compatibility
     trampoline = bytes([
         0xF5, 0x3E, 0x0D, 0xEA, 0x00, 0x20, 0xCD, 0x00, 0x6D, 0x3E, 0x01, 0xEA, 0x00, 0x20, 0xF1, 0xC9
     ])
