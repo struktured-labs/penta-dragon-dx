@@ -148,12 +148,12 @@ def create_comparison_image(reference_img, candidate_img, comparison_stats, outp
     cand_pil = Image.fromarray(cand_cropped, 'RGBA')
     diff_pil = Image.fromarray(diff_map, 'RGB')
     
-    # Create composite image - make it much wider for wide monitors
-    padding = 60  # More padding for wide layout
-    label_height = 80  # More space for labels
-    img_width = min_w * 4  # Make sprites 4x larger for better visibility
-    img_height = min_h * 4
-    stats_height = 220  # More space for stats and suggestions
+    # Create composite image - make it much bigger for wide monitors
+    padding = 80  # More padding for wide layout
+    label_height = 100  # More space for labels
+    img_width = min_w * 6  # Make sprites 6x larger for better visibility
+    img_height = min_h * 6
+    stats_height = 280  # More space for stats and suggestions
     
     # Scale up the images
     ref_pil = ref_pil.resize((img_width, img_height), Image.NEAREST)
@@ -166,12 +166,12 @@ def create_comparison_image(reference_img, candidate_img, comparison_stats, outp
     composite = Image.new('RGB', (total_width, total_height), color=(30, 30, 30))
     draw = ImageDraw.Draw(composite)
     
-    # Try to load fonts - make them larger for readability
+    # Try to load fonts - adjust sizes: title large, labels medium, text smaller
     try:
-        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
-        font_label = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
-        font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
-        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+        font_label = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+        font_text = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 13)
+        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
     except:
         font_title = ImageFont.load_default()
         font_label = font_title
@@ -179,44 +179,44 @@ def create_comparison_image(reference_img, candidate_img, comparison_stats, outp
         font_small = font_title
     
     # Title - at the top with more space
-    title_y = 20
+    title_y = 30
     title_text = "SARA_W Color Comparison"
     if frame_num:
         title_text += f" (Frame {frame_num})"
     draw.text((total_width // 2, title_y), title_text, fill=(255, 255, 255), anchor="mt", font=font_title)
     
-    # Draw reference - ensure labels are above images
+    # Draw reference - ensure labels are well above images with clear separation
     x_offset = padding
-    y_offset = label_height + padding + 10  # More space below labels
+    y_offset = label_height + padding + 20  # More space below labels
     composite.paste(ref_pil, (x_offset, y_offset), ref_pil)
-    draw.text((x_offset + img_width // 2, label_height + 5), 
+    draw.text((x_offset + img_width // 2, label_height + 10), 
               "Reference Sprite", fill=(200, 255, 200), anchor="mm", font=font_label)
-    draw.text((x_offset + img_width // 2, label_height + 25), 
+    draw.text((x_offset + img_width // 2, label_height + 35), 
               "(Expected Colors)", fill=(150, 200, 150), anchor="mm", font=font_small)
     
     # Draw candidate
     x_offset = padding * 2 + img_width
     composite.paste(cand_pil, (x_offset, y_offset), cand_pil)
-    draw.text((x_offset + img_width // 2, label_height + 5), 
+    draw.text((x_offset + img_width // 2, label_height + 10), 
               "ROM Screenshot", fill=(200, 200, 255), anchor="mm", font=font_label)
-    draw.text((x_offset + img_width // 2, label_height + 25), 
+    draw.text((x_offset + img_width // 2, label_height + 35), 
               "(Actual Colors)", fill=(150, 150, 200), anchor="mm", font=font_small)
     
     # Draw difference map
     x_offset = padding * 3 + img_width * 2
     composite.paste(diff_pil, (x_offset, y_offset))
-    draw.text((x_offset + img_width // 2, label_height + 5), 
+    draw.text((x_offset + img_width // 2, label_height + 10), 
               "Difference Map", fill=(255, 200, 200), anchor="mm", font=font_label)
-    draw.text((x_offset + img_width // 2, label_height + 25), 
+    draw.text((x_offset + img_width // 2, label_height + 35), 
               "(Green=Match, Red=Mismatch)", fill=(200, 150, 150), anchor="mm", font=font_small)
     
     # Statistics section (below images) - ensure enough space
-    stats_y = y_offset + img_height + padding + 30  # More space after images
+    stats_y = y_offset + img_height + padding + 50  # Much more space after images
     
     # Draw separator line
-    draw.line([padding, stats_y - 10, total_width - padding, stats_y - 10], fill=(100, 100, 100), width=2)
+    draw.line([padding, stats_y - 15, total_width - padding, stats_y - 15], fill=(100, 100, 100), width=3)
     
-    # Statistics - two column layout for wide screens
+    # Statistics - ensure clear spacing
     stats_title = "Comparison Statistics:"
     draw.text((padding, stats_y), stats_title, fill=(255, 255, 200), font=font_label)
     
@@ -226,13 +226,13 @@ def create_comparison_image(reference_img, candidate_img, comparison_stats, outp
         f"• Total Pixels Compared: {comparison_stats['total_pixels']}"
     ]
     
-    stats_y += 30
-    line_height = 22  # More line spacing
+    stats_y += 35
+    line_height = 20  # Line spacing
     for i, text in enumerate(stats_text):
-        draw.text((padding + 15, stats_y + i * line_height), text, fill=(220, 220, 220), font=font_text)
+        draw.text((padding + 20, stats_y + i * line_height), text, fill=(220, 220, 220), font=font_text)
     
     # Improvement suggestions - ensure enough space
-    suggestions_y = stats_y + len(stats_text) * line_height + 25
+    suggestions_y = stats_y + len(stats_text) * line_height + 35
     draw.text((padding, suggestions_y), "Next Steps to Improve Colors:", fill=(255, 200, 100), font=font_label)
     
     suggestions = []
@@ -249,20 +249,20 @@ def create_comparison_image(reference_img, candidate_img, comparison_stats, outp
     suggestions.append("7. Run automated iteration: python3 scripts/auto_verify_color_match.py")
     
     suggestions_y += 30
-    suggestion_line_height = 18  # More spacing for suggestions
+    suggestion_line_height = 17  # Spacing for suggestions (smaller text)
     for i, suggestion in enumerate(suggestions):
-        draw.text((padding + 15, suggestions_y + i * suggestion_line_height), suggestion, fill=(200, 220, 255), font=font_text)
+        draw.text((padding + 20, suggestions_y + i * suggestion_line_height), suggestion, fill=(200, 220, 255), font=font_small)
     
     # Add legend for difference map (top right, larger for visibility)
-    legend_x = padding * 3 + img_width * 2 + 10
-    legend_y = y_offset + 10
-    legend_size = 20
+    legend_x = padding * 3 + img_width * 2 + 15
+    legend_y = y_offset + 15
+    legend_size = 25
     draw.rectangle([legend_x, legend_y, legend_x + legend_size, legend_y + legend_size], fill=(0, 255, 0))
-    draw.text((legend_x + legend_size + 8, legend_y + 4), "Match", fill=(255, 255, 255), font=font_text)
+    draw.text((legend_x + legend_size + 10, legend_y + 6), "Match", fill=(255, 255, 255), font=font_small)
     
-    legend_y += 28
+    legend_y += 32
     draw.rectangle([legend_x, legend_y, legend_x + legend_size, legend_y + legend_size], fill=(255, 0, 0))
-    draw.text((legend_x + legend_size + 8, legend_y + 4), "Mismatch", fill=(255, 255, 255), font=font_text)
+    draw.text((legend_x + legend_size + 10, legend_y + 6), "Mismatch", fill=(255, 255, 255), font=font_small)
     
     composite.save(output_path)
     print(f"✅ Saved comparison to: {output_path}")
