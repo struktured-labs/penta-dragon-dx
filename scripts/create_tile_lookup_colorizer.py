@@ -72,64 +72,61 @@ def create_lookup_table() -> bytes:
 
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     """
-    SHADOW-ONLY + direct palette calculation.
-    Like v0.8 (which worked) but with color variety.
+    SLOT-BASED palettes - assign by sprite position, not tile ID.
+    Every 5 sprites get a different palette (8 palettes for 40 sprites).
+    This gives consistent colors regardless of which tiles are used.
     """
     code = bytearray()
 
-    # PUSH AF, BC, HL
-    code.extend([0xF5, 0xC5, 0xE5])
+    # PUSH AF, BC, DE, HL
+    code.extend([0xF5, 0xC5, 0xD5, 0xE5])
 
-    # Process ONLY shadow buffers (like v0.8)
+    # Process ONLY shadow buffers
     for base_hi in [0xC0, 0xC1]:
-        # LD HL, base+2 (start at tile ID)
-        code.extend([0x21, 0x02, base_hi])
+        # LD HL, base+3 (start at flags)
+        code.extend([0x21, 0x03, base_hi])
 
-        # LD B, 40
+        # LD D, 0 (palette counter, 0-7)
+        code.extend([0x16, 0x00])
+        # LD E, 5 (sprites per palette group)
+        code.extend([0x1E, 0x05])
+        # LD B, 40 (total sprites)
         code.extend([0x06, 0x28])
 
         # .loop:
         loop_start = len(code)
 
-        # LD A, [HL] - get tile ID
-        code.append(0x7E)
-
-        # Compute palette = tile_id >> 7 (128-tile blocks, 2 palettes)
-        # SRL A x7 = tile_id >> 7 (0 or 1)
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A - now A = 0 or 1
-
-        # Save palette in C
-        code.append(0x4F)  # LD C, A
-
-        # INC HL (to flags)
-        code.append(0x23)
-
         # LD A, [HL] - get current flags
         code.append(0x7E)
         # AND 0xF8 - clear palette bits
         code.extend([0xE6, 0xF8])
-        # OR C - set new palette
-        code.append(0xB1)
+        # OR D - set palette from D (0-7)
+        code.append(0xB2)
         # LD [HL], A - write back
         code.append(0x77)
 
-        # Advance to next sprite's tile
-        code.append(0x23)  # INC HL (next Y)
-        code.append(0x23)  # INC HL (next X)
-        code.append(0x23)  # INC HL (next tile)
+        # Advance HL by 4 to next sprite's flags
+        code.extend([0x23, 0x23, 0x23, 0x23])
+
+        # DEC E (sprites remaining in this palette group)
+        code.append(0x1D)
+        # JR NZ, .skip_palette_change
+        skip_pal = len(code)
+        code.extend([0x20, 0x00])
+
+        # E reached 0, increment palette and reset E
+        code.append(0x14)  # INC D (next palette)
+        code.extend([0x1E, 0x05])  # LD E, 5
+
+        # .skip_palette_change:
+        code[skip_pal + 1] = (len(code) - skip_pal - 2) & 0xFF
 
         code.append(0x05)  # DEC B
         loop_offset = loop_start - len(code) - 2
         code.extend([0x20, loop_offset & 0xFF])  # JR NZ, .loop
 
-    # POP HL, BC, AF
-    code.extend([0xE1, 0xC1, 0xF1])
+    # POP HL, DE, BC, AF
+    code.extend([0xE1, 0xD1, 0xC1, 0xF1])
     code.append(0xC9)  # RET
 
     return bytes(code)
