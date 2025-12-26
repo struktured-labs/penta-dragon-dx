@@ -48,9 +48,26 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    DIAGNOSTIC: ALL tiles use palette 0 to test if flickering stops.
+    64-tile blocks for stability with unconditional sprite modification.
     """
-    table = bytearray([0] * 256)  # All tiles = palette 0 (RED)
+    table = bytearray(256)
+
+    # Tiles 0-63: Palette 0 (RED)
+    for tile in range(0, 64):
+        table[tile] = 0
+
+    # Tiles 64-127: Palette 1 (GREEN)
+    for tile in range(64, 128):
+        table[tile] = 1
+
+    # Tiles 128-191: Palette 2 (BLUE)
+    for tile in range(128, 192):
+        table[tile] = 2
+
+    # Tiles 192-255: Palette 3 (ORANGE)
+    for tile in range(192, 256):
+        table[tile] = 3
+
     return bytes(table)
 
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
