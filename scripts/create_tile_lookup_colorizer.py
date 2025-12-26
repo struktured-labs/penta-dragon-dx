@@ -55,8 +55,8 @@ def create_lookup_table() -> bytes:
 
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     """
-    Create sprite loop that uses tile-to-palette lookup table.
-    Modifies all three OAM locations (like v0.4 which worked).
+    UNCONDITIONAL version - modifies ALL 40 sprites regardless of visibility.
+    No Y position check, no 0xFF skip - just force palette on everything.
     """
     lo = lookup_table_addr & 0xFF
     hi = (lookup_table_addr >> 8) & 0xFF
@@ -66,10 +66,10 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     # PUSH AF, BC, DE, HL
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])
 
-    # Process all three buffers (v0.4 approach)
+    # Process all three buffers
     for base_hi in [0xFE, 0xC0, 0xC1]:
-        # LD HL, base (start at Y position)
-        code.extend([0x21, 0x00, base_hi])
+        # LD HL, base+2 (start at tile ID)
+        code.extend([0x21, 0x02, base_hi])
 
         # LD B, 40
         code.extend([0x06, 0x28])
@@ -77,28 +77,10 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
         # .loop:
         loop_start = len(code)
 
-        # LD A, [HL] - Y position
-        code.append(0x7E)
-
-        # AND A - check if 0
-        code.append(0xA7)
-
-        # JR Z, .next_sprite
-        skip_jrz = len(code)
-        code.extend([0x28, 0x00])  # placeholder
-
-        # CP 160 - check if off screen
-        code.extend([0xFE, 0xA0])
-
-        # JR NC, .next_sprite
-        skip_jrnc = len(code)
-        code.extend([0x30, 0x00])  # placeholder
-
-        # Sprite is visible - get tile ID
-        code.append(0x23)  # INC HL (X)
-        code.append(0x23)  # INC HL (tile)
-        code.append(0x5E)  # LD E, [HL] - get tile ID
-        code.append(0x23)  # INC HL (flags)
+        # LD E, [HL] - get tile ID
+        code.append(0x5E)
+        # INC HL (to flags)
+        code.append(0x23)
 
         # Save HL (flags address)
         code.append(0xE5)  # PUSH HL
@@ -112,39 +94,17 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
         # Restore HL (flags address)
         code.append(0xE1)  # POP HL
 
-        # Check if 0xFF (don't modify)
-        code.extend([0xFE, 0xFF])
-        skip_modify = len(code)
-        code.extend([0x28, 0x00])  # JR Z, .skip_modify
-
-        # Apply palette to flags
+        # Apply palette to flags unconditionally
         code.append(0x57)  # LD D, A - save palette
         code.append(0x7E)  # LD A, [HL] - get current flags
         code.extend([0xE6, 0xF8])  # AND 0xF8 - clear palette bits
         code.append(0xB2)  # OR D - set new palette
         code.append(0x77)  # LD [HL], A - write back
 
-        # .skip_modify:
-        skip_modify_target = len(code)
-        code[skip_modify + 1] = (skip_modify_target - skip_modify - 2) & 0xFF
-
-        code.append(0x23)  # INC HL to next sprite's Y
-
-        # JR .dec_b
-        jr_to_dec = len(code)
-        code.extend([0x18, 0x00])  # placeholder
-
-        # .next_sprite:
-        next_sprite = len(code)
-        code[skip_jrz + 1] = (next_sprite - skip_jrz - 2) & 0xFF
-        code[skip_jrnc + 1] = (next_sprite - skip_jrnc - 2) & 0xFF
-
-        # Advance HL by 4 to next sprite
-        code.extend([0x23, 0x23, 0x23, 0x23])
-
-        # .dec_b:
-        dec_b = len(code)
-        code[jr_to_dec + 1] = (dec_b - jr_to_dec - 2) & 0xFF
+        # Advance to next sprite (flags+1 = next Y, +3 more = next tile)
+        code.append(0x23)  # INC HL (next Y)
+        code.append(0x23)  # INC HL (next X)
+        code.append(0x23)  # INC HL (next tile)
 
         code.append(0x05)  # DEC B
         loop_offset = loop_start - len(code) - 2
