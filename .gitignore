@@ -1,1 +1,19 @@
 rom/**.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Build artifacts
+CMakeCache.txt
+CMakeFiles/
+
+# Temporary files
+tmp/
+test_output/
+logs/
+
+# Debug output
+debug_*.png
+*.log

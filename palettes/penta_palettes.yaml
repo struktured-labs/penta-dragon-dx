@@ -1,0 +1,91 @@
+# Simplified Penta Dragon DX Palettes
+# Focus: Sara W, Sara D, Dragon Fly with distinct colors
+
+bg_palettes:
+  Dungeon:
+    name: "Level 1 Dungeon"
+    colors: ["7FFF", "03E0", "0280", "0000"]  # White, Green, Dark Green, Black
+
+  Default1:
+    name: "Default BG 1"
+    colors: ["7FFF", "5294", "2108", "0000"]  # White to Black gradient
+
+  Default2:
+    name: "Default BG 2"
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  Default3:
+    name: "Default BG 3"
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  Default4:
+    name: "Default BG 4"
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  Default5:
+    name: "Default BG 5"
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  Default6:
+    name: "Default BG 6"
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  Default7:
+    name: "Default BG 7"
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+obj_palettes:
+  SaraD:
+    name: "Sara D - Red/Black"
+    colors: ["0000", "001F", "0010", "0008"]  # Trans, Bright Red, Dark Red, Darker Red
+    notes: "Sara D should appear RED"
+
+  SaraW:
+    name: "Sara W - Green/Orange"
+    colors: ["0000", "03E0", "03FF", "021F"]  # Trans, Green, Cyan, Orange
+    notes: "Sara W should appear GREEN/ORANGE"
+
+  DragonFly:
+    name: "Dragon Fly - Blue/White"
+    colors: ["0000", "7C00", "5000", "7FFF"]  # Trans, Blue, Dark Blue, White
+    notes: "Dragon Fly should appear BLUE/WHITE"
+
+  DefaultSprite3:
+    name: "Default Sprite 3"
+    colors: ["0000", "7FFF", "5294", "2108"]
+
+  DefaultSprite4:
+    name: "Default Sprite 4"
+    colors: ["0000", "7FFF", "5294", "2108"]
+
+  DefaultSprite5:
+    name: "Default Sprite 5"
+    colors: ["0000", "7FFF", "5294", "2108"]
+
+  DefaultSprite6:
+    name: "Default Sprite 6"
+    colors: ["0000", "7FFF", "5294", "2108"]
+
+  DefaultSprite7:
+    name: "Default Sprite 7"
+    colors: ["0000", "7FFF", "5294", "2108"]
+
+notes: |
+  SIMPLIFIED VERSION - Focus on 3 monsters only:
+
+  Sprite Palette 0: Sara D (tiles 0-3) - RED
+  Sprite Palette 1: Sara W (tiles 4-7) - GREEN/ORANGE
+  Sprite Palette 2: Dragon Fly (tiles 8-9) - BLUE/WHITE
+
+  All colors in BGR555 hex format (no color names)
+  Format: "BBBBGGGGGRRRRR" (each letter = 1 bit)
+
+  Common colors:
+  - 0000: Black/Transparent
+  - 7FFF: White
+  - 001F: Red
+  - 03E0: Green
+  - 7C00: Blue
+  - 7FE0: Yellow
+  - 03FF: Cyan
+  - 7C1F: Magenta
