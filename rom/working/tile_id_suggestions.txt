@@ -1,0 +1,11 @@
+=== Tile ID to Palette Mapping Suggestions ===
+
+Sara D (Palette 0 - red/black):
+  Tiles: [15, 12, 14, 13, 9, 11, 8, 10, 32, 33, 34, 35, 2, 3, 4, 5, 7, 6, 44, 45, 46, 47, 36, 37, 38, 39]
+
+Sara W (Palette 1 - green/orange):
+  Tiles: [124, 27, 41, 40, 43, 42, 51, 88, 89, 108, 111, 90, 91, 26, 92, 94, 93, 95, 48, 49, 50, 110, 105, 107, 104, 106, 109]
+
+Dragon Fly (Palette 7 - white/blue):
+  Tiles: [1, 0, 82, 83]
+

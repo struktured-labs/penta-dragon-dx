@@ -1,0 +1,280 @@
+
+=== Frame 300 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 600 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 900 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 1200 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 1500 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 1800 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 2100 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 2400 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 2700 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 3000 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 3300 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 3600 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 3900 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 4200 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 4500 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 4800 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 5100 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 5400 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 5700 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0
+
+=== Frame 6000 ===
+OBJ Palettes:
+  Palette 0: 0000 001F 0000 0008
+  Palette 1: 7FFF 7FFF 02FF 03E0
+  Palette 2: 0000 001F 7F00 7FFF
+  Palette 3: 00FF 03FF 7FFF 021F
+  Palette 4: 7F00 7FFF 7FFF 0280
+  Palette 5: 0000 7C00 7C1F 7FFF
+  Palette 6: 7FFF 7FFF 7FE0 7C1F
+  Palette 7: 0000 7FFF 7FFF 7FFF
+
+Visible Sprites:
+Total visible sprites: 0

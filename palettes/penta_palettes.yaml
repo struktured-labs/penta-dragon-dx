@@ -36,56 +36,64 @@ bg_palettes:
 
 obj_palettes:
   SaraD:
-    name: "Sara D - Red/Black"
-    colors: ["0000", "001F", "0010", "0008"]  # Trans, Bright Red, Dark Red, Darker Red
-    notes: "Sara D should appear RED"
+    name: "Palette 0 - Red/Crimson"
+    colors: ["0000", "001F", "0016", "000B"]  # Trans, Bright Red, Medium Red, Dark Red
+    notes: "Sara D, tiles 0-3, 32-35, 64-67, 92-95, 120-123"
 
   SaraW:
-    name: "Sara W - Green/Orange"
-    colors: ["0000", "03E0", "03FF", "021F"]  # Trans, Green, Cyan, Orange
-    notes: "Sara W should appear GREEN/ORANGE"
+    name: "Palette 1 - Green/Lime"
+    colors: ["0000", "03E0", "02A0", "0160"]  # Trans, Bright Green, Medium Green, Dark Green
+    notes: "Sara W, tiles 4-7, 36-39, 68-71, 96-99, 124-127"
 
   DragonFly:
-    name: "Dragon Fly - Blue/White"
-    colors: ["0000", "7C00", "5000", "7FFF"]  # Trans, Blue, Dark Blue, White
-    notes: "Dragon Fly should appear BLUE/WHITE"
+    name: "Palette 2 - Blue/Azure"
+    colors: ["0000", "7C00", "5800", "3000"]  # Trans, Bright Blue, Medium Blue, Dark Blue
+    notes: "DragonFly, tiles 12-13, 40-43, 72-75, 100-103"
 
   DefaultSprite3:
-    name: "Default Sprite 3"
-    colors: ["0000", "7FFF", "5294", "2108"]
+    name: "Palette 3 - Orange/Gold"
+    colors: ["0000", "02FF", "01DF", "00BF"]  # Trans, Orange, Dark Orange, Brown
+    notes: "Tiles 14-15, 44-47, 76-79, 104-107"
 
   DefaultSprite4:
-    name: "Default Sprite 4"
-    colors: ["0000", "7FFF", "5294", "2108"]
+    name: "Palette 4 - Purple/Violet"
+    colors: ["0000", "7C1F", "5010", "2808"]  # Trans, Magenta, Purple, Dark Purple
+    notes: "Tiles 18-19, 48-51, 80-83, 108-111"
 
   DefaultSprite5:
-    name: "Default Sprite 5"
-    colors: ["0000", "7FFF", "5294", "2108"]
+    name: "Palette 5 - Cyan/Teal"
+    colors: ["0000", "7FE0", "5EC0", "3D80"]  # Trans, Cyan, Teal, Dark Teal
+    notes: "Tiles 10-11, 20-23, 52-55, 84-87"
 
   DefaultSprite6:
-    name: "Default Sprite 6"
-    colors: ["0000", "7FFF", "5294", "2108"]
+    name: "Palette 6 - Pink/Rose"
+    colors: ["0000", "7E1F", "5C16", "3A0D"]  # Trans, Pink, Rose, Dark Rose
+    notes: "Tiles 24-27, 56-59, 88-91, 112-115"
 
   DefaultSprite7:
-    name: "Default Sprite 7"
-    colors: ["0000", "7FFF", "5294", "2108"]
+    name: "Palette 7 - Yellow/Gold"
+    colors: ["0000", "03FF", "02DF", "019F"]  # Trans, Yellow, Gold, Brown-Gold
+    notes: "Tiles 8-9, 28, 60-63, 116-119"
 
 notes: |
-  SIMPLIFIED VERSION - Focus on 3 monsters only:
+  COMPREHENSIVE 8-PALETTE MONSTER COLORIZATION
 
-  Sprite Palette 0: Sara D (tiles 0-3) - RED
-  Sprite Palette 1: Sara W (tiles 4-7) - GREEN/ORANGE
-  Sprite Palette 2: Dragon Fly (tiles 8-9) - BLUE/WHITE
+  All 35+ monster groups mapped to 8 palettes (cycling every 4 tiles):
 
-  All colors in BGR555 hex format (no color names)
-  Format: "BBBBGGGGGRRRRR" (each letter = 1 bit)
+  Palette 0 (RED):    Tiles 0-3, 32-35, 64-67, 92-95, 120-123
+  Palette 1 (GREEN):  Tiles 4-7, 36-39, 68-71, 96-99, 124-127
+  Palette 2 (BLUE):   Tiles 12-13, 40-43, 72-75, 100-103
+  Palette 3 (ORANGE): Tiles 14-15, 44-47, 76-79, 104-107
+  Palette 4 (PURPLE): Tiles 18-19, 48-51, 80-83, 108-111
+  Palette 5 (CYAN):   Tiles 10-11, 20-23, 52-55, 84-87
+  Palette 6 (PINK):   Tiles 24-27, 56-59, 88-91, 112-115
+  Palette 7 (YELLOW): Tiles 8-9, 28, 60-63, 116-119
 
-  Common colors:
-  - 0000: Black/Transparent
-  - 7FFF: White
-  - 001F: Red
-  - 03E0: Green
-  - 7C00: Blue
-  - 7FE0: Yellow
-  - 03FF: Cyan
-  - 7C1F: Magenta
+  All colors in BGR555 hex format
+  Format: BBBBBGGGGGRRRRR (5 bits each)
+
+  Color reference:
+  - 0000: Black/Transparent  - 7FFF: White
+  - 001F: Red                - 03E0: Green
+  - 7C00: Blue               - 03FF: Yellow/Cyan
+  - 7C1F: Magenta            - 7FE0: Cyan

@@ -1,0 +1,59 @@
+tile_palette_table:
+  current_mappings:
+    dragon_fly:
+      colors:
+      - white
+      - blue
+      palette: 7
+      tiles:
+      - 0
+      - 1
+      - 80
+      - 81
+      - 82
+      - 83
+      - 84
+      - 85
+      - 86
+      - 87
+    sara_d:
+      colors:
+      - red
+      - black
+      palette: 0
+      tiles:
+      - 8
+      - 9
+      - 14
+      - 15
+      - 32
+    sara_w:
+      colors:
+      - green
+      - orange
+      palette: 1
+      tiles:
+      - 10
+      - 11
+      - 12
+      - 13
+      - 33
+  description: 256-byte lookup table mapping tile IDs (0-255) to palette IDs (0-7)
+  format: "Each byte: tile_id \u2192 palette_id (0xFF = don't modify)"
+  location: Bank 13 @ 0x6E00
+  ready_for_expansion:
+    fire_enemies:
+      palette: 2
+      tiles: 16-31
+    flying_enemies:
+      palette: 4
+      tiles: 50-79
+    ice_enemies:
+      palette: 3
+      tiles: 34-49
+    mini_boss:
+      palette: 6
+      tiles: 100-119
+    poison_enemies:
+      palette: 5
+      tiles: 88-99
