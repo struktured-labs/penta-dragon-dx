@@ -6,31 +6,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with colors.
 
-**Current Status**: 🚧 **Work in Progress** - Basic colorization works (background and sprites show color), but **per-monster-type distinct colors are NOT working**. The main challenge is assigning unique palettes to different monster types (e.g., Sara W vs Sara D vs Dragon Fly) that appear in the intro demo screen.
+**Current Status**: ✅ **Per-Monster Colorization Working!** - Tile-based palette assignment successfully gives different monsters distinct colors.
 
 ### What Works
 - ✅ CGB mode detection and compatibility
 - ✅ Basic palette injection (colors are displayed)
 - ✅ Background palette loading
 - ✅ Sprite palette loading
+- ✅ **Per-monster distinct colors** via tile-to-palette lookup table
+- ✅ YAML-based palette configuration
 
-### What Doesn't Work Yet
-- ❌ Distinct colors per monster type - all monsters use the same palette
-- ❌ Reliable OAM palette assignment - game overwrites modifications
-- ❌ VBlank hooks - cause crashes due to timing sensitivity
+### Known Issues
+- ⚠️ Mild sprite flickering (inherent timing artifact from VBlank OAM modification)
+
+### Key Technical Breakthrough
+The game uses **dual shadow OAM buffers** (0xC000 and 0xC100). To make palette modifications persist, we must modify all three locations:
+- 0xFE00 (actual OAM)
+- 0xC000 (shadow buffer 1)
+- 0xC100 (shadow buffer 2)
 
 ## Common Commands
 
 ### Build the Colorized ROM
 
-**YAML-based (recommended):**
+**Tile-based colorizer (recommended):**
 ```bash
-uv run python scripts/create_dx_rom_from_yaml.py
+python3 scripts/create_tile_lookup_colorizer.py
 ```
 
-**Hardcoded palettes:**
+**YAML-based (legacy):**
 ```bash
-python3 scripts/create_dx_rom.py
+uv run python scripts/create_dx_rom_from_yaml.py
 ```
 
 Output ROM: `rom/working/penta_dragon_dx_FIXED.gb`
@@ -38,11 +44,17 @@ Output ROM: `rom/working/penta_dragon_dx_FIXED.gb`
 ### Testing & Verification
 
 ```bash
-# Run with emulator
+# Run with emulator (Nvidia/XCB systems)
+QT_QPA_PLATFORM=xcb __GLX_VENDOR_LIBRARY_NAME=nvidia mgba-qt rom/working/penta_dragon_dx_FIXED.gb
+
+# Alternative launch (Wayland)
 mgba-qt rom/working/penta_dragon_dx_FIXED.gb
 
 # Run with savestate
-mgba-qt -t rom/working/lvl1.ss0 rom/working/penta_dragon_dx_FIXED.gb
+QT_QPA_PLATFORM=xcb __GLX_VENDOR_LIBRARY_NAME=nvidia mgba-qt -t rom/working/lvl1.ss0 rom/working/penta_dragon_dx_FIXED.gb
+
+# Headless automated testing
+timeout 90 xvfb-run mgba-qt --fastforward --script scripts/quick_test2.lua rom/working/penta_dragon_dx_FIXED.gb
 
 # Automated color verification (captures screenshots, analyzes colors)
 python3 scripts/auto_verify_colors.py

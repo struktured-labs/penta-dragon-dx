@@ -3,12 +3,47 @@
 Tile-based palette lookup colorizer.
 Modifies all three OAM locations (0xFE00, 0xC000, 0xC100).
 Uses a 256-byte lookup table to map tile IDs to palettes.
+Loads palettes from YAML file.
 """
 import sys
+import yaml
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from penta_dragon_dx.display_patcher import apply_all_display_patches
+
+
+def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
+    """Load BG and OBJ palettes from YAML file."""
+    with open(yaml_path) as f:
+        data = yaml.safe_load(f)
+
+    def pal_to_bytes(colors: list[str]) -> bytes:
+        result = bytearray()
+        for c in colors:
+            val = int(c, 16) & 0x7FFF
+            result.extend([val & 0xFF, (val >> 8) & 0xFF])
+        return bytes(result)
+
+    bg_keys = ['Dungeon', 'Default1', 'Default2', 'Default3',
+               'Default4', 'Default5', 'Default6', 'Default7']
+    bg_data = bytearray()
+    for key in bg_keys:
+        if key in data.get('bg_palettes', {}):
+            bg_data.extend(pal_to_bytes(data['bg_palettes'][key]['colors']))
+        else:
+            bg_data.extend(pal_to_bytes(["7FFF", "5294", "2108", "0000"]))
+
+    obj_keys = ['SaraD', 'SaraW', 'DragonFly', 'DefaultSprite3',
+                'DefaultSprite4', 'DefaultSprite5', 'DefaultSprite6', 'DefaultSprite7']
+    obj_data = bytearray()
+    for key in obj_keys:
+        if key in data.get('obj_palettes', {}):
+            obj_data.extend(pal_to_bytes(data['obj_palettes'][key]['colors']))
+        else:
+            obj_data.extend(pal_to_bytes(["0000", "7FFF", "5294", "2108"]))
+
+    return bytes(bg_data), bytes(obj_data)
 
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
@@ -176,6 +211,7 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
 def main():
     input_rom = Path("rom/Penta Dragon (J).gb")
     output_rom = Path("rom/working/penta_dragon_dx_FIXED.gb")
+    palette_yaml = Path("palettes/penta_palettes.yaml")
 
     rom = bytearray(input_rom.read_bytes())
 
@@ -185,32 +221,11 @@ def main():
     rom, _ = apply_all_display_patches(rom)
     rom[0x143] = 0x80
 
-    def pal(colors):
-        data = bytearray()
-        for c in colors:
-            val = int(c, 16) & 0x7FFF
-            data.extend([val & 0xFF, (val >> 8) & 0xFF])
-        return bytes(data)
+    # Load palettes from YAML file
+    print(f"Loading palettes from: {palette_yaml}")
+    bg_palettes, obj_palettes = load_palettes_from_yaml(palette_yaml)
 
     PALETTE_DATA_OFFSET = 0x036C80
-
-    bg_palettes = (
-        pal(["7FFF", "03E0", "0280", "0000"]) +
-        pal(["7FFF", "5294", "2108", "0000"]) * 7
-    )
-
-    # Distinct color palettes for monsters
-    obj_palettes = (
-        pal(["0000", "001F", "0010", "7FFF"]) +  # 0: RED - SARA D
-        pal(["0000", "03E0", "01A0", "7FFF"]) +  # 1: GREEN - SARA W
-        pal(["0000", "7C00", "5000", "7FFF"]) +  # 2: BLUE - DRAGONFLY
-        pal(["0000", "03FF", "021F", "7FFF"]) +  # 3: CYAN
-        pal(["0000", "7C1F", "5010", "7FFF"]) +  # 4: MAGENTA
-        pal(["0000", "7FE0", "3CC0", "7FFF"]) +  # 5: YELLOW
-        pal(["0000", "6318", "4210", "7FFF"]) +  # 6: GRAY
-        pal(["0000", "7FFF", "5294", "2108"])    # 7: Default
-    )
-
     rom[PALETTE_DATA_OFFSET:PALETTE_DATA_OFFSET+64] = bg_palettes
     rom[PALETTE_DATA_OFFSET+64:PALETTE_DATA_OFFSET+128] = obj_palettes
 
