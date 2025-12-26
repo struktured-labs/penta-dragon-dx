@@ -48,46 +48,27 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    STABLE VERSION: Uses 32-tile blocks to prevent rainbow flashing.
-    Monster animations often span multiple tiles, so larger blocks
-    ensure a monster stays on one palette throughout its animation.
+    ULTRA-STABLE VERSION: Uses 64-tile blocks (4 palettes only).
+    Maximizes stability at the cost of variety.
     """
     table = bytearray([0xFF] * 256)  # 0xFF = don't modify
 
-    # 32-tile blocks for stability (monsters animate across tiles)
-    # Each monster type should stay within a 32-tile range
-
-    # Tiles 0-31: Palette 0 (RED) - Sara D and related
-    for tile in range(0, 32):
+    # 64-tile blocks for maximum stability
+    # Tiles 0-63: Palette 0 (RED) - Player and early enemies
+    for tile in range(0, 64):
         table[tile] = 0
 
-    # Tiles 32-63: Palette 1 (GREEN) - Sara W and related
-    for tile in range(32, 64):
+    # Tiles 64-127: Palette 1 (GREEN) - Mid-game enemies
+    for tile in range(64, 128):
         table[tile] = 1
 
-    # Tiles 64-95: Palette 2 (BLUE) - DragonFly and related
-    for tile in range(64, 96):
+    # Tiles 128-191: Palette 2 (BLUE) - Late-game enemies
+    for tile in range(128, 192):
         table[tile] = 2
 
-    # Tiles 96-127: Palette 3 (ORANGE) - Fire enemies
-    for tile in range(96, 128):
+    # Tiles 192-255: Palette 3 (ORANGE) - Bosses
+    for tile in range(192, 256):
         table[tile] = 3
-
-    # Tiles 128-159: Palette 4 (PURPLE) - Special enemies
-    for tile in range(128, 160):
-        table[tile] = 4
-
-    # Tiles 160-191: Palette 5 (CYAN) - Ice enemies
-    for tile in range(160, 192):
-        table[tile] = 5
-
-    # Tiles 192-223: Palette 6 (PINK) - Mini bosses
-    for tile in range(192, 224):
-        table[tile] = 6
-
-    # Tiles 224-255: Palette 7 (YELLOW) - Bosses
-    for tile in range(224, 256):
-        table[tile] = 7
 
     return bytes(table)
 
