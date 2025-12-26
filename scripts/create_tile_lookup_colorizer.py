@@ -72,16 +72,14 @@ def create_lookup_table() -> bytes:
 
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     """
-    UNCONDITIONAL version - modifies ALL 40 sprites regardless of visibility.
-    No Y position check, no 0xFF skip - just force palette on everything.
+    NO LOOKUP VERSION - computes palette directly from tile ID.
+    palette = tile_id >> 6 (gives 0-3 for 64-tile blocks)
+    Avoids memory access issues with lookup table.
     """
-    lo = lookup_table_addr & 0xFF
-    hi = (lookup_table_addr >> 8) & 0xFF
-
     code = bytearray()
 
-    # PUSH AF, BC, DE, HL
-    code.extend([0xF5, 0xC5, 0xD5, 0xE5])
+    # PUSH AF, BC, HL
+    code.extend([0xF5, 0xC5, 0xE5])
 
     # Process all three buffers
     for base_hi in [0xFE, 0xC0, 0xC1]:
@@ -94,31 +92,39 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
         # .loop:
         loop_start = len(code)
 
-        # LD E, [HL] - get tile ID
-        code.append(0x5E)
+        # LD A, [HL] - get tile ID
+        code.append(0x7E)
+
+        # Compute palette = tile_id >> 6
+        # SRL A (shift right, bit 0 to carry)
+        code.extend([0xCB, 0x3F])
+        # SRL A
+        code.extend([0xCB, 0x3F])
+        # SRL A
+        code.extend([0xCB, 0x3F])
+        # SRL A
+        code.extend([0xCB, 0x3F])
+        # SRL A
+        code.extend([0xCB, 0x3F])
+        # SRL A - now A = tile_id >> 6 (0-3)
+        code.extend([0xCB, 0x3F])
+
+        # Save palette in C
+        code.append(0x4F)  # LD C, A
+
         # INC HL (to flags)
         code.append(0x23)
 
-        # Save HL (flags address)
-        code.append(0xE5)  # PUSH HL
+        # LD A, [HL] - get current flags
+        code.append(0x7E)
+        # AND 0xF8 - clear palette bits
+        code.extend([0xE6, 0xF8])
+        # OR C - set new palette
+        code.append(0xB1)
+        # LD [HL], A - write back
+        code.append(0x77)
 
-        # Lookup palette: HL = lookup_table + tile_id
-        code.extend([0x16, 0x00])  # LD D, 0
-        code.extend([0x21, lo, hi])  # LD HL, lookup_table
-        code.append(0x19)  # ADD HL, DE
-        code.append(0x7E)  # LD A, [HL] - get palette
-
-        # Restore HL (flags address)
-        code.append(0xE1)  # POP HL
-
-        # Apply palette to flags unconditionally
-        code.append(0x57)  # LD D, A - save palette
-        code.append(0x7E)  # LD A, [HL] - get current flags
-        code.extend([0xE6, 0xF8])  # AND 0xF8 - clear palette bits
-        code.append(0xB2)  # OR D - set new palette
-        code.append(0x77)  # LD [HL], A - write back
-
-        # Advance to next sprite (flags+1 = next Y, +3 more = next tile)
+        # Advance to next sprite's tile
         code.append(0x23)  # INC HL (next Y)
         code.append(0x23)  # INC HL (next X)
         code.append(0x23)  # INC HL (next tile)
@@ -127,8 +133,8 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
         loop_offset = loop_start - len(code) - 2
         code.extend([0x20, loop_offset & 0xFF])  # JR NZ, .loop
 
-    # POP HL, DE, BC, AF
-    code.extend([0xE1, 0xD1, 0xC1, 0xF1])
+    # POP HL, BC, AF
+    code.extend([0xE1, 0xC1, 0xF1])
     code.append(0xC9)  # RET
 
     return bytes(code)
