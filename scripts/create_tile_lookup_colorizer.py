@@ -48,79 +48,111 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    ULTRA-STABLE VERSION: Uses 64-tile blocks (4 palettes only).
-    Maximizes stability at the cost of variety.
+    DIAGNOSTIC: ALL tiles use palette 0 to test if flickering stops.
     """
-    table = bytearray([0xFF] * 256)  # 0xFF = don't modify
-
-    # 64-tile blocks for maximum stability
-    # Tiles 0-63: Palette 0 (RED) - Player and early enemies
-    for tile in range(0, 64):
-        table[tile] = 0
-
-    # Tiles 64-127: Palette 1 (GREEN) - Mid-game enemies
-    for tile in range(64, 128):
-        table[tile] = 1
-
-    # Tiles 128-191: Palette 2 (BLUE) - Late-game enemies
-    for tile in range(128, 192):
-        table[tile] = 2
-
-    # Tiles 192-255: Palette 3 (ORANGE) - Bosses
-    for tile in range(192, 256):
-        table[tile] = 3
-
+    table = bytearray([0] * 256)  # All tiles = palette 0 (RED)
     return bytes(table)
 
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     """
-    DIAGNOSTIC VERSION: Set ALL sprites to palette 0 unconditionally.
-    No lookup table, no tile checking - just force palette 0.
-    This tests if flickering is caused by the lookup logic or timing.
+    Create sprite loop that uses tile-to-palette lookup table.
+    Modifies all three OAM locations (like v0.4 which worked).
     """
+    lo = lookup_table_addr & 0xFF
+    hi = (lookup_table_addr >> 8) & 0xFF
+
     code = bytearray()
 
-    # PUSH AF, BC, HL
-    code.extend([0xF5, 0xC5, 0xE5])
+    # PUSH AF, BC, DE, HL
+    code.extend([0xF5, 0xC5, 0xD5, 0xE5])
 
-    # Process ONLY shadow buffers
-    for base_hi in [0xC0, 0xC1]:
-        # LD HL, base + 3 (start at first flags byte)
-        code.extend([0x21, 0x03, base_hi])
+    # Process all three buffers (v0.4 approach)
+    for base_hi in [0xFE, 0xC0, 0xC1]:
+        # LD HL, base (start at Y position)
+        code.extend([0x21, 0x00, base_hi])
 
-        # LD B, 40 (40 sprites)
+        # LD B, 40
         code.extend([0x06, 0x28])
 
         # .loop:
         loop_start = len(code)
 
-        # LD A, [HL] - get current flags
+        # LD A, [HL] - Y position
         code.append(0x7E)
-        # AND 0xF8 - clear palette bits (set to palette 0)
-        code.extend([0xE6, 0xF8])
-        # LD [HL], A - write back
-        code.append(0x77)
 
-        # Add 4 to HL (next sprite's flags)
-        # LD A, L
-        code.append(0x7D)
-        # ADD 4
-        code.extend([0xC6, 0x04])
-        # LD L, A
-        code.append(0x6F)
+        # AND A - check if 0
+        code.append(0xA7)
 
-        # DEC B
-        code.append(0x05)
+        # JR Z, .next_sprite
+        skip_jrz = len(code)
+        code.extend([0x28, 0x00])  # placeholder
 
-        # JR NZ, .loop
+        # CP 160 - check if off screen
+        code.extend([0xFE, 0xA0])
+
+        # JR NC, .next_sprite
+        skip_jrnc = len(code)
+        code.extend([0x30, 0x00])  # placeholder
+
+        # Sprite is visible - get tile ID
+        code.append(0x23)  # INC HL (X)
+        code.append(0x23)  # INC HL (tile)
+        code.append(0x5E)  # LD E, [HL] - get tile ID
+        code.append(0x23)  # INC HL (flags)
+
+        # Save HL (flags address)
+        code.append(0xE5)  # PUSH HL
+
+        # Lookup palette: HL = lookup_table + tile_id
+        code.extend([0x16, 0x00])  # LD D, 0
+        code.extend([0x21, lo, hi])  # LD HL, lookup_table
+        code.append(0x19)  # ADD HL, DE
+        code.append(0x7E)  # LD A, [HL] - get palette
+
+        # Restore HL (flags address)
+        code.append(0xE1)  # POP HL
+
+        # Check if 0xFF (don't modify)
+        code.extend([0xFE, 0xFF])
+        skip_modify = len(code)
+        code.extend([0x28, 0x00])  # JR Z, .skip_modify
+
+        # Apply palette to flags
+        code.append(0x57)  # LD D, A - save palette
+        code.append(0x7E)  # LD A, [HL] - get current flags
+        code.extend([0xE6, 0xF8])  # AND 0xF8 - clear palette bits
+        code.append(0xB2)  # OR D - set new palette
+        code.append(0x77)  # LD [HL], A - write back
+
+        # .skip_modify:
+        skip_modify_target = len(code)
+        code[skip_modify + 1] = (skip_modify_target - skip_modify - 2) & 0xFF
+
+        code.append(0x23)  # INC HL to next sprite's Y
+
+        # JR .dec_b
+        jr_to_dec = len(code)
+        code.extend([0x18, 0x00])  # placeholder
+
+        # .next_sprite:
+        next_sprite = len(code)
+        code[skip_jrz + 1] = (next_sprite - skip_jrz - 2) & 0xFF
+        code[skip_jrnc + 1] = (next_sprite - skip_jrnc - 2) & 0xFF
+
+        # Advance HL by 4 to next sprite
+        code.extend([0x23, 0x23, 0x23, 0x23])
+
+        # .dec_b:
+        dec_b = len(code)
+        code[jr_to_dec + 1] = (dec_b - jr_to_dec - 2) & 0xFF
+
+        code.append(0x05)  # DEC B
         loop_offset = loop_start - len(code) - 2
-        code.extend([0x20, loop_offset & 0xFF])
+        code.extend([0x20, loop_offset & 0xFF])  # JR NZ, .loop
 
-    # POP HL, BC, AF
-    code.extend([0xE1, 0xC1, 0xF1])
-
-    # RET
-    code.append(0xC9)
+    # POP HL, DE, BC, AF
+    code.extend([0xE1, 0xD1, 0xC1, 0xF1])
+    code.append(0xC9)  # RET
 
     return bytes(code)
 
@@ -156,14 +188,13 @@ def main():
 
     print(f"Sprite loop size: {len(sprite_loop)} bytes")
 
-    # Combined function - sprite loop runs TWICE (before AND after input)
-    # This catches any OAM modifications made by the input handler
+    # Combined function - single sprite loop AFTER input handler (v0.4 style)
     combined = bytes([
         0x21, 0x80, 0x6C, 0x3E, 0x80, 0xE0, 0x68, 0x0E, 0x40,
         0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
         0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40,
         0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-    ]) + sprite_loop + original_input + sprite_loop + bytes([0xC9])
+    ]) + original_input + sprite_loop + bytes([0xC9])
 
     COMBINED_OFFSET = 0x036D00
     rom[COMBINED_OFFSET:COMBINED_OFFSET+len(combined)] = combined
