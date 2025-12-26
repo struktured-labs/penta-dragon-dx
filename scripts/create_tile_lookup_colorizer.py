@@ -75,7 +75,8 @@ def create_lookup_table() -> bytes:
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     """
     Create sprite loop that uses tile-to-palette lookup table.
-    Modifies all three OAM locations.
+    ONLY modifies shadow buffers (0xC000, 0xC100) - NOT actual OAM.
+    This avoids racing with DMA.
     """
     lo = lookup_table_addr & 0xFF
     hi = (lookup_table_addr >> 8) & 0xFF
@@ -85,8 +86,8 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     # PUSH AF, BC, DE, HL
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])
 
-    # Process all three buffers
-    for base_hi in [0xFE, 0xC0, 0xC1]:
+    # Process ONLY shadow buffers (not 0xFE00 - let DMA handle that)
+    for base_hi in [0xC0, 0xC1]:
         # LD HL, base (start at Y position)
         code.extend([0x21, 0x00, base_hi])
 
@@ -231,13 +232,14 @@ def main():
 
     print(f"Sprite loop size: {len(sprite_loop)} bytes")
 
-    # Combined function
+    # Combined function - sprite loop runs TWICE (before AND after input)
+    # This catches any OAM modifications made by the input handler
     combined = bytes([
         0x21, 0x80, 0x6C, 0x3E, 0x80, 0xE0, 0x68, 0x0E, 0x40,
         0x2A, 0xE0, 0x69, 0x0D, 0x20, 0xFA,
         0x3E, 0x80, 0xE0, 0x6A, 0x0E, 0x40,
         0x2A, 0xE0, 0x6B, 0x0D, 0x20, 0xFA,
-    ]) + original_input + sprite_loop + bytes([0xC9])
+    ]) + sprite_loop + original_input + sprite_loop + bytes([0xC9])
 
     COMBINED_OFFSET = 0x036D00
     rom[COMBINED_OFFSET:COMBINED_OFFSET+len(combined)] = combined
