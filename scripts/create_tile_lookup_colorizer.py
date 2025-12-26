@@ -94,19 +94,15 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
         # LD A, [HL] - get tile ID
         code.append(0x7E)
 
-        # Compute palette = tile_id >> 6
-        # SRL A (shift right, bit 0 to carry)
-        code.extend([0xCB, 0x3F])
-        # SRL A
-        code.extend([0xCB, 0x3F])
-        # SRL A
-        code.extend([0xCB, 0x3F])
-        # SRL A
-        code.extend([0xCB, 0x3F])
-        # SRL A
-        code.extend([0xCB, 0x3F])
-        # SRL A - now A = tile_id >> 6 (0-3)
-        code.extend([0xCB, 0x3F])
+        # Compute palette = tile_id >> 7 (128-tile blocks, 2 palettes)
+        # SRL A x7 = tile_id >> 7 (0 or 1)
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A - now A = 0 or 1
 
         # Save palette in C
         code.append(0x4F)  # LD C, A
