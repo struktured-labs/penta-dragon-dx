@@ -72,17 +72,16 @@ def create_lookup_table() -> bytes:
 
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     """
-    NO LOOKUP VERSION - computes palette directly from tile ID.
-    palette = tile_id >> 6 (gives 0-3 for 64-tile blocks)
-    Avoids memory access issues with lookup table.
+    SHADOW-ONLY + direct palette calculation.
+    Like v0.8 (which worked) but with color variety.
     """
     code = bytearray()
 
     # PUSH AF, BC, HL
     code.extend([0xF5, 0xC5, 0xE5])
 
-    # Process all three buffers
-    for base_hi in [0xFE, 0xC0, 0xC1]:
+    # Process ONLY shadow buffers (like v0.8)
+    for base_hi in [0xC0, 0xC1]:
         # LD HL, base+2 (start at tile ID)
         code.extend([0x21, 0x02, base_hi])
 
