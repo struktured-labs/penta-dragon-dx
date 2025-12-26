@@ -48,152 +48,46 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    Based on comprehensive screenshot analysis of all monsters.
-    Maps tile IDs to one of 8 OBJ palettes (0-7).
+    STABLE VERSION: Uses 32-tile blocks to prevent rainbow flashing.
+    Monster animations often span multiple tiles, so larger blocks
+    ensure a monster stays on one palette throughout its animation.
     """
     table = bytearray([0xFF] * 256)  # 0xFF = don't modify
 
-    # From monster_palette_map.yaml - comprehensive monster mapping
-    # Each group uses tiles in 4-tile blocks typically
+    # 32-tile blocks for stability (monsters animate across tiles)
+    # Each monster type should stay within a 32-tile range
 
-    # Sara D / DragonFly (tiles 0-3): Palette 0 (RED)
-    for tile in [0, 1, 2, 3]:
+    # Tiles 0-31: Palette 0 (RED) - Sara D and related
+    for tile in range(0, 32):
         table[tile] = 0
 
-    # Sara W (tiles 4-7): Palette 1 (GREEN)
-    for tile in [4, 5, 6, 7]:
+    # Tiles 32-63: Palette 1 (GREEN) - Sara W and related
+    for tile in range(32, 64):
         table[tile] = 1
 
-    # Tiles 8-9: Palette 7
-    for tile in [8, 9]:
+    # Tiles 64-95: Palette 2 (BLUE) - DragonFly and related
+    for tile in range(64, 96):
+        table[tile] = 2
+
+    # Tiles 96-127: Palette 3 (ORANGE) - Fire enemies
+    for tile in range(96, 128):
+        table[tile] = 3
+
+    # Tiles 128-159: Palette 4 (PURPLE) - Special enemies
+    for tile in range(128, 160):
+        table[tile] = 4
+
+    # Tiles 160-191: Palette 5 (CYAN) - Ice enemies
+    for tile in range(160, 192):
+        table[tile] = 5
+
+    # Tiles 192-223: Palette 6 (PINK) - Mini bosses
+    for tile in range(192, 224):
+        table[tile] = 6
+
+    # Tiles 224-255: Palette 7 (YELLOW) - Bosses
+    for tile in range(224, 256):
         table[tile] = 7
-
-    # Tiles 10-11: Palette 5
-    for tile in [10, 11]:
-        table[tile] = 5
-
-    # Tiles 12-13: Palette 2
-    for tile in [12, 13]:
-        table[tile] = 2
-
-    # Tiles 14-15: Palette 3
-    for tile in [14, 15]:
-        table[tile] = 3
-
-    # Tiles 18-19: Palette 4
-    for tile in [18, 19]:
-        table[tile] = 4
-
-    # Tiles 20-23: Palette 5
-    for tile in range(20, 24):
-        table[tile] = 5
-
-    # Tiles 24-27: Palette 6
-    for tile in range(24, 28):
-        table[tile] = 6
-
-    # Tile 28: Palette 7
-    table[28] = 7
-
-    # Tiles 32-35: Palette 0
-    for tile in range(32, 36):
-        table[tile] = 0
-
-    # Tiles 36-39: Palette 1
-    for tile in range(36, 40):
-        table[tile] = 1
-
-    # Tiles 40-43: Palette 2
-    for tile in range(40, 44):
-        table[tile] = 2
-
-    # Tiles 44-47: Palette 3
-    for tile in range(44, 48):
-        table[tile] = 3
-
-    # Tiles 48-51: Palette 4
-    for tile in range(48, 52):
-        table[tile] = 4
-
-    # Tiles 52-55: Palette 5
-    for tile in range(52, 56):
-        table[tile] = 5
-
-    # Tiles 56-59: Palette 6
-    for tile in range(56, 60):
-        table[tile] = 6
-
-    # Tiles 60-63: Palette 7
-    for tile in range(60, 64):
-        table[tile] = 7
-
-    # Tiles 64-67: Palette 0
-    for tile in range(64, 68):
-        table[tile] = 0
-
-    # Tiles 68-71: Palette 1
-    for tile in range(68, 72):
-        table[tile] = 1
-
-    # Tiles 72-75: Palette 2
-    for tile in range(72, 76):
-        table[tile] = 2
-
-    # Tiles 76-79: Palette 3
-    for tile in range(76, 80):
-        table[tile] = 3
-
-    # Tiles 80-83: Palette 4
-    for tile in range(80, 84):
-        table[tile] = 4
-
-    # Tiles 84-87: Palette 5
-    for tile in range(84, 88):
-        table[tile] = 5
-
-    # Tiles 88-91: Palette 6
-    for tile in range(88, 92):
-        table[tile] = 6
-
-    # Tiles 92-95: Palette 0
-    for tile in range(92, 96):
-        table[tile] = 0
-
-    # Tiles 96-99: Palette 1
-    for tile in range(96, 100):
-        table[tile] = 1
-
-    # Tiles 100-103: Palette 2
-    for tile in range(100, 104):
-        table[tile] = 2
-
-    # Tiles 104-107: Palette 3
-    for tile in range(104, 108):
-        table[tile] = 3
-
-    # Tiles 108-111: Palette 4
-    for tile in range(108, 112):
-        table[tile] = 4
-
-    # Tiles 112-115: Palette 6
-    for tile in range(112, 116):
-        table[tile] = 6
-
-    # Tiles 116-119: Palette 7
-    for tile in range(116, 120):
-        table[tile] = 7
-
-    # Tiles 120-123: Palette 0
-    for tile in range(120, 124):
-        table[tile] = 0
-
-    # Tiles 124-127: Palette 1
-    for tile in range(124, 128):
-        table[tile] = 1
-
-    # Fill remaining tiles 128-255 with cycling palettes
-    for tile in range(128, 256):
-        table[tile] = (tile // 4) % 8
 
     return bytes(table)
 
