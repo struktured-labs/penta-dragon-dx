@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-v0.49: Pure slot-based for stability (no tile lookup).
+v0.50: Multi-color slot-based assignment.
 
-v0.48 had direction-dependent color changes because tile ranges were wrong.
-Simplify: use ONLY slot position for palette assignment.
-
-- Slots 0-7: Palette 1 (GREEN - Sara W, extra slots for animations)
-- Slots 8-39: Palette 2 (BLUE - all monsters, uniform color)
-
-This sacrifices per-monster-type colors for stability.
+v0.49 was stable! Now add more monster colors by splitting slots:
+- Slots 0-5:   Palette 1 (GREEN - Sara W)
+- Slots 6-15:  Palette 2 (BLUE - monsters group 1)
+- Slots 16-27: Palette 3 (ORANGE - monsters group 2)
+- Slots 28-39: Palette 4 (PURPLE - monsters group 3)
 """
 import sys
 import yaml
@@ -53,10 +51,12 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 
 def create_slot_palette_loop() -> bytes:
     """
-    v0.49: Pure slot-based palette assignment for stability.
+    v0.50: Multi-color slot-based palette assignment.
 
-    - Slots 0-7: Palette 1 (GREEN - Sara W with animation sprites)
-    - Slots 8-39: Palette 2 (BLUE - all monsters)
+    - Slots 0-5:   Palette 1 (GREEN - Sara W)
+    - Slots 6-15:  Palette 2 (BLUE - monsters group 1)
+    - Slots 16-27: Palette 3 (ORANGE - monsters group 2)
+    - Slots 28-39: Palette 4 (PURPLE - monsters group 3)
 
     Modifies all three OAM locations for redundancy.
     """
@@ -65,34 +65,30 @@ def create_slot_palette_loop() -> bytes:
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
+    # Slot ranges: (count, palette)
+    slot_config = [
+        (6, 1),   # Slots 0-5: Palette 1 (GREEN - Sara W)
+        (10, 2),  # Slots 6-15: Palette 2 (BLUE)
+        (12, 3),  # Slots 16-27: Palette 3 (ORANGE)
+        (12, 4),  # Slots 28-39: Palette 4 (PURPLE)
+    ]
+
     # Process all three OAM locations: 0xFE00, 0xC000, 0xC100
     for base_hi in [0xFE, 0xC0, 0xC1]:
-        # FIRST LOOP: Slots 0-7 = Palette 1 (Sara W)
         code.extend([0x21, 0x03, base_hi])  # LD HL, base+3 (flags byte)
-        code.extend([0x06, 0x08])  # LD B, 8
 
-        loop1_start = len(code)
-        code.append(0x7E)  # LD A, [HL]
-        code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
-        code.extend([0xF6, 0x01])  # OR 1 (palette 1 = GREEN)
-        code.append(0x77)  # LD [HL], A
-        code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
-        code.append(0x05)  # DEC B
-        loop1_offset = loop1_start - len(code) - 2
-        code.extend([0x20, loop1_offset & 0xFF])  # JR NZ, loop1
+        for count, palette in slot_config:
+            code.extend([0x06, count])  # LD B, count
 
-        # SECOND LOOP: Slots 8-39 = Palette 2 (Monsters)
-        code.extend([0x06, 0x20])  # LD B, 32
-
-        loop2_start = len(code)
-        code.append(0x7E)  # LD A, [HL]
-        code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
-        code.extend([0xF6, 0x02])  # OR 2 (palette 2 = BLUE)
-        code.append(0x77)  # LD [HL], A
-        code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
-        code.append(0x05)  # DEC B
-        loop2_offset = loop2_start - len(code) - 2
-        code.extend([0x20, loop2_offset & 0xFF])  # JR NZ, loop2
+            loop_start = len(code)
+            code.append(0x7E)  # LD A, [HL]
+            code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
+            code.extend([0xF6, palette])  # OR palette
+            code.append(0x77)  # LD [HL], A
+            code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
+            code.append(0x05)  # DEC B
+            loop_offset = loop_start - len(code) - 2
+            code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop
 
     # Restore registers
     code.extend([0xE1, 0xD1, 0xC1, 0xF1])  # POP HL, DE, BC, AF
@@ -234,10 +230,11 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.49: Pure slot-based (no tile lookup)")
-    print(f"  Slots 0-7:  Palette 1 (GREEN - Sara W)")
-    print(f"  Slots 8-39: Palette 2 (BLUE - all monsters)")
-    print(f"  Triple OAM for stability")
+    print(f"  v0.50: Multi-color slot-based")
+    print(f"  Slots 0-5:   Pal 1 GREEN  (Sara W)")
+    print(f"  Slots 6-15:  Pal 2 BLUE   (monsters)")
+    print(f"  Slots 16-27: Pal 3 ORANGE (monsters)")
+    print(f"  Slots 28-39: Pal 4 PURPLE (monsters)")
 
 
 if __name__ == "__main__":
