@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-v0.47: Tile-based palette lookup for per-monster colors.
+v0.48: Corrected tile-to-palette mapping from YAML notes.
 
-Uses a 256-byte lookup table: tile_id -> palette number.
-Each monster type uses different tile ranges, so they get unique colors.
+Uses actual game tile assignments (scattered ranges, not contiguous):
+- Palette 0 (RED/SaraD): 0-3, 32-35, 64-67, 92-95, 120-123
+- Palette 1 (GREEN/SaraW): 4-7, 36-39, 68-71, 96-99, 124-127
+- Palette 2 (BLUE/DragonFly): 12-13, 40-43, 72-75, 100-103
+- etc.
 
-Lookup table stored in bank 13, applied to all three OAM locations.
+This should give each character their correct color.
 """
 import sys
 import yaml
@@ -52,37 +55,61 @@ def create_tile_lookup_table() -> bytes:
     """
     Create 256-byte tile-to-palette lookup table.
 
-    Initial mapping based on typical sprite tile ranges:
-    - Tiles 0x00-0x1F: Palette 1 (Sara W)
-    - Tiles 0x20-0x3F: Palette 2 (Sara D)
-    - Tiles 0x40-0x5F: Palette 3 (Dragon Fly)
-    - Tiles 0x60-0x7F: Palette 4 (Monster type 4)
-    - Tiles 0x80-0x9F: Palette 5 (Monster type 5)
-    - Tiles 0xA0-0xBF: Palette 6 (Monster type 6)
-    - Tiles 0xC0-0xDF: Palette 7 (Monster type 7)
-    - Tiles 0xE0-0xFF: Palette 0 (Default/misc)
-
-    Can be refined based on actual game tile usage.
+    Based on actual game tile assignments from YAML notes:
+    - Palette 0 (RED):    Tiles 0-3, 32-35, 64-67, 92-95, 120-123
+    - Palette 1 (GREEN):  Tiles 4-7, 36-39, 68-71, 96-99, 124-127
+    - Palette 2 (BLUE):   Tiles 12-13, 40-43, 72-75, 100-103
+    - Palette 3 (ORANGE): Tiles 14-15, 44-47, 76-79, 104-107
+    - Palette 4 (PURPLE): Tiles 18-19, 48-51, 80-83, 108-111
+    - Palette 5 (CYAN):   Tiles 10-11, 20-23, 52-55, 84-87
+    - Palette 6 (PINK):   Tiles 24-27, 56-59, 88-91, 112-115
+    - Palette 7 (YELLOW): Tiles 8-9, 28-31, 60-63, 116-119
     """
     table = bytearray(256)
 
-    for tile in range(256):
-        if tile < 0x20:
-            table[tile] = 1  # Sara W
-        elif tile < 0x40:
-            table[tile] = 2  # Sara D
-        elif tile < 0x60:
-            table[tile] = 3  # Dragon Fly
-        elif tile < 0x80:
-            table[tile] = 4  # Monster 4
-        elif tile < 0xA0:
-            table[tile] = 5  # Monster 5
-        elif tile < 0xC0:
-            table[tile] = 6  # Monster 6
-        elif tile < 0xE0:
-            table[tile] = 7  # Monster 7
-        else:
-            table[tile] = 0  # Default
+    # Default all to palette 0
+    for i in range(256):
+        table[i] = 0
+
+    # Palette 0 (RED/SaraD): Tiles 0-3, 32-35, 64-67, 92-95, 120-123
+    for t in list(range(0, 4)) + list(range(32, 36)) + list(range(64, 68)) + \
+             list(range(92, 96)) + list(range(120, 124)):
+        table[t] = 0
+
+    # Palette 1 (GREEN/SaraW): Tiles 4-7, 36-39, 68-71, 96-99, 124-127
+    for t in list(range(4, 8)) + list(range(36, 40)) + list(range(68, 72)) + \
+             list(range(96, 100)) + list(range(124, 128)):
+        table[t] = 1
+
+    # Palette 2 (BLUE/DragonFly): Tiles 12-13, 40-43, 72-75, 100-103
+    for t in list(range(12, 14)) + list(range(40, 44)) + list(range(72, 76)) + \
+             list(range(100, 104)):
+        table[t] = 2
+
+    # Palette 3 (ORANGE): Tiles 14-15, 44-47, 76-79, 104-107
+    for t in list(range(14, 16)) + list(range(44, 48)) + list(range(76, 80)) + \
+             list(range(104, 108)):
+        table[t] = 3
+
+    # Palette 4 (PURPLE): Tiles 18-19, 48-51, 80-83, 108-111
+    for t in list(range(18, 20)) + list(range(48, 52)) + list(range(80, 84)) + \
+             list(range(108, 112)):
+        table[t] = 4
+
+    # Palette 5 (CYAN): Tiles 10-11, 20-23, 52-55, 84-87
+    for t in list(range(10, 12)) + list(range(20, 24)) + list(range(52, 56)) + \
+             list(range(84, 88)):
+        table[t] = 5
+
+    # Palette 6 (PINK): Tiles 24-27, 56-59, 88-91, 112-115
+    for t in list(range(24, 28)) + list(range(56, 60)) + list(range(88, 92)) + \
+             list(range(112, 116)):
+        table[t] = 6
+
+    # Palette 7 (YELLOW): Tiles 8-9, 28-31, 60-63, 116-119
+    for t in list(range(8, 10)) + list(range(28, 32)) + list(range(60, 64)) + \
+             list(range(116, 120)):
+        table[t] = 7
 
     return bytes(table)
 
@@ -292,10 +319,10 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.47: Tile-based palette lookup")
-    print(f"  Each tile range maps to a different palette:")
-    print(f"    0x00-0x1F: Pal 1 | 0x20-0x3F: Pal 2 | 0x40-0x5F: Pal 3")
-    print(f"    0x60-0x7F: Pal 4 | 0x80-0x9F: Pal 5 | 0xA0-0xBF: Pal 6")
+    print(f"  v0.48: Corrected tile-to-palette mapping")
+    print(f"  Pal 0 RED:    0-3, 32-35, 64-67, 92-95, 120-123")
+    print(f"  Pal 1 GREEN:  4-7, 36-39, 68-71, 96-99, 124-127")
+    print(f"  Pal 2 BLUE:   12-13, 40-43, 72-75, 100-103")
     print(f"  Triple OAM for stability")
 
 
