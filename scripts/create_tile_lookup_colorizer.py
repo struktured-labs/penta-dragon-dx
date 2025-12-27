@@ -64,55 +64,46 @@ def create_lookup_table() -> bytes:
 
 def create_slot_based_sprite_loop() -> bytes:
     """
-    v0.36: Back to v0.32 approach - Sara W (slots 0-3) distinct, rest same color.
+    v0.37: Simple two-loop approach - no complex branching.
 
-    This was our best result: Sara W solid, monsters slight flicker but same color.
-    Modify both shadow buffers C0 and C1.
+    First loop: sprites 0-3 get palette 0 (Sara W = RED)
+    Second loop: sprites 4-39 get palette 1 (monsters = GREEN)
     """
     code = bytearray()
 
-    code.extend([0xF5, 0xC5, 0xD5, 0xE5])
+    code.extend([0xF5, 0xC5, 0xE5])  # PUSH AF, BC, HL
 
-    # Modify BOTH shadow buffers
     for base_hi in [0xC0, 0xC1]:
-        # LD HL, base+3 (flags of sprite 0)
-        code.extend([0x21, 0x03, base_hi])
-        # LD B, 40 (sprite counter)
-        code.extend([0x06, 0x28])
-        # LD E, 4 (first 4 sprites = Sara W)
-        code.extend([0x1E, 0x04])
+        # FIRST LOOP: Sprites 0-3 = Palette 0 (RED)
+        code.extend([0x21, 0x03, base_hi])  # LD HL, base+3 (flags)
+        code.extend([0x06, 0x04])  # LD B, 4
 
-        loop_start = len(code)
+        loop1_start = len(code)
+        code.append(0x7E)  # LD A, [HL]
+        code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette)
+        # OR 0 not needed - palette 0
+        code.append(0x77)  # LD [HL], A
+        code.extend([0x23, 0x23, 0x23, 0x23])  # next sprite
+        code.append(0x05)  # DEC B
+        loop1_offset = loop1_start - len(code) - 2
+        code.extend([0x20, loop1_offset & 0xFF])
 
-        # Determine palette: E > 0 means palette 0, else palette 1
-        code.append(0x7B)  # LD A, E
-        code.append(0xA7)  # AND A
-        code.extend([0x28, 0x04])  # JR Z, +4 (to palette 1)
-        code.extend([0x16, 0x00])  # LD D, 0 (Sara W = RED)
-        code.extend([0x18, 0x02])  # JR +2 (skip palette 1)
-        code.extend([0x16, 0x01])  # LD D, 1 (monsters = GREEN)
+        # SECOND LOOP: Sprites 4-39 = Palette 1 (GREEN)
+        # HL is already at sprite 4's flags
+        code.extend([0x06, 0x24])  # LD B, 36
 
-        # Set palette from D
+        loop2_start = len(code)
         code.append(0x7E)  # LD A, [HL]
         code.extend([0xE6, 0xF8])  # AND 0xF8
-        code.append(0xB2)  # OR D
+        code.extend([0xF6, 0x01])  # OR 1 (palette 1)
         code.append(0x77)  # LD [HL], A
-
-        # Advance to next sprite
-        code.extend([0x23, 0x23, 0x23, 0x23])
-
-        # Decrement E if > 0
-        code.append(0x7B)  # LD A, E
-        code.append(0xA7)  # AND A
-        code.extend([0x28, 0x01])  # JR Z, +1 (skip DEC)
-        code.append(0x1D)  # DEC E
-
+        code.extend([0x23, 0x23, 0x23, 0x23])  # next sprite
         code.append(0x05)  # DEC B
-        loop_offset = loop_start - len(code) - 2
-        code.extend([0x20, loop_offset & 0xFF])
+        loop2_offset = loop2_start - len(code) - 2
+        code.extend([0x20, loop2_offset & 0xFF])
 
-    code.extend([0xE1, 0xD1, 0xC1, 0xF1])
-    code.append(0xC9)
+    code.extend([0xE1, 0xC1, 0xF1])  # POP HL, BC, AF
+    code.append(0xC9)  # RET
 
     return bytes(code)
 
