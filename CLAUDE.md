@@ -6,40 +6,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with colors.
 
-**Current Status**: ✅ **Per-Monster Colorization Working!** - Tile-based palette assignment successfully gives different monsters distinct colors.
+**Current Status**: ✅ **Stable Colorization Complete!** - Flicker-free 5-color sprite system with slot-based palette assignment.
 
 ### What Works
 - ✅ CGB mode detection and compatibility
-- ✅ Basic palette injection (colors are displayed)
-- ✅ Background palette loading
-- ✅ Sprite palette loading
-- ✅ **Per-monster distinct colors** via tile-to-palette lookup table
-- ✅ YAML-based palette configuration
+- ✅ Background palette loading (blue-gray dungeon theme)
+- ✅ Sprite palette loading (5 distinct color groups)
+- ✅ **Flicker-free** sprite colorization via triple OAM modification
+- ✅ Sara W has distinct palette from monsters
+- ✅ YAML-based palette configuration (`palettes/penta_palettes.yaml`)
+- ✅ MiSTer FPGA compatibility (use .gbc extension)
 
-### Known Issues
-- ⚠️ Mild sprite flickering (inherent timing artifact from VBlank OAM modification)
+### Current Version: v0.64
+- Sara W: Black body, green/dark green accents
+- Monsters: 4 color groups (gray, orange, purple, cyan)
+- Background: Blue-gray dungeon theme
 
 ### Key Technical Breakthrough
-The game uses **dual shadow OAM buffers** (0xC000 and 0xC100). To make palette modifications persist, we must modify all three locations:
-- 0xFE00 (actual OAM)
+The game uses **dual shadow OAM buffers** (0xC000 and 0xC100). To eliminate flickering, we modify **all three** OAM locations:
+- 0xFE00 (actual OAM - hardware)
 - 0xC000 (shadow buffer 1)
 - 0xC100 (shadow buffer 2)
+
+**Slot-based palette assignment** (not tile-based) prevents direction-dependent color changes:
+```
+Slots 0-7:   Palette 1 (Sara W)
+Slots 8-15:  Palette 2 (Monster group 1)
+Slots 16-23: Palette 3 (Monster group 2)
+Slots 24-31: Palette 4 (Monster group 3)
+Slots 32-39: Palette 5 (Monster group 4)
+```
 
 ## Common Commands
 
 ### Build the Colorized ROM
 
-**Tile-based colorizer (recommended):**
+**Main colorizer (recommended):**
 ```bash
-python3 scripts/create_tile_lookup_colorizer.py
-```
-
-**YAML-based (legacy):**
-```bash
-uv run python scripts/create_dx_rom_from_yaml.py
+uv run python scripts/create_vblank_colorizer.py
 ```
 
 Output ROM: `rom/working/penta_dragon_dx_FIXED.gb`
+
+**Build and deploy to MiSTer:**
+```bash
+uv run python scripts/create_vblank_colorizer.py && \
+cp rom/working/penta_dragon_dx_FIXED.gb ~/gaming/roms/GBC/penta_dragon_dx_vX.XX.gbc && \
+scp rom/working/penta_dragon_dx_FIXED.gb root@mister:/media/fat/games/GBC/penta_dragon_dx_vX.XX.gbc
+```
 
 ### Testing & Verification
 
