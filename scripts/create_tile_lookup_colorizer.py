@@ -62,6 +62,73 @@ def create_lookup_table() -> bytes:
 
     return bytes(table)
 
+def create_slot_based_sprite_loop() -> bytes:
+    """
+    SLOT-BASED palette assignment, shadow-only, unconditional.
+    Assigns palettes based on OAM slot number, not tile ID.
+
+    Slots 0-4: Palette 0 (Sara W - typically first sprites)
+    Slots 5-9: Palette 1
+    Slots 10-14: Palette 2
+    Slots 15-19: Palette 3
+    Slots 20-24: Palette 4
+    Slots 25-29: Palette 5
+    Slots 30-34: Palette 6
+    Slots 35-39: Palette 7
+    """
+    code = bytearray()
+
+    # PUSH AF, BC, DE, HL
+    code.extend([0xF5, 0xC5, 0xD5, 0xE5])
+
+    # Process ONLY shadow buffers (C0, C1)
+    for base_hi in [0xC0, 0xC1]:
+        # LD HL, base+3 (start at flags of sprite 0)
+        code.extend([0x21, 0x03, base_hi])
+        # LD B, 40 (sprite counter)
+        code.extend([0x06, 0x28])
+        # LD D, 0 (palette counter - increments every 5 sprites)
+        code.extend([0x16, 0x00])
+        # LD E, 5 (sprites per palette group)
+        code.extend([0x1E, 0x05])
+
+        loop_start = len(code)
+
+        # Modify flags: clear palette bits, set palette from D
+        code.append(0x7E)  # LD A, [HL] - get flags
+        code.extend([0xE6, 0xF8])  # AND 0xF8 - clear palette bits
+        code.append(0xB2)  # OR D - set palette from D
+        code.append(0x77)  # LD [HL], A - write back
+
+        # Advance to next sprite's flags (+4)
+        code.extend([0x23, 0x23, 0x23, 0x23])
+
+        # Decrement sprites-per-group counter
+        code.append(0x1D)  # DEC E
+        skip_inc = len(code)
+        code.extend([0x20, 0x00])  # JR NZ, skip_palette_inc
+
+        # Reset E to 5, increment D (palette)
+        code.extend([0x1E, 0x05])  # LD E, 5
+        code.append(0x14)  # INC D
+        # Keep D in range 0-7
+        code.append(0x7A)  # LD A, D
+        code.extend([0xE6, 0x07])  # AND 0x07
+        code.append(0x57)  # LD D, A
+
+        skip_target = len(code)
+        code[skip_inc + 1] = (skip_target - skip_inc - 2) & 0xFF
+
+        code.append(0x05)  # DEC B
+        loop_offset = loop_start - len(code) - 2
+        code.extend([0x20, loop_offset & 0xFF])
+
+    code.extend([0xE1, 0xD1, 0xC1, 0xF1])
+    code.append(0xC9)
+
+    return bytes(code)
+
+
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     """
     TILE-BASED with actual lookup table, shadow-only, unconditional.
@@ -139,16 +206,11 @@ def main():
     rom[PALETTE_DATA_OFFSET:PALETTE_DATA_OFFSET+64] = bg_palettes
     rom[PALETTE_DATA_OFFSET+64:PALETTE_DATA_OFFSET+128] = obj_palettes
 
-    # Lookup table at 0x6E00 (file offset 0x036E00)
-    lookup_table = create_lookup_table()
-    LOOKUP_TABLE_OFFSET = 0x036E00
-    LOOKUP_TABLE_ADDR = 0x6E00
-    rom[LOOKUP_TABLE_OFFSET:LOOKUP_TABLE_OFFSET+256] = lookup_table
+    # v0.29: Use SLOT-BASED sprite loop instead of tile-based
+    # Since sprites share tile ranges, use OAM slot position for palette
+    sprite_loop = create_slot_based_sprite_loop()
 
-    # Sprite loop
-    sprite_loop = create_tile_lookup_sprite_loop(LOOKUP_TABLE_ADDR)
-
-    print(f"Sprite loop size: {len(sprite_loop)} bytes")
+    print(f"Sprite loop size: {len(sprite_loop)} bytes (slot-based)")
 
     # Combined function - single sprite loop AFTER input handler (v0.4 style)
     combined = bytes([
@@ -179,12 +241,10 @@ def main():
     output_rom.parent.mkdir(parents=True, exist_ok=True)
     output_rom.write_bytes(rom)
 
-    mapped_tiles = sum(1 for x in lookup_table if x != 0xFF)
     print(f"✓ Created: {output_rom}")
-    print(f"  Lookup table: {mapped_tiles}/256 tiles mapped")
+    print(f"  SLOT-BASED palette assignment (not tile-based)")
     print(f"  Combined function: {len(combined)} bytes")
-    print(f"  8 Palettes: RED, GREEN, BLUE, ORANGE, PURPLE, CYAN, PINK, YELLOW")
-    print(f"  All 35+ monster groups mapped to distinct palettes")
+    print(f"  Slots 0-4: P0, 5-9: P1, 10-14: P2, 15-19: P3, 20-24: P4, 25-29: P5, 30-34: P6, 35-39: P7")
 
 if __name__ == "__main__":
     main()
