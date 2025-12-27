@@ -91,7 +91,7 @@ def create_slot_based_sprite_loop() -> bytes:
         # Determine palette: E > 0 means palette 0, else palette 1
         code.append(0x7B)  # LD A, E
         code.append(0xA7)  # AND A (set flags)
-        code.extend([0x28, 0x02])  # JR Z, +2 (skip to palette 1)
+        code.extend([0x28, 0x04])  # JR Z, +4 (skip LD D,0 and JR to land on LD D,1)
         code.extend([0x16, 0x00])  # LD D, 0 (palette 0)
         code.extend([0x18, 0x02])  # JR +2 (skip palette 1 load)
         code.extend([0x16, 0x01])  # LD D, 1 (palette 1)
