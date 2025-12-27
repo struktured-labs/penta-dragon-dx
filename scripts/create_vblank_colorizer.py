@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-v0.41: Input handler palette assignment (fixes v0.40 crash).
+v0.42: Slot-based palette assignment on actual OAM.
 
-v0.40 crashed because VBlank bank switching corrupted game state
-(MBC registers are write-only, can't restore original bank).
+v0.41 had flickering because tiles are shared between Sara W and monsters.
+This version uses OAM SLOT position instead of tile ID:
+- Slots 0-3: Palette 1 (Sara W - typically in first slots)
+- Slots 4-39: Palette 2 (Monsters - higher slots)
 
-This version:
-- Only hooks the input handler (runs AFTER DMA during VBlank)
-- Modifies actual OAM (0xFE00) not shadow OAM
-- Safe bank switching (always restore to bank 1, which is what VBlank expects)
+This should give consistent per-character coloring since slot assignment
+is more predictable than tile usage.
 """
 import sys
 import yaml
@@ -51,91 +51,52 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
     return bytes(bg_data), bytes(obj_data)
 
 
-def create_tile_lookup_table() -> bytes:
-    """Create 256-byte tile-to-palette lookup table.
-
-    Based on observed tile usage - simplified mapping to reduce flickering:
-    - Tiles 32-47: Palette 1 (Sara W - GREEN)
-    - Tiles 0-31:  Palette 2 (Monsters A - BLUE)
-    - Tiles 48-95: Palette 3 (Monsters B - ORANGE)
-    - Tiles 96-127: Palette 4 (Monsters C - PURPLE)
-    - Tiles 128+:  Palette 0 (Default - RED)
+def create_slot_palette_loop() -> bytes:
     """
-    table = bytearray(256)
+    Slot-based palette assignment on actual OAM (0xFE00).
 
-    for tile in range(256):
-        if 32 <= tile < 48:
-            table[tile] = 1  # Sara W = GREEN
-        elif tile < 32:
-            table[tile] = 2  # Monsters = BLUE
-        elif 48 <= tile < 96:
-            table[tile] = 3  # Monsters = ORANGE
-        elif 96 <= tile < 128:
-            table[tile] = 4  # Monsters = PURPLE
-        else:
-            table[tile] = 0  # Default = RED
+    Assigns palettes by OAM slot position:
+    - Slots 0-3: Palette 1 (Sara W - GREEN)
+    - Slots 4-39: Palette 2 (Monsters - BLUE)
 
-    return bytes(table)
-
-
-def create_oam_palette_loop(lookup_table_addr: int) -> bytes:
+    This is simpler and more consistent than tile-based assignment
+    since sprites don't change slots as often as they share tiles.
     """
-    Palette assignment loop that modifies actual OAM (0xFE00).
-
-    This runs from the input handler, which executes AFTER DMA during VBlank.
-    Since game only modifies shadow OAM (C000/C100), our changes to
-    actual OAM persist until the next DMA.
-    """
-    lo = lookup_table_addr & 0xFF
-    hi = (lookup_table_addr >> 8) & 0xFF
-
     code = bytearray()
 
     # Save registers
-    code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
+    code.extend([0xF5, 0xC5, 0xE5])  # PUSH AF, BC, HL
 
-    # HL = 0xFE02 (first sprite's tile ID byte)
-    code.extend([0x21, 0x02, 0xFE])  # LD HL, 0xFE02
+    # === FIRST LOOP: Slots 0-3 get palette 1 (GREEN) ===
+    code.extend([0x21, 0x03, 0xFE])  # LD HL, 0xFE03 (first sprite's flags)
+    code.extend([0x06, 0x04])  # LD B, 4
 
-    # B = 40 (sprite count)
-    code.extend([0x06, 0x28])  # LD B, 40
+    loop1_start = len(code)
+    code.append(0x7E)  # LD A, [HL]
+    code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
+    code.extend([0xF6, 0x01])  # OR 1 (palette 1 = GREEN)
+    code.append(0x77)  # LD [HL], A
+    code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
+    code.append(0x05)  # DEC B
+    loop1_offset = loop1_start - len(code) - 2
+    code.extend([0x20, loop1_offset & 0xFF])  # JR NZ, loop1
 
-    # === LOOP START ===
-    loop_start = len(code)
+    # === SECOND LOOP: Slots 4-39 get palette 2 (BLUE) ===
+    # HL is already at slot 4's flags
+    code.extend([0x06, 0x24])  # LD B, 36
 
-    # Get tile ID into E, D=0
-    code.append(0x5E)  # LD E, [HL]
-    code.extend([0x16, 0x00])  # LD D, 0
-
-    # Save current HL position
-    code.append(0xE5)  # PUSH HL
-
-    # HL = lookup_table + tile_id
-    code.extend([0x21, lo, hi])  # LD HL, lookup_table
-    code.append(0x19)  # ADD HL, DE
-    code.append(0x4E)  # LD C, [HL] - palette from table
-
-    # Restore HL (tile ID position), advance to flags
-    code.append(0xE1)  # POP HL
-    code.append(0x23)  # INC HL -> flags byte
-
-    # Modify flags: AND 0xF8 to clear palette, OR C to set new palette
+    loop2_start = len(code)
     code.append(0x7E)  # LD A, [HL]
     code.extend([0xE6, 0xF8])  # AND 0xF8
-    code.append(0xB1)  # OR C
+    code.extend([0xF6, 0x02])  # OR 2 (palette 2 = BLUE)
     code.append(0x77)  # LD [HL], A
-
-    # Advance to next sprite's tile ID (+3: flags+1 -> Y -> X -> tile)
-    code.extend([0x23, 0x23, 0x23])  # INC HL x3
-
-    # Loop counter
+    code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4
     code.append(0x05)  # DEC B
-    loop_offset = loop_start - len(code) - 2
-    code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop_start
+    loop2_offset = loop2_start - len(code) - 2
+    code.extend([0x20, loop2_offset & 0xFF])  # JR NZ, loop2
 
     # Restore registers
-    code.extend([0xE1, 0xD1, 0xC1, 0xF1])  # POP HL, DE, BC, AF
-
+    code.extend([0xE1, 0xC1, 0xF1])  # POP HL, BC, AF
     code.append(0xC9)  # RET
 
     return bytes(code)
@@ -195,15 +156,13 @@ def main():
 
     # === BANK 13 LAYOUT ===
     # 0x6C80: Palette data (128 bytes)
-    # 0x6D00: Tile lookup table (256 bytes)
-    # 0x6E00: OAM palette loop
+    # 0x6E00: OAM palette loop (slot-based)
     # 0x6E80: Palette loader
     # 0x6F00: Combined function (original input + palette loop + palette load)
 
     BANK13_BASE = 0x034000  # Bank 13 file offset
 
     PALETTE_DATA = 0x6C80
-    LOOKUP_TABLE = 0x6D00
     OAM_LOOP = 0x6E00
     PALETTE_LOADER = 0x6E80
     COMBINED_FUNC = 0x6F00
@@ -213,16 +172,11 @@ def main():
     rom[offset:offset+64] = bg_palettes
     rom[offset+64:offset+128] = obj_palettes
 
-    # Write lookup table
-    offset = BANK13_BASE + (LOOKUP_TABLE - 0x4000)
-    lookup_table = create_tile_lookup_table()
-    rom[offset:offset+256] = lookup_table
-
-    # Write OAM palette loop (modifies actual OAM at 0xFE00)
+    # Write OAM palette loop (slot-based, modifies actual OAM at 0xFE00)
     offset = BANK13_BASE + (OAM_LOOP - 0x4000)
-    oam_loop = create_oam_palette_loop(LOOKUP_TABLE)
+    oam_loop = create_slot_palette_loop()
     rom[offset:offset+len(oam_loop)] = oam_loop
-    print(f"OAM palette loop: {len(oam_loop)} bytes")
+    print(f"OAM palette loop (slot-based): {len(oam_loop)} bytes")
 
     # Write palette loader
     offset = BANK13_BASE + (PALETTE_LOADER - 0x4000)
@@ -281,15 +235,11 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.41: Input handler palette assignment")
+    print(f"  v0.42: Slot-based palette assignment")
     print(f"  Modifies actual OAM (0xFE00) after DMA")
-    print(f"  Palette lookup table: 256 bytes")
-    print(f"  Tile mappings:")
-    print(f"    Tiles 32-47:  Palette 1 (GREEN - Sara W)")
-    print(f"    Tiles 0-31:   Palette 2 (BLUE - Monsters)")
-    print(f"    Tiles 48-95:  Palette 3 (ORANGE - Monsters)")
-    print(f"    Tiles 96-127: Palette 4 (PURPLE - Monsters)")
-    print(f"    Tiles 128+:   Palette 0 (RED - Default)")
+    print(f"  Slot mappings:")
+    print(f"    Slots 0-3:   Palette 1 (GREEN - Sara W)")
+    print(f"    Slots 4-39:  Palette 2 (BLUE - Monsters)")
 
 
 if __name__ == "__main__":
