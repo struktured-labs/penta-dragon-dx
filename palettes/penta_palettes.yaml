@@ -11,7 +11,7 @@
 # ============================================
 bg_palettes:
   Dungeon:
-    colors: ["7FFF", "03E0", "0280", "0000"]  # White, Green, Dark Green, Black
+    colors: ["7FFF", "5AD6", "294A", "0000"]  # White, Light blue-gray, Dark blue-gray, Black
 
   Default1:
     colors: ["7FFF", "5294", "2108", "0000"]
