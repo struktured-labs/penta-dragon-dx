@@ -48,23 +48,17 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    v0.27: Stabilize Wolf by making 64-255 same palette.
+    v0.28: ALL tiles same palette - diagnostic.
 
-    From v0.26:
-    - Sara W: solid red (0-63) - KEEP
-    - Wolf: 64-95 + 128+ (non-contiguous) - need same palette
-    - Hornet: 96-127 + 0-63 (non-contiguous) - will conflict with Sara
+    If still flickering, the issue isn't tile mapping but something else
+    (game resetting palettes, timing, etc.)
 
-    Tiles 0-63:   Palette 0 (RED) - Sara W
-    Tiles 64-255: Palette 1 (GREEN) - Wolf + Hornet (stable together)
+    Tiles 0-255: Palette 0 (RED) - everything
     """
     table = bytearray(256)
 
     for tile in range(256):
-        if tile < 64:
-            table[tile] = 0      # RED - Sara W (0-63)
-        else:
-            table[tile] = 1      # GREEN - everything else (64-255)
+        table[tile] = 0      # RED - everything
 
     return bytes(table)
 
