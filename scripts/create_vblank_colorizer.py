@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-v0.40: Deep VBlank hook colorizer.
-Hooks VBlank to modify actual OAM (0xFE00) right after DMA completes.
-This is stable because game only writes to shadow OAM (C000/C100).
+v0.41: Input handler palette assignment (fixes v0.40 crash).
 
-Key insight: Previous approaches failed because:
-- Tile-based: Sprites share tiles (Sara W and monsters overlap)
-- Slot-based: Game shuffles OAM slots dynamically
+v0.40 crashed because VBlank bank switching corrupted game state
+(MBC registers are write-only, can't restore original bank).
 
-This approach modifies actual OAM (0xFE00) AFTER DMA, during VBlank.
-The game only writes to shadow OAM, so our changes persist until next DMA.
+This version:
+- Only hooks the input handler (runs AFTER DMA during VBlank)
+- Modifies actual OAM (0xFE00) not shadow OAM
+- Safe bank switching (always restore to bank 1, which is what VBlank expects)
 """
 import sys
 import yaml
@@ -79,13 +78,11 @@ def create_tile_lookup_table() -> bytes:
     return bytes(table)
 
 
-def create_vblank_hook(lookup_table_addr: int) -> bytes:
+def create_oam_palette_loop(lookup_table_addr: int) -> bytes:
     """
-    VBlank hook that:
-    1. Calls original HRAM DMA routine (0xFF80)
-    2. Modifies actual OAM (0xFE00) palette bits based on tile lookup
+    Palette assignment loop that modifies actual OAM (0xFE00).
 
-    This runs during VBlank, immediately after DMA completes.
+    This runs from the input handler, which executes AFTER DMA during VBlank.
     Since game only modifies shadow OAM (C000/C100), our changes to
     actual OAM persist until the next DMA.
     """
@@ -93,9 +90,6 @@ def create_vblank_hook(lookup_table_addr: int) -> bytes:
     hi = (lookup_table_addr >> 8) & 0xFF
 
     code = bytearray()
-
-    # Call original HRAM DMA routine first
-    code.extend([0xCD, 0x80, 0xFF])  # CALL 0xFF80
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
@@ -202,17 +196,17 @@ def main():
     # === BANK 13 LAYOUT ===
     # 0x6C80: Palette data (128 bytes)
     # 0x6D00: Tile lookup table (256 bytes)
-    # 0x6E00: VBlank hook with DMA + palette assignment
-    # 0x6E80: Palette loader (for input handler)
-    # 0x6F00: Original input handler copy
+    # 0x6E00: OAM palette loop
+    # 0x6E80: Palette loader
+    # 0x6F00: Combined function (original input + palette loop + palette load)
 
     BANK13_BASE = 0x034000  # Bank 13 file offset
 
     PALETTE_DATA = 0x6C80
     LOOKUP_TABLE = 0x6D00
-    VBLANK_HOOK = 0x6E00
+    OAM_LOOP = 0x6E00
     PALETTE_LOADER = 0x6E80
-    INPUT_HANDLER = 0x6F00
+    COMBINED_FUNC = 0x6F00
 
     # Write palette data
     offset = BANK13_BASE + (PALETTE_DATA - 0x4000)
@@ -224,73 +218,58 @@ def main():
     lookup_table = create_tile_lookup_table()
     rom[offset:offset+256] = lookup_table
 
-    # Write VBlank hook
-    offset = BANK13_BASE + (VBLANK_HOOK - 0x4000)
-    vblank_hook = create_vblank_hook(LOOKUP_TABLE)
-    rom[offset:offset+len(vblank_hook)] = vblank_hook
-    print(f"VBlank hook: {len(vblank_hook)} bytes")
+    # Write OAM palette loop (modifies actual OAM at 0xFE00)
+    offset = BANK13_BASE + (OAM_LOOP - 0x4000)
+    oam_loop = create_oam_palette_loop(LOOKUP_TABLE)
+    rom[offset:offset+len(oam_loop)] = oam_loop
+    print(f"OAM palette loop: {len(oam_loop)} bytes")
 
     # Write palette loader
     offset = BANK13_BASE + (PALETTE_LOADER - 0x4000)
     palette_loader = create_palette_loader()
     rom[offset:offset+len(palette_loader)] = palette_loader
 
-    # Write original input handler
-    offset = BANK13_BASE + (INPUT_HANDLER - 0x4000)
-    rom[offset:offset+len(original_input)] = original_input
+    # Write combined function: original input + OAM loop + palette load
+    # This runs during VBlank after DMA, so modifying 0xFE00 is safe
+    combined = bytearray()
+    combined.extend(original_input)  # Original input handler
+    # Remove trailing RET if present, we'll add our own
+    if combined[-1] == 0xC9:
+        combined = combined[:-1]
+    combined.extend([0xCD, OAM_LOOP & 0xFF, OAM_LOOP >> 8])  # CALL OAM loop
+    combined.extend([0xCD, PALETTE_LOADER & 0xFF, PALETTE_LOADER >> 8])  # CALL palette loader
+    combined.append(0xC9)  # RET
 
-    # === TRAMPOLINES ===
-    # We need two trampolines:
-    # 1. VBlank DMA trampoline (replaces CALL 0xFF80)
-    # 2. Input handler trampoline (replaces original input handler)
+    offset = BANK13_BASE + (COMBINED_FUNC - 0x4000)
+    rom[offset:offset+len(combined)] = combined
+    print(f"Combined function: {len(combined)} bytes")
 
-    # VBlank DMA trampoline at 0x0824
-    vblank_tramp = bytearray()
-    vblank_tramp.extend([0xF5])  # PUSH AF
-    vblank_tramp.extend([0x3E, 0x0D])  # LD A, 13
-    vblank_tramp.extend([0xEA, 0x00, 0x20])  # LD [0x2000], A
-    vblank_tramp.extend([0xCD, VBLANK_HOOK & 0xFF, VBLANK_HOOK >> 8])  # CALL vblank_hook
-    vblank_tramp.extend([0x3E, 0x01])  # LD A, 1
-    vblank_tramp.extend([0xEA, 0x00, 0x20])  # LD [0x2000], A
-    vblank_tramp.extend([0xF1])  # POP AF
-    vblank_tramp.append(0xC9)  # RET
+    # === SINGLE TRAMPOLINE ===
+    # Only modify the input handler call, NOT the VBlank DMA call
+    # This is safe because input handler runs with bank 1 active
 
-    # Input handler trampoline immediately after
-    input_tramp_offset = len(vblank_tramp)
-    input_tramp = bytearray()
-    input_tramp.extend([0xF5])  # PUSH AF
-    input_tramp.extend([0x3E, 0x0D])  # LD A, 13
-    input_tramp.extend([0xEA, 0x00, 0x20])  # LD [0x2000], A
-    input_tramp.extend([0xCD, INPUT_HANDLER & 0xFF, INPUT_HANDLER >> 8])  # CALL input_handler
-    input_tramp.extend([0xCD, PALETTE_LOADER & 0xFF, PALETTE_LOADER >> 8])  # CALL palette_loader
-    input_tramp.extend([0x3E, 0x01])  # LD A, 1
-    input_tramp.extend([0xEA, 0x00, 0x20])  # LD [0x2000], A
-    input_tramp.extend([0xF1])  # POP AF
-    input_tramp.append(0xC9)  # RET
+    trampoline = bytearray()
+    trampoline.extend([0xF5])  # PUSH AF
+    trampoline.extend([0x3E, 0x0D])  # LD A, 13
+    trampoline.extend([0xEA, 0x00, 0x20])  # LD [0x2000], A - switch to bank 13
+    trampoline.extend([0xCD, COMBINED_FUNC & 0xFF, COMBINED_FUNC >> 8])  # CALL combined
+    trampoline.extend([0x3E, 0x01])  # LD A, 1
+    trampoline.extend([0xEA, 0x00, 0x20])  # LD [0x2000], A - restore bank 1
+    trampoline.extend([0xF1])  # POP AF
+    trampoline.append(0xC9)  # RET
 
-    # Combine and write trampolines
-    full_tramp = bytes(vblank_tramp) + bytes(input_tramp)
-    rom[0x0824:0x0824+len(full_tramp)] = full_tramp
+    # Write trampoline at 0x0824 (replaces original input handler)
+    rom[0x0824:0x0824+len(trampoline)] = trampoline
 
     # Pad remaining space with NOPs
-    remaining = 46 - len(full_tramp)
+    remaining = 46 - len(trampoline)
     if remaining > 0:
-        rom[0x0824+len(full_tramp):0x0824+46] = bytes([0x00] * remaining)
+        rom[0x0824+len(trampoline):0x0824+46] = bytes([0x00] * remaining)
 
-    print(f"VBlank trampoline: {len(vblank_tramp)} bytes at 0x0824")
-    print(f"Input trampoline: {len(input_tramp)} bytes at 0x{0x0824+input_tramp_offset:04X}")
+    print(f"Trampoline: {len(trampoline)} bytes at 0x0824")
 
-    # === PATCH VBLANK HANDLER ===
-    # VBlank at 0x06D5: CALL 0xFF80 -> CALL 0x0824 (VBlank trampoline)
-    rom[0x06D5] = 0xCD
-    rom[0x06D6] = 0x24
-    rom[0x06D7] = 0x08
-
-    # VBlank at 0x06DC: CALL 0x0824 -> CALL input trampoline
-    input_tramp_addr = 0x0824 + input_tramp_offset
-    rom[0x06DC] = 0xCD
-    rom[0x06DD] = input_tramp_addr & 0xFF
-    rom[0x06DE] = (input_tramp_addr >> 8) & 0xFF
+    # DO NOT modify VBlank DMA call at 0x06D5 - that caused the crash!
+    # The input handler at 0x0824 already runs after DMA during VBlank
 
     # Fix header checksum
     chk = 0
@@ -302,7 +281,7 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.40: Deep VBlank hook")
+    print(f"  v0.41: Input handler palette assignment")
     print(f"  Modifies actual OAM (0xFE00) after DMA")
     print(f"  Palette lookup table: 256 bytes")
     print(f"  Tile mappings:")
