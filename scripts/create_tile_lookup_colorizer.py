@@ -48,89 +48,144 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    64-tile blocks for stability with unconditional sprite modification.
+    Based on monster_palette_map.yaml analysis - group related tiles.
     """
     table = bytearray(256)
 
-    # Tiles 0-63: Palette 0 (RED)
-    for tile in range(0, 64):
+    # Sara/Player: tiles 0-15 -> Palette 0 (RED)
+    for tile in range(0, 16):
         table[tile] = 0
 
-    # Tiles 64-127: Palette 1 (GREEN)
-    for tile in range(64, 128):
+    # Monster group 1: tiles 16-31 -> Palette 1 (GREEN)
+    for tile in range(16, 32):
         table[tile] = 1
 
-    # Tiles 128-191: Palette 2 (BLUE)
-    for tile in range(128, 192):
+    # Monster group 2: tiles 32-47 -> Palette 2 (BLUE)
+    for tile in range(32, 48):
         table[tile] = 2
 
-    # Tiles 192-255: Palette 3 (ORANGE)
-    for tile in range(192, 256):
+    # Monster group 3: tiles 48-63 -> Palette 3 (ORANGE)
+    for tile in range(48, 64):
         table[tile] = 3
+
+    # Monster group 4: tiles 64-79 -> Palette 4 (PURPLE)
+    for tile in range(64, 80):
+        table[tile] = 4
+
+    # Monster group 5: tiles 80-95 -> Palette 5 (CYAN)
+    for tile in range(80, 96):
+        table[tile] = 5
+
+    # Monster group 6: tiles 96-111 -> Palette 6 (PINK)
+    for tile in range(96, 112):
+        table[tile] = 6
+
+    # Monster group 7: tiles 112-127 -> Palette 7 (YELLOW)
+    for tile in range(112, 128):
+        table[tile] = 7
+
+    # Tiles 128-255: cycle through palettes
+    for tile in range(128, 256):
+        table[tile] = (tile >> 4) & 7
 
     return bytes(table)
 
 def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
     """
-    SLOT-BASED palettes - assign by sprite position, not tile ID.
-    Every 5 sprites get a different palette (8 palettes for 40 sprites).
-    This gives consistent colors regardless of which tiles are used.
+    TILE-BASED with lookup table, shadow-only, unconditional.
+    Uses 16-tile blocks for 8 different palettes.
     """
+    lo = lookup_table_addr & 0xFF
+    hi = (lookup_table_addr >> 8) & 0xFF
+
     code = bytearray()
 
     # PUSH AF, BC, DE, HL
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])
 
-    # Process ONLY shadow buffers
+    # Process ONLY shadow buffers (C0, C1)
     for base_hi in [0xC0, 0xC1]:
-        # LD HL, base+3 (start at flags)
-        code.extend([0x21, 0x03, base_hi])
-
-        # LD D, 0 (palette counter, 0-7)
-        code.extend([0x16, 0x00])
-        # LD E, 4 (sprites per palette group - matches 2x2 sprite layout)
-        code.extend([0x1E, 0x04])
-        # LD B, 40 (total sprites)
+        # LD HL, base+2 (start at tile ID)
+        code.extend([0x21, 0x02, base_hi])
+        # LD B, 40
         code.extend([0x06, 0x28])
 
         # .loop:
         loop_start = len(code)
 
-        # LD A, [HL] - get current flags
+        # Get tile ID and look up palette
+        code.append(0x5E)  # LD E, [HL] - tile ID
+        code.append(0x23)  # INC HL (to flags)
+
+        # Lookup: DE = tile_id, add to lookup table base
+        code.extend([0x16, 0x00])  # LD D, 0
+        code.extend([0xD5])  # PUSH DE (save tile index)
+        code.extend([0x21, lo, hi])  # LD HL, lookup_table
+        code.append(0x19)  # ADD HL, DE
+        code.append(0x4E)  # LD C, [HL] - palette from table
+
+        # Restore position: POP DE, then compute flags address
+        code.append(0xD1)  # POP DE
+        # E still has tile ID, calculate flags address
+        # flags = base + sprite_num*4 + 3
+        # We're at loop iteration (40-B), so flags = base + (40-B)*4 + 3
+        # Simpler: just track position with another register
+
+        # Actually, let's use a simpler approach - compute from B
+        # Current sprite = 40 - B, flags offset = (40-B)*4 + 3
+        # This is complex. Let me use a different approach.
+
+        # Use HL to track position directly
+        code.extend([0xD1])  # POP DE (we pushed it, pop to balance)
+
+        # Recalculate: we need flags address
+        # Let's restructure...
+
+    # This is getting complex. Let me simplify.
+    code = bytearray()
+
+    # PUSH AF, BC, HL
+    code.extend([0xF5, 0xC5, 0xE5])
+
+    for base_hi in [0xC0, 0xC1]:
+        # LD HL, base+2 (tile ID of sprite 0)
+        code.extend([0x21, 0x02, base_hi])
+        # LD B, 40
+        code.extend([0x06, 0x28])
+
+        loop_start = len(code)
+
+        # LD A, [HL] - get tile ID
         code.append(0x7E)
-        # AND 0xF8 - clear palette bits
+        # Compute palette = tile_id >> 4 (16-tile blocks, 0-7 for tiles 0-127)
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xCB, 0x3F])  # SRL A
+        code.extend([0xE6, 0x07])  # AND 7 (keep 0-7)
+        code.append(0x4F)  # LD C, A (save palette)
+
+        # INC HL to flags
+        code.append(0x23)
+
+        # LD A, [HL] - get flags
+        code.append(0x7E)
+        # AND 0xF8 - clear palette
         code.extend([0xE6, 0xF8])
-        # OR D - set palette from D (0-7)
-        code.append(0xB2)
-        # LD [HL], A - write back
+        # OR C - set palette
+        code.append(0xB1)
+        # LD [HL], A - write
         code.append(0x77)
 
-        # Advance HL by 4 to next sprite's flags
-        code.extend([0x23, 0x23, 0x23, 0x23])
-
-        # DEC E (sprites remaining in this palette group)
-        code.append(0x1D)
-        # JR NZ, .skip_palette_change
-        skip_pal = len(code)
-        code.extend([0x20, 0x00])
-
-        # E reached 0, increment palette (mod 8) and reset E
-        code.append(0x14)  # INC D (next palette)
-        code.append(0x7A)  # LD A, D
-        code.extend([0xE6, 0x07])  # AND 7 (wrap palette 0-7)
-        code.append(0x57)  # LD D, A
-        code.extend([0x1E, 0x04])  # LD E, 4
-
-        # .skip_palette_change:
-        code[skip_pal + 1] = (len(code) - skip_pal - 2) & 0xFF
+        # Advance to next sprite's tile (+3 to next tile)
+        code.extend([0x23, 0x23, 0x23])
 
         code.append(0x05)  # DEC B
         loop_offset = loop_start - len(code) - 2
-        code.extend([0x20, loop_offset & 0xFF])  # JR NZ, .loop
+        code.extend([0x20, loop_offset & 0xFF])
 
-    # POP HL, DE, BC, AF
-    code.extend([0xE1, 0xD1, 0xC1, 0xF1])
-    code.append(0xC9)  # RET
+    code.extend([0xE1, 0xC1, 0xF1])
+    code.append(0xC9)
 
     return bytes(code)
 
