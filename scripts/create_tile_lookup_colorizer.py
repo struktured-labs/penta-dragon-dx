@@ -64,27 +64,33 @@ def create_lookup_table() -> bytes:
 
 def create_slot_based_sprite_loop() -> bytes:
     """
-    v0.35: Single buffer + actual OAM modification.
+    v0.36: Back to v0.32 approach - Sara W (slots 0-3) distinct, rest same color.
 
-    Try modifying C0 shadow AND actual OAM (FE) to ensure consistency.
-    Use simple 4-slot groups.
+    This was our best result: Sara W solid, monsters slight flicker but same color.
+    Modify both shadow buffers C0 and C1.
     """
     code = bytearray()
 
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])
 
-    # Modify BOTH shadow buffer C0 AND actual OAM FE00
-    for base_hi in [0xC0, 0xFE]:
+    # Modify BOTH shadow buffers
+    for base_hi in [0xC0, 0xC1]:
         # LD HL, base+3 (flags of sprite 0)
         code.extend([0x21, 0x03, base_hi])
         # LD B, 40 (sprite counter)
         code.extend([0x06, 0x28])
-        # LD D, 0 (palette)
-        code.extend([0x16, 0x00])
-        # LD E, 4 (sprites per palette)
+        # LD E, 4 (first 4 sprites = Sara W)
         code.extend([0x1E, 0x04])
 
         loop_start = len(code)
+
+        # Determine palette: E > 0 means palette 0, else palette 1
+        code.append(0x7B)  # LD A, E
+        code.append(0xA7)  # AND A
+        code.extend([0x28, 0x04])  # JR Z, +4 (to palette 1)
+        code.extend([0x16, 0x00])  # LD D, 0 (Sara W = RED)
+        code.extend([0x18, 0x02])  # JR +2 (skip palette 1)
+        code.extend([0x16, 0x01])  # LD D, 1 (monsters = GREEN)
 
         # Set palette from D
         code.append(0x7E)  # LD A, [HL]
@@ -95,20 +101,11 @@ def create_slot_based_sprite_loop() -> bytes:
         # Advance to next sprite
         code.extend([0x23, 0x23, 0x23, 0x23])
 
-        # Decrement E, if 0 then increment D and reset E
+        # Decrement E if > 0
+        code.append(0x7B)  # LD A, E
+        code.append(0xA7)  # AND A
+        code.extend([0x28, 0x01])  # JR Z, +1 (skip DEC)
         code.append(0x1D)  # DEC E
-        skip_inc = len(code)
-        code.extend([0x20, 0x00])  # JR NZ, skip
-
-        # E hit 0: reset to 4, increment palette
-        code.extend([0x1E, 0x04])  # LD E, 4
-        code.append(0x14)  # INC D
-        code.append(0x7A)  # LD A, D
-        code.extend([0xE6, 0x07])  # AND 7
-        code.append(0x57)  # LD D, A
-
-        skip_target = len(code)
-        code[skip_inc + 1] = (skip_target - skip_inc - 2) & 0xFF
 
         code.append(0x05)  # DEC B
         loop_offset = loop_start - len(code) - 2
@@ -233,7 +230,7 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"✓ Created: {output_rom}")
-    print(f"  SLOT-BASED: C0 shadow + FE00 actual OAM, 4 slots per group")
+    print(f"  Sara W (slots 0-3) = RED, all monsters = GREEN")
     print(f"  Combined function: {len(combined)} bytes")
 
 if __name__ == "__main__":
