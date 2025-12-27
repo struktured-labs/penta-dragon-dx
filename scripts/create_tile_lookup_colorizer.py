@@ -48,25 +48,19 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    DIAGNOSTIC VERSION: 16-tile blocks with 8 palettes.
-    This helps identify which tile ranges each monster uses.
-    Palette = (tile_id / 16) % 8
+    v0.20: 64-tile blocks to stabilize Sara W.
+    Based on diagnostic: Sara W uses tiles 0-47, monsters use 16-79.
 
-    Tiles 0-15:   Palette 0 (RED)
-    Tiles 16-31:  Palette 1 (GREEN)
-    Tiles 32-47:  Palette 2 (BLUE)
-    Tiles 48-63:  Palette 3 (ORANGE)
-    Tiles 64-79:  Palette 4 (PURPLE)
-    Tiles 80-95:  Palette 5 (CYAN)
-    Tiles 96-111: Palette 6 (PINK)
-    Tiles 112-127: Palette 7 (YELLOW)
-    (pattern repeats for 128-255)
+    Tiles 0-63:   Palette 0 (RED) - Sara W stable
+    Tiles 64-127: Palette 1 (GREEN) - monsters
+    Tiles 128-191: Palette 2 (BLUE)
+    Tiles 192-255: Palette 3 (ORANGE)
     """
     table = bytearray(256)
 
     for tile in range(256):
-        # 16-tile blocks, cycling through 8 palettes
-        table[tile] = (tile // 16) % 8
+        # 64-tile blocks = 4 palettes
+        table[tile] = tile // 64
 
     return bytes(table)
 
