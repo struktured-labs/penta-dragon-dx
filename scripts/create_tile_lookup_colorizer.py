@@ -48,27 +48,26 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    v0.25: Large blocks to ensure stability.
+    v0.26: Match v0.20 structure exactly (palette 0 for 0-63).
 
-    Sara W was stable with 0-63 in v0.20. Try that again but with
-    better color distribution for monsters.
+    v0.20 had Sara W solid with palette 0. Maybe palette index matters.
 
-    Tiles 0-63:   Palette 1 (GREEN) - Sara W (large block)
-    Tiles 64-95:  Palette 3 (ORANGE) - Wolf
-    Tiles 96-127: Palette 4 (PURPLE) - Hornet
-    Tiles 128+:   Other palettes
+    Tiles 0-63:   Palette 0 (RED) - Sara W
+    Tiles 64-95:  Palette 1 (GREEN) - Wolf
+    Tiles 96-127: Palette 2 (BLUE) - Hornet
+    Tiles 128+:   Palette 3+
     """
     table = bytearray(256)
 
     for tile in range(256):
         if tile < 64:
-            table[tile] = 1      # GREEN - Sara W (0-63)
+            table[tile] = 0      # RED - Sara W (0-63)
         elif tile < 96:
-            table[tile] = 3      # ORANGE - Wolf (64-95)
+            table[tile] = 1      # GREEN - Wolf (64-95)
         elif tile < 128:
-            table[tile] = 4      # PURPLE - Hornet (96-127)
+            table[tile] = 2      # BLUE - Hornet (96-127)
         else:
-            table[tile] = 5 + ((tile - 128) // 32)  # CYAN, PINK, YELLOW
+            table[tile] = 3 + ((tile - 128) // 32)  # ORANGE, PURPLE, CYAN, PINK
 
     return bytes(table)
 
