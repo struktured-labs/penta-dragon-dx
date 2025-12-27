@@ -88,8 +88,8 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
 
         # LD D, 0 (palette counter, 0-7)
         code.extend([0x16, 0x00])
-        # LD E, 5 (sprites per palette group)
-        code.extend([0x1E, 0x05])
+        # LD E, 4 (sprites per palette group - matches 2x2 sprite layout)
+        code.extend([0x1E, 0x04])
         # LD B, 40 (total sprites)
         code.extend([0x06, 0x28])
 
@@ -114,9 +114,12 @@ def create_tile_lookup_sprite_loop(lookup_table_addr: int) -> bytes:
         skip_pal = len(code)
         code.extend([0x20, 0x00])
 
-        # E reached 0, increment palette and reset E
+        # E reached 0, increment palette (mod 8) and reset E
         code.append(0x14)  # INC D (next palette)
-        code.extend([0x1E, 0x05])  # LD E, 5
+        code.append(0x7A)  # LD A, D
+        code.extend([0xE6, 0x07])  # AND 7 (wrap palette 0-7)
+        code.append(0x57)  # LD D, A
+        code.extend([0x1E, 0x04])  # LD E, 4
 
         # .skip_palette_change:
         code[skip_pal + 1] = (len(code) - skip_pal - 2) & 0xFF
