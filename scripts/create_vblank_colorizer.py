@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-v0.45: Hook BOTH 0x0824 AND 0x086C for redundant palette updates.
+v0.46: Slot-based per-character palette assignment.
 
-v0.44 crashed because original input handler has absolute jumps to itself.
-v0.43 flickered because input handler doesn't always run fully.
+v0.45 confirmed triple OAM works (stable green, no flicker).
+Now implement actual palette differentiation:
+- Slots 0-3: Palette 1 (Sara W - typically first sprites)
+- Slots 4-39: Palette 2 (Monsters)
 
-Fix: Keep v0.43 structure at 0x0824, but ALSO hook 0x086C to run
-palette code again. Double coverage = no flickering.
+This gives Sara W her own color distinct from monsters.
 """
 import sys
 import yaml
@@ -51,10 +52,12 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 
 def create_slot_palette_loop() -> bytes:
     """
-    v0.45: Modify ALL THREE OAM locations for redundancy.
+    v0.46: Slot-based palette assignment on all three OAM locations.
 
-    Modify actual OAM (0xFE00) AND both shadow buffers (0xC000, 0xC100).
-    This way, even if we miss a frame, next DMA copies correct palettes.
+    - Slots 0-3: Palette 1 (Sara W)
+    - Slots 4-39: Palette 2 (Monsters)
+
+    Modifies 0xFE00, 0xC000, 0xC100 for redundancy.
     """
     code = bytearray()
 
@@ -63,18 +66,33 @@ def create_slot_palette_loop() -> bytes:
 
     # Process all three OAM locations: 0xFE00, 0xC000, 0xC100
     for base_hi in [0xFE, 0xC0, 0xC1]:
+        # FIRST LOOP: Slots 0-3 = Palette 1 (Sara W)
         code.extend([0x21, 0x03, base_hi])  # LD HL, base+3 (flags byte)
-        code.extend([0x06, 0x28])  # LD B, 40
+        code.extend([0x06, 0x04])  # LD B, 4
 
-        loop_start = len(code)
+        loop1_start = len(code)
         code.append(0x7E)  # LD A, [HL]
         code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
-        code.extend([0xF6, 0x01])  # OR 1 (palette 1 = GREEN)
+        code.extend([0xF6, 0x01])  # OR 1 (palette 1)
         code.append(0x77)  # LD [HL], A
         code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
         code.append(0x05)  # DEC B
-        loop_offset = loop_start - len(code) - 2
-        code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop
+        loop1_offset = loop1_start - len(code) - 2
+        code.extend([0x20, loop1_offset & 0xFF])  # JR NZ, loop1
+
+        # SECOND LOOP: Slots 4-39 = Palette 2 (Monsters)
+        # HL already at slot 4's flags
+        code.extend([0x06, 0x24])  # LD B, 36
+
+        loop2_start = len(code)
+        code.append(0x7E)  # LD A, [HL]
+        code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
+        code.extend([0xF6, 0x02])  # OR 2 (palette 2)
+        code.append(0x77)  # LD [HL], A
+        code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
+        code.append(0x05)  # DEC B
+        loop2_offset = loop2_start - len(code) - 2
+        code.extend([0x20, loop2_offset & 0xFF])  # JR NZ, loop2
 
     # Restore registers
     code.extend([0xE1, 0xD1, 0xC1, 0xF1])  # POP HL, DE, BC, AF
@@ -216,9 +234,10 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.45: Triple OAM modification (0xFE00 + 0xC000 + 0xC100)")
-    print(f"  All sprites = palette 1 (GREEN)")
-    print(f"  Shadow buffers ensure next DMA has correct palettes")
+    print(f"  v0.46: Slot-based palette assignment")
+    print(f"  Slots 0-3:  Palette 1 (Sara W)")
+    print(f"  Slots 4-39: Palette 2 (Monsters)")
+    print(f"  Triple OAM for stability")
 
 
 if __name__ == "__main__":
