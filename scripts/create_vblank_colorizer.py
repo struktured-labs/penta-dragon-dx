@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
-v0.46: Slot-based per-character palette assignment.
+v0.47: Tile-based palette lookup for per-monster colors.
 
-v0.45 confirmed triple OAM works (stable green, no flicker).
-Now implement actual palette differentiation:
-- Slots 0-3: Palette 1 (Sara W - typically first sprites)
-- Slots 4-39: Palette 2 (Monsters)
+Uses a 256-byte lookup table: tile_id -> palette number.
+Each monster type uses different tile ranges, so they get unique colors.
 
-This gives Sara W her own color distinct from monsters.
+Lookup table stored in bank 13, applied to all three OAM locations.
 """
 import sys
 import yaml
@@ -50,15 +48,59 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
     return bytes(bg_data), bytes(obj_data)
 
 
-def create_slot_palette_loop() -> bytes:
+def create_tile_lookup_table() -> bytes:
     """
-    v0.46: Slot-based palette assignment on all three OAM locations.
+    Create 256-byte tile-to-palette lookup table.
 
-    - Slots 0-3: Palette 1 (Sara W)
-    - Slots 4-39: Palette 2 (Monsters)
+    Initial mapping based on typical sprite tile ranges:
+    - Tiles 0x00-0x1F: Palette 1 (Sara W)
+    - Tiles 0x20-0x3F: Palette 2 (Sara D)
+    - Tiles 0x40-0x5F: Palette 3 (Dragon Fly)
+    - Tiles 0x60-0x7F: Palette 4 (Monster type 4)
+    - Tiles 0x80-0x9F: Palette 5 (Monster type 5)
+    - Tiles 0xA0-0xBF: Palette 6 (Monster type 6)
+    - Tiles 0xC0-0xDF: Palette 7 (Monster type 7)
+    - Tiles 0xE0-0xFF: Palette 0 (Default/misc)
 
-    Modifies 0xFE00, 0xC000, 0xC100 for redundancy.
+    Can be refined based on actual game tile usage.
     """
+    table = bytearray(256)
+
+    for tile in range(256):
+        if tile < 0x20:
+            table[tile] = 1  # Sara W
+        elif tile < 0x40:
+            table[tile] = 2  # Sara D
+        elif tile < 0x60:
+            table[tile] = 3  # Dragon Fly
+        elif tile < 0x80:
+            table[tile] = 4  # Monster 4
+        elif tile < 0xA0:
+            table[tile] = 5  # Monster 5
+        elif tile < 0xC0:
+            table[tile] = 6  # Monster 6
+        elif tile < 0xE0:
+            table[tile] = 7  # Monster 7
+        else:
+            table[tile] = 0  # Default
+
+    return bytes(table)
+
+
+def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
+    """
+    Tile-based palette lookup on all three OAM locations.
+
+    For each sprite:
+    1. Read tile ID from OAM
+    2. Look up palette in table
+    3. Set palette bits in flags
+
+    lookup_table_addr: CPU address of the 256-byte table (in bank 13)
+    """
+    lo = lookup_table_addr & 0xFF
+    hi = (lookup_table_addr >> 8) & 0xFF
+
     code = bytearray()
 
     # Save registers
@@ -66,33 +108,41 @@ def create_slot_palette_loop() -> bytes:
 
     # Process all three OAM locations: 0xFE00, 0xC000, 0xC100
     for base_hi in [0xFE, 0xC0, 0xC1]:
-        # FIRST LOOP: Slots 0-3 = Palette 1 (Sara W)
-        code.extend([0x21, 0x03, base_hi])  # LD HL, base+3 (flags byte)
-        code.extend([0x06, 0x04])  # LD B, 4
+        # LD HL, base+2 (tile ID byte of sprite 0)
+        code.extend([0x21, 0x02, base_hi])
+        # LD B, 40 sprites
+        code.extend([0x06, 0x28])
 
-        loop1_start = len(code)
+        loop_start = len(code)
+
+        # Get tile ID into E
+        code.append(0x5E)  # LD E, [HL]
+        code.extend([0x16, 0x00])  # LD D, 0 (DE = tile ID)
+
+        # Save HL (current OAM position)
+        code.append(0xE5)  # PUSH HL
+
+        # Look up palette: HL = table + tile_id
+        code.extend([0x21, lo, hi])  # LD HL, lookup_table
+        code.append(0x19)  # ADD HL, DE
+        code.append(0x4E)  # LD C, [HL] (C = palette from table)
+
+        # Restore OAM position
+        code.append(0xE1)  # POP HL
+        code.append(0x23)  # INC HL (now at flags byte)
+
+        # Modify flags: clear palette bits, set new palette
         code.append(0x7E)  # LD A, [HL]
-        code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
-        code.extend([0xF6, 0x01])  # OR 1 (palette 1)
+        code.extend([0xE6, 0xF8])  # AND 0xF8 (clear bits 0-2)
+        code.append(0xB1)  # OR C (set palette)
         code.append(0x77)  # LD [HL], A
-        code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
-        code.append(0x05)  # DEC B
-        loop1_offset = loop1_start - len(code) - 2
-        code.extend([0x20, loop1_offset & 0xFF])  # JR NZ, loop1
 
-        # SECOND LOOP: Slots 4-39 = Palette 2 (Monsters)
-        # HL already at slot 4's flags
-        code.extend([0x06, 0x24])  # LD B, 36
+        # Advance to next sprite: flags+1 -> Y -> X -> tile of next sprite
+        code.extend([0x23, 0x23, 0x23])  # INC HL x3
 
-        loop2_start = len(code)
-        code.append(0x7E)  # LD A, [HL]
-        code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
-        code.extend([0xF6, 0x02])  # OR 2 (palette 2)
-        code.append(0x77)  # LD [HL], A
-        code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
         code.append(0x05)  # DEC B
-        loop2_offset = loop2_start - len(code) - 2
-        code.extend([0x20, loop2_offset & 0xFF])  # JR NZ, loop2
+        loop_offset = loop_start - len(code) - 2
+        code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop
 
     # Restore registers
     code.extend([0xE1, 0xD1, 0xC1, 0xF1])  # POP HL, DE, BC, AF
@@ -102,12 +152,12 @@ def create_slot_palette_loop() -> bytes:
 
 
 def create_palette_loader() -> bytes:
-    """Load CGB palettes from bank 13 data."""
+    """Load CGB palettes from bank 13 data at 0x6D00."""
     code = bytearray()
 
-    # BG palettes
+    # BG palettes (at 0x6D00)
     code.extend([
-        0x21, 0x80, 0x6C,  # LD HL, 0x6C80
+        0x21, 0x00, 0x6D,  # LD HL, 0x6D00
         0x3E, 0x80,        # LD A, 0x80 (auto-increment)
         0xE0, 0x68,        # LDH [0x68], A (BGPI)
         0x0E, 0x40,        # LD C, 64
@@ -154,28 +204,36 @@ def main():
     bg_palettes, obj_palettes = load_palettes_from_yaml(palette_yaml)
 
     # === BANK 13 LAYOUT ===
-    # 0x6C80: Palette data (128 bytes)
-    # 0x6E00: OAM palette loop (slot-based)
+    # 0x6C00: Tile lookup table (256 bytes)
+    # 0x6D00: Palette data (128 bytes)
+    # 0x6D80: OAM palette loop (tile-based)
     # 0x6E80: Palette loader
-    # 0x6F00: Combined function (original input + palette loop + palette load)
+    # 0x6F00: Combined function
 
     BANK13_BASE = 0x034000  # Bank 13 file offset
 
-    PALETTE_DATA = 0x6C80
-    OAM_LOOP = 0x6E00
+    LOOKUP_TABLE = 0x6C00
+    PALETTE_DATA = 0x6D00
+    OAM_LOOP = 0x6D80
     PALETTE_LOADER = 0x6E80
     COMBINED_FUNC = 0x6F00
+
+    # Write tile lookup table
+    offset = BANK13_BASE + (LOOKUP_TABLE - 0x4000)
+    lookup_table = create_tile_lookup_table()
+    rom[offset:offset+256] = lookup_table
+    print(f"Tile lookup table: 256 bytes at 0x{LOOKUP_TABLE:04X}")
 
     # Write palette data
     offset = BANK13_BASE + (PALETTE_DATA - 0x4000)
     rom[offset:offset+64] = bg_palettes
     rom[offset+64:offset+128] = obj_palettes
 
-    # Write OAM palette loop (slot-based, modifies actual OAM at 0xFE00)
+    # Write OAM palette loop (tile-based lookup)
     offset = BANK13_BASE + (OAM_LOOP - 0x4000)
-    oam_loop = create_slot_palette_loop()
+    oam_loop = create_tile_lookup_loop(LOOKUP_TABLE)
     rom[offset:offset+len(oam_loop)] = oam_loop
-    print(f"OAM palette loop (slot-based): {len(oam_loop)} bytes")
+    print(f"OAM palette loop (tile-based): {len(oam_loop)} bytes")
 
     # Write palette loader
     offset = BANK13_BASE + (PALETTE_LOADER - 0x4000)
@@ -234,9 +292,10 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.46: Slot-based palette assignment")
-    print(f"  Slots 0-3:  Palette 1 (Sara W)")
-    print(f"  Slots 4-39: Palette 2 (Monsters)")
+    print(f"  v0.47: Tile-based palette lookup")
+    print(f"  Each tile range maps to a different palette:")
+    print(f"    0x00-0x1F: Pal 1 | 0x20-0x3F: Pal 2 | 0x40-0x5F: Pal 3")
+    print(f"    0x60-0x7F: Pal 4 | 0x80-0x9F: Pal 5 | 0xA0-0xBF: Pal 6")
     print(f"  Triple OAM for stability")
 
 
