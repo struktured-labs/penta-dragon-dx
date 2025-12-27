@@ -52,7 +52,7 @@ obj_palettes:
   # Palette 1 - SARA W (Slots 0-7)
   # Color 0=transparent, 1=main body, 2=secondary, 3=outline/darkest
   SaraW:
-    colors: ["0000", "03E0", "001F", "2108"]  # Trans, Green body, Red hair, Dark gray
+    colors: ["0000", "03E0", "2108", "001F"]  # Trans, Green body, Dark gray, Red
 
 
 
