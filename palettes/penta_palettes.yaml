@@ -51,7 +51,9 @@ obj_palettes:
 
   # Palette 1 - SARA W (Slots 0-7)
   SaraW:
-    colors: ["03E0", "0000", "001F", "03FF"]  # Green, Black, Red, Yellow
+    #    colors: ["03E0", "0000", "001F", "03FF"]  # Green, Black, Red, Yellow
+    colors: ["0000", "03E0", "001F", "03FF"]  # Green, Black, Red, Yellow
+
 
 
   # Palette 2 - MONSTERS GROUP 1 (Slots 8-15)
