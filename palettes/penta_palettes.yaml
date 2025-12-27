@@ -52,13 +52,13 @@ obj_palettes:
   # Palette 1 - SARA W (Slots 0-7)
   # Color 0=transparent, 1=main body, 2=secondary, 3=outline/darkest
   SaraW:
-    colors: ["0000", "0000", "019F", "019F"]  # Trans, Black body, Dark yellow, Dark yellow
+    colors: ["0000", "0000", "03E0", "03E0"]  # Trans, Black body, Green, Green
 
 
 
   # Palette 2 - MONSTERS GROUP 1 (Slots 8-15)
   Monsters1:
-    colors: ["0000", "7C00", "5800", "3000"]  # Blue shades
+    colors: ["0000", "5294", "2108", "0000"]  # Black and gray shades
 
   # Palette 3 - MONSTERS GROUP 2 (Slots 16-23)
   Monsters2:
