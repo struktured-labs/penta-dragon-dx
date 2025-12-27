@@ -65,20 +65,12 @@ def create_lookup_table() -> bytes:
 def create_slot_based_sprite_loop() -> bytes:
     """
     SLOT-BASED palette assignment, shadow-only, unconditional.
-    Assigns palettes based on OAM slot number, not tile ID.
 
-    v0.30: Use 4 slots per group (monsters are 2x2 = 4 sprites)
+    v0.31: Simple split - Sara W (slots 0-3) vs everything else
+    Tests if Sara W stays in consistent slots while game shuffles monsters.
 
-    Slots 0-3: Palette 0 (Sara W)
-    Slots 4-7: Palette 1
-    Slots 8-11: Palette 2
-    Slots 12-15: Palette 3
-    Slots 16-19: Palette 4
-    Slots 20-23: Palette 5
-    Slots 24-27: Palette 6
-    Slots 28-31: Palette 7
-    Slots 32-35: Palette 0 (cycle)
-    Slots 36-39: Palette 1 (cycle)
+    Slots 0-3: Palette 0 (RED - Sara W)
+    Slots 4-39: Palette 1 (GREEN - all monsters)
     """
     code = bytearray()
 
@@ -91,12 +83,18 @@ def create_slot_based_sprite_loop() -> bytes:
         code.extend([0x21, 0x03, base_hi])
         # LD B, 40 (sprite counter)
         code.extend([0x06, 0x28])
-        # LD D, 0 (palette counter - increments every 4 sprites)
-        code.extend([0x16, 0x00])
-        # LD E, 4 (sprites per palette group - 4 for 2x2 monsters)
+        # LD E, 4 (first 4 sprites get palette 0)
         code.extend([0x1E, 0x04])
 
         loop_start = len(code)
+
+        # Determine palette: E > 0 means palette 0, else palette 1
+        code.append(0x7B)  # LD A, E
+        code.append(0xA7)  # AND A (set flags)
+        code.extend([0x28, 0x02])  # JR Z, +2 (skip to palette 1)
+        code.extend([0x16, 0x00])  # LD D, 0 (palette 0)
+        code.extend([0x18, 0x02])  # JR +2 (skip palette 1 load)
+        code.extend([0x16, 0x01])  # LD D, 1 (palette 1)
 
         # Modify flags: clear palette bits, set palette from D
         code.append(0x7E)  # LD A, [HL] - get flags
@@ -107,21 +105,11 @@ def create_slot_based_sprite_loop() -> bytes:
         # Advance to next sprite's flags (+4)
         code.extend([0x23, 0x23, 0x23, 0x23])
 
-        # Decrement sprites-per-group counter
+        # Decrement E if > 0
+        code.append(0x7B)  # LD A, E
+        code.append(0xA7)  # AND A
+        code.extend([0x28, 0x01])  # JR Z, +1
         code.append(0x1D)  # DEC E
-        skip_inc = len(code)
-        code.extend([0x20, 0x00])  # JR NZ, skip_palette_inc
-
-        # Reset E to 4, increment D (palette)
-        code.extend([0x1E, 0x04])  # LD E, 4
-        code.append(0x14)  # INC D
-        # Keep D in range 0-7
-        code.append(0x7A)  # LD A, D
-        code.extend([0xE6, 0x07])  # AND 0x07
-        code.append(0x57)  # LD D, A
-
-        skip_target = len(code)
-        code[skip_inc + 1] = (skip_target - skip_inc - 2) & 0xFF
 
         code.append(0x05)  # DEC B
         loop_offset = loop_start - len(code) - 2
@@ -246,9 +234,8 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"✓ Created: {output_rom}")
-    print(f"  SLOT-BASED palette assignment (4 slots per group for 2x2 monsters)")
+    print(f"  SLOT-BASED: Slots 0-3 = P0 (Sara W), Slots 4-39 = P1 (monsters)")
     print(f"  Combined function: {len(combined)} bytes")
-    print(f"  Slots 0-3: P0, 4-7: P1, 8-11: P2, 12-15: P3, 16-19: P4, 20-23: P5, 24-27: P6, 28-31: P7")
 
 if __name__ == "__main__":
     main()
