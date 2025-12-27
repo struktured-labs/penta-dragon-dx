@@ -1,99 +1,78 @@
-# Simplified Penta Dragon DX Palettes
-# Focus: Sara W, Sara D, Dragon Fly with distinct colors
+# Penta Dragon DX Palettes
+# v0.52: Slot-based 5-color sprite system
+#
+# Colors are BGR555 hex format: BBBBBGGGGGRRRRR (5 bits each)
+# Common colors:
+#   0000=Transparent, 7FFF=White, 001F=Red, 03E0=Green
+#   7C00=Blue, 03FF=Yellow, 7C1F=Magenta, 7FE0=Cyan
 
+# ============================================
+# BACKGROUND PALETTES (8 palettes, 4 colors each)
+# ============================================
 bg_palettes:
   Dungeon:
-    name: "Level 1 Dungeon"
     colors: ["7FFF", "03E0", "0280", "0000"]  # White, Green, Dark Green, Black
 
   Default1:
-    name: "Default BG 1"
-    colors: ["7FFF", "5294", "2108", "0000"]  # White to Black gradient
+    colors: ["7FFF", "5294", "2108", "0000"]
 
   Default2:
-    name: "Default BG 2"
     colors: ["7FFF", "5294", "2108", "0000"]
 
   Default3:
-    name: "Default BG 3"
     colors: ["7FFF", "5294", "2108", "0000"]
 
   Default4:
-    name: "Default BG 4"
     colors: ["7FFF", "5294", "2108", "0000"]
 
   Default5:
-    name: "Default BG 5"
     colors: ["7FFF", "5294", "2108", "0000"]
 
   Default6:
-    name: "Default BG 6"
     colors: ["7FFF", "5294", "2108", "0000"]
 
   Default7:
-    name: "Default BG 7"
     colors: ["7FFF", "5294", "2108", "0000"]
 
+# ============================================
+# SPRITE PALETTES - v0.52 Slot Mapping
+# ============================================
+# Slots 0-7:   Palette 1 (SaraW)      - Player character
+# Slots 8-15:  Palette 2 (Monsters1)  - First monster group
+# Slots 16-23: Palette 3 (Monsters2)  - Second monster group
+# Slots 24-31: Palette 4 (Monsters3)  - Third monster group
+# Slots 32-39: Palette 5 (Monsters4)  - Fourth monster group
+# ============================================
+
 obj_palettes:
-  SaraD:
-    name: "Palette 0 - Red/Crimson"
-    colors: ["0000", "001F", "0016", "000B"]  # Trans, Bright Red, Medium Red, Dark Red
-    notes: "Sara D, tiles 0-3, 32-35, 64-67, 92-95, 120-123"
+  # Palette 0 - Currently unused in v0.52
+  Unused0:
+    colors: ["0000", "001F", "0016", "000B"]  # Red shades
 
+  # Palette 1 - SARA W (Slots 0-7)
   SaraW:
-    name: "Palette 1 - Green/Lime"
-    colors: ["0000", "03E0", "02A0", "0160"]  # Trans, Bright Green, Medium Green, Dark Green
-    notes: "Sara W, tiles 4-7, 36-39, 68-71, 96-99, 124-127"
+    colors: ["0000", "03E0", "02A0", "0160"]  # Green shades
 
-  DragonFly:
-    name: "Palette 2 - Blue/Azure"
-    colors: ["0000", "7C00", "5800", "3000"]  # Trans, Bright Blue, Medium Blue, Dark Blue
-    notes: "DragonFly, tiles 12-13, 40-43, 72-75, 100-103"
+  # Palette 2 - MONSTERS GROUP 1 (Slots 8-15)
+  Monsters1:
+    colors: ["0000", "7C00", "5800", "3000"]  # Blue shades
 
-  DefaultSprite3:
-    name: "Palette 3 - Orange/Gold"
-    colors: ["0000", "02FF", "01DF", "00BF"]  # Trans, Orange, Dark Orange, Brown
-    notes: "Tiles 14-15, 44-47, 76-79, 104-107"
+  # Palette 3 - MONSTERS GROUP 2 (Slots 16-23)
+  Monsters2:
+    colors: ["0000", "02FF", "01DF", "00BF"]  # Orange shades
 
-  DefaultSprite4:
-    name: "Palette 4 - Purple/Violet"
-    colors: ["0000", "7C1F", "5010", "2808"]  # Trans, Magenta, Purple, Dark Purple
-    notes: "Tiles 18-19, 48-51, 80-83, 108-111"
+  # Palette 4 - MONSTERS GROUP 3 (Slots 24-31)
+  Monsters3:
+    colors: ["0000", "7C1F", "5010", "2808"]  # Purple shades
 
-  DefaultSprite5:
-    name: "Palette 5 - Cyan/Teal"
-    colors: ["0000", "7FE0", "5EC0", "3D80"]  # Trans, Cyan, Teal, Dark Teal
-    notes: "Tiles 10-11, 20-23, 52-55, 84-87"
+  # Palette 5 - MONSTERS GROUP 4 (Slots 32-39)
+  Monsters4:
+    colors: ["0000", "7FE0", "5EC0", "3D80"]  # Cyan shades
 
-  DefaultSprite6:
-    name: "Palette 6 - Pink/Rose"
-    colors: ["0000", "7E1F", "5C16", "3A0D"]  # Trans, Pink, Rose, Dark Rose
-    notes: "Tiles 24-27, 56-59, 88-91, 112-115"
+  # Palette 6 - Currently unused in v0.52
+  Unused6:
+    colors: ["0000", "7E1F", "5C16", "3A0D"]  # Pink shades
 
-  DefaultSprite7:
-    name: "Palette 7 - Yellow/Gold"
-    colors: ["0000", "03FF", "02DF", "019F"]  # Trans, Yellow, Gold, Brown-Gold
-    notes: "Tiles 8-9, 28, 60-63, 116-119"
-
-notes: |
-  COMPREHENSIVE 8-PALETTE MONSTER COLORIZATION
-
-  All 35+ monster groups mapped to 8 palettes (cycling every 4 tiles):
-
-  Palette 0 (RED):    Tiles 0-3, 32-35, 64-67, 92-95, 120-123
-  Palette 1 (GREEN):  Tiles 4-7, 36-39, 68-71, 96-99, 124-127
-  Palette 2 (BLUE):   Tiles 12-13, 40-43, 72-75, 100-103
-  Palette 3 (ORANGE): Tiles 14-15, 44-47, 76-79, 104-107
-  Palette 4 (PURPLE): Tiles 18-19, 48-51, 80-83, 108-111
-  Palette 5 (CYAN):   Tiles 10-11, 20-23, 52-55, 84-87
-  Palette 6 (PINK):   Tiles 24-27, 56-59, 88-91, 112-115
-  Palette 7 (YELLOW): Tiles 8-9, 28, 60-63, 116-119
-
-  All colors in BGR555 hex format
-  Format: BBBBBGGGGGRRRRR (5 bits each)
-
-  Color reference:
-  - 0000: Black/Transparent  - 7FFF: White
-  - 001F: Red                - 03E0: Green
-  - 7C00: Blue               - 03FF: Yellow/Cyan
-  - 7C1F: Magenta            - 7FE0: Cyan
+  # Palette 7 - Currently unused in v0.52
+  Unused7:
+    colors: ["0000", "03FF", "02DF", "019F"]  # Yellow shades

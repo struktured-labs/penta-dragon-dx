@@ -39,8 +39,8 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
         else:
             bg_data.extend(pal_to_bytes(["7FFF", "5294", "2108", "0000"]))
 
-    obj_keys = ['SaraD', 'SaraW', 'DragonFly', 'DefaultSprite3',
-                'DefaultSprite4', 'DefaultSprite5', 'DefaultSprite6', 'DefaultSprite7']
+    obj_keys = ['Unused0', 'SaraW', 'Monsters1', 'Monsters2',
+                'Monsters3', 'Monsters4', 'Unused6', 'Unused7']
     obj_data = bytearray()
     for key in obj_keys:
         if key in data.get('obj_palettes', {}):
