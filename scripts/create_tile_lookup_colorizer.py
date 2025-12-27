@@ -48,33 +48,25 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    v0.24: Extended ranges to reduce tiny flickers.
+    v0.25: Large blocks to ensure stability.
 
-    From v0.23 testing:
-    - Sara W: green (24-47) with tiny flicker -> extend to 24-55
-    - Wolves: orange (72-95) with slight flicker -> extend to 64-95
-    - Hornets: purple (96-127) solid -> keep as is
+    Sara W was stable with 0-63 in v0.20. Try that again but with
+    better color distribution for monsters.
 
-    Tiles 0-23:   Palette 0 (RED)
-    Tiles 24-55:  Palette 1 (GREEN) - Sara W extended
-    Tiles 56-63:  Palette 2 (BLUE) - small gap
-    Tiles 64-95:  Palette 3 (ORANGE) - Wolf extended
+    Tiles 0-63:   Palette 1 (GREEN) - Sara W (large block)
+    Tiles 64-95:  Palette 3 (ORANGE) - Wolf
     Tiles 96-127: Palette 4 (PURPLE) - Hornet
-    Tiles 128+:   Palette 5-7 cycling
+    Tiles 128+:   Other palettes
     """
     table = bytearray(256)
 
     for tile in range(256):
-        if tile < 24:
-            table[tile] = 0      # RED
-        elif tile < 56:
-            table[tile] = 1      # GREEN - Sara W extended
-        elif tile < 64:
-            table[tile] = 2      # BLUE - small gap
+        if tile < 64:
+            table[tile] = 1      # GREEN - Sara W (0-63)
         elif tile < 96:
-            table[tile] = 3      # ORANGE - Wolf extended
+            table[tile] = 3      # ORANGE - Wolf (64-95)
         elif tile < 128:
-            table[tile] = 4      # PURPLE - Hornet
+            table[tile] = 4      # PURPLE - Hornet (96-127)
         else:
             table[tile] = 5 + ((tile - 128) // 32)  # CYAN, PINK, YELLOW
 
