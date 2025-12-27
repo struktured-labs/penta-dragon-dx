@@ -67,14 +67,18 @@ def create_slot_based_sprite_loop() -> bytes:
     SLOT-BASED palette assignment, shadow-only, unconditional.
     Assigns palettes based on OAM slot number, not tile ID.
 
-    Slots 0-4: Palette 0 (Sara W - typically first sprites)
-    Slots 5-9: Palette 1
-    Slots 10-14: Palette 2
-    Slots 15-19: Palette 3
-    Slots 20-24: Palette 4
-    Slots 25-29: Palette 5
-    Slots 30-34: Palette 6
-    Slots 35-39: Palette 7
+    v0.30: Use 4 slots per group (monsters are 2x2 = 4 sprites)
+
+    Slots 0-3: Palette 0 (Sara W)
+    Slots 4-7: Palette 1
+    Slots 8-11: Palette 2
+    Slots 12-15: Palette 3
+    Slots 16-19: Palette 4
+    Slots 20-23: Palette 5
+    Slots 24-27: Palette 6
+    Slots 28-31: Palette 7
+    Slots 32-35: Palette 0 (cycle)
+    Slots 36-39: Palette 1 (cycle)
     """
     code = bytearray()
 
@@ -87,10 +91,10 @@ def create_slot_based_sprite_loop() -> bytes:
         code.extend([0x21, 0x03, base_hi])
         # LD B, 40 (sprite counter)
         code.extend([0x06, 0x28])
-        # LD D, 0 (palette counter - increments every 5 sprites)
+        # LD D, 0 (palette counter - increments every 4 sprites)
         code.extend([0x16, 0x00])
-        # LD E, 5 (sprites per palette group)
-        code.extend([0x1E, 0x05])
+        # LD E, 4 (sprites per palette group - 4 for 2x2 monsters)
+        code.extend([0x1E, 0x04])
 
         loop_start = len(code)
 
@@ -108,8 +112,8 @@ def create_slot_based_sprite_loop() -> bytes:
         skip_inc = len(code)
         code.extend([0x20, 0x00])  # JR NZ, skip_palette_inc
 
-        # Reset E to 5, increment D (palette)
-        code.extend([0x1E, 0x05])  # LD E, 5
+        # Reset E to 4, increment D (palette)
+        code.extend([0x1E, 0x04])  # LD E, 4
         code.append(0x14)  # INC D
         # Keep D in range 0-7
         code.append(0x7A)  # LD A, D
@@ -242,9 +246,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"✓ Created: {output_rom}")
-    print(f"  SLOT-BASED palette assignment (not tile-based)")
+    print(f"  SLOT-BASED palette assignment (4 slots per group for 2x2 monsters)")
     print(f"  Combined function: {len(combined)} bytes")
-    print(f"  Slots 0-4: P0, 5-9: P1, 10-14: P2, 15-19: P3, 20-24: P4, 25-29: P5, 30-34: P6, 35-39: P7")
+    print(f"  Slots 0-3: P0, 4-7: P1, 8-11: P2, 12-15: P3, 16-19: P4, 20-23: P5, 24-27: P6, 28-31: P7")
 
 if __name__ == "__main__":
     main()
