@@ -64,61 +64,51 @@ def create_lookup_table() -> bytes:
 
 def create_slot_based_sprite_loop() -> bytes:
     """
-    Y-POSITION based palette assignment, shadow-only.
+    v0.35: Single buffer + actual OAM modification.
 
-    v0.34: Assign palette based on sprite Y position.
-    This should be stable since Y position is consistent per character.
-
-    Y < 40:  Palette 0 (top of screen)
-    Y < 60:  Palette 1
-    Y < 80:  Palette 2
-    Y < 100: Palette 3
-    Y < 120: Palette 4
-    Y < 140: Palette 5
-    Y >= 140: Palette 6
+    Try modifying C0 shadow AND actual OAM (FE) to ensure consistency.
+    Use simple 4-slot groups.
     """
     code = bytearray()
 
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])
 
-    for base_hi in [0xC0, 0xC1]:
-        # LD HL, base (Y position of sprite 0)
-        code.extend([0x21, 0x00, base_hi])
+    # Modify BOTH shadow buffer C0 AND actual OAM FE00
+    for base_hi in [0xC0, 0xFE]:
+        # LD HL, base+3 (flags of sprite 0)
+        code.extend([0x21, 0x03, base_hi])
         # LD B, 40 (sprite counter)
         code.extend([0x06, 0x28])
+        # LD D, 0 (palette)
+        code.extend([0x16, 0x00])
+        # LD E, 4 (sprites per palette)
+        code.extend([0x1E, 0x04])
 
         loop_start = len(code)
 
-        # Get Y position
-        code.append(0x7E)  # LD A, [HL] - Y position
-
-        # Calculate palette from Y: palette = Y / 20 (capped at 7)
-        # Divide by 16 is easier (shift right 4 times)
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A
-        code.extend([0xCB, 0x3F])  # SRL A (A = Y / 16)
-
-        # Cap at 7
-        code.extend([0xFE, 0x08])  # CP 8
-        code.extend([0x38, 0x02])  # JR C, +2 (skip if < 8)
-        code.extend([0x3E, 0x07])  # LD A, 7
-
-        code.append(0x57)  # LD D, A (save palette)
-
-        # Move to flags (offset +3 from Y)
-        code.append(0x23)  # INC HL (X)
-        code.append(0x23)  # INC HL (tile)
-        code.append(0x23)  # INC HL (flags)
-
-        # Set palette
+        # Set palette from D
         code.append(0x7E)  # LD A, [HL]
         code.extend([0xE6, 0xF8])  # AND 0xF8
         code.append(0xB2)  # OR D
         code.append(0x77)  # LD [HL], A
 
-        # Move to next sprite's Y (+1)
-        code.append(0x23)
+        # Advance to next sprite
+        code.extend([0x23, 0x23, 0x23, 0x23])
+
+        # Decrement E, if 0 then increment D and reset E
+        code.append(0x1D)  # DEC E
+        skip_inc = len(code)
+        code.extend([0x20, 0x00])  # JR NZ, skip
+
+        # E hit 0: reset to 4, increment palette
+        code.extend([0x1E, 0x04])  # LD E, 4
+        code.append(0x14)  # INC D
+        code.append(0x7A)  # LD A, D
+        code.extend([0xE6, 0x07])  # AND 7
+        code.append(0x57)  # LD D, A
+
+        skip_target = len(code)
+        code[skip_inc + 1] = (skip_target - skip_inc - 2) & 0xFF
 
         code.append(0x05)  # DEC B
         loop_offset = loop_start - len(code) - 2
@@ -243,7 +233,7 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"✓ Created: {output_rom}")
-    print(f"  Y-POSITION based: palette = Y / 16 (capped at 7)")
+    print(f"  SLOT-BASED: C0 shadow + FE00 actual OAM, 4 slots per group")
     print(f"  Combined function: {len(combined)} bytes")
 
 if __name__ == "__main__":
