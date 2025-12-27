@@ -110,12 +110,12 @@ def create_slot_palette_loop() -> bytes:
 
 
 def create_palette_loader() -> bytes:
-    """Load CGB palettes from bank 13 data at 0x6C80."""
+    """Load CGB palettes from bank 13 data at 0x6800."""
     code = bytearray()
 
-    # BG palettes (at 0x6C80)
+    # BG palettes (at 0x6800)
     code.extend([
-        0x21, 0x80, 0x6C,  # LD HL, 0x6C80
+        0x21, 0x00, 0x68,  # LD HL, 0x6800
         0x3E, 0x80,        # LD A, 0x80 (auto-increment)
         0xE0, 0x68,        # LDH [0x68], A (BGPI)
         0x0E, 0x40,        # LD C, 64
@@ -162,17 +162,18 @@ def main():
     bg_palettes, obj_palettes = load_palettes_from_yaml(palette_yaml)
 
     # === BANK 13 LAYOUT ===
-    # 0x6C80: Palette data (128 bytes)
-    # 0x6D80: OAM palette loop (slot-based)
-    # 0x6E80: Palette loader
-    # 0x6F00: Combined function
+    # v0.51: OAM loop is now 378 bytes, need more space!
+    # 0x6800: Palette data (128 bytes) -> ends 0x6880
+    # 0x6880: OAM palette loop (~400 bytes) -> ends ~0x6A10
+    # 0x6A20: Palette loader (32 bytes) -> ends ~0x6A40
+    # 0x6A50: Combined function (60 bytes)
 
     BANK13_BASE = 0x034000  # Bank 13 file offset
 
-    PALETTE_DATA = 0x6C80
-    OAM_LOOP = 0x6D80
-    PALETTE_LOADER = 0x6E80
-    COMBINED_FUNC = 0x6F00
+    PALETTE_DATA = 0x6800
+    OAM_LOOP = 0x6880
+    PALETTE_LOADER = 0x6A20
+    COMBINED_FUNC = 0x6A50
 
     # Write palette data
     offset = BANK13_BASE + (PALETTE_DATA - 0x4000)
