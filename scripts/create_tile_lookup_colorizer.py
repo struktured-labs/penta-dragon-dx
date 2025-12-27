@@ -48,17 +48,18 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    v0.21: 128-tile blocks to confirm stability.
-    Monsters cross 64 boundary, try 128 to eliminate flicker.
+    v0.22: 8-tile blocks diagnostic.
+    Find exact tile boundaries for each monster.
 
-    Tiles 0-127:   Palette 0 (RED) - Sara W + monsters
-    Tiles 128-255: Palette 1 (GREEN)
+    Tiles 0-7: P0 (RED), 8-15: P1 (GREEN), 16-23: P2 (BLUE), 24-31: P3 (ORANGE)
+    Tiles 32-39: P4 (PURPLE), 40-47: P5 (CYAN), 48-55: P6 (PINK), 56-63: P7 (YELLOW)
+    Pattern repeats for 64-127.
     """
     table = bytearray(256)
 
     for tile in range(256):
-        # 128-tile blocks = 2 palettes
-        table[tile] = tile // 128
+        # 8-tile blocks, 8 palettes cycling
+        table[tile] = (tile // 8) % 8
 
     return bytes(table)
 
