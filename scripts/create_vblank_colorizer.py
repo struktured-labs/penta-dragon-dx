@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-v0.42: Slot-based palette assignment on actual OAM.
+v0.43: DIAGNOSTIC - All sprites same palette.
 
-v0.41 had flickering because tiles are shared between Sara W and monsters.
-This version uses OAM SLOT position instead of tile ID:
-- Slots 0-3: Palette 1 (Sara W - typically in first slots)
-- Slots 4-39: Palette 2 (Monsters - higher slots)
+v0.42 still had flickering (blue/red monsters, green/red Sara W).
+This version sets ALL 40 sprites to palette 1 (GREEN) to diagnose:
+- If still flickering: timing/overwrite issue (code runs inconsistently)
+- If stable green: assignment logic issue (need better slot/tile mapping)
 
-This should give consistent per-character coloring since slot assignment
-is more predictable than tile usage.
+Test result determines next approach.
 """
 import sys
 import yaml
@@ -53,47 +52,29 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 
 def create_slot_palette_loop() -> bytes:
     """
-    Slot-based palette assignment on actual OAM (0xFE00).
+    v0.43 DIAGNOSTIC: Set ALL sprites to palette 1 (GREEN).
 
-    Assigns palettes by OAM slot position:
-    - Slots 0-3: Palette 1 (Sara W - GREEN)
-    - Slots 4-39: Palette 2 (Monsters - BLUE)
-
-    This is simpler and more consistent than tile-based assignment
-    since sprites don't change slots as often as they share tiles.
+    If we still see red flickering with this, our code isn't running
+    consistently or something is overwriting after us.
     """
     code = bytearray()
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xE5])  # PUSH AF, BC, HL
 
-    # === FIRST LOOP: Slots 0-3 get palette 1 (GREEN) ===
+    # Set ALL 40 sprites to palette 1 (GREEN)
     code.extend([0x21, 0x03, 0xFE])  # LD HL, 0xFE03 (first sprite's flags)
-    code.extend([0x06, 0x04])  # LD B, 4
+    code.extend([0x06, 0x28])  # LD B, 40
 
-    loop1_start = len(code)
+    loop_start = len(code)
     code.append(0x7E)  # LD A, [HL]
     code.extend([0xE6, 0xF8])  # AND 0xF8 (clear palette bits)
     code.extend([0xF6, 0x01])  # OR 1 (palette 1 = GREEN)
     code.append(0x77)  # LD [HL], A
     code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (next sprite)
     code.append(0x05)  # DEC B
-    loop1_offset = loop1_start - len(code) - 2
-    code.extend([0x20, loop1_offset & 0xFF])  # JR NZ, loop1
-
-    # === SECOND LOOP: Slots 4-39 get palette 2 (BLUE) ===
-    # HL is already at slot 4's flags
-    code.extend([0x06, 0x24])  # LD B, 36
-
-    loop2_start = len(code)
-    code.append(0x7E)  # LD A, [HL]
-    code.extend([0xE6, 0xF8])  # AND 0xF8
-    code.extend([0xF6, 0x02])  # OR 2 (palette 2 = BLUE)
-    code.append(0x77)  # LD [HL], A
-    code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4
-    code.append(0x05)  # DEC B
-    loop2_offset = loop2_start - len(code) - 2
-    code.extend([0x20, loop2_offset & 0xFF])  # JR NZ, loop2
+    loop_offset = loop_start - len(code) - 2
+    code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop
 
     # Restore registers
     code.extend([0xE1, 0xC1, 0xF1])  # POP HL, BC, AF
@@ -235,11 +216,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.42: Slot-based palette assignment")
+    print(f"  v0.43: DIAGNOSTIC - All sprites palette 1 (GREEN)")
     print(f"  Modifies actual OAM (0xFE00) after DMA")
-    print(f"  Slot mappings:")
-    print(f"    Slots 0-3:   Palette 1 (GREEN - Sara W)")
-    print(f"    Slots 4-39:  Palette 2 (BLUE - Monsters)")
+    print(f"  If still flickering, timing/overwrite issue confirmed")
 
 
 if __name__ == "__main__":
