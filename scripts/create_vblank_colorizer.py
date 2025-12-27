@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-v0.43: DIAGNOSTIC - All sprites same palette.
+v0.44: Run palette code FIRST, before input handler.
 
-v0.42 still had flickering (blue/red monsters, green/red Sara W).
-This version sets ALL 40 sprites to palette 1 (GREEN) to diagnose:
-- If still flickering: timing/overwrite issue (code runs inconsistently)
-- If stable green: assignment logic issue (need better slot/tile mapping)
+v0.43 showed green with mild red flicker - confirms timing issue.
+The original input handler may return early on some frames.
+Fix: Run OUR code first (unconditionally), then input handler.
 
-Test result determines next approach.
+This ensures palette modifications happen EVERY frame.
 """
 import sys
 import yaml
@@ -164,16 +163,15 @@ def main():
     palette_loader = create_palette_loader()
     rom[offset:offset+len(palette_loader)] = palette_loader
 
-    # Write combined function: original input + OAM loop + palette load
-    # This runs during VBlank after DMA, so modifying 0xFE00 is safe
+    # Write combined function: palette code FIRST, then input handler
+    # v0.44: Run our code first to ensure it runs every frame
+    # Original input handler might return early on some frames
     combined = bytearray()
-    combined.extend(original_input)  # Original input handler
-    # Remove trailing RET if present, we'll add our own
-    if combined[-1] == 0xC9:
-        combined = combined[:-1]
-    combined.extend([0xCD, OAM_LOOP & 0xFF, OAM_LOOP >> 8])  # CALL OAM loop
+    # OUR CODE FIRST - runs unconditionally
     combined.extend([0xCD, PALETTE_LOADER & 0xFF, PALETTE_LOADER >> 8])  # CALL palette loader
-    combined.append(0xC9)  # RET
+    combined.extend([0xCD, OAM_LOOP & 0xFF, OAM_LOOP >> 8])  # CALL OAM loop
+    # Original input handler LAST (includes its own RET)
+    combined.extend(original_input)
 
     offset = BANK13_BASE + (COMBINED_FUNC - 0x4000)
     rom[offset:offset+len(combined)] = combined
@@ -216,9 +214,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.43: DIAGNOSTIC - All sprites palette 1 (GREEN)")
-    print(f"  Modifies actual OAM (0xFE00) after DMA")
-    print(f"  If still flickering, timing/overwrite issue confirmed")
+    print(f"  v0.44: Palette code runs FIRST (before input handler)")
+    print(f"  All sprites = palette 1 (GREEN) - should be stable now")
+    print(f"  If still flickering, something overwrites AFTER our code")
 
 
 if __name__ == "__main__":
