@@ -48,34 +48,33 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 def create_lookup_table() -> bytes:
     """Create 256-byte tile-to-palette lookup table.
 
-    v0.23: Custom mapping based on v0.22 diagnostic.
+    v0.24: Extended ranges to reduce tiny flickers.
 
-    Sara W: 32-47 (needs 32-47 same palette)
-    Hornet: 24-39 (needs 24-39 same palette)
-    Wolf: 0-7 + 16-23 + 64-71 (non-contiguous, will flicker)
+    From v0.23 testing:
+    - Sara W: green (24-47) with tiny flicker -> extend to 24-55
+    - Wolves: orange (72-95) with slight flicker -> extend to 64-95
+    - Hornets: purple (96-127) solid -> keep as is
 
-    Strategy: Group 24-47 together for Sara W + Hornet stability.
-
-    Tiles 0-23:   Palette 0 (RED) - Wolf lower
-    Tiles 24-47:  Palette 1 (GREEN) - Sara W + Hornet
-    Tiles 48-71:  Palette 2 (BLUE)
-    Tiles 72-95:  Palette 3 (ORANGE)
-    Tiles 96-127: Palette 4 (PURPLE)
+    Tiles 0-23:   Palette 0 (RED)
+    Tiles 24-55:  Palette 1 (GREEN) - Sara W extended
+    Tiles 56-63:  Palette 2 (BLUE) - small gap
+    Tiles 64-95:  Palette 3 (ORANGE) - Wolf extended
+    Tiles 96-127: Palette 4 (PURPLE) - Hornet
     Tiles 128+:   Palette 5-7 cycling
     """
     table = bytearray(256)
 
     for tile in range(256):
         if tile < 24:
-            table[tile] = 0      # RED - Wolf lower
-        elif tile < 48:
-            table[tile] = 1      # GREEN - Sara W + Hornet
-        elif tile < 72:
-            table[tile] = 2      # BLUE
+            table[tile] = 0      # RED
+        elif tile < 56:
+            table[tile] = 1      # GREEN - Sara W extended
+        elif tile < 64:
+            table[tile] = 2      # BLUE - small gap
         elif tile < 96:
-            table[tile] = 3      # ORANGE
+            table[tile] = 3      # ORANGE - Wolf extended
         elif tile < 128:
-            table[tile] = 4      # PURPLE
+            table[tile] = 4      # PURPLE - Hornet
         else:
             table[tile] = 5 + ((tile - 128) // 32)  # CYAN, PINK, YELLOW
 
