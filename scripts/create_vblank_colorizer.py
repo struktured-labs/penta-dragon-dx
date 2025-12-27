@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
-v0.51: All 8 palettes with 5 slots each.
+v0.52: 5 colors with 8 slots each (fewer split monsters).
 
-v0.50 was stable with no flickering! Now use ALL 8 palettes:
-- Slots 0-4:   Palette 1 (GREEN - Sara W)
-- Slots 5-9:   Palette 2 (BLUE)
-- Slots 10-14: Palette 3 (ORANGE)
-- Slots 15-19: Palette 4 (PURPLE)
-- Slots 20-24: Palette 5 (CYAN)
-- Slots 25-29: Palette 6 (PINK)
-- Slots 30-34: Palette 7 (YELLOW)
-- Slots 35-39: Palette 0 (RED)
+v0.51 had too many boundary crossings with 5 slots each.
+Larger ranges = fewer monsters spanning multiple colors:
+- Slots 0-7:   Palette 1 (GREEN - Sara W)
+- Slots 8-15:  Palette 2 (BLUE)
+- Slots 16-23: Palette 3 (ORANGE)
+- Slots 24-31: Palette 4 (PURPLE)
+- Slots 32-39: Palette 5 (CYAN)
 """
 import sys
 import yaml
@@ -55,16 +53,13 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 
 def create_slot_palette_loop() -> bytes:
     """
-    v0.51: All 8 palettes with 5 slots each.
+    v0.52: 5 colors with 8 slots each.
 
-    - Slots 0-4:   Palette 1 (GREEN - Sara W)
-    - Slots 5-9:   Palette 2 (BLUE)
-    - Slots 10-14: Palette 3 (ORANGE)
-    - Slots 15-19: Palette 4 (PURPLE)
-    - Slots 20-24: Palette 5 (CYAN)
-    - Slots 25-29: Palette 6 (PINK)
-    - Slots 30-34: Palette 7 (YELLOW)
-    - Slots 35-39: Palette 0 (RED)
+    - Slots 0-7:   Palette 1 (GREEN - Sara W)
+    - Slots 8-15:  Palette 2 (BLUE)
+    - Slots 16-23: Palette 3 (ORANGE)
+    - Slots 24-31: Palette 4 (PURPLE)
+    - Slots 32-39: Palette 5 (CYAN)
 
     Modifies all three OAM locations for redundancy.
     """
@@ -73,16 +68,13 @@ def create_slot_palette_loop() -> bytes:
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
-    # Slot ranges: (count, palette) - 5 slots each, all 8 palettes
+    # Slot ranges: (count, palette) - 8 slots each, 5 colors
     slot_config = [
-        (5, 1),  # Slots 0-4:   GREEN (Sara W)
-        (5, 2),  # Slots 5-9:   BLUE
-        (5, 3),  # Slots 10-14: ORANGE
-        (5, 4),  # Slots 15-19: PURPLE
-        (5, 5),  # Slots 20-24: CYAN
-        (5, 6),  # Slots 25-29: PINK
-        (5, 7),  # Slots 30-34: YELLOW
-        (5, 0),  # Slots 35-39: RED
+        (8, 1),  # Slots 0-7:   GREEN (Sara W)
+        (8, 2),  # Slots 8-15:  BLUE
+        (8, 3),  # Slots 16-23: ORANGE
+        (8, 4),  # Slots 24-31: PURPLE
+        (8, 5),  # Slots 32-39: CYAN
     ]
 
     # Process all three OAM locations: 0xFE00, 0xC000, 0xC100
@@ -243,9 +235,8 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.51: All 8 palettes (5 slots each)")
-    print(f"  0-4:GREEN | 5-9:BLUE | 10-14:ORANGE | 15-19:PURPLE")
-    print(f"  20-24:CYAN | 25-29:PINK | 30-34:YELLOW | 35-39:RED")
+    print(f"  v0.52: 5 colors (8 slots each)")
+    print(f"  0-7:GREEN | 8-15:BLUE | 16-23:ORANGE | 24-31:PURPLE | 32-39:CYAN")
 
 
 if __name__ == "__main__":
