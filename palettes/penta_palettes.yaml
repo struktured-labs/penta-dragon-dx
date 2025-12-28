@@ -64,8 +64,8 @@ bg_palettes:
   Dungeon:
     colors: ["7FFF", "5AD6", "294A", "0000"]  # White, Light blue-gray, Dark blue-gray, Black
 
-  Hazard:  # BG Palette 1 - for spiky logs/traps (tiles 0x3E-0x7F)
-    colors: ["7FFF", "1D5F", "0D3F", "0000"]  # White, Tan/wood, Brown, Black
+  Hazard:  # BG Palette 1 - BRIGHT RED for testing
+    colors: ["001F", "001F", "001F", "0000"]  # Red, Red, Red, Black
 
   Default2:
     colors: ["7FFF", "5294", "2108", "0000"]
