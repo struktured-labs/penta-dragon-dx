@@ -36,17 +36,18 @@ sprite_tile_mappings:
     palette: 7
     tile_ranges: [[0x40, 0x4F]]
 
-  # Hazard (spiky log) - Palette 6
-  # Range: 0x50-0x53 (4 tiles)
-  Hazard:
-    palette: 6
-    tile_ranges: [[0x50, 0x53]]
+  # NOTE: Hazards are BACKGROUND TILES, not sprites!
+  # Cannot be colorized via OAM. This mapping is kept for documentation only.
+  # Tiles 0x50-0x53 may be used by other sprites (soldiers, slimes)
+  # Hazard:
+  #   palette: 6
+  #   tile_ranges: [[0x50, 0x53]]
 
-  # Wolf/Ground beasts - Palette 3
-  # Range: 0x54-0x5F (12 tiles)
+  # Wolf/Ground beasts (kobolds, soldiers, slimes) - Palette 3
+  # Range: 0x50-0x5F (16 tiles) - includes former "hazard sprite" tiles
   Wolf:
     palette: 3
-    tile_ranges: [[0x54, 0x5F]]
+    tile_ranges: [[0x50, 0x5F]]
 
   # Other enemies (0x80-0xDF) - Palette 4
   OtherEnemies:
@@ -119,9 +120,9 @@ obj_palettes:
   Unused5:
     colors: ["0000", "7C1F", "4C0F", "0000"]  # Trans, Magenta, Dark purple, Black
 
-  # Palette 6 - HAZARD (brown wood)
-  Hazard:
-    colors: ["0000", "1D5F", "0D3F", "0000"]  # Trans, Tan/wood, Brown, Black
+  # Palette 6 - Unused (hazards are BG tiles, not sprites)
+  Unused6:
+    colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
 
   # Palette 7 - MINIBOSS (red/orange)
   Miniboss:
