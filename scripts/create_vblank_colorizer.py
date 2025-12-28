@@ -216,9 +216,9 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0x6A80) -> byte
 
     # Check if hazard tile (0x6A-0x6F only)
     code.extend([0xFE, 0x6A])  # CP 0x6A
-    code.extend([0x38, 0x0C])  # JR C, .skip (A < 0x6A) - skip non-hazard
+    code.extend([0x38, 0x0A])  # JR C, .skip (+10) - skip non-hazard
     code.extend([0xFE, 0x70])  # CP 0x70
-    code.extend([0x30, 0x08])  # JR NC, .skip (A >= 0x70) - skip non-hazard
+    code.extend([0x30, 0x06])  # JR NC, .skip (+6) - skip non-hazard
 
     # IS hazard - write palette 1
     code.extend([0x3E, 0x01])  # LD A, 1 (VBK=1)
