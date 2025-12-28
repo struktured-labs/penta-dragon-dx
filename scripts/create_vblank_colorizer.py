@@ -156,10 +156,13 @@ def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
     return bytes(code)
 
 
-def create_bg_attribute_modifier_visible(row_counter_addr: int = 0xCFF0) -> bytes:
+def create_bg_attribute_modifier_scy_based() -> bytes:
     """
-    Process 4 rows per frame, covering tilemap in 8 frames.
-    Check LCDC bit 3 for correct tilemap address.
+    v0.84: SCY-based approach - no persistent counter needed.
+
+    Process 6 visible rows per frame, all 32 tiles per row.
+    Uses DIV register to select which third of visible area to process.
+    This ensures full coverage every ~3 frames.
     """
     code = bytearray()
 
@@ -175,17 +178,36 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0xCFF0) -> byte
     code.extend([0x01, 0x00, 0x98])  # LD BC, 0x9800
     # BC now has tilemap base
 
-    # Get row counter (0-31), process 4 rows starting from there
-    code.extend([0xFA, row_counter_addr & 0xFF, row_counter_addr >> 8])  # LD A, [counter]
-    code.append(0x57)  # LD D, A (save starting row in D)
+    # Get SCY (scroll Y) and calculate starting tile row
+    code.extend([0xF0, 0x42])  # LDH A, [SCY]
+    # Divide by 8: shift right 3 times to get tile row
+    code.extend([0xCB, 0x3F])  # SRL A (divide by 2)
+    code.extend([0xCB, 0x3F])  # SRL A (divide by 4)
+    code.extend([0xCB, 0x3F])  # SRL A (divide by 8)
+    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap to 0-31)
+    code.append(0x57)  # LD D, A (D = starting visible row)
 
-    # Increment counter by 4, wrap at 32
-    code.extend([0xC6, 0x04])  # ADD A, 4
-    code.extend([0xE6, 0x1F])  # AND 0x1F
-    code.extend([0xEA, row_counter_addr & 0xFF, row_counter_addr >> 8])  # LD [counter], A
+    # Use DIV register to select which 6 rows to process (0-5, 6-11, or 12-17)
+    code.extend([0xF0, 0x04])  # LDH A, [DIV]
+    code.extend([0xE6, 0x03])  # AND 0x03 (0, 1, 2, or 3)
+    code.extend([0xFE, 0x03])  # CP 3
+    code.extend([0x38, 0x02])  # JR C, +2 (if < 3, skip)
+    code.extend([0x3E, 0x00])  # LD A, 0 (if 3, use 0 instead)
+    # A is now 0, 1, or 2
 
-    # Outer loop: 4 rows
-    code.extend([0x1E, 0x04])  # LD E, 4 (row count)
+    # Multiply by 6 to get row offset: A = A * 6
+    code.append(0x47)  # LD B, A
+    code.append(0x87)  # ADD A, A (A * 2)
+    code.append(0x80)  # ADD A, B (A * 3)
+    code.append(0x87)  # ADD A, A (A * 6)
+
+    # Add offset to starting row
+    code.append(0x82)  # ADD A, D
+    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap)
+    code.append(0x57)  # LD D, A (D = row to start from)
+
+    # Process 6 rows
+    code.extend([0x1E, 0x06])  # LD E, 6 (row count)
 
     # --- Row loop ---
     row_loop = len(code)
@@ -201,7 +223,7 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0xCFF0) -> byte
     code.append(0x29)  # ADD HL, HL (x32)
     code.append(0x09)  # ADD HL, BC (add tilemap base)
 
-    # Inner loop: 32 tiles
+    # Inner loop: all 32 tiles in row
     code.append(0xC5)  # PUSH BC (save tilemap base)
     code.extend([0x06, 0x20])  # LD B, 32 (tile count)
 
@@ -214,16 +236,16 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0xCFF0) -> byte
 
     # Check if hazard tile (0x60-0x7F)
     code.extend([0xFE, 0x60])  # CP 0x60
-    code.extend([0x38, 0x0A])  # JR C, .skip
+    code.extend([0x38, 0x0A])  # JR C, .skip (tile < 0x60)
     code.extend([0xFE, 0x80])  # CP 0x80
-    code.extend([0x30, 0x06])  # JR NC, .skip
+    code.extend([0x30, 0x06])  # JR NC, .skip (tile >= 0x80)
 
-    # Write palette 1
+    # Write palette 1 to VRAM bank 1
     code.extend([0x3E, 0x01])  # LD A, 1
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
-    code.extend([0x36, 0x01])  # LD [HL], 1
+    code.extend([0x36, 0x01])  # LD [HL], 1 (palette 1)
 
-    # .skip
+    # .skip: Next tile
     code.append(0x23)  # INC HL
     code.append(0x05)  # DEC B
     tile_offset = tile_loop - len(code) - 2
@@ -231,7 +253,7 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0xCFF0) -> byte
 
     code.append(0xC1)  # POP BC (restore tilemap base)
 
-    # Next row
+    # Next row (with wrap at 32)
     code.append(0x14)  # INC D
     code.append(0x7A)  # LD A, D
     code.extend([0xE6, 0x1F])  # AND 0x1F (wrap at 32)
@@ -304,25 +326,23 @@ def main():
     bg_palettes, obj_palettes = load_palettes_from_yaml(palette_yaml)
 
     # === BANK 13 LAYOUT ===
-    # v0.71: Added incremental BG attribute modifier for hazards
+    # v0.84: SCY-based BG modifier (no persistent counter)
     # 0x6800: Palette data (128 bytes) -> ends 0x6880
     # 0x6880: Tile lookup table (256 bytes) -> ends 0x6980
     # 0x6980: OAM palette loop (~100 bytes) -> ends ~0x69E4
     # 0x69F0: Palette loader (~40 bytes) -> ends ~0x6A18
-    # 0x6A20: BG attribute modifier (~70 bytes) -> ends ~0x6A70
-    # 0x6A80: BG counter (2 bytes)
-    # 0x6A90: Combined function (~70 bytes)
+    # 0x6A20: BG attribute modifier (~120 bytes) -> ends ~0x6A98
+    # 0x6AA0: Combined function (~70 bytes)
 
     BANK13_BASE = 0x034000  # Bank 13 file offset
 
-    # Memory layout for v0.71 with BG modifier
+    # Memory layout for v0.84 with SCY-based BG modifier
     PALETTE_DATA = 0x6800      # 128 bytes -> ends 0x6880
     TILE_LOOKUP = 0x6880       # 256 bytes -> ends 0x6980
     OAM_LOOP = 0x6980          # ~100 bytes -> ends ~0x69E4
     PALETTE_LOADER = 0x69F0    # ~40 bytes -> ends ~0x6A18
-    BG_MODIFIER = 0x6A20       # ~70 bytes -> ends ~0x6A70
-    BG_COUNTER = 0x6A80        # 2 bytes for position counter
-    COMBINED_FUNC = 0x6A90     # ~70 bytes
+    BG_MODIFIER = 0x6A20       # ~120 bytes -> ends ~0x6A98
+    COMBINED_FUNC = 0x6AA0     # ~70 bytes
 
     # Write palette data
     offset = BANK13_BASE + (PALETTE_DATA - 0x4000)
@@ -346,15 +366,11 @@ def main():
     palette_loader = create_palette_loader()
     rom[offset:offset+len(palette_loader)] = palette_loader
 
-    # Write BG attribute modifier (scroll-aware version)
+    # Write BG attribute modifier (SCY-based, no counter needed)
     offset = BANK13_BASE + (BG_MODIFIER - 0x4000)
-    bg_modifier = create_bg_attribute_modifier_visible(BG_COUNTER)
+    bg_modifier = create_bg_attribute_modifier_scy_based()
     rom[offset:offset+len(bg_modifier)] = bg_modifier
-    print(f"BG attribute modifier (scroll-aware): {len(bg_modifier)} bytes")
-
-    # Initialize BG counter to 0
-    offset = BANK13_BASE + (BG_COUNTER - 0x4000)
-    rom[offset:offset+2] = bytes([0x00, 0x00])
+    print(f"BG attribute modifier (SCY-based): {len(bg_modifier)} bytes")
 
     # Write combined function: original input + OAM loop + BG modifier + palette load
     combined = bytearray()
@@ -408,9 +424,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.75: BG hazard colorization (tiles 0x69-0x7F)")
+    print(f"  v0.84: SCY-based BG hazard colorization")
+    print(f"  BG tiles 0x60-0x7F -> palette 1 (red for testing)")
     print(f"  Sprites: Sara=green, Hornet=yellow, Wolf=gray, Miniboss=red")
-    print(f"  BG: Spike log tiles (0x69-0x7F) -> palette 1 (brown/wood)")
 
 
 if __name__ == "__main__":
