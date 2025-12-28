@@ -82,8 +82,8 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
         else:
             bg_data.extend(pal_to_bytes(["7FFF", "5294", "2108", "0000"]))
 
-    obj_keys = ['Default', 'Sara', 'Hornet', 'Wolf',
-                'OtherEnemies', 'Unused5', 'Hazard', 'Miniboss']
+    obj_keys = ['Default', 'Sara', 'Reserved2', 'Reserved3',
+                'OtherEnemies', 'SpiderBoss', 'BeeBoss', 'ButterflyBoss']
     obj_data = bytearray()
     for key in obj_keys:
         if key in data.get('obj_palettes', {}):
@@ -411,7 +411,7 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.87: Per-miniboss colorization")
+    print(f"  v0.88: Fixed palette loader key names")
     print(f"  Spider=red/gray, Bee=yellow/orange, Butterfly=orange/purple")
 
 
