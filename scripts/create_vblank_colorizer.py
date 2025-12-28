@@ -156,83 +156,86 @@ def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
     return bytes(code)
 
 
-def create_bg_attribute_modifier(counter_addr: int = 0x6A80) -> bytes:
+def create_bg_attribute_modifier_visible(row_counter_addr: int = 0x6A80) -> bytes:
     """
-    Incremental BG attribute modifier - processes 16 tiles per frame.
-    Uses a counter in bank 13 RAM to track position.
-    Hazard tiles (0x3E-0x7F) get palette 1, others get palette 0.
+    Scroll-aware BG attribute modifier - processes visible rows only.
+    Each frame processes 2 rows of the visible 18-row area.
+    Only targets specific hazard tile IDs (0x74).
 
-    Takes ~64 frames to color entire 1024-tile map.
+    Uses SCY to determine which tilemap rows are visible.
     """
     code = bytearray()
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
-    # Load counter (0-1023, stored as 16-bit at counter_addr)
-    code.extend([0x21, counter_addr & 0xFF, counter_addr >> 8])  # LD HL, counter_addr
-    code.append(0x2A)  # LD A, [HL+] (low byte)
-    code.append(0x4F)  # LD C, A
-    code.append(0x46)  # LD B, [HL] (high byte)
-    # BC = current tile offset (0-1023)
+    # Get current row counter (0-17, wraps)
+    code.extend([0x21, row_counter_addr & 0xFF, row_counter_addr >> 8])  # LD HL, counter
+    code.append(0x7E)  # LD A, [HL]
+    code.append(0x47)  # LD B, A (save row offset in B)
 
-    # Calculate tilemap address: HL = 0x9800 + BC
-    code.extend([0x21, 0x00, 0x98])  # LD HL, 0x9800
+    # Increment and wrap counter at 18
+    code.append(0x3C)  # INC A
+    code.extend([0xFE, 0x12])  # CP 18
+    code.extend([0x38, 0x01])  # JR C, +1 (skip reset if < 18)
+    code.append(0xAF)  # XOR A (reset to 0)
+    code.append(0x77)  # LD [HL], A (save new counter)
+
+    # Get SCY (vertical scroll)
+    code.extend([0xF0, 0x42])  # LDH A, [SCY]
+    code.extend([0xE6, 0xF8])  # AND 0xF8 (round to tile: /8 * 8)
+    code.append(0x0F)  # RRCA (divide by 2)
+    code.append(0x0F)  # RRCA (divide by 4)
+    code.append(0x0F)  # RRCA (divide by 8) - now A = tile row from scroll
+    # Add row offset
+    code.append(0x80)  # ADD B
+    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap at 32 rows)
+
+    # Calculate tilemap row address: HL = 0x9800 + (row * 32)
+    # row * 32 = row << 5
+    code.append(0x6F)  # LD L, A
+    code.extend([0x26, 0x00])  # LD H, 0
+    code.append(0x29)  # ADD HL, HL (x2)
+    code.append(0x29)  # ADD HL, HL (x4)
+    code.append(0x29)  # ADD HL, HL (x8)
+    code.append(0x29)  # ADD HL, HL (x16)
+    code.append(0x29)  # ADD HL, HL (x32)
+    code.extend([0x01, 0x00, 0x98])  # LD BC, 0x9800
     code.append(0x09)  # ADD HL, BC
 
-    # Process 16 tiles this frame
-    code.extend([0x11, 0x10, 0x00])  # LD DE, 16 (tiles to process)
+    # Process 32 tiles in this row (full row width)
+    code.extend([0x0E, 0x20])  # LD C, 32
 
-    # --- Tile processing loop ---
+    # --- Tile loop ---
     loop_start = len(code)
 
-    # Switch to VRAM bank 0, read tile ID
-    code.append(0xAF)  # XOR A (A = 0)
+    # Switch to VRAM bank 0, read tile
+    code.append(0xAF)  # XOR A
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
-    code.append(0x7E)  # LD A, [HL] - read tile ID
+    code.append(0x7E)  # LD A, [HL]
 
-    # Check if hazard tile (0x3E-0x7F)
-    code.extend([0xFE, 0x3E])  # CP 0x3E
-    code.extend([0x38, 0x06])  # JR C, .not_hazard (A < 0x3E)
-    code.extend([0xFE, 0x80])  # CP 0x80
-    code.extend([0x30, 0x02])  # JR NC, .not_hazard (A >= 0x80)
-    # Is hazard - palette 1
-    code.extend([0x3E, 0x01])  # LD A, 1
-    code.extend([0x18, 0x01])  # JR .write_attr
-    # .not_hazard - palette 0
-    not_hazard = len(code)
-    code.append(0xAF)  # XOR A (palette 0)
+    # Check if hazard tile (only 0x74 for now - very specific)
+    code.extend([0xFE, 0x74])  # CP 0x74
+    code.extend([0x20, 0x02])  # JR NZ, .not_hazard
+    code.extend([0x06, 0x01])  # LD B, 1 (palette 1)
+    code.extend([0x18, 0x02])  # JR .write
+    # .not_hazard
+    code.extend([0x06, 0x00])  # LD B, 0 (palette 0)
 
-    # .write_attr
-    # Switch to VRAM bank 1, write attribute
-    code.append(0x47)  # LD B, A (save palette in B)
+    # .write - switch to VRAM bank 1, write attribute
     code.extend([0x3E, 0x01])  # LD A, 1
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
-    code.append(0x70)  # LD [HL], B (write palette)
+    code.append(0x70)  # LD [HL], B
 
     # Next tile
     code.append(0x23)  # INC HL
-    code.append(0x03)  # INC BC (counter)
-    code.append(0x1D)  # DEC E
+    code.append(0x0D)  # DEC C
     loop_offset = loop_start - len(code) - 2
     code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop
-
-    # --- End of loop ---
 
     # Switch back to VRAM bank 0
     code.append(0xAF)  # XOR A
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
-
-    # Wrap counter at 1024 (BC & 0x3FF)
-    code.append(0x78)  # LD A, B
-    code.extend([0xE6, 0x03])  # AND 0x03
-    code.append(0x47)  # LD B, A
-
-    # Save counter back
-    code.extend([0x21, counter_addr & 0xFF, counter_addr >> 8])  # LD HL, counter_addr
-    code.append(0x71)  # LD [HL], C (low byte)
-    code.append(0x23)  # INC HL
-    code.append(0x70)  # LD [HL], B (high byte)
 
     # Restore registers
     code.extend([0xE1, 0xD1, 0xC1, 0xF1])  # POP HL, DE, BC, AF
@@ -336,25 +339,24 @@ def main():
     palette_loader = create_palette_loader()
     rom[offset:offset+len(palette_loader)] = palette_loader
 
-    # Write BG attribute modifier
+    # Write BG attribute modifier (scroll-aware version)
     offset = BANK13_BASE + (BG_MODIFIER - 0x4000)
-    bg_modifier = create_bg_attribute_modifier(BG_COUNTER)
+    bg_modifier = create_bg_attribute_modifier_visible(BG_COUNTER)
     rom[offset:offset+len(bg_modifier)] = bg_modifier
-    print(f"BG attribute modifier: {len(bg_modifier)} bytes")
+    print(f"BG attribute modifier (scroll-aware): {len(bg_modifier)} bytes")
 
     # Initialize BG counter to 0
     offset = BANK13_BASE + (BG_COUNTER - 0x4000)
     rom[offset:offset+2] = bytes([0x00, 0x00])
 
-    # Write combined function: original input + OAM loop + palette load
-    # NOTE: BG modifier disabled for now - need to identify correct hazard tile IDs first
+    # Write combined function: original input + OAM loop + BG modifier + palette load
     combined = bytearray()
     combined.extend(original_input)  # Original input handler
     # Remove trailing RET if present, we'll add our own
     if combined[-1] == 0xC9:
         combined = combined[:-1]
     combined.extend([0xCD, OAM_LOOP & 0xFF, OAM_LOOP >> 8])  # CALL OAM loop
-    # combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # CALL BG modifier (DISABLED)
+    combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # CALL BG modifier
     combined.extend([0xCD, PALETTE_LOADER & 0xFF, PALETTE_LOADER >> 8])  # CALL palette loader
     combined.append(0xC9)  # RET
 
@@ -399,9 +401,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.72: Tile-based colorization (BG modifier disabled)")
+    print(f"  v0.73: Scroll-aware BG modifier targeting tile 0x74")
     print(f"  Sprites: Sara=green, Hornet=yellow, Wolf=gray, Miniboss=red")
-    print(f"  BG: Disabled - need to identify correct hazard tile IDs")
+    print(f"  BG: Tile 0x74 -> palette 1 (brown/wood)")
 
 
 if __name__ == "__main__":
