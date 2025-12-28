@@ -1,10 +1,67 @@
 # Penta Dragon DX Palettes
-# v0.52: Slot-based 5-color sprite system
+# v0.66: Tile-based per-monster colorization
 #
 # Colors are BGR555 hex format: BBBBBGGGGGRRRRR (5 bits each)
 # Common colors:
 #   0000=Transparent, 7FFF=White, 001F=Red, 03E0=Green
 #   7C00=Blue, 03FF=Yellow, 7C1F=Magenta, 7FE0=Cyan
+
+# ============================================
+# SPRITE TILE MAPPINGS (tile ID -> palette)
+# ============================================
+# Each monster type uses specific tile IDs
+# Map tile ranges to palette numbers (1-7)
+#
+# To find tile IDs: Run scripts/capture_monster_tiles.lua
+# Press SELECT when viewing each monster type
+
+sprite_tile_mappings:
+  # Sara (player character) - Palette 1
+  # Includes up/down (0x20-0x2B) and left/right (0xF0-0xF9)
+  Sara:
+    palette: 1
+    tiles: [0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B,
+            0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB]
+
+  # Hornet - Palette 2
+  # Includes all directions (0x60-0x6F)
+  Hornet:
+    palette: 2
+    tiles: [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67,
+            0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F]
+
+  # Wolf/Beast - Palette 3
+  Wolf:
+    palette: 3
+    tiles: [0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F]
+
+  # Soldier/Knight - Palette 4
+  # Expanded range for all directions
+  Soldier:
+    palette: 4
+    tiles: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19]
+
+  # Slime (gray square) - Palette 5
+  Slime:
+    palette: 5
+    tiles: [0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F]
+
+  # Hazard (spiky log) - Palette 6
+  Hazard:
+    palette: 6
+    tiles: [0x50, 0x51, 0x52, 0x53]
+
+  # Miniboss - Palette 7 (uses many tiles)
+  Miniboss:
+    palette: 7
+    tiles: [0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
+            0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F]
+
+  # Projectiles/effects - Palette 0 (default white/gray)
+  # 0x01, 0x0F, 0x70, 0x80, 0x90, 0xCA use default
+
+  # Default for unmapped tiles
+  default_palette: 0
 
 # ============================================
 # BACKGROUND PALETTES (8 palettes, 4 colors each)
@@ -13,8 +70,8 @@ bg_palettes:
   Dungeon:
     colors: ["7FFF", "5AD6", "294A", "0000"]  # White, Light blue-gray, Dark blue-gray, Black
 
-  Default1:
-    colors: ["7FFF", "5294", "2108", "0000"]
+  Hazard:  # BG Palette 1 - for spiky logs/traps (tiles 0x3E-0x7F)
+    colors: ["7FFF", "1D5F", "0D3F", "0000"]  # White, Tan/wood, Brown, Black
 
   Default2:
     colors: ["7FFF", "5294", "2108", "0000"]
@@ -45,37 +102,34 @@ bg_palettes:
 # ============================================
 
 obj_palettes:
-  # Palette 0 - Currently unused in v0.52
-  Unused0:
-    colors: ["0000", "001F", "0016", "000B"]  # Red shades
+  # Palette 0 - Default/fallback (white/gray for unmapped)
+  Default:
+    colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
 
-  # Palette 1 - SARA W (Slots 0-7)
-  # Color 0=transparent, 1=main body, 2=secondary, 3=outline/darkest
-  SaraW:
+  # Palette 1 - SARA (player character - green/black)
+  Sara:
     colors: ["0000", "0000", "03E0", "0280"]  # Trans, Black body, Green, Dark green
 
+  # Palette 2 - HORNET (yellow/black bee)
+  Hornet:
+    colors: ["0000", "03FF", "01BF", "0000"]  # Trans, Bright yellow, Orange-yellow, Black
 
+  # Palette 3 - WOLF (gray beast)
+  Wolf:
+    colors: ["0000", "6318", "318C", "0000"]  # Trans, Light gray, Dark gray, Black
 
-  # Palette 2 - MONSTERS GROUP 1 (Slots 8-15)
-  Monsters1:
-    colors: ["0000", "5294", "2108", "0000"]  # Black and gray shades
+  # Palette 4 - SOLDIER (blue armor)
+  Soldier:
+    colors: ["0000", "7E00", "5800", "0000"]  # Trans, Light blue, Dark blue, Black
 
-  # Palette 3 - MONSTERS GROUP 2 (Slots 16-23)
-  Monsters2:
-    colors: ["0000", "02FF", "01DF", "00BF"]  # Orange shades
+  # Palette 5 - SLIME (purple goo)
+  Slime:
+    colors: ["0000", "7C1F", "4C0F", "0000"]  # Trans, Magenta, Dark purple, Black
 
-  # Palette 4 - MONSTERS GROUP 3 (Slots 24-31)
-  Monsters3:
-    colors: ["0000", "7C1F", "5010", "2808"]  # Purple shades
+  # Palette 6 - HAZARD (brown wood)
+  Hazard:
+    colors: ["0000", "1D5F", "0D3F", "0000"]  # Trans, Tan/wood, Brown, Black
 
-  # Palette 5 - MONSTERS GROUP 4 (Slots 32-39)
-  Monsters4:
-    colors: ["0000", "7FE0", "5EC0", "3D80"]  # Cyan shades
-
-  # Palette 6 - Currently unused in v0.52
-  Unused6:
-    colors: ["0000", "7E1F", "5C16", "3A0D"]  # Pink shades
-
-  # Palette 7 - Currently unused in v0.52
-  Unused7:
-    colors: ["0000", "03FF", "02DF", "019F"]  # Yellow shades
+  # Palette 7 - MINIBOSS (red/orange menacing)
+  Miniboss:
+    colors: ["0000", "001F", "00FF", "0000"]  # Trans, Red, Orange, Black
