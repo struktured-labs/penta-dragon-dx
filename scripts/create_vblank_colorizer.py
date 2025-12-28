@@ -214,10 +214,12 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0x6A80) -> byte
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
     code.append(0x7E)  # LD A, [HL]
 
-    # Check if hazard tile (only 0x74 for now - very specific)
-    code.extend([0xFE, 0x74])  # CP 0x74
-    code.extend([0x20, 0x02])  # JR NZ, .not_hazard
-    code.extend([0x06, 0x01])  # LD B, 1 (palette 1)
+    # Check if hazard tile (0x69-0x7F = spike log tiles)
+    code.extend([0xFE, 0x69])  # CP 0x69
+    code.extend([0x38, 0x06])  # JR C, .not_hazard (A < 0x69)
+    code.extend([0xFE, 0x80])  # CP 0x80
+    code.extend([0x30, 0x02])  # JR NC, .not_hazard (A >= 0x80)
+    code.extend([0x06, 0x01])  # LD B, 1 (palette 1 = hazard)
     code.extend([0x18, 0x02])  # JR .write
     # .not_hazard
     code.extend([0x06, 0x00])  # LD B, 0 (palette 0)
@@ -356,7 +358,7 @@ def main():
     if combined[-1] == 0xC9:
         combined = combined[:-1]
     combined.extend([0xCD, OAM_LOOP & 0xFF, OAM_LOOP >> 8])  # CALL OAM loop
-    combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # CALL BG modifier
+    combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # BG modifier for hazards (0x69-0x7F)
     combined.extend([0xCD, PALETTE_LOADER & 0xFF, PALETTE_LOADER >> 8])  # CALL palette loader
     combined.append(0xC9)  # RET
 
@@ -401,9 +403,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.73: Scroll-aware BG modifier targeting tile 0x74")
+    print(f"  v0.75: BG hazard colorization (tiles 0x69-0x7F)")
     print(f"  Sprites: Sara=green, Hornet=yellow, Wolf=gray, Miniboss=red")
-    print(f"  BG: Tile 0x74 -> palette 1 (brown/wood)")
+    print(f"  BG: Spike log tiles (0x69-0x7F) -> palette 1 (brown/wood)")
 
 
 if __name__ == "__main__":
