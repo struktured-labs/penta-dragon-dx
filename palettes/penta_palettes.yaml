@@ -1,5 +1,5 @@
 # Penta Dragon DX Palettes
-# v0.66: Tile-based per-monster colorization
+# v0.87: Per-miniboss colorization
 #
 # Colors are BGR555 hex format: BBBBBGGGGGRRRRR (5 bits each)
 # Common colors:
@@ -12,42 +12,40 @@
 # Each monster type uses specific tile IDs
 # Map tile ranges to palette numbers (1-7)
 #
-# To find tile IDs: Run scripts/capture_monster_tiles.lua
+# To find tile IDs: Run scripts/capture_miniboss_tiles.lua
 # Press SELECT when viewing each monster type
 
 sprite_tile_mappings:
-  # AGGRESSIVE TILE MAPPING - broad ranges to catch all animation frames
-  #
   # Sara (player character) - Palette 1
   # Full range: 0x00-0x3F (first 64 tiles) + 0xE0-0xFF (last 32 tiles)
   Sara:
     palette: 1
     tile_ranges: [[0x00, 0x3F], [0xE0, 0xFF]]
 
-  # Hornet/Flying enemies - Palette 2
-  # Range: 0x60-0x7F (32 tiles)
-  Hornet:
-    palette: 2
-    tile_ranges: [[0x60, 0x7F]]
+  # === MINI-BOSS TYPES ===
+  # Each miniboss has distinct tile ranges and palettes
+  # Note: These ranges also used by regular enemies, but minibosses
+  # appear alone (no other enemies on screen)
 
-  # Miniboss - Palette 7
+  # Spider/Crab miniboss - Palette 5 (red/gray/black)
   # Range: 0x40-0x4F (16 tiles)
-  Miniboss:
-    palette: 7
+  SpiderBoss:
+    palette: 5
     tile_ranges: [[0x40, 0x4F]]
 
-  # NOTE: Hazards are BACKGROUND TILES, not sprites!
-  # Cannot be colorized via OAM. This mapping is kept for documentation only.
-  # Tiles 0x50-0x53 may be used by other sprites (soldiers, slimes)
-  # Hazard:
-  #   palette: 6
-  #   tile_ranges: [[0x50, 0x53]]
-
-  # Wolf/Ground beasts (kobolds, soldiers, slimes) - Palette 3
-  # Range: 0x50-0x5F (16 tiles) - includes former "hazard sprite" tiles
-  Wolf:
-    palette: 3
+  # Bee/Wasp miniboss - Palette 6 (yellow/orange/black)
+  # Range: 0x50-0x5F (16 tiles)
+  # Also used by Wolf/ground enemies
+  BeeBoss:
+    palette: 6
     tile_ranges: [[0x50, 0x5F]]
+
+  # Butterfly miniboss - Palette 7 (orange/purple/black)
+  # Range: 0x60-0x7F (32 tiles)
+  # Also used by Hornet/flying enemies
+  ButterflyBoss:
+    palette: 7
+    tile_ranges: [[0x60, 0x7F]]
 
   # Other enemies (0x80-0xDF) - Palette 4
   OtherEnemies:
@@ -86,13 +84,16 @@ bg_palettes:
     colors: ["7FFF", "5294", "2108", "0000"]
 
 # ============================================
-# SPRITE PALETTES - v0.52 Slot Mapping
+# SPRITE PALETTES - v0.87 Per-Miniboss Colors
 # ============================================
-# Slots 0-7:   Palette 1 (SaraW)      - Player character
-# Slots 8-15:  Palette 2 (Monsters1)  - First monster group
-# Slots 16-23: Palette 3 (Monsters2)  - Second monster group
-# Slots 24-31: Palette 4 (Monsters3)  - Third monster group
-# Slots 32-39: Palette 5 (Monsters4)  - Fourth monster group
+# Palette 0: Default (projectiles/effects)
+# Palette 1: Sara (player)
+# Palette 2: Reserved
+# Palette 3: Reserved
+# Palette 4: Other enemies
+# Palette 5: Spider/Crab miniboss
+# Palette 6: Bee/Wasp miniboss
+# Palette 7: Butterfly miniboss
 # ============================================
 
 obj_palettes:
@@ -104,26 +105,26 @@ obj_palettes:
   Sara:
     colors: ["0000", "0000", "03E0", "0280"]  # Trans, Black body, Green, Dark green
 
-  # Palette 2 - HORNET/Flying (yellow/black)
-  Hornet:
-    colors: ["0000", "03FF", "01BF", "0000"]  # Trans, Bright yellow, Orange-yellow, Black
+  # Palette 2 - Reserved
+  Reserved2:
+    colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
 
-  # Palette 3 - WOLF/Ground beasts (gray)
-  Wolf:
-    colors: ["0000", "6318", "318C", "0000"]  # Trans, Light gray, Dark gray, Black
+  # Palette 3 - Reserved
+  Reserved3:
+    colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
 
   # Palette 4 - OTHER ENEMIES (blue)
   OtherEnemies:
     colors: ["0000", "7E00", "5800", "0000"]  # Trans, Light blue, Dark blue, Black
 
-  # Palette 5 - Unused
-  Unused5:
-    colors: ["0000", "7C1F", "4C0F", "0000"]  # Trans, Magenta, Dark purple, Black
+  # Palette 5 - SPIDER/CRAB miniboss (red/gray/black)
+  SpiderBoss:
+    colors: ["0000", "001F", "294A", "0000"]  # Trans, Red, Gray, Black
 
-  # Palette 6 - Unused (hazards are BG tiles, not sprites)
-  Unused6:
-    colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
+  # Palette 6 - BEE/WASP miniboss (yellow/orange/black)
+  BeeBoss:
+    colors: ["0000", "03FF", "00BF", "0000"]  # Trans, Yellow, Orange, Black
 
-  # Palette 7 - MINIBOSS (red/orange)
-  Miniboss:
-    colors: ["0000", "001F", "00FF", "0000"]  # Trans, Red, Orange, Black
+  # Palette 7 - BUTTERFLY miniboss (orange/purple/black)
+  ButterflyBoss:
+    colors: ["0000", "01DF", "780F", "0000"]  # Trans, Orange, Purple, Black

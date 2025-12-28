@@ -411,8 +411,8 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.86: BG modifier DISABLED - sprites only")
-    print(f"  Reverted to stable sprite colorization")
+    print(f"  v0.87: Per-miniboss colorization")
+    print(f"  Spider=red/gray, Bee=yellow/orange, Butterfly=orange/purple")
 
 
 if __name__ == "__main__":
