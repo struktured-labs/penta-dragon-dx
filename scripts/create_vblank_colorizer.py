@@ -346,14 +346,15 @@ def main():
     offset = BANK13_BASE + (BG_COUNTER - 0x4000)
     rom[offset:offset+2] = bytes([0x00, 0x00])
 
-    # Write combined function: original input + OAM loop + BG modifier + palette load
+    # Write combined function: original input + OAM loop + palette load
+    # NOTE: BG modifier disabled for now - need to identify correct hazard tile IDs first
     combined = bytearray()
     combined.extend(original_input)  # Original input handler
     # Remove trailing RET if present, we'll add our own
     if combined[-1] == 0xC9:
         combined = combined[:-1]
     combined.extend([0xCD, OAM_LOOP & 0xFF, OAM_LOOP >> 8])  # CALL OAM loop
-    combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # CALL BG modifier
+    # combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # CALL BG modifier (DISABLED)
     combined.extend([0xCD, PALETTE_LOADER & 0xFF, PALETTE_LOADER >> 8])  # CALL palette loader
     combined.append(0xC9)  # RET
 
@@ -398,9 +399,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.71: Tile-based colorization + BG hazard colors")
+    print(f"  v0.72: Tile-based colorization (BG modifier disabled)")
     print(f"  Sprites: Sara=green, Hornet=yellow, Wolf=gray, Miniboss=red")
-    print(f"  BG: Hazard tiles (0x3E-0x7F) -> palette 1 (brown/tan)")
+    print(f"  BG: Disabled - need to identify correct hazard tile IDs")
 
 
 if __name__ == "__main__":
