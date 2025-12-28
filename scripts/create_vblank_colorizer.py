@@ -358,14 +358,15 @@ def main():
     rom[offset:offset+len(bg_modifier)] = bg_modifier
     print(f"BG attribute modifier (SCY-based): {len(bg_modifier)} bytes")
 
-    # Write combined function: original input + OAM loop + BG modifier + palette load
+    # Write combined function: original input + OAM loop + palette load
+    # NOTE: BG modifier disabled for v0.86 - was causing crashes
     combined = bytearray()
     combined.extend(original_input)  # Original input handler
     # Remove trailing RET if present, we'll add our own
     if combined[-1] == 0xC9:
         combined = combined[:-1]
     combined.extend([0xCD, OAM_LOOP & 0xFF, OAM_LOOP >> 8])  # CALL OAM loop
-    combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # BG modifier for hazards (0x69-0x7F)
+    # combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # BG modifier DISABLED
     combined.extend([0xCD, PALETTE_LOADER & 0xFF, PALETTE_LOADER >> 8])  # CALL palette loader
     combined.append(0xC9)  # RET
 
@@ -410,9 +411,8 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.85: Full tilemap scan with WRAM counter at 0xDFFC")
-    print(f"  BG tiles 0x60-0x7F -> palette 1 (red for testing)")
-    print(f"  4 rows/frame, full 32x32 tilemap every 8 frames")
+    print(f"  v0.86: BG modifier DISABLED - sprites only")
+    print(f"  Reverted to stable sprite colorization")
 
 
 if __name__ == "__main__":
