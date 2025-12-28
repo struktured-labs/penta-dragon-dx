@@ -158,41 +158,26 @@ def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
 
 def create_bg_attribute_modifier_visible(row_counter_addr: int = 0x6A80) -> bytes:
     """
-    Scroll-aware BG attribute modifier - processes visible rows only.
-    Each frame processes 2 rows of the visible 18-row area.
-    Only targets specific hazard tile IDs (0x74).
-
-    Uses SCY to determine which tilemap rows are visible.
+    Simple BG attribute modifier - scans entire tilemap over 32 frames.
+    No scroll awareness needed - just color all hazard tiles wherever they are.
     """
     code = bytearray()
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
-    # Get current row counter (0-17, wraps)
+    # Get current row counter (0-31, wraps)
     code.extend([0x21, row_counter_addr & 0xFF, row_counter_addr >> 8])  # LD HL, counter
     code.append(0x7E)  # LD A, [HL]
-    code.append(0x47)  # LD B, A (save row offset in B)
+    code.append(0x47)  # LD B, A (save row in B)
 
-    # Increment and wrap counter at 18
+    # Increment and wrap counter at 32
     code.append(0x3C)  # INC A
-    code.extend([0xFE, 0x12])  # CP 18
-    code.extend([0x38, 0x01])  # JR C, +1 (skip reset if < 18)
-    code.append(0xAF)  # XOR A (reset to 0)
+    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap at 32)
     code.append(0x77)  # LD [HL], A (save new counter)
 
-    # Get SCY (vertical scroll)
-    code.extend([0xF0, 0x42])  # LDH A, [SCY]
-    code.extend([0xE6, 0xF8])  # AND 0xF8 (round to tile: /8 * 8)
-    code.append(0x0F)  # RRCA (divide by 2)
-    code.append(0x0F)  # RRCA (divide by 4)
-    code.append(0x0F)  # RRCA (divide by 8) - now A = tile row from scroll
-    # Add row offset
-    code.append(0x80)  # ADD B
-    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap at 32 rows)
-
-    # Calculate tilemap row address: HL = 0x9800 + (row * 32)
-    # row * 32 = row << 5
+    # Calculate tilemap row address: HL = 0x9800 + (B * 32)
+    code.append(0x78)  # LD A, B
     code.append(0x6F)  # LD L, A
     code.extend([0x26, 0x00])  # LD H, 0
     code.append(0x29)  # ADD HL, HL (x2)
@@ -203,7 +188,7 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0x6A80) -> byte
     code.extend([0x01, 0x00, 0x98])  # LD BC, 0x9800
     code.append(0x09)  # ADD HL, BC
 
-    # Process 32 tiles in this row (full row width)
+    # Process 32 tiles in this row
     code.extend([0x0E, 0x20])  # LD C, 32
 
     # --- Tile loop ---
@@ -225,7 +210,7 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0x6A80) -> byte
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
     code.extend([0x36, 0x01])  # LD [HL], 1 (palette 1)
 
-    # .skip - next tile (don't write to non-hazard tiles)
+    # .skip - next tile
     code.append(0x23)  # INC HL
     code.append(0x0D)  # DEC C
     loop_offset = loop_start - len(code) - 2
