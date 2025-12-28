@@ -158,26 +158,40 @@ def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
 
 def create_bg_attribute_modifier_visible(row_counter_addr: int = 0xCFF0) -> bytes:
     """
-    Simple BG attribute modifier - scans entire tilemap over 32 frames.
-    No scroll awareness needed - just color all hazard tiles wherever they are.
-    Counter stored in WRAM (0xCFF0) - safe location at end of WRAM.
+    Process 4 rows per frame, covering tilemap in 8 frames.
+    Check LCDC bit 3 for correct tilemap address.
     """
     code = bytearray()
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
-    # Get current row counter from WRAM (0-31, wraps)
-    code.extend([0xFA, row_counter_addr & 0xFF, row_counter_addr >> 8])  # LD A, [counter]
-    code.append(0x47)  # LD B, A (save row in B)
+    # Get BG tilemap base from LCDC bit 3
+    code.extend([0xF0, 0x40])  # LDH A, [LCDC]
+    code.extend([0xE6, 0x08])  # AND 0x08
+    code.extend([0x28, 0x04])  # JR Z, +4 (use 0x9800)
+    code.extend([0x01, 0x00, 0x9C])  # LD BC, 0x9C00
+    code.extend([0x18, 0x03])  # JR +3
+    code.extend([0x01, 0x00, 0x98])  # LD BC, 0x9800
+    # BC now has tilemap base
 
-    # Increment and wrap counter at 32
-    code.append(0x3C)  # INC A
-    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap at 32)
+    # Get row counter (0-31), process 4 rows starting from there
+    code.extend([0xFA, row_counter_addr & 0xFF, row_counter_addr >> 8])  # LD A, [counter]
+    code.append(0x57)  # LD D, A (save starting row in D)
+
+    # Increment counter by 4, wrap at 32
+    code.extend([0xC6, 0x04])  # ADD A, 4
+    code.extend([0xE6, 0x1F])  # AND 0x1F
     code.extend([0xEA, row_counter_addr & 0xFF, row_counter_addr >> 8])  # LD [counter], A
 
-    # Calculate tilemap row address: HL = 0x9800 + (B * 32)
-    code.append(0x78)  # LD A, B
+    # Outer loop: 4 rows
+    code.extend([0x1E, 0x04])  # LD E, 4 (row count)
+
+    # --- Row loop ---
+    row_loop = len(code)
+
+    # Calculate address: HL = BC + (D * 32)
+    code.append(0x7A)  # LD A, D
     code.append(0x6F)  # LD L, A
     code.extend([0x26, 0x00])  # LD H, 0
     code.append(0x29)  # ADD HL, HL (x2)
@@ -185,36 +199,46 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0xCFF0) -> byte
     code.append(0x29)  # ADD HL, HL (x8)
     code.append(0x29)  # ADD HL, HL (x16)
     code.append(0x29)  # ADD HL, HL (x32)
-    code.extend([0x01, 0x00, 0x98])  # LD BC, 0x9800
-    code.append(0x09)  # ADD HL, BC
+    code.append(0x09)  # ADD HL, BC (add tilemap base)
 
-    # Process 32 tiles in this row
-    code.extend([0x0E, 0x20])  # LD C, 32
+    # Inner loop: 32 tiles
+    code.append(0xC5)  # PUSH BC (save tilemap base)
+    code.extend([0x06, 0x20])  # LD B, 32 (tile count)
 
-    # --- Tile loop ---
-    loop_start = len(code)
+    tile_loop = len(code)
 
-    # Switch to VRAM bank 0, read tile
+    # Read tile from VRAM bank 0
     code.append(0xAF)  # XOR A
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
     code.append(0x7E)  # LD A, [HL]
 
-    # Check if hazard tile (0x60-0x7F - wide range to test)
+    # Check if hazard tile (0x60-0x7F)
     code.extend([0xFE, 0x60])  # CP 0x60
-    code.extend([0x38, 0x0A])  # JR C, .skip (+10) - skip non-hazard
+    code.extend([0x38, 0x0A])  # JR C, .skip
     code.extend([0xFE, 0x80])  # CP 0x80
-    code.extend([0x30, 0x06])  # JR NC, .skip (+6) - skip non-hazard
+    code.extend([0x30, 0x06])  # JR NC, .skip
 
-    # IS hazard - write palette 1
-    code.extend([0x3E, 0x01])  # LD A, 1 (VBK=1)
+    # Write palette 1
+    code.extend([0x3E, 0x01])  # LD A, 1
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
-    code.extend([0x36, 0x01])  # LD [HL], 1 (palette 1)
+    code.extend([0x36, 0x01])  # LD [HL], 1
 
-    # .skip - next tile
+    # .skip
     code.append(0x23)  # INC HL
-    code.append(0x0D)  # DEC C
-    loop_offset = loop_start - len(code) - 2
-    code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop
+    code.append(0x05)  # DEC B
+    tile_offset = tile_loop - len(code) - 2
+    code.extend([0x20, tile_offset & 0xFF])  # JR NZ, tile_loop
+
+    code.append(0xC1)  # POP BC (restore tilemap base)
+
+    # Next row
+    code.append(0x14)  # INC D
+    code.append(0x7A)  # LD A, D
+    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap at 32)
+    code.append(0x57)  # LD D, A
+    code.append(0x1D)  # DEC E
+    row_offset = row_loop - len(code) - 2
+    code.extend([0x20, row_offset & 0xFF])  # JR NZ, row_loop
 
     # Switch back to VRAM bank 0
     code.append(0xAF)  # XOR A
