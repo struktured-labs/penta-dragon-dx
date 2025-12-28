@@ -156,25 +156,25 @@ def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
     return bytes(code)
 
 
-def create_bg_attribute_modifier_visible(row_counter_addr: int = 0x6A80) -> bytes:
+def create_bg_attribute_modifier_visible(row_counter_addr: int = 0xFF80) -> bytes:
     """
     Simple BG attribute modifier - scans entire tilemap over 32 frames.
     No scroll awareness needed - just color all hazard tiles wherever they are.
+    Counter stored in HRAM (0xFF80) since bank 13 is ROM, not RAM!
     """
     code = bytearray()
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
-    # Get current row counter (0-31, wraps)
-    code.extend([0x21, row_counter_addr & 0xFF, row_counter_addr >> 8])  # LD HL, counter
-    code.append(0x7E)  # LD A, [HL]
+    # Get current row counter from HRAM (0-31, wraps)
+    code.extend([0xF0, row_counter_addr & 0xFF])  # LDH A, [counter]
     code.append(0x47)  # LD B, A (save row in B)
 
     # Increment and wrap counter at 32
     code.append(0x3C)  # INC A
     code.extend([0xE6, 0x1F])  # AND 0x1F (wrap at 32)
-    code.append(0x77)  # LD [HL], A (save new counter)
+    code.extend([0xE0, row_counter_addr & 0xFF])  # LDH [counter], A
 
     # Calculate tilemap row address: HL = 0x9800 + (B * 32)
     code.append(0x78)  # LD A, B
