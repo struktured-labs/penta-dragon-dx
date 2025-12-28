@@ -158,13 +158,17 @@ def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
 
 def create_bg_attribute_modifier_scy_based() -> bytes:
     """
-    v0.84: SCY-based approach - no persistent counter needed.
+    v0.85: Simplified - scan entire 32x32 tilemap over 8 frames.
 
-    Process 6 visible rows per frame, all 32 tiles per row.
-    Uses DIV register to select which third of visible area to process.
-    This ensures full coverage every ~3 frames.
+    Process 4 rows per frame starting from row (frame_counter * 4) % 32.
+    Uses a byte in WRAM at 0xDFFC (very end of WRAM, unlikely to be used).
+    Each frame processes 128 tiles = ~3000 cycles, fits in VBlank.
+    Full tilemap covered every 8 frames.
     """
     code = bytearray()
+
+    # Counter address at very end of WRAM (less likely to conflict)
+    counter_addr = 0xDFFC
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
@@ -178,36 +182,18 @@ def create_bg_attribute_modifier_scy_based() -> bytes:
     code.extend([0x01, 0x00, 0x98])  # LD BC, 0x9800
     # BC now has tilemap base
 
-    # Get SCY (scroll Y) and calculate starting tile row
-    code.extend([0xF0, 0x42])  # LDH A, [SCY]
-    # Divide by 8: shift right 3 times to get tile row
-    code.extend([0xCB, 0x3F])  # SRL A (divide by 2)
-    code.extend([0xCB, 0x3F])  # SRL A (divide by 4)
-    code.extend([0xCB, 0x3F])  # SRL A (divide by 8)
-    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap to 0-31)
-    code.append(0x57)  # LD D, A (D = starting visible row)
+    # Read counter from WRAM, use as starting row
+    code.extend([0xFA, counter_addr & 0xFF, (counter_addr >> 8) & 0xFF])  # LD A, [counter]
+    code.extend([0xE6, 0x1F])  # AND 0x1F (ensure 0-31)
+    code.append(0x57)  # LD D, A (D = starting row)
 
-    # Use DIV register to select which 6 rows to process (0-5, 6-11, or 12-17)
-    code.extend([0xF0, 0x04])  # LDH A, [DIV]
-    code.extend([0xE6, 0x03])  # AND 0x03 (0, 1, 2, or 3)
-    code.extend([0xFE, 0x03])  # CP 3
-    code.extend([0x38, 0x02])  # JR C, +2 (if < 3, skip)
-    code.extend([0x3E, 0x00])  # LD A, 0 (if 3, use 0 instead)
-    # A is now 0, 1, or 2
+    # Increment counter by 4 for next frame
+    code.extend([0xC6, 0x04])  # ADD A, 4
+    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap at 32)
+    code.extend([0xEA, counter_addr & 0xFF, (counter_addr >> 8) & 0xFF])  # LD [counter], A
 
-    # Multiply by 6 to get row offset: A = A * 6
-    code.append(0x47)  # LD B, A
-    code.append(0x87)  # ADD A, A (A * 2)
-    code.append(0x80)  # ADD A, B (A * 3)
-    code.append(0x87)  # ADD A, A (A * 6)
-
-    # Add offset to starting row
-    code.append(0x82)  # ADD A, D
-    code.extend([0xE6, 0x1F])  # AND 0x1F (wrap)
-    code.append(0x57)  # LD D, A (D = row to start from)
-
-    # Process 6 rows
-    code.extend([0x1E, 0x06])  # LD E, 6 (row count)
+    # Process 4 rows
+    code.extend([0x1E, 0x04])  # LD E, 4 (row count)
 
     # --- Row loop ---
     row_loop = len(code)
@@ -424,9 +410,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.84: SCY-based BG hazard colorization")
+    print(f"  v0.85: Full tilemap scan with WRAM counter at 0xDFFC")
     print(f"  BG tiles 0x60-0x7F -> palette 1 (red for testing)")
-    print(f"  Sprites: Sara=green, Hornet=yellow, Wolf=gray, Miniboss=red")
+    print(f"  4 rows/frame, full 32x32 tilemap every 8 frames")
 
 
 if __name__ == "__main__":
