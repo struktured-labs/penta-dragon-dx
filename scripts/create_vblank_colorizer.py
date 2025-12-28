@@ -411,8 +411,8 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.89: All miniboss tiles (0x40-0x7F) use single palette 7")
-    print(f"  Miniboss=orange/purple/black, Sara=green")
+    print(f"  v0.90: Expanded miniboss range (0x30-0xDF)")
+    print(f"  Miniboss=orange/purple/black, Sara=green (0x00-0x2F, 0xE0-0xFF)")
 
 
 if __name__ == "__main__":
