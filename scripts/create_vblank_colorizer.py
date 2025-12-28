@@ -32,10 +32,27 @@ def load_tile_mappings_from_yaml(yaml_path: Path) -> bytes:
     for name, info in mappings.items():
         if name == 'default_palette':
             continue
+        if not isinstance(info, dict):
+            continue
+
         palette = info.get('palette', 0)
+
+        # Handle tile_ranges format: [[start, end], [start, end], ...]
+        tile_ranges = info.get('tile_ranges', [])
+        for range_pair in tile_ranges:
+            if len(range_pair) == 2:
+                start, end = range_pair
+                if isinstance(start, str):
+                    start = int(start, 16)
+                if isinstance(end, str):
+                    end = int(end, 16)
+                for tile in range(start, end + 1):
+                    if 0 <= tile < 256:
+                        lookup[tile] = palette
+
+        # Also handle old tiles format for backwards compatibility
         tiles = info.get('tiles', [])
         for tile in tiles:
-            # Handle hex strings like "0x20" or integers
             if isinstance(tile, str):
                 tile = int(tile, 16)
             if 0 <= tile < 256:
@@ -66,7 +83,7 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
             bg_data.extend(pal_to_bytes(["7FFF", "5294", "2108", "0000"]))
 
     obj_keys = ['Default', 'Sara', 'Hornet', 'Wolf',
-                'Soldier', 'Slime', 'Hazard', 'Projectiles']
+                'OtherEnemies', 'Unused5', 'Hazard', 'Miniboss']
     obj_data = bytearray()
     for key in obj_keys:
         if key in data.get('obj_palettes', {}):
