@@ -156,72 +156,83 @@ def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
     return bytes(code)
 
 
-def create_bg_attribute_modifier() -> bytes:
+def create_bg_attribute_modifier(counter_addr: int = 0x6A80) -> bytes:
     """
-    Modify BG tile attributes based on tile ID.
+    Incremental BG attribute modifier - processes 16 tiles per frame.
+    Uses a counter in bank 13 RAM to track position.
     Hazard tiles (0x3E-0x7F) get palette 1, others get palette 0.
 
-    Scans the visible BG area and sets CGB tile attributes in VRAM bank 1.
+    Takes ~64 frames to color entire 1024-tile map.
     """
     code = bytearray()
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
-    # We need to scan the BG tile map and set attributes
-    # BG map is at 0x9800 (32x32 tiles)
-    # For each tile, check if it's a hazard tile and set attribute accordingly
+    # Load counter (0-1023, stored as 16-bit at counter_addr)
+    code.extend([0x21, counter_addr & 0xFF, counter_addr >> 8])  # LD HL, counter_addr
+    code.append(0x2A)  # LD A, [HL+] (low byte)
+    code.append(0x4F)  # LD C, A
+    code.append(0x46)  # LD B, [HL] (high byte)
+    # BC = current tile offset (0-1023)
 
-    # Process all 1024 tiles (32x32) - this is slow but thorough
-    # HL = tile map address (VRAM bank 0)
-    # DE = attribute map address (VRAM bank 1, same address)
+    # Calculate tilemap address: HL = 0x9800 + BC
+    code.extend([0x21, 0x00, 0x98])  # LD HL, 0x9800
+    code.append(0x09)  # ADD HL, BC
 
-    code.extend([0x21, 0x00, 0x98])  # LD HL, 0x9800 (BG map)
-    code.extend([0x01, 0x00, 0x04])  # LD BC, 0x0400 (1024 tiles)
+    # Process 16 tiles this frame
+    code.extend([0x11, 0x10, 0x00])  # LD DE, 16 (tiles to process)
 
-    # Main loop
+    # --- Tile processing loop ---
     loop_start = len(code)
 
-    # Switch to VRAM bank 0 to read tile ID
-    code.extend([0x3E, 0x00])  # LD A, 0
-    code.extend([0xE0, 0x4F])  # LDH [0x4F], A (VBK = 0)
+    # Switch to VRAM bank 0, read tile ID
+    code.append(0xAF)  # XOR A (A = 0)
+    code.extend([0xE0, 0x4F])  # LDH [VBK], A
+    code.append(0x7E)  # LD A, [HL] - read tile ID
 
-    # Read tile ID
-    code.append(0x56)  # LD D, [HL] - tile ID into D
-
-    # Check if tile ID is in hazard range (0x3E-0x7F)
-    # D >= 0x3E AND D <= 0x7F
-    code.append(0x7A)  # LD A, D
+    # Check if hazard tile (0x3E-0x7F)
     code.extend([0xFE, 0x3E])  # CP 0x3E
-    code.extend([0x38, 0x08])  # JR C, +8 (if A < 0x3E, skip to palette 0)
+    code.extend([0x38, 0x06])  # JR C, .not_hazard (A < 0x3E)
     code.extend([0xFE, 0x80])  # CP 0x80
-    code.extend([0x30, 0x04])  # JR NC, +4 (if A >= 0x80, skip to palette 0)
-    # In range - use palette 1
-    code.extend([0x1E, 0x01])  # LD E, 1 (palette 1)
-    code.extend([0x18, 0x02])  # JR +2 (skip palette 0)
-    # Not in range - use palette 0
-    code.extend([0x1E, 0x00])  # LD E, 0 (palette 0)
-
-    # Switch to VRAM bank 1 to write attribute
+    code.extend([0x30, 0x02])  # JR NC, .not_hazard (A >= 0x80)
+    # Is hazard - palette 1
     code.extend([0x3E, 0x01])  # LD A, 1
-    code.extend([0xE0, 0x4F])  # LDH [0x4F], A (VBK = 1)
+    code.extend([0x18, 0x01])  # JR .write_attr
+    # .not_hazard - palette 0
+    not_hazard = len(code)
+    code.append(0xAF)  # XOR A (palette 0)
 
-    # Write attribute (E contains palette number)
-    code.append(0x73)  # LD [HL], E
-
-    # Switch back to VRAM bank 0
-    code.extend([0x3E, 0x00])  # LD A, 0
-    code.extend([0xE0, 0x4F])  # LDH [0x4F], A (VBK = 0)
+    # .write_attr
+    # Switch to VRAM bank 1, write attribute
+    code.append(0x47)  # LD B, A (save palette in B)
+    code.extend([0x3E, 0x01])  # LD A, 1
+    code.extend([0xE0, 0x4F])  # LDH [VBK], A
+    code.append(0x70)  # LD [HL], B (write palette)
 
     # Next tile
     code.append(0x23)  # INC HL
-    code.append(0x0B)  # DEC BC
-
-    # Check if BC == 0
-    code.append(0x78)  # LD A, B
-    code.append(0xB1)  # OR C
+    code.append(0x03)  # INC BC (counter)
+    code.append(0x1D)  # DEC E
     loop_offset = loop_start - len(code) - 2
     code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop
+
+    # --- End of loop ---
+
+    # Switch back to VRAM bank 0
+    code.append(0xAF)  # XOR A
+    code.extend([0xE0, 0x4F])  # LDH [VBK], A
+
+    # Wrap counter at 1024 (BC & 0x3FF)
+    code.append(0x78)  # LD A, B
+    code.extend([0xE6, 0x03])  # AND 0x03
+    code.append(0x47)  # LD B, A
+
+    # Save counter back
+    code.extend([0x21, counter_addr & 0xFF, counter_addr >> 8])  # LD HL, counter_addr
+    code.append(0x71)  # LD [HL], C (low byte)
+    code.append(0x23)  # INC HL
+    code.append(0x70)  # LD [HL], B (high byte)
 
     # Restore registers
     code.extend([0xE1, 0xD1, 0xC1, 0xF1])  # POP HL, DE, BC, AF
@@ -283,20 +294,25 @@ def main():
     bg_palettes, obj_palettes = load_palettes_from_yaml(palette_yaml)
 
     # === BANK 13 LAYOUT ===
-    # v0.51: OAM loop is now 378 bytes, need more space!
+    # v0.71: Added incremental BG attribute modifier for hazards
     # 0x6800: Palette data (128 bytes) -> ends 0x6880
-    # 0x6880: OAM palette loop (~400 bytes) -> ends ~0x6A10
-    # 0x6A20: Palette loader (32 bytes) -> ends ~0x6A40
-    # 0x6A50: Combined function (60 bytes)
+    # 0x6880: Tile lookup table (256 bytes) -> ends 0x6980
+    # 0x6980: OAM palette loop (~100 bytes) -> ends ~0x69E4
+    # 0x69F0: Palette loader (~40 bytes) -> ends ~0x6A18
+    # 0x6A20: BG attribute modifier (~70 bytes) -> ends ~0x6A70
+    # 0x6A80: BG counter (2 bytes)
+    # 0x6A90: Combined function (~70 bytes)
 
     BANK13_BASE = 0x034000  # Bank 13 file offset
 
-    # Memory layout for v0.66 tile-based system
+    # Memory layout for v0.71 with BG modifier
     PALETTE_DATA = 0x6800      # 128 bytes -> ends 0x6880
     TILE_LOOKUP = 0x6880       # 256 bytes -> ends 0x6980
     OAM_LOOP = 0x6980          # ~100 bytes -> ends ~0x69E4
     PALETTE_LOADER = 0x69F0    # ~40 bytes -> ends ~0x6A18
-    COMBINED_FUNC = 0x6A20     # ~60 bytes
+    BG_MODIFIER = 0x6A20       # ~70 bytes -> ends ~0x6A70
+    BG_COUNTER = 0x6A80        # 2 bytes for position counter
+    COMBINED_FUNC = 0x6A90     # ~70 bytes
 
     # Write palette data
     offset = BANK13_BASE + (PALETTE_DATA - 0x4000)
@@ -320,13 +336,24 @@ def main():
     palette_loader = create_palette_loader()
     rom[offset:offset+len(palette_loader)] = palette_loader
 
-    # Write combined function: original input + OAM loop + palette load
+    # Write BG attribute modifier
+    offset = BANK13_BASE + (BG_MODIFIER - 0x4000)
+    bg_modifier = create_bg_attribute_modifier(BG_COUNTER)
+    rom[offset:offset+len(bg_modifier)] = bg_modifier
+    print(f"BG attribute modifier: {len(bg_modifier)} bytes")
+
+    # Initialize BG counter to 0
+    offset = BANK13_BASE + (BG_COUNTER - 0x4000)
+    rom[offset:offset+2] = bytes([0x00, 0x00])
+
+    # Write combined function: original input + OAM loop + BG modifier + palette load
     combined = bytearray()
     combined.extend(original_input)  # Original input handler
     # Remove trailing RET if present, we'll add our own
     if combined[-1] == 0xC9:
         combined = combined[:-1]
     combined.extend([0xCD, OAM_LOOP & 0xFF, OAM_LOOP >> 8])  # CALL OAM loop
+    combined.extend([0xCD, BG_MODIFIER & 0xFF, BG_MODIFIER >> 8])  # CALL BG modifier
     combined.extend([0xCD, PALETTE_LOADER & 0xFF, PALETTE_LOADER >> 8])  # CALL palette loader
     combined.append(0xC9)  # RET
 
@@ -371,9 +398,9 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.66: Tile-based per-monster colorization")
-    print(f"  Sara=green, Hornet=yellow, Wolf=gray, Soldier=blue")
-    print(f"  Slime=purple, Hazard=brown, Miniboss=red")
+    print(f"  v0.71: Tile-based colorization + BG hazard colors")
+    print(f"  Sprites: Sara=green, Hornet=yellow, Wolf=gray, Miniboss=red")
+    print(f"  BG: Hazard tiles (0x3E-0x7F) -> palette 1 (brown/tan)")
 
 
 if __name__ == "__main__":
