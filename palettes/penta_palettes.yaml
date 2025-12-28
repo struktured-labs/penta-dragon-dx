@@ -22,30 +22,12 @@ sprite_tile_mappings:
     palette: 1
     tile_ranges: [[0x00, 0x3F], [0xE0, 0xFF]]
 
-  # === MINI-BOSS TYPES ===
-  # Each miniboss has distinct tile ranges and palettes
-  # Note: These ranges also used by regular enemies, but minibosses
-  # appear alone (no other enemies on screen)
-
-  # Spider/Crab miniboss - Palette 5 (red/gray/black)
-  # Range: 0x40-0x4F (16 tiles)
-  SpiderBoss:
-    palette: 5
-    tile_ranges: [[0x40, 0x4F]]
-
-  # Bee/Wasp miniboss - Palette 6 (yellow/orange/black)
-  # Range: 0x50-0x5F (16 tiles)
-  # Also used by Wolf/ground enemies
-  BeeBoss:
-    palette: 6
-    tile_ranges: [[0x50, 0x5F]]
-
-  # Butterfly miniboss - Palette 7 (orange/purple/black)
-  # Range: 0x60-0x7F (32 tiles)
-  # Also used by Hornet/flying enemies
-  ButterflyBoss:
+  # === MINI-BOSS (all types use same palette for now) ===
+  # All miniboss tiles (0x40-0x7F) get palette 7
+  # This ensures consistent coloring - can refine per-boss later
+  Miniboss:
     palette: 7
-    tile_ranges: [[0x60, 0x7F]]
+    tile_ranges: [[0x40, 0x7F]]
 
   # Other enemies (0x80-0xDF) - Palette 4
   OtherEnemies:
