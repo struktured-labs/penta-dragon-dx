@@ -214,22 +214,18 @@ def create_bg_attribute_modifier_visible(row_counter_addr: int = 0x6A80) -> byte
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
     code.append(0x7E)  # LD A, [HL]
 
-    # Check if hazard tile (0x6A-0x6F only - avoids shared ceiling tiles)
+    # Check if hazard tile (0x6A-0x6F only)
     code.extend([0xFE, 0x6A])  # CP 0x6A
-    code.extend([0x38, 0x06])  # JR C, .not_hazard (A < 0x6A)
+    code.extend([0x38, 0x0C])  # JR C, .skip (A < 0x6A) - skip non-hazard
     code.extend([0xFE, 0x70])  # CP 0x70
-    code.extend([0x30, 0x02])  # JR NC, .not_hazard (A >= 0x70)
-    code.extend([0x06, 0x01])  # LD B, 1 (palette 1 = hazard)
-    code.extend([0x18, 0x02])  # JR .write
-    # .not_hazard
-    code.extend([0x06, 0x00])  # LD B, 0 (palette 0)
+    code.extend([0x30, 0x08])  # JR NC, .skip (A >= 0x70) - skip non-hazard
 
-    # .write - switch to VRAM bank 1, write attribute
-    code.extend([0x3E, 0x01])  # LD A, 1
+    # IS hazard - write palette 1
+    code.extend([0x3E, 0x01])  # LD A, 1 (VBK=1)
     code.extend([0xE0, 0x4F])  # LDH [VBK], A
-    code.append(0x70)  # LD [HL], B
+    code.extend([0x36, 0x01])  # LD [HL], 1 (palette 1)
 
-    # Next tile
+    # .skip - next tile (don't write to non-hazard tiles)
     code.append(0x23)  # INC HL
     code.append(0x0D)  # DEC C
     loop_offset = loop_start - len(code) - 2
