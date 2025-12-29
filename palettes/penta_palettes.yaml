@@ -16,21 +16,28 @@
 # Press SELECT when viewing each monster type
 
 sprite_tile_mappings:
-  # Sara (player character) - Palette 1
-  # Narrowed range: 0x00-0x2F (Sara uses ~0x20-0x2B typically)
-  # 0xE0-0xFF kept for Sara D / powered up form
+  # Sara (player character) - Palette 1 (handled by slot, not tile)
   Sara:
     palette: 1
-    tile_ranges: [[0x00, 0x2F], [0xE0, 0xFF]]
+    tile_ranges: [[0x00, 0x3F], [0xE0, 0xFF]]
 
-  # === MINI-BOSS (expanded range) ===
-  # Expanded to 0x30-0xDF to catch all miniboss animation frames
-  # This takes priority over Sara's old 0x30-0x3F range
-  Miniboss:
-    palette: 7
-    tile_ranges: [[0x30, 0xDF]]
+  # Regular enemies - varied colors (used when NOT miniboss)
+  # Tiles 0x80-0x9F: blue enemies
+  BlueEnemies:
+    palette: 4
+    tile_ranges: [[0x80, 0x9F]]
 
-  # Default for unmapped tiles (projectiles, effects)
+  # Tiles 0xA0-0xBF: purple enemies
+  PurpleEnemies:
+    palette: 5
+    tile_ranges: [[0xA0, 0xBF]]
+
+  # Tiles 0xC0-0xDF: yellow enemies
+  YellowEnemies:
+    palette: 6
+    tile_ranges: [[0xC0, 0xDF]]
+
+  # Default for unmapped tiles (0x40-0x7F handled as miniboss in code)
   default_palette: 0
 
 # ============================================

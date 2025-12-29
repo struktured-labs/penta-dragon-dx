@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """
-v0.52: 5 colors with 8 slots each (fewer split monsters).
+v0.93 STABLE: Simple slot-based palette assignment.
 
-v0.51 had too many boundary crossings with 5 slots each.
-Larger ranges = fewer monsters spanning multiple colors:
-- Slots 0-7:   Palette 1 (GREEN - Sara W)
-- Slots 8-15:  Palette 2 (BLUE)
-- Slots 16-23: Palette 3 (ORANGE)
-- Slots 24-31: Palette 4 (PURPLE)
-- Slots 32-39: Palette 5 (CYAN)
+- Slots 0-3: Sara (palette 1)
+- Slots 4+: palette 7 (all enemies same color)
 """
 import sys
 import yaml
@@ -96,54 +91,53 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes]:
 
 def create_tile_lookup_loop(lookup_table_addr: int) -> bytes:
     """
-    v0.66: Tile-based palette lookup.
-
-    For each sprite:
-    1. Read tile ID
-    2. Look up palette from 256-byte table
-    3. Set palette bits in flags
-
-    Modifies all three OAM locations for redundancy.
+    v0.93 STABLE: Simple slot-based assignment (no boss detection).
+    - Slots 0-3: Sara (palette 1)
+    - Slots 4+: palette 7
     """
     code = bytearray()
-    lo = lookup_table_addr & 0xFF
-    hi = (lookup_table_addr >> 8) & 0xFF
 
     # Save registers
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
+    # Check boss flag ONCE, store enemy palette in E
+    # If 0xFFBF != 0: E = 7 (boss)
+    # If 0xFFBF == 0: E = 4 (regular enemy)
+    code.extend([0xF0, 0xBF])  # LDH A, [0xFFBF]
+    code.extend([0x1E, 0x07])  # LD E, 7 (assume boss)
+    code.append(0xB7)          # OR A (set flags)
+    code.extend([0x20, 0x02])  # JR NZ, +2 (skip if boss)
+    code.extend([0x1E, 0x04])  # LD E, 4 (no boss)
+
     # Process all three OAM locations: 0xFE00, 0xC000, 0xC100
     for base_hi in [0xFE, 0xC0, 0xC1]:
-        # HL = base + 2 (tile ID byte)
-        code.extend([0x21, 0x02, base_hi])  # LD HL, base+2
-        code.extend([0x06, 0x28])  # LD B, 40 sprites
+        # HL = base + 3 (flags byte of sprite 0)
+        code.extend([0x21, 0x03, base_hi])  # LD HL, base+3
+        code.extend([0x06, 0x28])  # LD B, 40 (sprite counter)
+        code.extend([0x0E, 0x00])  # LD C, 0 (slot counter)
 
         loop_start = len(code)
 
-        # Read tile ID into E
-        code.append(0x5E)  # LD E, [HL]
-        code.extend([0x16, 0x00])  # LD D, 0
+        # STABLE v0.96: Simple slot-based with E for enemy palette
+        # Slots 0-3: Sara (palette 1)
+        # Slots 4+: E (7 for boss, 4 for regular)
+        code.append(0x79)           # LD A, C (slot number)
+        code.extend([0xFE, 0x04])   # CP 4
+        code.extend([0x30, 0x04])   # JR NC, +4 (slot >= 4, enemy)
+        code.extend([0x3E, 0x01])   # LD A, 1 (Sara palette)
+        code.extend([0x18, 0x01])   # JR +1 (skip LD A, E)
+        code.append(0x7B)           # LD A, E (enemy palette)
+        code.append(0x57)           # LD D, A (save palette)
 
-        # Save HL
-        code.append(0xE5)  # PUSH HL
-
-        # Look up palette: HL = lookup_table + tile_id
-        code.extend([0x21, lo, hi])  # LD HL, lookup_table
-        code.append(0x19)  # ADD HL, DE
-        code.append(0x4E)  # LD C, [HL] - palette into C
-
-        # Restore HL (at tile ID)
-        code.append(0xE1)  # POP HL
-        code.append(0x23)  # INC HL (now at flags)
-
-        # Modify flags: clear bits 0-2, set palette from C
+        # Modify flags byte at [HL]: clear bits 0-2, set palette
         code.append(0x7E)  # LD A, [HL]
         code.extend([0xE6, 0xF8])  # AND 0xF8
-        code.append(0xB1)  # OR C
+        code.append(0xB2)  # OR D
         code.append(0x77)  # LD [HL], A
 
-        # Next sprite (flags+1 -> Y -> X -> tile = +3)
-        code.extend([0x23, 0x23, 0x23])  # INC HL x3
+        # Next sprite (flags -> Y -> X -> tile -> flags = +4)
+        code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4
+        code.append(0x0C)  # INC C (slot counter)
 
         code.append(0x05)  # DEC B
         loop_offset = loop_start - len(code) - 2
@@ -411,8 +405,7 @@ def main():
     output_rom.write_bytes(rom)
 
     print(f"\nCreated: {output_rom}")
-    print(f"  v0.90: Expanded miniboss range (0x30-0xDF)")
-    print(f"  Miniboss=orange/purple/black, Sara=green (0x00-0x2F, 0xE0-0xFF)")
+    print(f"  v0.95: BOSS DETECTION via 0xFFBF - testing if flag works")
 
 
 if __name__ == "__main__":
