@@ -118,13 +118,13 @@ def create_v097_oam_loop(tile_table_addr: int) -> bytes:
     code.extend([0xF5, 0xC5, 0xD5, 0xE5])  # PUSH AF, BC, DE, HL
 
     # === Determine Sara palette (store in D) ===
-    # Read tile from slot 0 at 0xFE02 (Y=0, X=1, Tile=2, Flags=3)
-    code.extend([0xFA, 0x02, 0xFE])  # LD A, [0xFE02] - Sara's tile
-    code.extend([0xFE, 0x28])        # CP 0x28
-    code.extend([0x38, 0x04])        # JR C, +4 (tile < 0x28 = Sara W)
-    code.extend([0x16, 0x01])        # LD D, 1 (Sara D palette - green)
-    code.extend([0x18, 0x02])        # JR +2
+    # Read form flag at 0xFFBE: 0 = Sara W, 1 = Sara D
+    code.extend([0xF0, 0xBE])        # LDH A, [0xFFBE] - Sara form flag
+    code.append(0xB7)                # OR A (test if zero)
+    code.extend([0x20, 0x04])        # JR NZ, +4 (form != 0 = Sara D)
     code.extend([0x16, 0x02])        # LD D, 2 (Sara W palette - skin/pink)
+    code.extend([0x18, 0x02])        # JR +2
+    code.extend([0x16, 0x01])        # LD D, 1 (Sara D palette - green)
 
     # === Determine enemy palette (store in E) ===
     # Check boss_flag at 0xFFBF

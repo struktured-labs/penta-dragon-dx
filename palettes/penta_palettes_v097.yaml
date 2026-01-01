@@ -28,30 +28,41 @@
 # ============================================
 # BACKGROUND PALETTES (8 palettes, 4 colors each)
 # ============================================
-bg_palettes:
-  Dungeon:
-    colors: ["7FFF", "5AD6", "294A", "0000"]  # White, Light gray, Dark gray, Black
+# Level 1: Royal Castle Theme
+# Stone walls with blue-gray tones, subtle gold accents
+#
+# BGR555 color reference:
+#   Stone cream: 0x5F7B (light warm gray)
+#   Blue-gray:   0x4E73 (castle stone mid)
+#   Dark slate:  0x2529 (shadows)
+#   Near-black:  0x0842 (outlines)
 
+bg_palettes:
+  # Main dungeon/castle walls - blue-gray stone with gold accent
+  Dungeon:
+    colors: ["6F5B", "4A52", "2529", "0000"]  # Warm cream, Blue-gray stone, Dark slate, Black
+
+  # Alternate - same for consistency
   BG1:
-    colors: ["7FFF", "5294", "2108", "0000"]
+    colors: ["6F5B", "4A52", "2529", "0000"]
 
   BG2:
-    colors: ["7FFF", "5294", "2108", "0000"]
+    colors: ["6F5B", "4A52", "2529", "0000"]
 
   BG3:
-    colors: ["7FFF", "5294", "2108", "0000"]
+    colors: ["6F5B", "4A52", "2529", "0000"]
 
   BG4:
-    colors: ["7FFF", "5294", "2108", "0000"]
+    colors: ["6F5B", "4A52", "2529", "0000"]
 
   BG5:
-    colors: ["7FFF", "5294", "2108", "0000"]
+    colors: ["6F5B", "4A52", "2529", "0000"]
 
   BG6:
-    colors: ["7FFF", "5294", "2108", "0000"]
+    colors: ["6F5B", "4A52", "2529", "0000"]
 
   BG7:
-    colors: ["7FFF", "5294", "2108", "0000"]
+    colors: ["6F5B", "4A52", "2529", "0000"]
 
 # ============================================
 # SPRITE PALETTES - v0.97 Multi-color
@@ -86,9 +97,10 @@ obj_palettes:
   CrowCatfish:
     colors: ["0000", "7FE0", "3CC0", "0000"]  # Trans, Cyan, Dark cyan, Black
 
-  # Palette 4 - REGULAR ENEMIES: Orc, Hornets, Ground (blue)
-  RegularBlue:
-    colors: ["0000", "7E00", "5800", "0000"]  # Trans, Light blue, Dark blue, Black
+  # Palette 4 - ITEMS + Ground enemies (gold/yellow)
+  # Items use tiles 0x50-0x53, gives powerups a golden glow
+  ItemsGold:
+    colors: ["0000", "03FF", "01BF", "0000"]  # Trans, Bright gold, Dark gold, Black
 
   # Palette 5 - HUMANOID: Soldier, Moth, Mage (purple/violet)
   HumanoidPurple:
