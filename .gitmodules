@@ -1,0 +1,3 @@
+[submodule "mgba-mcp"]
+	path = mgba-mcp
+	url = git@github.com:struktured-labs/mgba-mcp.git
