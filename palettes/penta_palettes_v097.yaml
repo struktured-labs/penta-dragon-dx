@@ -1,0 +1,103 @@
+# Penta Dragon DX Palettes
+# v0.97: Tile-based colorization with Sara W/D distinction
+#
+# Colors are BGR555 hex format: 0bBBBBBGGGGGRRRRR (5 bits each)
+# Common colors:
+#   0x0000=Transparent, 0x7FFF=White, 0x001F=Red, 0x03E0=Green
+#   0x7C00=Blue, 0x03FF=Yellow, 0x7C1F=Magenta, 0x7FE0=Cyan
+
+# ============================================
+# TILE-BASED PALETTE MAPPING (v0.97)
+# ============================================
+# Sara W: tiles 0x20-0x27 -> Palette 2 (skin/pink)
+# Sara D: tiles 0x28-0x2F -> Palette 1 (green - dragon)
+#
+# Boss detection via boss_flag at 0xFFBF:
+#   boss_flag=0: Normal mode (tile-based palettes)
+#   boss_flag=1: Gargoyle miniboss -> Palette 6
+#   boss_flag=2: Spider miniboss -> Palette 7
+#
+# Normal mode tile ranges:
+#   0x00-0x1F: Effects -> Palette 0
+#   0x30-0x3F: Crow/flying -> Palette 3
+#   0x40-0x4F: Hornets/flying -> Palette 4
+#   0x50-0x5F: Ground (orc) -> Palette 4
+#   0x60-0x6F: Humanoid (soldier/moth/mage) -> Palette 5
+#   0x70-0x7F: Special (catfish) -> Palette 3
+
+# ============================================
+# BACKGROUND PALETTES (8 palettes, 4 colors each)
+# ============================================
+bg_palettes:
+  Dungeon:
+    colors: ["7FFF", "5AD6", "294A", "0000"]  # White, Light gray, Dark gray, Black
+
+  BG1:
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  BG2:
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  BG3:
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  BG4:
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  BG5:
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  BG6:
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+  BG7:
+    colors: ["7FFF", "5294", "2108", "0000"]
+
+# ============================================
+# SPRITE PALETTES - v0.97 Multi-color
+# ============================================
+# Palette 0: Effects/projectiles (white/gray)
+# Palette 1: Sara D - Dragon form (green/dark green/black)
+# Palette 2: Sara W - Witch form (skin/pink/gray)
+# Palette 3: Crow/Catfish/Items (cyan/teal)
+# Palette 4: Regular enemies - Orc/Hornets (blue)
+# Palette 5: Humanoid enemies - Soldier/Moth/Mage (purple)
+# Palette 6: Gargoyle miniboss (dark purple/magenta)
+# Palette 7: Spider miniboss (red/orange)
+# ============================================
+
+obj_palettes:
+  # Palette 0 - Effects/projectiles (neutral white/gray)
+  Effects:
+    colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
+
+  # Palette 1 - SARA D (Dragon form - green/black)
+  # Dark, draconic appearance
+  SaraDragon:
+    colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Bright green, Dark green, Black
+
+  # Palette 2 - SARA W (Witch form - skin/pink-red/black)
+  # Skin tone primary, pinkish-red wings, black tones
+  SaraWitch:
+    colors: ["0000", "2EBE", "511F", "0842"]  # Trans, Skin (peach), Pink-red, Near-black
+
+  # Palette 3 - CROW / CATFISH / ITEMS (cyan/teal)
+  # Distinctive color for special enemies and pickups
+  CrowCatfish:
+    colors: ["0000", "7FE0", "3CC0", "0000"]  # Trans, Cyan, Dark cyan, Black
+
+  # Palette 4 - REGULAR ENEMIES: Orc, Hornets, Ground (blue)
+  RegularBlue:
+    colors: ["0000", "7E00", "5800", "0000"]  # Trans, Light blue, Dark blue, Black
+
+  # Palette 5 - HUMANOID: Soldier, Moth, Mage (purple/violet)
+  HumanoidPurple:
+    colors: ["0000", "7C1F", "4C0F", "0000"]  # Trans, Magenta, Dark purple, Black
+
+  # Palette 6 - GARGOYLE MINIBOSS (boss_flag=1) (dark magenta/purple)
+  GargoyleBoss:
+    colors: ["0000", "601F", "400F", "0000"]  # Trans, Dark magenta, Darker purple, Black
+
+  # Palette 7 - SPIDER MINIBOSS (boss_flag=2) (red/orange)
+  SpiderBoss:
+    colors: ["0000", "001F", "00BF", "0000"]  # Trans, Red, Orange, Black
