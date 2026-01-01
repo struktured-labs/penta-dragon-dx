@@ -6,261 +6,199 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with colors.
 
-**Current Status**: ✅ **Stable Colorization Complete!** - Flicker-free 5-color sprite system with slot-based palette assignment.
+**Current Status**: v0.96 STABLE - Slot-based palette assignment with boss detection working. v0.97 experimental (entity-based) in progress.
 
 ### What Works
-- ✅ CGB mode detection and compatibility
-- ✅ Background palette loading (blue-gray dungeon theme)
-- ✅ Sprite palette loading (5 distinct color groups)
-- ✅ **Flicker-free** sprite colorization via triple OAM modification
-- ✅ Sara W has distinct palette from monsters
-- ✅ YAML-based palette configuration (`palettes/penta_palettes.yaml`)
-- ✅ MiSTer FPGA compatibility (use .gbc extension)
+- CGB mode detection and compatibility
+- Background palette loading (blue-gray dungeon theme)
+- Sprite palette loading (8 distinct palettes)
+- **Flicker-free** sprite colorization via triple OAM modification
+- Sara W has distinct palette (palette 1) from monsters
+- Boss detection - all enemies turn red (palette 7) when boss flag is set
+- YAML-based palette configuration (`palettes/penta_palettes.yaml`)
+- MiSTer FPGA compatibility (use .gbc extension)
 
-### Current Version: v0.64
-- Sara W: Black body, green/dark green accents
-- Monsters: 4 color groups (gray, orange, purple, cyan)
-- Background: Blue-gray dungeon theme
+### Current Versions
 
-### Key Technical Breakthrough
-The game uses **dual shadow OAM buffers** (0xC000 and 0xC100). To eliminate flickering, we modify **all three** OAM locations:
-- 0xFE00 (actual OAM - hardware)
-- 0xC000 (shadow buffer 1)
-- 0xC100 (shadow buffer 2)
+| Version | Status | Description |
+|---------|--------|-------------|
+| v0.96 | **STABLE** | Slot-based: Sara=1, Enemies=4/7 (boss) |
+| v0.97 | Experimental | Entity-based with HRAM palette array (has issues) |
 
-**Slot-based palette assignment** (not tile-based) prevents direction-dependent color changes:
+### Key Technical Architecture
+
+**Triple OAM Modification** - The game uses dual shadow OAM buffers. We modify all three:
+- `0xFE00` - Hardware OAM
+- `0xC000` - Shadow buffer 1
+- `0xC100` - Shadow buffer 2
+
+**Slot-based palette assignment** (v0.96):
 ```
-Slots 0-7:   Palette 1 (Sara W)
-Slots 8-15:  Palette 2 (Monster group 1)
-Slots 16-23: Palette 3 (Monster group 2)
-Slots 24-31: Palette 4 (Monster group 3)
-Slots 32-39: Palette 5 (Monster group 4)
+Slots 0-3:   Palette 1 (Sara)
+Slots 4-39:  Palette 4 (regular enemies) or 7 (boss mode)
+```
+
+**Entity-based palette assignment** (v0.97 experimental):
+```
+HRAM 0xFF80-0xFF8F: Palette array for slots 0-15
+  - Slots 0-3: Sara (palette 1)
+  - Slots 4-15: Entity type lookup from 0xC200+ data
+Slots 16+: Boss flag determines palette (4 or 7)
 ```
 
 ## Common Commands
 
 ### Build the Colorized ROM
 
-**Main colorizer (recommended):**
 ```bash
+# Build v0.96 stable (recommended)
 uv run python scripts/create_vblank_colorizer.py
+
+# Build v0.97 experimental (entity-based, may have issues)
+uv run python scripts/create_vblank_colorizer.py --experimental
 ```
 
 Output ROM: `rom/working/penta_dragon_dx_FIXED.gb`
 
-**Build and deploy to MiSTer:**
-```bash
-uv run python scripts/create_vblank_colorizer.py && \
-cp rom/working/penta_dragon_dx_FIXED.gb ~/gaming/roms/GBC/penta_dragon_dx_vX.XX.gbc && \
-scp rom/working/penta_dragon_dx_FIXED.gb root@mister:/media/fat/games/GBC/penta_dragon_dx_vX.XX.gbc
-```
-
 ### Testing & Verification
 
 ```bash
-# Run with emulator (Nvidia/XCB systems)
-QT_QPA_PLATFORM=xcb __GLX_VENDOR_LIBRARY_NAME=nvidia mgba-qt rom/working/penta_dragon_dx_FIXED.gb
-
-# Alternative launch (Wayland)
+# Run with emulator
 mgba-qt rom/working/penta_dragon_dx_FIXED.gb
 
 # Run with savestate
-QT_QPA_PLATFORM=xcb __GLX_VENDOR_LIBRARY_NAME=nvidia mgba-qt -t rom/working/lvl1.ss0 rom/working/penta_dragon_dx_FIXED.gb
+mgba-qt -t rom/working/penta_dragon_dx_FIXED.ss1 rom/working/penta_dragon_dx_FIXED.gb
 
 # Headless automated testing
-timeout 90 xvfb-run mgba-qt --fastforward --script scripts/quick_test2.lua rom/working/penta_dragon_dx_FIXED.gb
-
-# Automated color verification (captures screenshots, analyzes colors)
-python3 scripts/auto_verify_colors.py
-
-# Comprehensive testing framework
-python3 scripts/comprehensive_test_framework.py
-
-# Quick ROM verification
-python3 scripts/quick_verify_rom.py
+timeout 20 xvfb-run mgba-qt rom/working/penta_dragon_dx_FIXED.gb --script tmp/quick_test.lua -l 0
 ```
 
-### Palette Tools
+### MCP Tools (mgba-mcp)
 
-```bash
-# Interactive palette color converter
-python3 scripts/palette_tool.py
+The project includes an MCP server for programmatic mGBA control. After configuring `.mcp.json`, these tools are available:
 
-# Quick conversions
-python3 scripts/palette_tool.py --hex #FF8800      # Orange to BGR555
-python3 scripts/palette_tool.py --rgb 255 128 0    # RGB to BGR555
-python3 scripts/palette_tool.py --examples         # Show common colors
-```
-
-### CLI Commands
-
-The project includes a CLI tool (`penta-colorize`) defined in `src/penta_dragon_dx/cli.py`:
-
-```bash
-# Verify ROM integrity
-uv run penta-colorize verify --rom rom/Penta\ Dragon\ \(J\).gb
-
-# Inject palettes with display patches
-uv run penta-colorize inject --rom <input> --palette-file palettes/penta_palettes.yaml --out <output> --fix-display
-
-# Analyze ROM (free space, header info)
-uv run penta-colorize analyze --rom <input>
-
-# Build IPS patch
-uv run penta-colorize build-patch --original <orig> --modified <mod> --out <patch.ips>
-
-# Development loop (inject + launch emulator)
-uv run penta-colorize dev-loop --rom <input> --palette-file <yaml> --emu mgba-qt
-```
+| Tool | Description |
+|------|-------------|
+| `mgba_run` | Run ROM for N frames, capture screenshot |
+| `mgba_read_memory` | Read specific memory addresses |
+| `mgba_read_range` | Read contiguous memory range |
+| `mgba_dump_oam` | Dump all 40 OAM sprite entries |
+| `mgba_dump_entities` | Dump entity data from WRAM |
+| `mgba_run_lua` | Execute custom Lua script |
 
 ## Architecture
 
-### Core Technical Approach
-
-The colorization uses a **minimal trampoline approach** that preserves the original input handler while adding CGB palette loading. This was necessary because the ROM has **zero free space** in banks 0 and 1.
-
-**Critical Constraint**: Cannot relocate and call the input handler - must execute it inline to avoid state corruption.
-
-### ROM Layout
+### ROM Layout (Bank 13)
 
 ```
-VBlank Handler (0x06DD)
-  └─> CALL 0x0824 (18-byte trampoline)
-        ├─> Switch to Bank 13
-        ├─> CALL 0x6D00 (Combined function in bank 13)
-        │     ├─> Execute original input handler inline
-        │     └─> Load CGB palettes (128 bytes)
-        └─> Restore Bank 1
+0x6800: Palette data (128 bytes) - 8 BG + 8 OBJ palettes
+0x6880: Entity-type-to-palette table (256 bytes) [v0.97]
+0x6980: OAM processing loop / Entity scanner
+0x69F0: Palette loader (~28 bytes)
+0x6A20: BG attribute modifier (optional)
+0x6AA0: Combined function (original input + colorization)
 ```
 
-### ROM Modifications
+### Memory Map (Game Boy)
 
-1. **Display Patch (0x0067)**: CGB detection to prevent LCD freeze
-2. **Trampoline (0x0824)**: 18-byte bank-switching stub
-3. **Palette Data (Bank 13:0x6C80)**: 128 bytes (8 BG + 8 OBJ palettes)
-4. **Combined Function (Bank 13:0x6D00)**: 74 bytes (input handler + palette loader)
+| Address | Purpose |
+|---------|---------|
+| `0xC000-0xC09F` | Shadow OAM 1 (40 sprites x 4 bytes) |
+| `0xC100-0xC19F` | Shadow OAM 2 (alternate buffer) |
+| `0xC200-0xC2FF` | Entity data (10 entities x 24 bytes) |
+| `0xFE00-0xFE9F` | Hardware OAM |
+| `0xFF80-0xFF8F` | HRAM palette array [v0.97] (game uses 0xFF90+) |
+| `0xFFBF` | Boss flag (non-zero = boss mode) |
 
-### Module Organization
+### Entity Data Structure (0xC200+)
 
-```
-src/penta_dragon_dx/
-├── cli.py                   # Click-based CLI commands
-├── display_patcher.py       # CGB display compatibility patches
-├── palette_injector.py      # Main palette injection logic
-├── palette_loader.py        # YAML palette loading
-├── palette_wrapper.py       # Palette wrapper utilities
-├── injector.py              # Generic injection utilities
-├── vblank_injector.py       # VBlank hook injection
-├── rom_utils.py             # ROM reading/writing/analysis utilities
-└── patch_builder.py         # IPS patch generation
-```
+Each entity is 24 bytes. Key fields identified:
+- Offset 3: Entity type ID (0x17=regular, 0x1D=miniboss, etc.)
+- Structure varies during gameplay vs title screen
 
-### Palette System
+### OAM Sprite Entry (4 bytes)
 
-The game uses 16 total palettes in BGR555 format (15-bit color):
+| Offset | Field | Notes |
+|--------|-------|-------|
+| 0 | Y position | 0 or >160 = hidden |
+| 1 | X position | |
+| 2 | Tile ID | |
+| 3 | Flags | Bits 0-2 = palette |
 
-**Background Palettes (0-7)**: Different area themes (dungeon, lava, water, desert, forest, castle, sky, boss)
+## Known Issues & Constraints
 
-**Sprite Palettes (0-7)**: Different monster types and character
+### HRAM Conflict
+The game uses HRAM 0xFF90+ for its own purposes. The v0.97 entity scanner can only use 0xFF80-0xFF8F (16 slots) for the palette array.
 
-Palettes are defined in `palettes/penta_palettes.yaml` with each palette having 4 colors.
-
-**Color Format (BGR555)**:
-- Format: BBBBBGGGGGRRRRR (5 bits each channel)
-- Examples: `7FFF` = white, `001F` = red, `03E0` = green, `7C00` = blue
-- Use `scripts/palette_tool.py` for RGB ↔ BGR555 conversion
-
-## Current Challenges & Known Issues
-
-### Main Problem: Per-Monster Palette Assignment
-
-The game continuously overwrites OAM (sprite) data, including palette bits. Attempts to assign different palettes to different monster types get overwritten by the game's code.
-
-**Failed Approaches**:
-1. **Input handler modification** - Runs too infrequently (only on button press)
-2. **VBlank hooks** - Timing-critical, causes crashes
-3. **Runtime OAM modification** - Game overwrites our changes
-
-**Proposed Solutions** (documented in `docs/`):
-1. **Tile-to-Palette Lookup Table** (`SCALABLE_PALETTE_APPROACH.md`) - Use a 256-byte lookup table with VBlank hook
-2. **Patch Game's Palette Assignment Code** (`RELIABLE_APPROACH.md`) - Find and patch where game assigns palettes (tedious but reliable)
-3. **GBC-Native Approach** (`GBC_NATIVE_APPROACH.md`) - Hook/disable DMG palette writes, let CGB hardware handle it
-
-### Critical ROM Constraints
-
-- **Zero free space** in banks 0 and 1
-- 0x07A0-0x07E0 contains active game code (not actually free)
+### ROM Constraints
+- Zero free space in banks 0 and 1
 - Bank 13 is the only safe location for new code
-- Input handler cannot be relocated - must execute inline
 - VBlank handler is timing-critical
+- Input handler cannot be relocated
 
-### Unsafe Hook Points (DO NOT USE)
+### Unsafe Hook Points
+- `0x0190`: Main initialization - crashes
+- `0x06D6`: VBlank handler - crashes with modifications
+- `0x0824`: Input handler - can only trampoline, not replace
 
-- **0x0190**: Main initialization - causes direct crash
-- **0x06D6**: VBlank handler - crashes with modifications
-- **0x0824**: Input handler - crashes if replaced (can only trampoline)
-- **0x0150-0x0A0F**: Entire initialization sequence is unsafe
+## Project Structure
+
+```
+penta-dragon-dx-claude/
+├── mgba-mcp/              # MCP server for mGBA (git submodule)
+├── palettes/              # YAML palette definitions
+├── rom/                   # ROM files and savestates
+│   └── working/           # Output ROMs
+├── scripts/               # Build and analysis scripts
+│   ├── create_vblank_colorizer.py  # Main ROM builder
+│   ├── analyze_entity_data.lua     # Entity structure analysis
+│   └── ...
+├── src/penta_dragon_dx/   # Python package
+├── docs/                  # Strategy documents
+├── reverse_engineering/   # Disassembly and analysis
+└── tmp/                   # Temporary test files
+```
 
 ## Development Workflow
 
-### Iteration Pattern
+### Quick Iteration
+```bash
+# Build and test
+uv run python scripts/create_vblank_colorizer.py && \
+timeout 20 xvfb-run mgba-qt rom/working/penta_dragon_dx_FIXED.gb --script tmp/quick_test.lua -l 0
 
-The project has many iterative ROM generation scripts showing the evolution:
-- `scripts/penta_cursor_dx_iter*.py` - Various iteration attempts
-- `scripts/penta_cursor_dx_breakthrough.py` - Breakthrough approach
-- `scripts/create_dx_rom.py` - Main working version
+# Check results
+cat tmp/v097_quick.txt
+```
 
-### Testing Scripts
+### Debugging with Lua
+Create diagnostic scripts in `tmp/` that dump memory and quit:
+```lua
+local frame = 0
+callbacks:add("frame", function()
+    frame = frame + 1
+    if frame == 60 then
+        emu:screenshot("tmp/test.png")
+        -- Dump memory, OAM, etc.
+        emu:quit()
+    end
+end)
+```
 
-- `scripts/auto_verify_colors.py` - Automated screenshot-based color verification
-- `scripts/comprehensive_test_framework.py` - Full testing suite
-- `scripts/breakthrough_test.py` - Test specific approaches
-- `scripts/quick_verify_rom.py` - Fast ROM validation
-
-### Analysis Tools
-
-- `scripts/analyze_monsters.py` - Monster sprite analysis
-- `scripts/trace_oam_writes.lua` - mGBA Lua script to trace OAM modifications
-- `scripts/disassemble_function.py` - Disassemble ROM functions
-
-## Reverse Engineering Resources
-
-The `reverse_engineering/` directory contains detailed analysis:
-
-- `analysis/` - Call graphs, memory maps, function traces
-- `notes/PROJECT_PLAN.md` - 28-day project timeline
-- `disassembly/` - Disassembled code sections
-- `maps/` - Memory maps
-
-Key strategy documents in `docs/`:
-- `RELIABLE_APPROACH.md` - Patching game code directly
-- `GBC_NATIVE_APPROACH.md` - CGB vs DMG palette system
-- `SCALABLE_PALETTE_APPROACH.md` - Lookup table strategy
-- `CGB_COLORIZATION_FINDINGS.md` - Research findings
-
-## Project Dependencies
+## Dependencies
 
 Managed via `pyproject.toml` with uv:
 - Python >=3.11
-- click (CLI framework)
-- pillow (image processing)
-- numpy (numerical operations)
-- pyyaml (YAML parsing)
-- pytesseract (OCR for testing)
-
-Code style:
-- Black formatter (line-length=100)
-- Ruff linter (line-length=100)
+- click, pillow, numpy, pyyaml
+- mcp (for mgba-mcp server)
 
 ## Legal Notice
 
-The repository does NOT include the original ROM. Users must supply their own legally obtained copy of "Penta Dragon (J).gb" in the `rom/` directory (gitignored).
+The repository does NOT include the original ROM. Users must supply their own legally obtained copy of "Penta Dragon (J).gb" in the `rom/` directory.
 
-## Next Steps for Contributors
+## Next Steps
 
-The primary goal is to achieve **distinct colors per monster type**. Focus areas:
-
-1. Implement tile-to-palette lookup table approach (see `SCALABLE_PALETTE_APPROACH.md`)
-2. Find safe VBlank hook point that doesn't crash
-3. Alternative: Reverse engineer and patch game's OAM write locations
-4. Test with first 3 monsters: Sara W, Sara D, Dragon Fly
+1. **Fix v0.97 black screen issue** - Entity scanner or batch OAM loop has a bug
+2. **Identify entity type field** - Find correct offset in 0xC200+ structure for monster type
+3. **Map entity types to palettes** - Create lookup table for distinct monster colors
+4. **Sara form detection** - Detect Sara W vs Sara D for different palettes
