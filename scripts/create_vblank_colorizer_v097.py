@@ -144,10 +144,12 @@ def create_v097_oam_loop(tile_table_addr: int) -> bytes:
     code.extend([0x1E, 0x00])        # LD E, 0
 
     # === Process all three OAM locations ===
+    # Hardware OAM (0xFE00) for immediate effect
+    # Shadow buffers (0xC000, 0xC100) for persistence across frames
     table_low = tile_table_addr & 0xFF   # 0x80
     table_high = (tile_table_addr >> 8) & 0xFF  # 0x68
 
-    for base_hi in [0xFE, 0xC0, 0xC1]:
+    for base_hi in [0xFE, 0xC0, 0xC1]:  # All three OAM locations
         # HL = base address (sprite 0)
         code.extend([0x21, 0x00, base_hi])  # LD HL, base
         code.extend([0x06, 0x28])           # LD B, 40 (sprite count)

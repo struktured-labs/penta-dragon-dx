@@ -38,31 +38,32 @@
 #   Near-black:  0x0842 (outlines)
 
 bg_palettes:
-  # Main dungeon/castle walls - blue-gray stone with gold accent
+  # Main dungeon/castle walls - royal blue stone castle
+  # Strong blue tones for castle atmosphere
   Dungeon:
-    colors: ["6F5B", "4A52", "2529", "0000"]  # Warm cream, Blue-gray stone, Dark slate, Black
+    colors: ["7F1B", "6210", "3D08", "0000"]  # Light sky blue, Royal blue, Deep navy, Black
 
   # Alternate - same for consistency
   BG1:
-    colors: ["6F5B", "4A52", "2529", "0000"]
+    colors: ["7F1B", "6210", "3D08", "0000"]
 
   BG2:
-    colors: ["6F5B", "4A52", "2529", "0000"]
+    colors: ["7F1B", "6210", "3D08", "0000"]
 
   BG3:
-    colors: ["6F5B", "4A52", "2529", "0000"]
+    colors: ["7F1B", "6210", "3D08", "0000"]
 
   BG4:
-    colors: ["6F5B", "4A52", "2529", "0000"]
+    colors: ["7F1B", "6210", "3D08", "0000"]
 
   BG5:
-    colors: ["6F5B", "4A52", "2529", "0000"]
+    colors: ["7F1B", "6210", "3D08", "0000"]
 
   BG6:
-    colors: ["6F5B", "4A52", "2529", "0000"]
+    colors: ["7F1B", "6210", "3D08", "0000"]
 
   BG7:
-    colors: ["6F5B", "4A52", "2529", "0000"]
+    colors: ["7F1B", "6210", "3D08", "0000"]
 
 # ============================================
 # SPRITE PALETTES - v0.97 Multi-color
