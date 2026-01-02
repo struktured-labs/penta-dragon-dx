@@ -28,31 +28,38 @@
 # ============================================
 # BACKGROUND PALETTES (8 palettes, 4 colors each)
 # ============================================
-# Level 1: Royal Castle Theme
-# Stone walls with blue-gray tones, subtle gold accents
+# v0.98: Multiple BG palettes for distinct areas
+#
+# Palette 0: Main floor tiles (blue castle stone)
+# Palette 1: Items/pickups (gold/yellow glow)
+# Palette 2: Walls/void (darker blue-gray)
+# Palette 3-7: Reserved for other levels/areas
 #
 # BGR555 color reference:
-#   Stone cream: 0x5F7B (light warm gray)
-#   Blue-gray:   0x4E73 (castle stone mid)
-#   Dark slate:  0x2529 (shadows)
-#   Near-black:  0x0842 (outlines)
+#   0x7F1B = Light sky blue
+#   0x6210 = Royal blue
+#   0x3D08 = Deep navy
+#   0x03FF = Gold/Yellow
+#   0x01BF = Dark gold
 
 bg_palettes:
-  # Main dungeon/castle walls - royal blue stone castle
-  # Strong blue tones for castle atmosphere
+  # Palette 0 - Main floor/platform (royal blue castle)
   Dungeon:
     colors: ["7F1B", "6210", "3D08", "0000"]  # Light sky blue, Royal blue, Deep navy, Black
 
-  # Alternate - same for consistency
+  # Palette 1 - Items/pickups (gold/yellow - makes items stand out!)
   BG1:
-    colors: ["7F1B", "6210", "3D08", "0000"]
+    colors: ["03FF", "01BF", "00FF", "0000"]  # Bright gold, Dark gold, Orange, Black
 
+  # Palette 2 - Walls/void areas (darker slate blue)
   BG2:
-    colors: ["7F1B", "6210", "3D08", "0000"]
+    colors: ["5AD6", "4A52", "2929", "0000"]  # Slate blue, Dark slate, Near-black, Black
 
+  # Palette 3 - Wall edges/structural (blue-gray stone)
   BG3:
-    colors: ["7F1B", "6210", "3D08", "0000"]
+    colors: ["6318", "5294", "3148", "0000"]  # Gray-blue, Mid gray, Dark gray, Black
 
+  # Palette 4-7: Same as main for now (can customize per level)
   BG4:
     colors: ["7F1B", "6210", "3D08", "0000"]
 
@@ -66,16 +73,16 @@ bg_palettes:
     colors: ["7F1B", "6210", "3D08", "0000"]
 
 # ============================================
-# SPRITE PALETTES - v0.97 Multi-color
+# SPRITE PALETTES - v0.99 Dynamic Boss Swap
 # ============================================
 # Palette 0: Effects/projectiles (white/gray)
-# Palette 1: Sara D - Dragon form (green/dark green/black)
-# Palette 2: Sara W - Witch form (skin/pink/gray)
-# Palette 3: Crow/Catfish/Items (cyan/teal)
-# Palette 4: Regular enemies - Orc/Hornets (blue)
-# Palette 5: Humanoid enemies - Soldier/Moth/Mage (purple)
-# Palette 6: Gargoyle miniboss (dark purple/magenta)
-# Palette 7: Spider miniboss (red/orange)
+# Palette 1: Sara D - Dragon form (green)
+# Palette 2: Sara W - Witch form (skin/pink)
+# Palette 3: Crow (dark blue/black)
+# Palette 4: Hornets (yellow/orange)
+# Palette 5: Orc/Ground (green/brown)
+# Palette 6: Humanoid (purple) OR Gargoyle boss
+# Palette 7: Catfish (cyan) OR Spider boss
 # ============================================
 
 obj_palettes:
@@ -84,33 +91,41 @@ obj_palettes:
     colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
 
   # Palette 1 - SARA D (Dragon form - green/black)
-  # Dark, draconic appearance
   SaraDragon:
     colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Bright green, Dark green, Black
 
   # Palette 2 - SARA W (Witch form - skin/pink-red/black)
-  # Skin tone primary, pinkish-red wings, black tones
   SaraWitch:
     colors: ["0000", "2EBE", "511F", "0842"]  # Trans, Skin (peach), Pink-red, Near-black
 
-  # Palette 3 - CROW / CATFISH / ITEMS (cyan/teal)
-  # Distinctive color for special enemies and pickups
-  CrowCatfish:
-    colors: ["0000", "7FE0", "3CC0", "0000"]  # Trans, Cyan, Dark cyan, Black
+  # Palette 3 - CROW (dark blue/black - nocturnal bird)
+  Crow:
+    colors: ["0000", "4E73", "2529", "0000"]  # Trans, Blue-gray, Dark slate, Black
 
-  # Palette 4 - ITEMS + Ground enemies (gold/yellow)
-  # Items use tiles 0x50-0x53, gives powerups a golden glow
-  ItemsGold:
-    colors: ["0000", "03FF", "01BF", "0000"]  # Trans, Bright gold, Dark gold, Black
+  # Palette 4 - HORNETS (yellow/orange - insects)
+  Hornets:
+    colors: ["0000", "03FF", "00DF", "0000"]  # Trans, Yellow, Orange, Black
 
-  # Palette 5 - HUMANOID: Soldier, Moth, Mage (purple/violet)
-  HumanoidPurple:
+  # Palette 5 - ORC/GROUND (green/brown - earthy)
+  OrcGround:
+    colors: ["0000", "02A0", "0160", "0000"]  # Trans, Forest green, Dark green, Black
+
+  # Palette 6 - HUMANOID: Soldier, Moth, Spike (purple)
+  # In boss mode (boss_flag=1), this becomes Gargoyle
+  Humanoid:
     colors: ["0000", "7C1F", "4C0F", "0000"]  # Trans, Magenta, Dark purple, Black
 
-  # Palette 6 - GARGOYLE MINIBOSS (boss_flag=1) (dark magenta/purple)
-  GargoyleBoss:
+  # Palette 7 - CATFISH/SPECIAL (cyan/teal)
+  # In boss mode (boss_flag=2), this becomes Spider
+  Catfish:
+    colors: ["0000", "7FE0", "3CC0", "0000"]  # Trans, Cyan, Dark cyan, Black
+
+# Boss override palettes (loaded when boss_flag is set)
+boss_palettes:
+  # Gargoyle (replaces palette 6 when boss_flag=1)
+  Gargoyle:
     colors: ["0000", "601F", "400F", "0000"]  # Trans, Dark magenta, Darker purple, Black
 
-  # Palette 7 - SPIDER MINIBOSS (boss_flag=2) (red/orange)
-  SpiderBoss:
+  # Spider (replaces palette 7 when boss_flag=2)
+  Spider:
     colors: ["0000", "001F", "00BF", "0000"]  # Trans, Red, Orange, Black
