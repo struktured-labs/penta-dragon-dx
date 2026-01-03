@@ -65,30 +65,70 @@ def load_palettes_from_yaml(yaml_path: Path) -> tuple[bytes, bytes, bytes, bytes
 
 def create_simplified_oam_colorizer() -> bytes:
     """
-    Simplified slot-based colorizer.
+    Slot-based colorizer with projectile detection.
     Input: HL = pointer to first flags byte (0xC003 or 0xC103)
            D = Sara palette, E = enemy/boss palette
+
+    v1.04b: Projectiles get palette 0 (effects):
+    - Tile < 0x10: projectile/effect (palette 0)
+    - Tile >= 0x78: boss projectile like spider web (palette 0)
+    - Slots 0-3: Sara (palette D)
+    - Slots 4+: Enemy (palette E)
     """
     code = bytearray()
     code.extend([0x06, 0x28])        # LD B, 40
+
+    # Loop start
     loop_start = len(code)
+
+    # First check if Sara (slots 0-3)
     code.extend([0x3E, 0x28])        # LD A, 40
-    code.append(0x90)                # SUB B
+    code.append(0x90)                # SUB B (A = slot number)
     code.extend([0xFE, 0x04])        # CP 4
-    code.extend([0x38, 0x03])        # JR C, +3 (Sara)
-    code.append(0x7B)                # LD A, E (enemy)
-    code.extend([0x18, 0x01])        # JR +1
-    code.append(0x7A)                # LD A, D (Sara)
+    code.extend([0x38, 0x0E])        # JR C, +14 (to sara_palette) - skip projectile check for Sara
+
+    # For slots 4+, check tile ID for projectiles
+    # Tile is at HL-1 (OAM: Y, X, Tile, Flags - HL points to Flags)
+    code.append(0x2B)                # DEC HL (point to tile)
+    code.append(0x7E)                # LD A, [HL] (read tile)
+    code.append(0x23)                # INC HL (restore to flags)
+
+    # Check if tile < 0x10 (projectile/effect)
+    code.extend([0xFE, 0x10])        # CP 0x10
+    code.extend([0x38, 0x0A])        # JR C, +10 (to projectile_palette at offset 26)
+
+    # Check if tile >= 0x78 (boss projectile)
+    code.extend([0xFE, 0x78])        # CP 0x78
+    code.extend([0x30, 0x06])        # JR NC, +6 (to projectile_palette at offset 26)
+
+    # Enemy palette (not a projectile)
+    code.append(0x7B)                # LD A, E (enemy palette)
+    code.extend([0x18, 0x05])        # JR +5 (to apply_palette at offset 28)
+
+    # Sara palette (offset 23)
+    # sara_palette:
+    code.append(0x7A)                # LD A, D (Sara palette)
+    code.extend([0x18, 0x02])        # JR +2 (to apply_palette at offset 28)
+
+    # Projectile palette (palette 0)
+    # projectile_palette:
+    code.extend([0x3E, 0x00])        # LD A, 0 (effects palette)
+
+    # Apply palette
+    # apply_palette:
     code.append(0x4F)                # LD C, A
-    code.append(0x7E)                # LD A, [HL]
-    code.extend([0xE6, 0xF8])        # AND 0xF8
-    code.append(0xB1)                # OR C
-    code.append(0x77)                # LD [HL], A
-    code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4
+    code.append(0x7E)                # LD A, [HL] (read flags)
+    code.extend([0xE6, 0xF8])        # AND 0xF8 (clear palette bits)
+    code.append(0xB1)                # OR C (set new palette)
+    code.append(0x77)                # LD [HL], A (write flags)
+
+    # Next sprite
+    code.extend([0x23, 0x23, 0x23, 0x23])  # INC HL x4 (to next flags)
     code.append(0x05)                # DEC B
     loop_offset = loop_start - len(code) - 2
-    code.extend([0x20, loop_offset & 0xFF])
+    code.extend([0x20, loop_offset & 0xFF])  # JR NZ, loop
     code.append(0xC9)                # RET
+
     return bytes(code)
 
 
