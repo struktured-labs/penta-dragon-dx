@@ -4,46 +4,64 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with colors.
+Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v0.96 STABLE - Slot-based palette assignment with boss detection working. v0.97 experimental (entity-based) in progress.
+**Current Status**: v1.09 STABLE (tagged `best-colorization-jan2026`) - Tile-based monster coloring with dynamic boss palette loading.
 
 ### What Works
 - CGB mode detection and compatibility
-- Background palette loading (blue-gray dungeon theme)
-- Sprite palette loading (8 distinct palettes)
-- **Flicker-free** sprite colorization via triple OAM modification
-- Sara W has distinct palette (palette 1) from monsters
-- Boss detection - all enemies turn red (palette 7) when boss flag is set
-- YAML-based palette configuration (`palettes/penta_palettes.yaml`)
+- Background palette loading (colorful Level 1 theme)
+- Sprite palette loading (8 distinct palettes for different entity types)
+- **Flicker-free** sprite colorization via pre-DMA shadow buffer modification
+- **Tile-based monster coloring**: Hornets, Orcs, Humanoids, Crows, etc. each have distinct palettes
+- **Sara W/D distinction**: Sara Witch (tiles 0x20-0x27) and Sara Dragon (tiles 0x28-0x2F) have different palettes
+- **Boss detection** via 0xFFBF flag with dynamic palette loading:
+  - Gargoyle (flag=1): Dark magenta palette loaded into slot 6
+  - Spider (flag=2): Red/orange palette loaded into slot 7
+- YAML-based palette configuration (`palettes/penta_palettes_v097.yaml`)
 - MiSTer FPGA compatibility (use .gbc extension)
 
-### Current Versions
+### Version History
 
-| Version | Status | Description |
-|---------|--------|-------------|
-| v0.96 | **STABLE** | Slot-based: Sara=1, Enemies=4/7 (boss) |
-| v0.97 | Experimental | Entity-based with HRAM palette array (has issues) |
+| Version | Tag | Status | Description |
+|---------|-----|--------|-------------|
+| v1.09 | `best-colorization-jan2026` | **STABLE** | Tile-based + dynamic boss palettes (BEST) |
+| v1.07 | `v1.07` | Stable | Tile-based + boss flag detection |
+| v1.05 | `v1.05` | Stable | Tile-based coloring only (no boss detection) |
+| v0.99 | - | Legacy | Dynamic palettes but entity-based (unstable) |
+| v0.96 | - | Legacy | Slot-based: Sara=1, Enemies=4/7 |
 
 ### Key Technical Architecture
 
-**Triple OAM Modification** - The game uses dual shadow OAM buffers. We modify all three:
-- `0xFE00` - Hardware OAM
-- `0xC000` - Shadow buffer 1
-- `0xC100` - Shadow buffer 2
+**Pre-DMA Shadow Colorization** - We modify sprite palettes in shadow OAM BEFORE DMA copies to hardware:
+- `0xC000` - Shadow buffer 1 (modified pre-DMA)
+- `0xC100` - Shadow buffer 2 (modified pre-DMA)
+- `0xFE00` - Hardware OAM (receives colored data via DMA)
 
-**Slot-based palette assignment** (v0.96):
+**Tile-based palette assignment** (v1.05+):
 ```
-Slots 0-3:   Palette 1 (Sara)
-Slots 4-39:  Palette 4 (regular enemies) or 7 (boss mode)
+Sara W (tiles 0x20-0x27):   Palette 2 (skin/pink)
+Sara D (tiles 0x28-0x2F):   Palette 1 (green/dragon)
+Effects (tiles 0x00-0x1F):  Palette 0 (white/gray)
+Crows (tiles 0x30-0x3F):    Palette 3 (dark blue)
+Hornets (tiles 0x40-0x4F):  Palette 4 (yellow/orange)
+Orcs (tiles 0x50-0x5F):     Palette 5 (green/brown)
+Humanoids (tiles 0x60-0x6F): Palette 6 (purple) or 7 (boss)
+Special (tiles 0x70-0x7F):  Palette 3 (cyan)
 ```
 
-**Entity-based palette assignment** (v0.97 experimental):
+**Boss detection** (v1.07+):
 ```
-HRAM 0xFF80-0xFF8F: Palette array for slots 0-15
-  - Slots 0-3: Sara (palette 1)
-  - Slots 4-15: Entity type lookup from 0xC200+ data
-Slots 16+: Boss flag determines palette (4 or 7)
+0xFFBF = 0: Normal mode (tile-based palettes)
+0xFFBF = 1: Gargoyle mode (all enemies palette 6, load dark magenta)
+0xFFBF = 2: Spider mode (all enemies palette 7, load red/orange)
+```
+
+**Dynamic palette loading** (v1.09):
+```
+When boss_flag != 0:
+  - Load special boss colors into palette 6 or 7 via OCPS/OCPD
+  - Override tile-based assignment for all enemies
 ```
 
 ## Common Commands
@@ -51,14 +69,15 @@ Slots 16+: Boss flag determines palette (4 or 7)
 ### Build the Colorized ROM
 
 ```bash
-# Build v0.96 stable (recommended)
-uv run python scripts/create_vblank_colorizer.py
+# Build v1.09 (current best)
+uv run python scripts/create_vblank_colorizer_v109.py
 
-# Build v0.97 experimental (entity-based, may have issues)
-uv run python scripts/create_vblank_colorizer.py --experimental
+# Build specific versions
+uv run python scripts/create_vblank_colorizer_v107.py  # Boss flag + tile-based
+uv run python scripts/create_vblank_colorizer_v105.py  # Tile-based only
 ```
 
-Output ROM: `rom/working/penta_dragon_dx_FIXED.gb`
+Output: `rom/working/penta_dragon_dx_FIXED.gb`
 
 ### Testing & Verification
 
@@ -66,16 +85,27 @@ Output ROM: `rom/working/penta_dragon_dx_FIXED.gb`
 # Run with emulator
 mgba-qt rom/working/penta_dragon_dx_FIXED.gb
 
-# Run with savestate
-mgba-qt -t rom/working/penta_dragon_dx_FIXED.ss1 rom/working/penta_dragon_dx_FIXED.gb
+# Run with savestate (many available in save_states_for_claude/)
+mgba-qt -t save_states_for_claude/level1_sara_w_4_hornets.ss0 rom/working/penta_dragon_dx_FIXED.gb
 
 # Headless automated testing
-timeout 20 xvfb-run mgba-qt rom/working/penta_dragon_dx_FIXED.gb --script tmp/quick_test.lua -l 0
+timeout 20 xvfb-run mgba-qt rom/working/penta_dragon_dx_FIXED.gb \
+  -t save_states_for_claude/level1_sara_w_gargoyle_mini_boss.ss0 \
+  --script tmp/quick_test.lua -l 0
 ```
+
+### Available Save States
+
+Located in `save_states_for_claude/`, covering:
+- **Sara forms**: `level1_sara_w_alone.ss0`, `level1_sara_d_alone.ss0`
+- **Enemies**: `level1_sara_w_4_hornets.ss0`, `level1_sara_w_orc.ss0`, `level1_sara_w_soldier.ss0`, `level1_sara_w_moth.ss0`, `level1_sara_w_crow.ss0`
+- **Minibosses**: `level1_sara_w_gargoyle_mini_boss.ss0`, `level1_sara_w_spier_miniboss.ss0`, `level1_sara_d_spider_miniboss.ss0`
+- **Items/Effects**: `level1_sara_w_flash_item.ss0`, `level1_sara_w_dragon_powerup_item.ss0`
+- **Special**: `level1_cat_fish_moth_spike_hazard_orb_item.ss0`, `level1_sara_w_in_jet_form_secret_stage.ss0`
 
 ### MCP Tools (mgba-mcp)
 
-The project includes an MCP server for programmatic mGBA control. After configuring `.mcp.json`, these tools are available:
+The project includes an MCP server for programmatic mGBA control:
 
 | Tool | Description |
 |------|-------------|
@@ -92,11 +122,11 @@ The project includes an MCP server for programmatic mGBA control. After configur
 
 ```
 0x6800: Palette data (128 bytes) - 8 BG + 8 OBJ palettes
-0x6880: Entity-type-to-palette table (256 bytes) [v0.97]
-0x6980: OAM processing loop / Entity scanner
-0x69F0: Palette loader (~28 bytes)
-0x6A20: BG attribute modifier (optional)
-0x6AA0: Combined function (original input + colorization)
+0x6880: Boss palette data (16 bytes) - Gargoyle + Spider colors
+0x6900: Palette loader with dynamic boss swap (~80 bytes)
+0x6980: Shadow colorizer main (boss flag check + loop setup)
+0x69D0: Tile-based colorizer routine
+0x6A80: Combined function (original input + colorization call)
 ```
 
 ### Memory Map (Game Boy)
@@ -107,14 +137,22 @@ The project includes an MCP server for programmatic mGBA control. After configur
 | `0xC100-0xC19F` | Shadow OAM 2 (alternate buffer) |
 | `0xC200-0xC2FF` | Entity data (10 entities x 24 bytes) |
 | `0xFE00-0xFE9F` | Hardware OAM |
-| `0xFF80-0xFF8F` | HRAM palette array [v0.97] (game uses 0xFF90+) |
-| `0xFFBF` | Boss flag (non-zero = boss mode) |
+| `0xFFBF` | Boss flag: 0=normal, 1=Gargoyle, 2=Spider |
+| `0xFF6A` | OCPS - Object Color Palette Specification |
+| `0xFF6B` | OCPD - Object Color Palette Data |
 
-### Entity Data Structure (0xC200+)
+### Tile ID Ranges (Sprites)
 
-Each entity is 24 bytes. Key fields identified:
-- Offset 3: Entity type ID (0x17=regular, 0x1D=miniboss, etc.)
-- Structure varies during gameplay vs title screen
+| Range | Entity Type | Default Palette |
+|-------|-------------|-----------------|
+| 0x00-0x1F | Effects/projectiles | 0 (white/gray) |
+| 0x20-0x27 | Sara W (Witch) | 2 (skin/pink) |
+| 0x28-0x2F | Sara D (Dragon) | 1 (green) |
+| 0x30-0x3F | Crow/flying | 3 (dark blue) |
+| 0x40-0x4F | Hornets | 4 (yellow/orange) |
+| 0x50-0x5F | Orcs/ground | 5 (green/brown) |
+| 0x60-0x6F | Humanoid (soldier/moth/mage) | 6 (purple) |
+| 0x70-0x7F | Special (catfish) | 3 (cyan) |
 
 ### OAM Sprite Entry (4 bytes)
 
@@ -122,64 +160,68 @@ Each entity is 24 bytes. Key fields identified:
 |--------|-------|-------|
 | 0 | Y position | 0 or >160 = hidden |
 | 1 | X position | |
-| 2 | Tile ID | |
-| 3 | Flags | Bits 0-2 = palette |
+| 2 | Tile ID | Used for palette lookup |
+| 3 | Flags | Bits 0-2 = palette (modified by colorizer) |
 
 ## Known Issues & Constraints
-
-### HRAM Conflict
-The game uses HRAM 0xFF90+ for its own purposes. The v0.97 entity scanner can only use 0xFF80-0xFF8F (16 slots) for the palette array.
 
 ### ROM Constraints
 - Zero free space in banks 0 and 1
 - Bank 13 is the only safe location for new code
 - VBlank handler is timing-critical
-- Input handler cannot be relocated
+- Input handler cannot be relocated (trampoline only)
 
-### Unsafe Hook Points
-- `0x0190`: Main initialization - crashes
-- `0x06D6`: VBlank handler - crashes with modifications
-- `0x0824`: Input handler - can only trampoline, not replace
+### Miniboss Tiles
+Minibosses use tiles from multiple ranges (e.g., both 0x60-0x6F and 0x70-0x7F), which caused color alternation in tile-only detection. Solved via 0xFFBF boss flag.
+
+### First Frame Colors
+Save states may show incorrect colors on the very first frame before the colorizer runs. This is expected behavior.
 
 ## Project Structure
 
 ```
 penta-dragon-dx-claude/
-├── mgba-mcp/              # MCP server for mGBA (git submodule)
-├── palettes/              # YAML palette definitions
-├── rom/                   # ROM files and savestates
-│   └── working/           # Output ROMs
-├── scripts/               # Build and analysis scripts
-│   ├── create_vblank_colorizer.py  # Main ROM builder
-│   ├── analyze_entity_data.lua     # Entity structure analysis
+├── mgba-mcp/                    # MCP server for mGBA (git submodule)
+├── palettes/                    # YAML palette definitions
+│   └── penta_palettes_v097.yaml # Current palette config
+├── rom/
+│   ├── versions/                # Tagged ROM releases (.gbc)
+│   └── working/                 # Build output
+├── save_states_for_claude/      # Test save states (55+ scenarios)
+├── scripts/
+│   ├── create_vblank_colorizer_v109.py  # Current best
+│   ├── create_vblank_colorizer_v107.py  # Boss flag + tile-based
+│   ├── create_vblank_colorizer_v105.py  # Tile-based only
 │   └── ...
-├── src/penta_dragon_dx/   # Python package
-├── docs/                  # Strategy documents
-├── reverse_engineering/   # Disassembly and analysis
-└── tmp/                   # Temporary test files
+├── src/penta_dragon_dx/         # Python package
+├── docs/                        # Strategy documents
+├── reverse_engineering/         # Disassembly and analysis
+└── tmp/                         # Temporary test files
 ```
 
 ## Development Workflow
 
 ### Quick Iteration
 ```bash
-# Build and test
-uv run python scripts/create_vblank_colorizer.py && \
-timeout 20 xvfb-run mgba-qt rom/working/penta_dragon_dx_FIXED.gb --script tmp/quick_test.lua -l 0
-
-# Check results
-cat tmp/v097_quick.txt
+# Build and test with specific savestate
+uv run python scripts/create_vblank_colorizer_v109.py && \
+mgba-qt rom/working/penta_dragon_dx_FIXED.gb \
+  -t save_states_for_claude/level1_sara_w_gargoyle_mini_boss.ss0
 ```
 
 ### Debugging with Lua
-Create diagnostic scripts in `tmp/` that dump memory and quit:
 ```lua
 local frame = 0
 callbacks:add("frame", function()
     frame = frame + 1
     if frame == 60 then
         emu:screenshot("tmp/test.png")
-        -- Dump memory, OAM, etc.
+        -- Check OAM palettes
+        for i = 0, 39 do
+            local flags = emu:read8(0xFE00 + i*4 + 3)
+            local pal = flags & 0x07
+            console:log(string.format("Sprite %d: palette %d", i, pal))
+        end
         emu:quit()
     end
 end)
@@ -198,7 +240,7 @@ The repository does NOT include the original ROM. Users must supply their own le
 
 ## Next Steps
 
-1. **Fix v0.97 black screen issue** - Entity scanner or batch OAM loop has a bug
-2. **Identify entity type field** - Find correct offset in 0xC200+ structure for monster type
-3. **Map entity types to palettes** - Create lookup table for distinct monster colors
-4. **Sara form detection** - Detect Sara W vs Sara D for different palettes
+1. **Regression test suite** - Automated color verification using save states
+2. **Level 2+ palettes** - Different BG/sprite palettes for other levels
+3. **Sara form-specific effects** - Different projectile colors per form
+4. **More enemy variety** - Fine-tune palettes for specific enemy subtypes

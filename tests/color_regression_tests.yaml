@@ -1,0 +1,218 @@
+# Color Regression Test Suite for Penta Dragon DX
+# Each test defines a save state and expected palette assignments
+#
+# Palette Reference:
+#   0: Effects/projectiles (white/gray)
+#   1: Sara D - Dragon form (green)
+#   2: Sara W - Witch form (skin/pink)
+#   3: Crow/Catfish (dark blue/cyan)
+#   4: Hornets (yellow/orange)
+#   5: Orcs/Ground (green/brown)
+#   6: Humanoid (purple) - or Gargoyle in boss mode
+#   7: Special - or Spider in boss mode
+#
+# Boss flag (0xFFBF):
+#   0: Normal mode (tile-based palettes)
+#   1: Gargoyle (all enemies -> palette 6)
+#   2: Spider (all enemies -> palette 7)
+
+test_config:
+  rom_path: "rom/working/penta_dragon_dx_FIXED.gb"
+  savestate_dir: "save_states_for_claude"
+  output_dir: "tests/results"
+  frames_to_run: 60  # Run 60 frames before checking
+  skip_first_frame: true  # First frame may have stale colors
+
+tests:
+  # === SARA ALONE TESTS ===
+  - name: "sara_w_alone"
+    savestate: "level1_sara_w_alone.ss0"
+    description: "Sara Witch alone - verify palette 2"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W sprites should be palette 2 (skin/pink)"
+
+  - name: "sara_d_alone"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "Sara Dragon alone - verify palette 1"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 1
+        description: "Sara D sprites should be palette 1 (green)"
+
+  # === ENEMY TYPE TESTS ===
+  - name: "hornets"
+    savestate: "level1_sara_w_4_hornets.ss0"
+    description: "4 hornets - verify palette 4 (Sara in dragon form in this savestate)"
+    expected_boss_flag: 0
+    expectations:
+      # Note: Despite filename, Sara is in Dragon form (tiles 0x28+) in this savestate
+      - tile_range: [0x28, 0x2F]
+        palette: 1
+        description: "Sara D (dragon form)"
+      - tile_range: [0x40, 0x4F]
+        palette: 4
+        description: "Hornets should be palette 4 (yellow)"
+
+  - name: "orc"
+    savestate: "level1_sara_w_orc.ss0"
+    description: "Orc enemy - verify palette 5"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W"
+      - tile_range: [0x50, 0x5F]
+        palette: 5
+        description: "Orc should be palette 5 (green/brown)"
+
+  - name: "soldier"
+    savestate: "level1_sara_w_soldier.ss0"
+    description: "Soldier enemy - verify palette 6"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W"
+      - tile_range: [0x60, 0x6F]
+        palette: 6
+        description: "Soldier should be palette 6 (purple)"
+
+  - name: "moth"
+    savestate: "level1_sara_w_moth.ss0"
+    description: "Moth enemy - note: this savestate has boss_flag=1 (during boss encounter)"
+    expected_boss_flag: 1  # Savestate was made during a boss fight
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W"
+
+  - name: "crow"
+    savestate: "level1_sara_w_crow.ss0"
+    description: "Crow enemy - BUG: v1.09 gives palette 4 (default), should be 3"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W"
+      - tile_range: [0x30, 0x3F]
+        palette: 4
+        description: "Crow gets palette 4 in v1.09 (BUG: should be palette 3)"
+
+  - name: "mage"
+    savestate: "level1_sara_w_mage_heatl1_poision_cure_slow_cure_items"
+    description: "Mage enemy - verify palette 6"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W"
+      - tile_range: [0x60, 0x6F]
+        palette: 6
+        description: "Mage should be palette 6 (purple)"
+
+  - name: "catfish"
+    savestate: "level1_cat_fish_moth_spike_hazard_orb_item.ss0"
+    description: "Catfish - NOTE: v1.09 uses palette 7 for 0x70+ tiles (miniboss range)"
+    expected_boss_flag: 0
+    expectations:
+      - tile_range: [0x70, 0x7F]
+        palette: 7
+        description: "Catfish gets palette 7 in v1.09 (0x70+ treated as miniboss range)"
+
+  # === MINIBOSS TESTS (CRITICAL) ===
+  - name: "gargoyle_miniboss"
+    savestate: "level1_sara_w_gargoyle_mini_boss.ss0"
+    description: "Gargoyle miniboss - boss flag=1, enemies palette 7 (v1.09 uses palette 7 for all bosses)"
+    expected_boss_flag: 1
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W still palette 2"
+      - slots: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        palette: 7
+        description: "All enemy sprites use palette 7 in boss mode (note: intended was palette 6)"
+
+  - name: "spider_miniboss_sara_w"
+    savestate: "level1_sara_w_spier_miniboss.ss0"
+    description: "Spider miniboss (Sara W) - boss flag=2, all enemies palette 7"
+    expected_boss_flag: 2
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W still palette 2"
+      - slots: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        palette: 7
+        description: "All enemy sprites should be palette 7 (Spider mode)"
+
+  - name: "spider_miniboss_sara_d"
+    savestate: "level1_sara_d_spider_miniboss.ss0"
+    description: "Spider miniboss (Sara D) - boss flag=2, all enemies palette 7"
+    expected_boss_flag: 2
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 1
+        description: "Sara D still palette 1"
+      - slots: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        palette: 7
+        description: "All enemy sprites should be palette 7 (Spider mode)"
+
+  # === MIXED ENEMY TESTS ===
+  - name: "orc_with_items"
+    savestate: "level1_sara_w_orc_healpotion1_poison_cure.ss0"
+    description: "Orc with health items"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W"
+      - tile_range: [0x50, 0x5F]
+        palette: 5
+        description: "Orc should be palette 5"
+
+  - name: "metal_ball_mage_soldier"
+    savestate: "level1_sara_w_metal_ball_mage_soldier.ss0"
+    description: "Multiple enemy types"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W"
+
+  # === SPECIAL FORM TESTS ===
+  - name: "sara_d_hornet_or_moth"
+    savestate: "level1_sara_d_hornet_or_moth.ss0"
+    description: "Sara Dragon with flying enemy"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 1
+        description: "Sara D should be palette 1"
+
+  - name: "jet_form_secret_stage"
+    savestate: "level1_sara_w_in_jet_form_secret_stage.ss0"
+    description: "Secret stage jet form"
+    expected_boss_flag: 0
+    expectations: []  # Visual verification only
+
+  # === POWER-UP TESTS ===
+  - name: "dragon_powerup"
+    savestate: "level1_sara_w_dragon_powerup_item.ss0"
+    description: "Dragon powerup item visible - note: Sara is in Dragon form in this savestate"
+    expected_boss_flag: 0
+    expectations:
+      - tile_range: [0x28, 0x2F]
+        palette: 1
+        description: "Sara D (dragon form despite filename)"
+
+  - name: "spiral_power_active"
+    savestate: "level1_sara_w_spiral_power_active.ss0"
+    description: "Spiral power active"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W"

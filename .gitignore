@@ -17,3 +17,4 @@ logs/
 # Debug output
 debug_*.png
 *.log
+tests/results/
