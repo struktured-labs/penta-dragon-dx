@@ -92,15 +92,15 @@ tests:
 
   - name: "crow"
     savestate: "level1_sara_w_crow.ss0"
-    description: "Crow enemy - BUG: v1.09 gives palette 4 (default), should be 3"
+    description: "Crow enemy - v1.10 fixes crow to use palette 3"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W"
       - tile_range: [0x30, 0x3F]
-        palette: 4
-        description: "Crow gets palette 4 in v1.09 (BUG: should be palette 3)"
+        palette: 3
+        description: "Crow should be palette 3 (dark blue) - fixed in v1.10"
 
   - name: "mage"
     savestate: "level1_sara_w_mage_health1_items.ss0"

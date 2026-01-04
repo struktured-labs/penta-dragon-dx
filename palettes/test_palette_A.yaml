@@ -1,0 +1,60 @@
+# Test Palette A - Bright Primary Colors
+# Used for regression testing to verify palette loading works
+# Colors are intentionally obvious/bright for easy visual verification
+
+bg_palettes:
+  Dungeon:
+    colors: ["7FFF", "001F", "03E0", "0000"]  # White, Red, Green, Black
+  BG1:
+    colors: ["7FFF", "7C00", "03FF", "0000"]  # White, Blue, Yellow, Black
+  BG2:
+    colors: ["7FFF", "7C1F", "03E0", "0000"]  # White, Magenta, Green, Black
+  BG3:
+    colors: ["7FFF", "001F", "7C00", "0000"]  # White, Red, Blue, Black
+  BG4:
+    colors: ["7FFF", "03FF", "7C1F", "0000"]  # White, Yellow, Magenta, Black
+  BG5:
+    colors: ["7FFF", "03E0", "001F", "0000"]  # White, Green, Red, Black
+  BG6:
+    colors: ["7FFF", "7C00", "03E0", "0000"]  # White, Blue, Green, Black
+  BG7:
+    colors: ["7FFF", "7C1F", "03FF", "0000"]  # White, Magenta, Yellow, Black
+
+obj_palettes:
+  # Palette 0 - Effects (WHITE for easy visibility)
+  Effects:
+    colors: ["0000", "7FFF", "7FFF", "0000"]  # Trans, White, White, Black
+
+  # Palette 1 - Sara D (PURE RED - very distinct)
+  SaraDragon:
+    colors: ["0000", "001F", "001F", "0000"]  # Trans, Red, Red, Black
+
+  # Palette 2 - Sara W (PURE GREEN - very distinct)
+  SaraWitch:
+    colors: ["0000", "03E0", "03E0", "0000"]  # Trans, Green, Green, Black
+
+  # Palette 3 - Crow (PURE BLUE)
+  Crow:
+    colors: ["0000", "7C00", "7C00", "0000"]  # Trans, Blue, Blue, Black
+
+  # Palette 4 - Hornets (PURE YELLOW)
+  Hornets:
+    colors: ["0000", "03FF", "03FF", "0000"]  # Trans, Yellow, Yellow, Black
+
+  # Palette 5 - Orcs (PURE CYAN)
+  OrcGround:
+    colors: ["0000", "7FE0", "7FE0", "0000"]  # Trans, Cyan, Cyan, Black
+
+  # Palette 6 - Humanoid (PURE MAGENTA)
+  Humanoid:
+    colors: ["0000", "7C1F", "7C1F", "0000"]  # Trans, Magenta, Magenta, Black
+
+  # Palette 7 - Special (ORANGE)
+  Catfish:
+    colors: ["0000", "00FF", "00FF", "0000"]  # Trans, Orange, Orange, Black
+
+boss_palettes:
+  Gargoyle:
+    colors: ["0000", "7C1F", "7C1F", "0000"]  # Trans, Magenta, Magenta, Black
+  Spider:
+    colors: ["0000", "001F", "001F", "0000"]  # Trans, Red, Red, Black

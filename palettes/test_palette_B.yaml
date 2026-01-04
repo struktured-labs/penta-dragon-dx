@@ -1,0 +1,60 @@
+# Test Palette B - Alternate Distinct Colors
+# Used for regression testing to verify palette loading works
+# Colors are DIFFERENT from test_palette_A to prove YAML changes are applied
+
+bg_palettes:
+  Dungeon:
+    colors: ["7FE0", "5294", "2108", "0000"]  # Cyan, Gray, Dark, Black
+  BG1:
+    colors: ["03FF", "001F", "0000", "0000"]  # Yellow, Red, Black, Black
+  BG2:
+    colors: ["7C1F", "7C00", "3800", "0000"]  # Magenta, Blue, Navy, Black
+  BG3:
+    colors: ["03E0", "001F", "0000", "0000"]  # Green, Red, Black, Black
+  BG4:
+    colors: ["001F", "03E0", "7C00", "0000"]  # Red, Green, Blue, Black
+  BG5:
+    colors: ["7C00", "7C1F", "03FF", "0000"]  # Blue, Magenta, Yellow, Black
+  BG6:
+    colors: ["03FF", "7FE0", "001F", "0000"]  # Yellow, Cyan, Red, Black
+  BG7:
+    colors: ["7FFF", "0000", "7FFF", "0000"]  # White, Black, White, Black
+
+obj_palettes:
+  # Palette 0 - Effects (CYAN instead of white)
+  Effects:
+    colors: ["0000", "7FE0", "3CC0", "0000"]  # Trans, Cyan, Dark Cyan, Black
+
+  # Palette 1 - Sara D (BLUE instead of red)
+  SaraDragon:
+    colors: ["0000", "7C00", "3C00", "0000"]  # Trans, Blue, Dark Blue, Black
+
+  # Palette 2 - Sara W (MAGENTA instead of green)
+  SaraWitch:
+    colors: ["0000", "7C1F", "3C0F", "0000"]  # Trans, Magenta, Dark Magenta, Black
+
+  # Palette 3 - Crow (YELLOW instead of blue)
+  Crow:
+    colors: ["0000", "03FF", "01DF", "0000"]  # Trans, Yellow, Dark Yellow, Black
+
+  # Palette 4 - Hornets (RED instead of yellow)
+  Hornets:
+    colors: ["0000", "001F", "000F", "0000"]  # Trans, Red, Dark Red, Black
+
+  # Palette 5 - Orcs (WHITE instead of cyan)
+  OrcGround:
+    colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
+
+  # Palette 6 - Humanoid (GREEN instead of magenta)
+  Humanoid:
+    colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Green, Dark Green, Black
+
+  # Palette 7 - Special (BLUE instead of orange)
+  Catfish:
+    colors: ["0000", "7C00", "3C00", "0000"]  # Trans, Blue, Dark Blue, Black
+
+boss_palettes:
+  Gargoyle:
+    colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Green, Dark Green, Black
+  Spider:
+    colors: ["0000", "7C00", "3C00", "0000"]  # Trans, Blue, Dark Blue, Black
