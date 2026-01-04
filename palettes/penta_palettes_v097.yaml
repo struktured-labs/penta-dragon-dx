@@ -43,34 +43,37 @@
 #   0x01BF = Dark gold
 
 bg_palettes:
-  # Palette 0 - Main floor/platform (royal blue castle)
+  # Palette 0 - Main floor/platform (vibrant blue-white)
   Dungeon:
-    colors: ["7F1B", "6210", "3D08", "0000"]  # Light sky blue, Royal blue, Deep navy, Black
+    colors: ["7FFF", "7E94", "3D4A", "0000"]  # White, Light blue, Deep teal, Black
 
-  # Palette 1 - Items/pickups (gold/yellow - makes items stand out!)
+  # Palette 1 - Items/pickups (bright gold - makes items pop!)
   BG1:
-    colors: ["03FF", "01BF", "00FF", "0000"]  # Bright gold, Dark gold, Orange, Black
+    colors: ["03FF", "02DF", "019F", "0000"]  # Bright yellow, Gold, Dark gold, Black
 
-  # Palette 2 - Walls/void areas (darker slate blue)
+  # Palette 2 - Decorative elements (purple/magenta)
   BG2:
-    colors: ["5AD6", "4A52", "2929", "0000"]  # Slate blue, Dark slate, Near-black, Black
+    colors: ["7E1F", "5C0F", "3807", "0000"]  # Light magenta, Purple, Dark purple, Black
 
-  # Palette 3 - Wall edges/structural (blue-gray stone)
+  # Palette 3 - Nature/organic (green tones)
   BG3:
-    colors: ["6318", "5294", "3148", "0000"]  # Gray-blue, Mid gray, Dark gray, Black
+    colors: ["03E0", "02A0", "0160", "0000"]  # Bright green, Forest green, Dark green, Black
 
-  # Palette 4-7: Same as main for now (can customize per level)
+  # Palette 4 - Water/ice (cyan/teal)
   BG4:
-    colors: ["7F1B", "6210", "3D08", "0000"]
+    colors: ["7FE0", "5EC0", "3D80", "0000"]  # Cyan, Teal, Dark teal, Black
 
+  # Palette 5 - Fire/lava (red/orange)
   BG5:
-    colors: ["7F1B", "6210", "3D08", "0000"]
+    colors: ["03FF", "00DF", "001F", "0000"]  # Yellow, Orange, Red, Black
 
+  # Palette 6 - Stone/castle (blue-gray)
   BG6:
-    colors: ["7F1B", "6210", "3D08", "0000"]
+    colors: ["6F7B", "4E73", "2D4A", "0000"]  # Light slate, Blue-gray, Dark slate, Black
 
+  # Palette 7 - Mystery/special (deep blue)
   BG7:
-    colors: ["7F1B", "6210", "3D08", "0000"]
+    colors: ["7E10", "5C08", "3800", "0000"]  # Sky blue, Royal blue, Navy, Black
 
 # ============================================
 # SPRITE PALETTES - v0.99 Dynamic Boss Swap
