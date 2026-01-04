@@ -103,7 +103,7 @@ tests:
         description: "Crow gets palette 4 in v1.09 (BUG: should be palette 3)"
 
   - name: "mage"
-    savestate: "level1_sara_w_mage_heatl1_poision_cure_slow_cure_items"
+    savestate: "level1_sara_w_mage_health1_items.ss0"
     description: "Mage enemy - verify palette 6"
     expected_boss_flag: 0
     expectations:
