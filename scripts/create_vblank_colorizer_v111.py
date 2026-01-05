@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-v1.11: Background Item Colorization
+v1.11: Same as v1.10 (BG item colorization WIP)
 
-Changes from v1.10:
-  - NEW: BG tiles 0x88-0xDF (items) get BG palette 1 (gold/yellow)
-  - Scans visible BG tilemap and sets attributes for item tiles
+BG item colorization attempted but disabled due to:
+  - Game resets BG tile attributes, overwriting our changes
+  - Scanning 1024 tiles per frame exceeds VBlank timing
+  - Need O(1) solution: hook game's tile write routine instead
 
-Item tiles identified:
+Item tiles identified for future work:
   - 0x88-0x9F: Potions, turbo powerup
   - 0xA8-0xBF: Health, extra life, flash
   - 0xC8-0xDF: Rock, dragon powerup
 
-OBJ Tile-based coloring (unchanged from v1.10):
+OBJ Tile-based coloring (same as v1.10):
   - 0x00-0x0F: Effects/projectiles (palette 0)
   - 0x20-0x27: Sara W (palette 2)
   - 0x28-0x2F: Sara D (palette 1)
@@ -207,7 +208,7 @@ def create_bg_item_colorizer() -> bytes:
     """
     Scan BG tilemap and set palette 1 for item tiles (0x88-0xDF).
 
-    Scans the entire 32x32 tilemap (1024 tiles).
+    OPTIMIZED: Only scans 256 tiles (16x16 area) to fit in VBlank.
     For tiles >= 0x88 and < 0xE0, set BG attribute to palette 1.
 
     VRAM bank 0: tile IDs
@@ -217,14 +218,22 @@ def create_bg_item_colorizer() -> bytes:
     labels = {}
     jumps_to_fix = []
 
-    # LD HL, 0x9800 (start of BG tilemap)
-    code.extend([0x21, 0x00, 0x98])
+    # Scan a fixed 16x16 region (256 tiles) - much faster than 1024
+    # Start at row 4 (0x9800 + 4*32 = 0x9880) to cover typical play area
+    # LD HL, 0x9880 (start at row 4)
+    code.extend([0x21, 0x80, 0x98])
 
-    # LD BC, 0x0400 (1024 tiles)
-    code.extend([0x01, 0x00, 0x04])
+    # LD B, 16 (16 rows)
+    code.extend([0x06, 0x10])
 
-    # loop_start:
-    labels['loop_start'] = len(code)
+    # row_loop:
+    labels['row_loop'] = len(code)
+
+    # LD C, 20 (20 columns - visible width)
+    code.extend([0x0E, 0x14])
+
+    # col_loop:
+    labels['col_loop'] = len(code)
 
     # Switch to VRAM bank 0 to read tile ID
     code.extend([0x3E, 0x00])        # LD A, 0
@@ -235,13 +244,13 @@ def create_bg_item_colorizer() -> bytes:
 
     # Check if tile >= 0x88 (item range start)
     code.extend([0xFE, 0x88])        # CP 0x88
-    jumps_to_fix.append((len(code), 'next_tile'))
-    code.extend([0x38, 0x00])        # JR C, next_tile (placeholder)
+    jumps_to_fix.append((len(code), 'next_col'))
+    code.extend([0x38, 0x00])        # JR C, next_col
 
     # Check if tile < 0xE0 (item range end)
     code.extend([0xFE, 0xE0])        # CP 0xE0
-    jumps_to_fix.append((len(code), 'next_tile'))
-    code.extend([0x30, 0x00])        # JR NC, next_tile (placeholder)
+    jumps_to_fix.append((len(code), 'next_col'))
+    code.extend([0x30, 0x00])        # JR NC, next_col
 
     # It's an item tile! Switch to VRAM bank 1 and set palette
     code.extend([0x3E, 0x01])        # LD A, 1
@@ -253,18 +262,20 @@ def create_bg_item_colorizer() -> bytes:
     code.extend([0xF6, 0x01])        # OR 0x01 (set palette 1)
     code.append(0x77)                # LD [HL], A
 
-    # next_tile:
-    labels['next_tile'] = len(code)
+    # next_col:
+    labels['next_col'] = len(code)
     code.append(0x23)                # INC HL
-    code.append(0x0B)                # DEC BC
+    code.append(0x0D)                # DEC C
+    jumps_to_fix.append((len(code), 'col_loop'))
+    code.extend([0x20, 0x00])        # JR NZ, col_loop
 
-    # Check if BC == 0
-    code.append(0x78)                # LD A, B
-    code.append(0xB1)                # OR C
+    # End of row - skip remaining 12 tiles to next row (32-20=12)
+    code.extend([0x11, 0x0C, 0x00])  # LD DE, 12
+    code.append(0x19)                # ADD HL, DE
 
-    # Jump back to loop_start
-    jumps_to_fix.append((len(code), 'loop_start'))
-    code.extend([0x20, 0x00])        # JR NZ, loop_start (placeholder)
+    code.append(0x05)                # DEC B
+    jumps_to_fix.append((len(code), 'row_loop'))
+    code.extend([0x20, 0x00])        # JR NZ, row_loop
 
     # Switch back to VRAM bank 0
     code.extend([0x3E, 0x00])        # LD A, 0
@@ -373,11 +384,17 @@ def create_palette_loader(palette_data_addr: int, gargoyle_addr: int, spider_add
 
 
 def create_combined_with_dma(palette_loader_addr: int, shadow_main_addr: int, bg_colorizer_addr: int) -> bytes:
-    """Combined function: load palettes, colorize shadows, colorize BG items, run DMA."""
+    """
+    Combined function: load palettes, colorize shadows, run DMA.
+
+    NOTE: BG item colorization disabled for now - game resets BG attributes
+    and scanning every frame causes performance issues. Need to hook game's
+    tile write routine for O(1) item colorization.
+    """
     code = bytearray()
     code.extend([0xCD, palette_loader_addr & 0xFF, palette_loader_addr >> 8])
     code.extend([0xCD, shadow_main_addr & 0xFF, shadow_main_addr >> 8])
-    code.extend([0xCD, bg_colorizer_addr & 0xFF, bg_colorizer_addr >> 8])  # NEW: BG items
+    # BG colorizer disabled: code.extend([0xCD, bg_colorizer_addr & 0xFF, bg_colorizer_addr >> 8])
     code.extend([0xCD, 0x80, 0xFF])  # CALL DMA
     code.append(0xC9)
     return bytes(code)
