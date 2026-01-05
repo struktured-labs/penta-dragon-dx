@@ -1,4 +1,9 @@
-rom/**.*
+# ROM files (copyrighted, cannot be in public repo)
+*.gb
+*.gbc
+*.gba
+rom/**/*.gb
+rom/**/*.gbc
 
 # Python
 __pycache__/
