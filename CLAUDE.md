@@ -105,7 +105,12 @@ Located in `save_states_for_claude/`, covering:
 
 ### MCP Tools (mgba-mcp)
 
-The project includes an MCP server for programmatic mGBA control:
+The project includes an MCP server for programmatic mGBA control.
+
+**IMPORTANT**: Always prefer MCP tools over bash/xvfb-run for emulator operations:
+- MCP tools run headless automatically (no windows on user's desktop)
+- MCP tools handle SDL audio dummy driver
+- Use `mcp__mgba__mgba_run`, `mcp__mgba__mgba_read_range`, etc.
 
 | Tool | Description |
 |------|-------------|
@@ -115,6 +120,12 @@ The project includes an MCP server for programmatic mGBA control:
 | `mgba_dump_oam` | Dump all 40 OAM sprite entries |
 | `mgba_dump_entities` | Dump entity data from WRAM |
 | `mgba_run_lua` | Execute custom Lua script |
+
+If MCP tools aren't available, use bash with proper headless settings:
+```bash
+unset DISPLAY
+SDL_AUDIODRIVER=dummy xvfb-run -a mgba-qt rom.gb --script script.lua -l 0
+```
 
 ## Architecture
 
