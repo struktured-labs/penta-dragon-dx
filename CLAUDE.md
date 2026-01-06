@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v1.09 STABLE (tagged `best-colorization-jan2026`) - Tile-based monster coloring with dynamic boss palette loading.
+**Current Status**: v1.12 STABLE - BG item colorization + tile-based monster coloring + boss detection.
 
 ### What Works
 - CGB mode detection and compatibility
@@ -18,14 +18,19 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 - **Boss detection** via 0xFFBF flag with dynamic palette loading:
   - Gargoyle (flag=1): Dark magenta palette loaded into slot 6
   - Spider (flag=2): Red/orange palette loaded into slot 7
+- **BG Item colorization** (v1.12): Items (tiles 0x88-0xDF) get gold/yellow BG palette
+  - Potions, health, extra lives, powerups all stand out from blue floor
+  - Runs after DMA to win race condition against game's attribute reset
 - YAML-based palette configuration (`palettes/penta_palettes_v097.yaml`)
+- BG tile category mapping (`palettes/bg_tile_categories.yaml`)
 - MiSTer FPGA compatibility (use .gbc extension)
 
 ### Version History
 
 | Version | Tag | Status | Description |
 |---------|-----|--------|-------------|
-| v1.09 | `best-colorization-jan2026` | **STABLE** | Tile-based + dynamic boss palettes (BEST) |
+| v1.12 | `v1.12` | **STABLE** | BG items gold + OBJ tile-based + boss detection (BEST) |
+| v1.09 | `best-colorization-jan2026` | Stable | Tile-based + dynamic boss palettes |
 | v1.07 | `v1.07` | Stable | Tile-based + boss flag detection |
 | v1.05 | `v1.05` | Stable | Tile-based coloring only (no boss detection) |
 | v0.99 | - | Legacy | Dynamic palettes but entity-based (unstable) |
@@ -64,15 +69,24 @@ When boss_flag != 0:
   - Override tile-based assignment for all enemies
 ```
 
+**BG Item Colorization** (v1.12):
+```
+Item tiles (0x88-0xDF) -> BG palette 1 (gold/yellow)
+- Runs AFTER DMA to win race against game's attribute reset
+- Scans 20x18 visible tile area each VBlank
+- Items include: potions, health, extra lives, powerups
+```
+
 ## Common Commands
 
 ### Build the Colorized ROM
 
 ```bash
-# Build v1.09 (current best)
-uv run python scripts/create_vblank_colorizer_v109.py
+# Build v1.12 (current best - with BG item colors)
+uv run python scripts/create_vblank_colorizer_v112.py
 
 # Build specific versions
+uv run python scripts/create_vblank_colorizer_v109.py  # OBJ only (no BG items)
 uv run python scripts/create_vblank_colorizer_v107.py  # Boss flag + tile-based
 uv run python scripts/create_vblank_colorizer_v105.py  # Tile-based only
 ```
