@@ -1,0 +1,211 @@
+# Penta Dragon DX - Background Tile Category Mapping
+# Generated from analysis of Level 1 savestates
+#
+# Purpose: Map BG tiles to categories for O(1) colorization
+# Instead of scanning all tiles, hook the game's tile write routine
+# and apply palette based on tile ID category.
+
+# ==============================================
+# TILE CATEGORIES - Level 1 Dungeon Theme
+# ==============================================
+#
+# The game uses 2x2 tile blocks for most elements.
+# Items follow a pattern: base, base+1, base+16, base+17
+#
+# Recommended BG Palette Assignment:
+#   Palette 0: Floor/platforms (blue-white dungeon)
+#   Palette 1: Items (gold/yellow - makes them pop!)
+#   Palette 2: Walls/structure (darker blue-gray)
+#   Palette 3: Hazards (red/orange warning)
+#   Palette 4: Decorative (purple/magenta)
+#   Palette 5: Nature/organic (green)
+#   Palette 6: Water/ice (cyan)
+#   Palette 7: Special/secret (deep blue)
+
+categories:
+  # -----------------------------------------
+  # FLOOR TILES (0x01-0x06)
+  # -----------------------------------------
+  # Checkered floor pattern, very high frequency
+  # Always 40-110+ tiles on screen
+  floor:
+    range: [0x01, 0x06]
+    tiles: [1, 2, 3, 4, 5, 6]
+    palette: 0
+    description: "Checkered dungeon floor pattern"
+    frequency: "high (40-110+ per screen)"
+
+  # -----------------------------------------
+  # VOID/BORDER (0xFE)
+  # -----------------------------------------
+  # Empty space, screen edges, black areas
+  void:
+    tiles: [254]  # 0xFE
+    palette: 0  # Keep default (black)
+    description: "Empty void/border tiles"
+    frequency: "variable (4-256 per screen)"
+
+  # -----------------------------------------
+  # WALL STRUCTURES (0x40-0x5B)
+  # -----------------------------------------
+  # Vertical and corner wall pieces
+  # Gray/blue stone appearance
+  walls:
+    range: [0x40, 0x5B]
+    tiles: [64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,
+            80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91]
+    palette: 2
+    description: "Wall corners, vertical structures"
+    frequency: "medium (1-6 each)"
+
+  # -----------------------------------------
+  # PLATFORMS/EDGES (0x24-0x39)
+  # -----------------------------------------
+  # Horizontal platforms, ledges, edges
+  platforms:
+    range: [0x24, 0x39]
+    tiles: [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+            48, 49, 50, 51, 52, 53, 54, 55, 56, 57]
+    palette: 0
+    description: "Platform edges, horizontal ledges"
+    frequency: "medium (1-10 each)"
+    note: "Some overlap with hazards (0x2A-0x2E, 0x3A-0x3D)"
+
+  # -----------------------------------------
+  # STRUCTURAL DETAILS (0x13-0x23)
+  # -----------------------------------------
+  # Corners, decorative edges, transitions
+  structure:
+    range: [0x13, 0x23]
+    tiles: [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]
+    palette: 2
+    description: "Structural corners, wall edges"
+    frequency: "low-medium (1-17 each)"
+
+  # -----------------------------------------
+  # HAZARDS - Spike Cylinders (0x2A-0x2E, 0x3A-0x3D)
+  # -----------------------------------------
+  # Rotating spike hazards, appear in groups of 10
+  # SUBSET of platform range - needs special handling
+  hazards_spike_cylinder:
+    tiles: [42, 43, 44, 45, 46, 58, 59, 60, 61]
+    # 0x2A-0x2E = 42-46, 0x3A-0x3D = 58-61
+    palette: 3
+    description: "Rotating spike cylinders"
+    frequency: "10 tiles when present"
+    note: "Only colorize when in hazard context (check nearby tiles)"
+
+  # -----------------------------------------
+  # HAZARDS - Thrusting Spikes (0x47, 0x57)
+  # -----------------------------------------
+  # Wall spikes that thrust in/out
+  hazards_thrusting:
+    tiles: [71, 87]  # 0x47, 0x57
+    palette: 3
+    description: "Thrusting wall spikes"
+    note: "These overlap with wall range - context dependent"
+
+  # -----------------------------------------
+  # DECORATIVE ELEMENTS (0x7E-0x7F)
+  # -----------------------------------------
+  decoration:
+    tiles: [126, 127]  # 0x7E, 0x7F
+    palette: 4
+    description: "Corner decorations, ornaments"
+    frequency: "low (1-8 per screen)"
+
+  # -----------------------------------------
+  # ITEMS (0x88-0xDF) - THE GOLD RANGE!
+  # -----------------------------------------
+  # All pickups: health, extra life, powerups, etc.
+  # Each item is a 2x2 block:
+  #   [base]   [base+1]
+  #   [base+16][base+17]
+  #
+  # Specific items found:
+  #   0x88-0x89, 0x98-0x99: Health/turbo (turbo_health scene)
+  #   0xA8-0xA9, 0xB8-0xB9: Health pickup (turbo_health scene)
+  #   0xAA-0xAB, 0xBA-0xBB: Flash item
+  #   0xAE-0xAF, 0xBE-0xBF: Extra life
+  #   0xC8-0xC9, 0xD8-0xD9: Rock powerup
+  #   0xCA-0xCB, 0xDA-0xDB: P item (points?)
+  #   0xCC-0xCD, 0xDC-0xDD: Orb item
+  #   0xCE-0xCF, 0xDE-0xDF: Dragon powerup
+  items:
+    range: [0x88, 0xDF]
+    # Full list: 136-223 decimal
+    palette: 1
+    description: "All item pickups - health, powerups, extra lives"
+    frequency: "2-4 tiles when item present (2x2 blocks)"
+    colorization: "PRIORITY - makes items stand out!"
+
+    # Detailed breakdown:
+    subtypes:
+      health_turbo:
+        tiles: [136, 137, 152, 153]  # 0x88-89, 0x98-99
+      health_pickup:
+        tiles: [168, 169, 184, 185]  # 0xA8-A9, 0xB8-B9
+      flash:
+        tiles: [170, 171, 186, 187]  # 0xAA-AB, 0xBA-BB
+      extra_life:
+        tiles: [174, 175, 190, 191]  # 0xAE-AF, 0xBE-BF
+      rock_powerup:
+        tiles: [200, 201, 216, 217]  # 0xC8-C9, 0xD8-D9
+      p_item:
+        tiles: [202, 203, 218, 219]  # 0xCA-CB, 0xDA-DB
+      orb:
+        tiles: [204, 205, 220, 221]  # 0xCC-CD, 0xDC-DD
+      dragon_powerup:
+        tiles: [206, 207, 222, 223]  # 0xCE-CF, 0xDE-DF
+
+  # -----------------------------------------
+  # SECRET STAGE - Spaceship Theme (0x60-0x7C)
+  # -----------------------------------------
+  # Completely different tileset in jet form stage
+  # Note: overlaps with wall range in dungeon!
+  secret_stage:
+    tiles: [66, 67, 76, 82, 83, 92, 96, 97, 98, 99, 100, 101,
+            112, 113, 116, 124]
+    palette: 7
+    description: "Tech/spaceship tiles in secret stage"
+    note: "Different tileset - may need level detection"
+
+# ==============================================
+# O(1) COLORIZATION STRATEGY
+# ==============================================
+#
+# APPROACH 1: Hook tile write routine
+# ------------------------------------
+# Game copies tiles from buffer 0xC1A0 to VRAM via routine at 0x42A7
+# Hook this to set BG attributes based on tile ID:
+#
+#   if tile >= 0x88 and tile <= 0xDF:
+#       set_bg_attr(palette=1)  # Item = gold
+#   elif tile >= 0x40 and tile <= 0x5B:
+#       set_bg_attr(palette=2)  # Wall = gray
+#   else:
+#       set_bg_attr(palette=0)  # Default = dungeon blue
+#
+# APPROACH 2: Lookup table (fastest)
+# ------------------------------------
+# Create 256-byte table mapping tile ID -> palette
+# Single table lookup per tile write
+#
+# Memory: Bank 13 at 0x6B00 (256 bytes)
+# Code: ~20 bytes for lookup and attribute set
+
+# ==============================================
+# PALETTE RECOMMENDATIONS
+# ==============================================
+#
+# BG Palette 0 (Floor/Default): Blue-white dungeon
+#   [0x7FFF, 0x7E94, 0x3D4A, 0x0000]  # White, Light blue, Teal, Black
+#
+# BG Palette 1 (Items): Gold/Yellow
+#   [0x03FF, 0x02DF, 0x019F, 0x0000]  # Bright yellow, Gold, Dark gold, Black
+#
+# BG Palette 2 (Walls): Blue-gray stone
+#   [0x6F7B, 0x4E73, 0x2D4A, 0x0000]  # Slate, Blue-gray, Dark slate, Black
+#
+# BG Palette 3 (Hazards): Red/Orange warning
+#   [0x03FF, 0x00DF, 0x001F, 0x0000]  # Yellow, Orange, Red, Black
