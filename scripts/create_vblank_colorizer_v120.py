@@ -16,8 +16,8 @@ BG Tile → Palette mapping:
   0x00-0x0F: Floor/effects → Palette 0 (base)
   0x10-0x5F: Walls/borders → Palette 2 (blue/purple)
   0x60-0x7F: Structure → Palette 0 (base)
-  0x80-0xBF: Hazards → Palette 3 (red)
-  0xC0-0xDF: Items → Palette 1 (gold) [dragon powerup, flash, etc]
+  0x80-0x9F: Hazards → Palette 3 (red)
+  0xA0-0xDF: Items → Palette 1 (gold) [flash AA-BB, dragon CE-DF]
   0xE0-0xFF: Borders → Palette 2 (blue/purple)
 
 OBJ Colorization (unchanged from v1.11):
@@ -78,8 +78,9 @@ def create_tile_palette_lookup_table() -> bytes:
       0x10-0x3F: Walls, borders, decorations → Palette 2 (blue/walls)
       0x40-0x5F: More decorations → Palette 2
       0x60-0x7F: Structure → Palette 0
-      0x80-0xBF: Special/hazards → Palette 3 (red/hazards)
-      0xC0-0xDF: Items! → Palette 1 (gold)
+      0x80-0x9F: Structure/hazards → Palette 3 (red)
+      0xA0-0xBF: Items (flash: AA,AB,BA,BB) → Palette 1 (gold)
+      0xC0-0xDF: Items (dragon: CE,CF,DE,DF) → Palette 1 (gold)
       0xE0-0xFF: Borders/special → Palette 2
     """
     table = [0] * 256  # Default palette 0
@@ -90,12 +91,12 @@ def create_tile_palette_lookup_table() -> bytes:
     for t in range(0x40, 0x60):
         table[t] = 2
 
-    # Hazards (red) - 0x80-0xBF excluding items
-    for t in range(0x80, 0xC0):
+    # Hazards (red) - 0x80-0x9F only
+    for t in range(0x80, 0xA0):
         table[t] = 3
 
-    # Items (gold) - 0xC0-0xDF
-    for t in range(0xC0, 0xE0):
+    # Items (gold) - 0xA0-0xDF (both flash and dragon powerup ranges)
+    for t in range(0xA0, 0xE0):
         table[t] = 1
 
     # High borders (blue)
@@ -499,8 +500,8 @@ def main():
     print("  0x00-0x0F: Palette 0 (floor)")
     print("  0x10-0x5F: Palette 2 (walls/blue)")
     print("  0x60-0x7F: Palette 0 (floor)")
-    print("  0x80-0xBF: Palette 3 (hazards/red)")
-    print("  0xC0-0xDF: Palette 1 (items/gold)")
+    print("  0x80-0x9F: Palette 3 (hazards/red)")
+    print("  0xA0-0xDF: Palette 1 (items/gold)")
     print("  0xE0-0xFF: Palette 2 (borders)")
 
 
