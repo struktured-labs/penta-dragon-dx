@@ -109,7 +109,7 @@ def create_direct_vram_colorizer(lookup_table_addr: int) -> bytes:
     """
     Direct VRAM scan: Read from bank 0, write to bank 1.
 
-    Final version with DC0B tilemap selection and 16 rows coverage.
+    Simplified version - always use 0x9800 tilemap for stability.
     """
     code = bytearray()
     labels = {}
@@ -122,36 +122,11 @@ def create_direct_vram_colorizer(lookup_table_addr: int) -> bytes:
     code.extend([0x3E, 0x0D])        # LD A, 13
     code.extend([0xEA, 0x00, 0x20])  # LD [0x2000], A
 
-    # Get tilemap base from DC0B (in WRAM bank 1)
-    code.extend([0xF0, 0x70])        # LDH A, [FF70] (save WRAM bank)
-    code.append(0xF5)                # PUSH AF
-    code.extend([0x3E, 0x01])        # LD A, 1
-    code.extend([0xE0, 0x70])        # LDH [FF70], A
-    code.extend([0xFA, 0x0B, 0xDC])  # LD A, [DC0B]
-    code.append(0x4F)                # LD C, A (save DC0B in C!)
-    code.append(0xF1)                # POP AF (restore WRAM bank)
-    code.extend([0xE0, 0x70])        # LDH [FF70], A
-
-    # Check DC0B (saved in C) and set tilemap base
-    code.append(0x79)                # LD A, C (get DC0B back)
-    code.extend([0xE6, 0x01])        # AND 1
-    jumps.append((len(code), 'use_9800'))
-    code.extend([0x28, 0x00])        # JR Z, use_9800
-    code.extend([0x11, 0x00, 0x9C])  # LD DE, 0x9C00
-    jumps.append((len(code), 'have_base'))
-    code.extend([0x18, 0x00])        # JR have_base
-
-    labels['use_9800'] = len(code)
+    # DE = 0x9800 (tilemap base - always use this for stability)
     code.extend([0x11, 0x00, 0x98])  # LD DE, 0x9800
 
-    labels['have_base'] = len(code)
-
-    # Do 2 passes of 256 tiles each (16 rows total)
-    code.extend([0x06, 0x02])        # LD B, 2 (outer loop: 2 passes)
-
-    labels['outer_loop'] = len(code)
-    code.append(0xC5)                # PUSH BC (save outer counter)
-    code.extend([0x06, 0x00])        # LD B, 0 (inner loop: 256 tiles)
+    # 256 tiles per frame (8 rows)
+    code.extend([0x06, 0x00])        # LD B, 0 (256 iterations)
 
     labels['inner_loop'] = len(code)
 
@@ -180,16 +155,10 @@ def create_direct_vram_colorizer(lookup_table_addr: int) -> bytes:
     # Next tile
     code.append(0x13)                # INC DE
 
-    # Inner loop
+    # Loop
     code.append(0x05)                # DEC B
     jumps.append((len(code), 'inner_loop'))
     code.extend([0x20, 0x00])        # JR NZ, inner_loop
-
-    # Outer loop
-    code.append(0xC1)                # POP BC
-    code.append(0x05)                # DEC B
-    jumps.append((len(code), 'outer_loop'))
-    code.extend([0x20, 0x00])        # JR NZ, outer_loop
 
     # Restore VBK = 0
     code.extend([0xAF])              # XOR A
