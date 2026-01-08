@@ -126,7 +126,7 @@ def create_direct_vram_colorizer(lookup_table_addr: int) -> bytes:
     # DE = 0x9800 (tilemap base - always use this for stability)
     code.extend([0x11, 0x00, 0x98])  # LD DE, 0x9800
 
-    # 256 tiles per frame (8 rows)
+    # 256 tiles (8 rows) - max we can fit in VBlank without corruption
     code.extend([0x06, 0x00])        # LD B, 0 (256 iterations)
 
     labels['inner_loop'] = len(code)
@@ -156,7 +156,7 @@ def create_direct_vram_colorizer(lookup_table_addr: int) -> bytes:
     # Next tile
     code.append(0x13)                # INC DE
 
-    # Loop
+    # Loop (256 tiles = 8 rows - max we can do in VBlank)
     code.append(0x05)                # DEC B
     jumps.append((len(code), 'inner_loop'))
     code.extend([0x20, 0x00])        # JR NZ, inner_loop
