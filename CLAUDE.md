@@ -6,7 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v1.12 STABLE - BG item colorization + tile-based monster coloring + boss detection.
+**Current Status**: v2.28 STABLE (Fixed) - Stage detection + jet form palettes + BG items + tile-based monsters + boss detection.
+
+**Recent Fixes**:
+- Spider miniboss palette assignment (was Sara W pink, now red/black)
+- Boss flag flickering (read once per VBlank instead of twice)
 
 ### What Works
 - CGB mode detection and compatibility
@@ -15,10 +19,15 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 - **Flicker-free** sprite colorization via pre-DMA shadow buffer modification
 - **Tile-based monster coloring**: Hornets, Orcs, Humanoids, Crows, etc. each have distinct palettes
 - **Sara W/D distinction**: Sara Witch (tiles 0x20-0x27) and Sara Dragon (tiles 0x28-0x2F) have different palettes
+- **Stage detection** (v2.28): Reads 0xFFD0 to determine current level
+  - Level 1 (0x00): Normal dungeon palettes
+  - Bonus stage (0x01): Jet form palettes for Sara
+- **Jet form colors** (v2.28): Sara W jet = magenta/purple, Sara D jet = cyan/blue
 - **Boss detection** via 0xFFBF flag with dynamic palette loading:
   - Gargoyle (flag=1): Dark magenta palette loaded into slot 6
   - Spider (flag=2): Red/orange palette loaded into slot 7
-- **BG Item colorization** (v1.12): Items (tiles 0x88-0xDF) get gold/yellow BG palette
+  - **Bug fix (v2.28)**: Boss flag now read once per VBlank to prevent flickering
+- **BG Item colorization**: Items (tiles 0x88-0xDF) get gold/yellow BG palette
   - Potions, health, extra lives, powerups all stand out from blue floor
   - Runs after DMA to win race condition against game's attribute reset
 - YAML-based palette configuration (`palettes/penta_palettes_v097.yaml`)
@@ -29,7 +38,9 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 
 | Version | Tag | Status | Description |
 |---------|-----|--------|-------------|
-| v1.12 | `v1.12` | **STABLE** | BG items gold + OBJ tile-based + boss detection (BEST) |
+| v2.28 | `v2.28` | **STABLE** | Stage detection + jet form colors + BG items + bosses (BEST) |
+| v2.26 | - | Stable | BG items + OBJ tile-based + boss detection |
+| v1.12 | `v1.12` | Stable | BG items gold + OBJ tile-based + boss detection |
 | v1.09 | `best-colorization-jan2026` | Stable | Tile-based + dynamic boss palettes |
 | v1.07 | `v1.07` | Stable | Tile-based + boss flag detection |
 | v1.05 | `v1.05` | Stable | Tile-based coloring only (no boss detection) |
@@ -82,13 +93,13 @@ Item tiles (0x88-0xDF) -> BG palette 1 (gold/yellow)
 ### Build the Colorized ROM
 
 ```bash
-# Build v1.12 (current best - with BG item colors)
-uv run python scripts/create_vblank_colorizer_v112.py
+# Build v2.28 (current best - stage detection + jet colors + BG items)
+uv run python scripts/create_vblank_colorizer_v228.py
 
-# Build specific versions
-uv run python scripts/create_vblank_colorizer_v109.py  # OBJ only (no BG items)
-uv run python scripts/create_vblank_colorizer_v107.py  # Boss flag + tile-based
-uv run python scripts/create_vblank_colorizer_v105.py  # Tile-based only
+# Build older versions
+uv run python scripts/create_vblank_colorizer_v226.py  # v2.26 (no stage detection)
+uv run python scripts/create_vblank_colorizer_v112.py  # v1.12 (BG items)
+uv run python scripts/create_vblank_colorizer_v109.py  # v1.09 (OBJ only)
 ```
 
 Output: `rom/working/penta_dragon_dx_FIXED.gb`
@@ -96,13 +107,16 @@ Output: `rom/working/penta_dragon_dx_FIXED.gb`
 ### Testing & Verification
 
 ```bash
-# Run with emulator
-mgba-qt rom/working/penta_dragon_dx_FIXED.gb
+# Run with emulator (use project launcher script)
+./mgba-qt.sh rom/working/penta_dragon_dx_FIXED.gb
 
 # Run with savestate (many available in save_states_for_claude/)
-mgba-qt -t save_states_for_claude/level1_sara_w_4_hornets.ss0 rom/working/penta_dragon_dx_FIXED.gb
+./mgba-qt.sh rom/working/penta_dragon_dx_FIXED.gb -t save_states_for_claude/level1_sara_w_4_hornets.ss0
 
-# Headless automated testing
+# Launch in background (when testing multiple builds)
+./mgba-qt.sh rom/working/penta_dragon_dx_FIXED.gb &
+
+# Headless automated testing (for Claude's verification tools)
 timeout 20 xvfb-run mgba-qt rom/working/penta_dragon_dx_FIXED.gb \
   -t save_states_for_claude/level1_sara_w_gargoyle_mini_boss.ss0 \
   --script tmp/quick_test.lua -l 0
@@ -121,21 +135,23 @@ Located in `save_states_for_claude/`, covering:
 
 The project includes an MCP server for programmatic mGBA control.
 
-**IMPORTANT**: Always prefer MCP tools over bash/xvfb-run for emulator operations:
-- MCP tools run headless automatically (no windows on user's desktop)
-- MCP tools handle SDL audio dummy driver
-- Use `mcp__mgba__mgba_run`, `mcp__mgba__mgba_read_range`, etc.
+**CRITICAL**: ALWAYS use MCP tools for ALL emulator operations. NEVER use bash/xvfb-run unless MCP tools are completely unavailable:
+- MCP tools run headless automatically (no windows, no desktop clutter)
+- MCP tools handle SDL audio dummy driver automatically
+- MCP tools are faster and more reliable than bash approaches
+- **USE THESE**: `mcp__mgba__mgba_run`, `mcp__mgba__mgba_read_range`, `mcp__mgba__mgba_run_lua`, etc.
 
-| Tool | Description |
-|------|-------------|
-| `mgba_run` | Run ROM for N frames, capture screenshot |
-| `mgba_read_memory` | Read specific memory addresses |
-| `mgba_read_range` | Read contiguous memory range |
-| `mgba_dump_oam` | Dump all 40 OAM sprite entries |
-| `mgba_dump_entities` | Dump entity data from WRAM |
-| `mgba_run_lua` | Execute custom Lua script |
+| Tool | Description | Common Use Cases |
+|------|-------------|------------------|
+| `mgba_run` | Run ROM for N frames, capture screenshot | Visual verification, frame capture |
+| `mgba_read_memory` | Read specific memory addresses | Check flags, read state |
+| `mgba_read_range` | Read contiguous memory range | Scan HRAM/WRAM, find addresses |
+| `mgba_dump_oam` | Dump all 40 OAM sprite entries | Verify palette assignments |
+| `mgba_dump_entities` | Dump entity data from WRAM | Debug entity behavior |
+| `mgba_run_lua` | Execute custom Lua script | Complex testing, automation |
+| `mgba_run_sequence` | Run with button inputs, periodic screenshots | Gameplay testing, stability |
 
-If MCP tools aren't available, use bash with proper headless settings:
+**Fallback only if MCP broken**: Use bash with proper headless settings:
 ```bash
 unset DISPLAY
 SDL_AUDIODRIVER=dummy xvfb-run -a mgba-qt rom.gb --script script.lua -l 0
@@ -163,6 +179,7 @@ SDL_AUDIODRIVER=dummy xvfb-run -a mgba-qt rom.gb --script script.lua -l 0
 | `0xC200-0xC2FF` | Entity data (10 entities x 24 bytes) |
 | `0xFE00-0xFE9F` | Hardware OAM |
 | `0xFFBF` | Boss flag: 0=normal, 1=Gargoyle, 2=Spider |
+| `0xFFD0` | **Stage flag: 0=Level 1, 1=Bonus stage** (v2.28+) |
 | `0xFF6A` | OCPS - Object Color Palette Specification |
 | `0xFF6B` | OCPD - Object Color Palette Data |
 

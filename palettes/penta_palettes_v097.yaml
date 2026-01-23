@@ -1,5 +1,5 @@
 # Penta Dragon DX Palettes
-# v0.97: Tile-based colorization with Sara W/D distinction
+# v0.98: Stage detection + Jet form palettes + Tile-based colorization
 #
 # Colors are BGR555 hex format: 0bBBBBBGGGGGRRRRR (5 bits each)
 # Common colors:
@@ -7,10 +7,18 @@
 #   0x7C00=Blue, 0x03FF=Yellow, 0x7C1F=Magenta, 0x7FE0=Cyan
 
 # ============================================
+# STAGE DETECTION (v0.98) - Address 0xFFD0
+# ============================================
+# stage_flag=0x00: Level 1 (main dungeon) -> BG palette 0 (Dungeon)
+# stage_flag=0x01: Bonus stage (jet/spaceship) -> BG palette 7 (BG7)
+#                  + Use jet form OBJ palettes (SaraWitchJet, SaraDragonJet)
+# stage_flag=0x02-0x04: Levels 2-5 (not yet implemented)
+#
+# ============================================
 # TILE-BASED PALETTE MAPPING (v0.97)
 # ============================================
-# Sara W: tiles 0x20-0x27 -> Palette 2 (skin/pink)
-# Sara D: tiles 0x28-0x2F -> Palette 1 (green - dragon)
+# Sara W: tiles 0x20-0x27 -> Palette 2 (skin/pink) OR SaraWitchJet in bonus stage
+# Sara D: tiles 0x28-0x2F -> Palette 1 (green) OR SaraDragonJet in bonus stage
 #
 # Boss detection via boss_flag at 0xFFBF:
 #   boss_flag=0: Normal mode (tile-based palettes)
@@ -76,16 +84,16 @@ bg_palettes:
     colors: ["7E10", "5C08", "3800", "0000"]  # Sky blue, Royal blue, Navy, Black
 
 # ============================================
-# SPRITE PALETTES - v0.99 Dynamic Boss Swap
+# SPRITE PALETTES - v0.98 Stage + Boss Detection
 # ============================================
 # Palette 0: Effects/projectiles (white/gray)
-# Palette 1: Sara D - Dragon form (green)
-# Palette 2: Sara W - Witch form (skin/pink)
+# Palette 1: Sara D - Dragon form (green) OR Sara D Jet (cyan) in bonus stage
+# Palette 2: Sara W - Witch form (skin/pink) OR Sara W Jet (magenta) in bonus stage
 # Palette 3: Crow (dark blue/black)
 # Palette 4: Hornets (yellow/orange)
 # Palette 5: Orc/Ground (green/brown)
-# Palette 6: Humanoid (purple) OR Gargoyle boss
-# Palette 7: Catfish (cyan) OR Spider boss
+# Palette 6: Humanoid (purple) OR Gargoyle boss (boss_flag=1)
+# Palette 7: Catfish (cyan) OR Spider boss (boss_flag=2)
 # ============================================
 
 obj_palettes:
@@ -100,6 +108,16 @@ obj_palettes:
   # Palette 2 - SARA W (Witch form - skin/pink-red/black)
   SaraWitch:
     colors: ["0000", "2EBE", "511F", "0842"]  # Trans, Skin (peach), Pink-red, Near-black
+
+  # Palette 2 (Alt) - SARA W JET (Spaceship form - magenta/purple)
+  # Used in bonus stage (stage_flag=0x01) instead of SaraWitch
+  SaraWitchJet:
+    colors: ["0000", "7C1F", "5817", "3010"]  # Trans, Magenta, Purple, Dark purple
+
+  # Palette 1 (Alt) - SARA D JET (Spaceship form - cyan/electric blue)
+  # Used in bonus stage (stage_flag=0x01) instead of SaraDragon
+  SaraDragonJet:
+    colors: ["0000", "7FE0", "4EC0", "2D80"]  # Trans, Bright cyan, Blue, Dark blue
 
   # Palette 3 - CROW (dark blue/black - nocturnal bird)
   Crow:
