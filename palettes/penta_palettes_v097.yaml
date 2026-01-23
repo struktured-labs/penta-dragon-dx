@@ -1,4 +1,5 @@
 # Penta Dragon DX Palettes
+# v2.29: Projectile colorization with dynamic Palette 0
 # v0.98: Stage detection + Jet form palettes + Tile-based colorization
 #
 # Colors are BGR555 hex format: 0bBBBBBGGGGGRRRRR (5 bits each)
@@ -25,12 +26,14 @@
 #   boss_flag=1: Gargoyle miniboss -> Palette 6
 #   boss_flag=2: Spider miniboss -> Palette 7
 #
-# Normal mode tile ranges:
-#   0x00-0x1F: Effects -> Palette 0
+# Normal mode tile ranges (v2.29 projectile sub-ranges):
+#   0x00-0x07: Sara projectiles -> Palette 0 (dynamic - pink for W, green for D)
+#   0x08-0x0F: Enemy projectiles -> Palette 3 (blue/dark)
+#   0x10-0x1F: Effects/explosions -> (TBD - currently Palette 0)
 #   0x30-0x3F: Crow/flying -> Palette 3
 #   0x40-0x4F: Hornets/flying -> Palette 4
-#   0x50-0x5F: Ground (orc) -> Palette 4
-#   0x60-0x6F: Humanoid (soldier/moth/mage) -> Palette 5
+#   0x50-0x5F: Ground (orc) -> Palette 5
+#   0x60-0x6F: Humanoid (soldier/moth/mage) -> Palette 6
 #   0x70-0x7F: Special (catfish) -> Palette 3
 
 # ============================================
@@ -84,12 +87,14 @@ bg_palettes:
     colors: ["7E10", "5C08", "3800", "0000"]  # Sky blue, Royal blue, Navy, Black
 
 # ============================================
-# SPRITE PALETTES - v0.98 Stage + Boss Detection
+# SPRITE PALETTES - v2.29 Dynamic Palette 0 + Stage + Boss Detection
 # ============================================
-# Palette 0: Effects/projectiles (white/gray)
+# Palette 0: Sara projectiles (DYNAMIC - changes based on Sara form)
+#            Sara W (0xFFBE=0): Pink/red projectile colors
+#            Sara D (0xFFBE≠0): Green projectile colors
 # Palette 1: Sara D - Dragon form (green) OR Sara D Jet (cyan) in bonus stage
 # Palette 2: Sara W - Witch form (skin/pink) OR Sara W Jet (magenta) in bonus stage
-# Palette 3: Crow (dark blue/black)
+# Palette 3: Crow (dark blue/black) + Enemy projectiles (tiles 0x08-0x0F)
 # Palette 4: Hornets (yellow/orange)
 # Palette 5: Orc/Ground (green/brown)
 # Palette 6: Humanoid (purple) OR Gargoyle boss (boss_flag=1)
@@ -97,9 +102,19 @@ bg_palettes:
 # ============================================
 
 obj_palettes:
-  # Palette 0 - Effects/projectiles (neutral white/gray)
-  Effects:
-    colors: ["0000", "7FFF", "5294", "0000"]  # Trans, White, Gray, Black
+  # Palette 0 - SARA PROJECTILES (dynamic - changes based on Sara form)
+  # Sara W (0xFFBE=0): Pink/red projectile (SaraProjectileWitch)
+  # Sara D (0xFFBE≠0): Green projectile (SaraProjectileDragon)
+  # v2.29: Repurposed Effects palette for projectile colorization
+
+  # Default Palette 0 - Sara W Projectile (pink/red)
+  SaraProjectileWitch:
+    colors: ["0000", "7C1F", "5817", "3010"]  # Trans, Bright pink, Pink-red, Dark red
+
+  # Alternative Palette 0 - Sara D Projectile (green) - loaded dynamically
+  # (Note: Not in default obj_palettes list, loaded separately)
+  SaraProjectileDragon:
+    colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Bright green, Dark green, Black
 
   # Palette 1 - SARA D (Dragon form - green/black)
   SaraDragon:
