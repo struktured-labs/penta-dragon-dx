@@ -6,11 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v2.28 STABLE (Fixed) - Stage detection + jet form palettes + BG items + tile-based monsters + boss detection.
+**Current Status**: v2.29 TESTING - Projectile colorization with dynamic Palette 0
 
-**Recent Fixes**:
-- Spider miniboss palette assignment (was Sara W pink, now red/black)
-- Boss flag flickering (read once per VBlank instead of twice)
+**NEW in v2.29**:
+- Projectile sub-range detection (tiles 0x00-0x07 Sara, 0x08-0x0F enemies)
+- Dynamic Palette 0 loading based on Sara form (pink for W, green for D)
+- Enemy projectiles get distinct color (blue/dark via Palette 3)
+- Infrastructure ready for powerup-based palette swapping
+
+**Status**: Tile ranges are educated guesses - need testing/verification
 
 ### What Works
 - CGB mode detection and compatibility
@@ -38,7 +42,8 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 
 | Version | Tag | Status | Description |
 |---------|-----|--------|-------------|
-| v2.28 | `v2.28` | **STABLE** | Stage detection + jet form colors + BG items + bosses (BEST) |
+| v2.29 | `v2.29` | **TESTING** | Projectile colorization + dynamic Palette 0 (needs verification) |
+| v2.28 | `v2.28` | Stable | Stage detection + jet form colors + BG items + bosses |
 | v2.26 | - | Stable | BG items + OBJ tile-based + boss detection |
 | v1.12 | `v1.12` | Stable | BG items gold + OBJ tile-based + boss detection |
 | v1.09 | `best-colorization-jan2026` | Stable | Tile-based + dynamic boss palettes |
@@ -54,16 +59,18 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 - `0xC100` - Shadow buffer 2 (modified pre-DMA)
 - `0xFE00` - Hardware OAM (receives colored data via DMA)
 
-**Tile-based palette assignment** (v1.05+):
+**Tile-based palette assignment** (v2.29):
 ```
-Sara W (tiles 0x20-0x27):   Palette 2 (skin/pink)
-Sara D (tiles 0x28-0x2F):   Palette 1 (green/dragon)
-Effects (tiles 0x00-0x1F):  Palette 0 (white/gray)
-Crows (tiles 0x30-0x3F):    Palette 3 (dark blue)
-Hornets (tiles 0x40-0x4F):  Palette 4 (yellow/orange)
-Orcs (tiles 0x50-0x5F):     Palette 5 (green/brown)
-Humanoids (tiles 0x60-0x6F): Palette 6 (purple) or 7 (boss)
-Special (tiles 0x70-0x7F):  Palette 3 (cyan)
+Sara projectiles (0x00-0x07):  Palette 0 (DYNAMIC - pink for W, green for D)
+Enemy projectiles (0x08-0x0F): Palette 3 (blue/dark)
+Effects (tiles 0x10-0x1F):     Palette 4 (default - needs testing)
+Sara W (tiles 0x20-0x27):      Palette 2 (skin/pink)
+Sara D (tiles 0x28-0x2F):      Palette 1 (green/dragon)
+Crows (tiles 0x30-0x3F):       Palette 3 (dark blue)
+Hornets (tiles 0x40-0x4F):     Palette 4 (yellow/orange)
+Orcs (tiles 0x50-0x5F):        Palette 5 (green/brown)
+Humanoids (tiles 0x60-0x6F):   Palette 6 (purple) or 7 (boss)
+Special (tiles 0x70-0x7F):     Palette 3 (cyan)
 ```
 
 **Boss detection** (v1.07+):
@@ -88,12 +95,26 @@ Item tiles (0x88-0xDF) -> BG palette 1 (gold/yellow)
 - Items include: potions, health, extra lives, powerups
 ```
 
+**Dynamic Palette 0** (v2.29):
+```
+Projectile colorization via dynamic palette loading:
+- Read Sara form flag (0xFFBE) at palette initialization
+- If Sara W (0xFFBE=0): Load pink/red projectile colors into Palette 0
+- If Sara D (0xFFBE≠0): Load green projectile colors into Palette 0
+- Tile colorizer assigns Palette 0 to tiles 0x00-0x07 (Sara projectiles)
+- Enemy projectiles (0x08-0x0F) use Palette 3 (blue/dark)
+- Ready for powerup-based expansion (Phase 4)
+```
+
 ## Common Commands
 
 ### Build the Colorized ROM
 
 ```bash
-# Build v2.28 (current best - stage detection + jet colors + BG items)
+# Build v2.29 (latest - projectile colorization + dynamic Palette 0)
+uv run python scripts/create_vblank_colorizer_v229.py
+
+# Build v2.28 (stable - stage detection + jet colors + BG items)
 uv run python scripts/create_vblank_colorizer_v228.py
 
 # Build older versions
