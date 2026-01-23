@@ -6,15 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v2.29 TESTING - Projectile colorization with dynamic Palette 0
+**Current Status**: v2.30 TESTING - Simplified projectile colorization (fixes v2.29)
 
-**NEW in v2.29**:
-- Projectile sub-range detection (tiles 0x00-0x07 Sara, 0x08-0x0F enemies)
-- Dynamic Palette 0 loading based on Sara form (pink for W, green for D)
-- Enemy projectiles get distinct color (blue/dark via Palette 3)
-- Infrastructure ready for powerup-based palette swapping
+**NEW in v2.30**:
+- Fixed direction-dependent projectile colors (v2.29 issue)
+- Fixed purple flashing BG tiles (v2.29 register conflict)
+- Simplified: ALL projectiles (0x00-0x0F) use dynamic Palette 0
+- Sara W: Pink projectiles, Sara D: Green projectiles
+- Trade-off: Enemy projectiles also colored by Sara's form (not distinct yet)
 
-**Status**: Tile ranges are educated guesses - need testing/verification
+**Status**: Awaiting user testing to confirm fixes
 
 ### What Works
 - CGB mode detection and compatibility
@@ -42,7 +43,8 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 
 | Version | Tag | Status | Description |
 |---------|-----|--------|-------------|
-| v2.29 | `v2.29` | **TESTING** | Projectile colorization + dynamic Palette 0 (needs verification) |
+| v2.30 | `v2.30` | **TESTING** | Fixed v2.29 issues (direction colors + BG flashing) |
+| v2.29 | `v2.29` | BROKEN | Projectile colorization (direction-dependent colors, BG flashing) |
 | v2.28 | `v2.28` | Stable | Stage detection + jet form colors + BG items + bosses |
 | v2.26 | - | Stable | BG items + OBJ tile-based + boss detection |
 | v1.12 | `v1.12` | Stable | BG items gold + OBJ tile-based + boss detection |
@@ -111,10 +113,10 @@ Projectile colorization via dynamic palette loading:
 ### Build the Colorized ROM
 
 ```bash
-# Build v2.29 (latest - projectile colorization + dynamic Palette 0)
-uv run python scripts/create_vblank_colorizer_v229.py
+# Build v2.30 (testing - fixed projectile colors, no BG flashing)
+uv run python scripts/create_vblank_colorizer_v230.py
 
-# Build v2.28 (stable - stage detection + jet colors + BG items)
+# Build v2.28 (stable fallback - no projectile coloring)
 uv run python scripts/create_vblank_colorizer_v228.py
 
 # Build older versions
