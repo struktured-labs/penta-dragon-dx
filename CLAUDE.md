@@ -6,16 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v2.31 STABLE - Projectile colorization with dynamic Palette 0
+**Current Status**: v2.34 STABLE - Full BG Colorization + STAT-safe VRAM Access
 
-**What Works in v2.31**:
-- Dynamic Palette 0 based on Sara form (0xFFBE)
-- Sara W: Pink/magenta projectiles
-- Sara D: Green projectiles
+**What Works in v2.34** (all v2.33 features plus):
+- **Full BG tile colorization**: Walls, floors, and items have distinct colors
+  - Palette 0: Floor/platforms (blue-white dungeon)
+  - Palette 1: Items (bright gold - health, powerups, extra lives)
+  - Palette 6: Walls/structure (blue-gray stone)
+- **STAT-safe VRAM access**: Checks LCD STAT register before every VRAM read/write
+  - Eliminates mode 3 (LCD transfer) silent failures → 100% palette accuracy
+- **Continuous BG colorizer**: Processes 2 rows per VBlank, cycles all 32 tilemap rows
+  - Full tilemap refresh every 16 frames (~0.27 seconds)
+  - Row counter at HRAM 0xFFE0 with AND 0x1F wrap
+- **Game mode detection**: Skips BG coloring on menus/title (0xFFC1 check)
+- **Multi-boss palette system** (table-based lookup for 8 distinct bosses)
+- Per-entity projectile colors based on verified tile mapping
+- Powerup-based Palette 0 colors (0xFFC0 flag)
+- All v2.33 features intact (jet forms, BG items, tile-based monsters, bosses)
 - No flickering, stable colors
-- All v2.28 features intact (bosses, jet forms, BG items, tile-based monsters)
-
-**Trade-off**: Enemy projectiles share Sara's form color (intentional for stability)
 
 ### What Works
 - CGB mode detection and compatibility
@@ -28,9 +36,11 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
   - Level 1 (0x00): Normal dungeon palettes
   - Bonus stage (0x01): Jet form palettes for Sara
 - **Jet form colors** (v2.28): Sara W jet = magenta/purple, Sara D jet = cyan/blue
-- **Boss detection** via 0xFFBF flag with dynamic palette loading:
-  - Gargoyle (flag=1): Dark magenta palette loaded into slot 6
-  - Spider (flag=2): Red/orange palette loaded into slot 7
+- **Boss detection** via 0xFFBF flag with table-based palette loading (v2.33):
+  - 8 bosses supported via palette table + slot table lookup
+  - Gargoyle (flag=1), Spider (flag=2), Crimson (flag=3), Ice (flag=4),
+    Void (flag=5), Poison (flag=6), Knight (flag=7), Angela (flag=8)
+  - Each boss loads custom colors into its assigned palette slot (6 or 7)
   - **Bug fix (v2.28)**: Boss flag now read once per VBlank to prevent flickering
 - **BG Item colorization**: Items (tiles 0x88-0xDF) get gold/yellow BG palette
   - Potions, health, extra lives, powerups all stand out from blue floor
@@ -43,7 +53,10 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 
 | Version | Tag | Status | Description |
 |---------|-----|--------|-------------|
-| v2.31 | `v2.31` | **STABLE (BEST)** | Dynamic projectile colors (Sara W=pink, Sara D=green) |
+| v2.34 | `v2.34` | **STABLE (BEST)** | Full BG colorization + STAT-safe VRAM access |
+| v2.33 | `v2.33` | Stable | Multi-boss table (8 bosses) + turbo powerup |
+| v2.32 | `v2.32` | Stable | Per-entity projectile colors + powerup support |
+| v2.31 | `v2.31` | Stable | Dynamic projectile colors (Sara W=pink, Sara D=green) |
 | v2.30 | `v2.30` | Broken | Wrong jump offsets caused flickering |
 | v2.29 | `v2.29` | Broken | Direction-dependent colors, BG flashing |
 | v2.28 | `v2.28` | Stable | Stage detection + jet form colors + BG items + bosses |
@@ -62,51 +75,66 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 - `0xC100` - Shadow buffer 2 (modified pre-DMA)
 - `0xFE00` - Hardware OAM (receives colored data via DMA)
 
-**Tile-based palette assignment** (v2.29):
+**Tile-based palette assignment** (v2.32+):
 ```
-Sara projectiles (0x00-0x07):  Palette 0 (DYNAMIC - pink for W, green for D)
-Enemy projectiles (0x08-0x0F): Palette 3 (blue/dark)
-Effects (tiles 0x10-0x1F):     Palette 4 (default - needs testing)
+Projectiles (per-entity detection):
+  Tile 0x0F:           Palette 2 (Sara W - pink)
+  Tiles 0x06,0x09,0x0A: Palette 1 (Sara D - green)
+  Tiles 0x00-0x01:     Palette 3 (Enemy - dark blue)
+  Tiles 0x02-0x05,etc: Palette 0 (Dynamic - powerup colors)
+Effects (tiles 0x10-0x1F):     Palette 4 (yellow/white)
 Sara W (tiles 0x20-0x27):      Palette 2 (skin/pink)
 Sara D (tiles 0x28-0x2F):      Palette 1 (green/dragon)
 Crows (tiles 0x30-0x3F):       Palette 3 (dark blue)
 Hornets (tiles 0x40-0x4F):     Palette 4 (yellow/orange)
 Orcs (tiles 0x50-0x5F):        Palette 5 (green/brown)
 Humanoids (tiles 0x60-0x6F):   Palette 6 (purple) or 7 (boss)
-Special (tiles 0x70-0x7F):     Palette 3 (cyan)
+Special (tiles 0x70-0x7F):     Palette 7 (catfish)
 ```
 
-**Boss detection** (v1.07+):
+**Boss detection** (v2.33 table-based):
 ```
 0xFFBF = 0: Normal mode (tile-based palettes)
-0xFFBF = 1: Gargoyle mode (all enemies palette 6, load dark magenta)
-0xFFBF = 2: Spider mode (all enemies palette 7, load red/orange)
+0xFFBF = 1-8: Boss mode (table lookup)
+  - Boss slot table (8 bytes at 0x68C0): maps boss_flag → palette slot (6 or 7)
+  - Boss palette table (64 bytes at 0x6880): maps boss_flag → 8-byte palette data
+  - Loader: reads slot from table, computes OCPS target, loads 8 bytes from palette table
+  - All enemy sprites forced to boss's palette slot via E register override
 ```
 
-**Dynamic palette loading** (v1.09):
+**Dynamic palette loading** (v2.33):
 ```
 When boss_flag != 0:
-  - Load special boss colors into palette 6 or 7 via OCPS/OCPD
-  - Override tile-based assignment for all enemies
+  - Index into boss_slot_table[flag-1] to get target slot (6 or 7)
+  - Index into boss_palette_table[flag-1] to get 8 color bytes
+  - Write to OCPS/OCPD to load boss colors into target slot
+  - Shadow colorizer sets E = slot for all non-Sara sprites
 ```
 
-**BG Item Colorization** (v1.12):
+**BG Tile Colorization** (v2.34):
 ```
-Item tiles (0x88-0xDF) -> BG palette 1 (gold/yellow)
-- Runs AFTER DMA to win race against game's attribute reset
-- Scans 20x18 visible tile area each VBlank
-- Items include: potions, health, extra lives, powerups
+Continuous colorizer with STAT-safe VRAM access:
+- 256-byte lookup table maps tile_id → BG palette (0, 1, or 6)
+- Processes 2 rows per VBlank, cycling all 32 tilemap rows
+- Checks LCD STAT register before each VRAM read/write (avoids mode 3)
+- Row counter at HRAM 0xFFE0 wraps at 32 (AND 0x1F)
+- Skips menus via 0xFFC1 gameplay flag check
+- Tile categories:
+    Floor (0x01-0x06, 0xFE):  Palette 0 (blue-white)
+    Walls (0x13-0x7F, 0xE0+): Palette 6 (blue-gray stone)
+    Items (0x88-0xDF):         Palette 1 (gold/yellow)
 ```
 
-**Dynamic Palette 0** (v2.29):
+**Dynamic Palette 0** (v2.29+):
 ```
 Projectile colorization via dynamic palette loading:
-- Read Sara form flag (0xFFBE) at palette initialization
-- If Sara W (0xFFBE=0): Load pink/red projectile colors into Palette 0
-- If Sara D (0xFFBE≠0): Load green projectile colors into Palette 0
+- Read powerup flag (0xFFC0) first - powerup overrides Sara form
+  - 0x01: Spiral (cyan), 0x02: Shield (gold), 0x03: Turbo (orange)
+- If no powerup, read Sara form flag (0xFFBE)
+  - Sara W (0xFFBE=0): Pink/red projectile colors
+  - Sara D (0xFFBE≠0): Green projectile colors
 - Tile colorizer assigns Palette 0 to tiles 0x00-0x07 (Sara projectiles)
 - Enemy projectiles (0x08-0x0F) use Palette 3 (blue/dark)
-- Ready for powerup-based expansion (Phase 4)
 ```
 
 ## Common Commands
@@ -114,16 +142,15 @@ Projectile colorization via dynamic palette loading:
 ### Build the Colorized ROM
 
 ```bash
-# Build v2.31 (BEST - dynamic projectile colors, stable)
-uv run python scripts/create_vblank_colorizer_v231.py
+# Build v2.34 (BEST - full BG colorization + STAT-safe VRAM)
+uv run python scripts/create_vblank_colorizer_v234.py
 
-# Build v2.28 (fallback - no projectile coloring)
-uv run python scripts/create_vblank_colorizer_v228.py
+# Build v2.33 (fallback - multi-boss table + turbo powerup, no BG coloring)
+uv run python scripts/create_vblank_colorizer_v233.py
 
 # Build older versions
-uv run python scripts/create_vblank_colorizer_v226.py  # v2.26 (no stage detection)
-uv run python scripts/create_vblank_colorizer_v112.py  # v1.12 (BG items)
-uv run python scripts/create_vblank_colorizer_v109.py  # v1.09 (OBJ only)
+uv run python scripts/create_vblank_colorizer_v232.py  # v2.32 (per-entity projectiles)
+uv run python scripts/create_vblank_colorizer_v228.py  # v2.28 (no projectile coloring)
 ```
 
 Output: `rom/working/penta_dragon_dx_FIXED.gb`
@@ -186,12 +213,21 @@ SDL_AUDIODRIVER=dummy xvfb-run -a mgba-qt rom.gb --script script.lua -l 0
 ### ROM Layout (Bank 13)
 
 ```
-0x6800: Palette data (128 bytes) - 8 BG + 8 OBJ palettes
-0x6880: Boss palette data (16 bytes) - Gargoyle + Spider colors
-0x6900: Palette loader with dynamic boss swap (~80 bytes)
-0x6980: Shadow colorizer main (boss flag check + loop setup)
-0x69D0: Tile-based colorizer routine
-0x6A80: Combined function (original input + colorization call)
+0x6800-0x683F: BG palettes (64 bytes, 8 palettes x 8 bytes)
+0x6840-0x687F: OBJ palettes (64 bytes, 8 palettes x 8 bytes)
+0x6880-0x68BF: Boss palette table (64 bytes, 8 bosses x 8 bytes)
+0x68C0-0x68C7: Boss slot table (8 bytes, maps boss_flag → palette slot 6/7)
+0x68D0-0x68D7: Sara Witch Jet palette (8 bytes)
+0x68D8-0x68DF: Sara Dragon Jet palette (8 bytes)
+0x68E0-0x68E7: Spiral projectile palette (8 bytes)
+0x68E8-0x68EF: Shield projectile palette (8 bytes)
+0x68F0-0x68F7: Turbo projectile palette (8 bytes)
+0x6900:        Palette loader (~194 bytes, boss table + powerup chain)
+0x69D0:        Shadow colorizer main (~50 bytes, boss flag + loop setup)
+0x6A10:        Tile-based colorizer (~134 bytes)
+0x6B00-0x6BFF: BG tile lookup table (256 bytes, tile_id → palette)
+0x6C00:        BG colorizer (~78 bytes, STAT-safe continuous)
+0x6D00:        Combined function (~13 bytes, input + colorization call)
 ```
 
 ### Memory Map (Game Boy)
@@ -200,10 +236,15 @@ SDL_AUDIODRIVER=dummy xvfb-run -a mgba-qt rom.gb --script script.lua -l 0
 |---------|---------|
 | `0xC000-0xC09F` | Shadow OAM 1 (40 sprites x 4 bytes) |
 | `0xC100-0xC19F` | Shadow OAM 2 (alternate buffer) |
-| `0xC200-0xC2FF` | Entity data (10 entities x 24 bytes) |
+| `0xC200-0xC2FF` | Level/tilemap buffer data (NOT entities) |
 | `0xFE00-0xFE9F` | Hardware OAM |
-| `0xFFBF` | Boss flag: 0=normal, 1=Gargoyle, 2=Spider |
+| `0xFFBE` | Sara form: 0=Witch, non-zero=Dragon |
+| `0xFFBF` | Boss flag: 0=normal, 1-8=boss index (v2.33: 8 bosses) |
+| `0xFFC0` | Powerup state: 0=none, 1=spiral, 2=shield, 3=turbo |
+| `0xFFCB` | DMA buffer toggle: alternates 0/1 each frame |
 | `0xFFD0` | **Stage flag: 0=Level 1, 1=Bonus stage** (v2.28+) |
+| `0xFFE0` | BG colorizer row counter (0-31, wraps with AND 0x1F) (v2.34+) |
+| `0xFFC1` | Gameplay active flag: 0=menu, non-zero=gameplay (v2.34+) |
 | `0xFF6A` | OCPS - Object Color Palette Specification |
 | `0xFF6B` | OCPD - Object Color Palette Data |
 
@@ -255,9 +296,9 @@ penta-dragon-dx-claude/
 │   └── working/                 # Build output
 ├── save_states_for_claude/      # Test save states (55+ scenarios)
 ├── scripts/
-│   ├── create_vblank_colorizer_v109.py  # Current best
-│   ├── create_vblank_colorizer_v107.py  # Boss flag + tile-based
-│   ├── create_vblank_colorizer_v105.py  # Tile-based only
+│   ├── create_vblank_colorizer_v233.py  # Current best (v2.33)
+│   ├── create_vblank_colorizer_v232.py  # v2.32 fallback
+│   ├── create_vblank_colorizer_v225.py  # v2.25 reference
 │   └── ...
 ├── src/penta_dragon_dx/         # Python package
 ├── docs/                        # Strategy documents
@@ -270,7 +311,7 @@ penta-dragon-dx-claude/
 ### Quick Iteration
 ```bash
 # Build and test with specific savestate
-uv run python scripts/create_vblank_colorizer_v109.py && \
+uv run python scripts/create_vblank_colorizer_v233.py && \
 mgba-qt rom/working/penta_dragon_dx_FIXED.gb \
   -t save_states_for_claude/level1_sara_w_gargoyle_mini_boss.ss0
 ```
@@ -306,7 +347,7 @@ The repository does NOT include the original ROM. Users must supply their own le
 
 ## Next Steps
 
-1. **Regression test suite** - Automated color verification using save states
-2. **Level 2+ palettes** - Different BG/sprite palettes for other levels
-3. **Sara form-specific effects** - Different projectile colors per form
+1. **Per-level BG palettes** - Different BG themes for Levels 1-5 (needs level address research; requires save states from levels 2+)
+2. **Game code patching** - Patch ROM projectile rendering to set CGB palette bits at source, enabling true per-entity projectile colors without tile heuristics
+3. **Regression test suite** - Automated color verification using save states
 4. **More enemy variety** - Fine-tune palettes for specific enemy subtypes

@@ -90,19 +90,33 @@ def patch_vblank_wait_for_cgb(rom_data: bytearray) -> tuple[bytearray, list[tupl
     # In CGB mode, bit 7 of KEY1 should be 1, so Z will be clear
     # RET NZ would return if CGB mode
     
-    ultra_simple_patch = bytearray([
-        0xF0, 0x4D,        # LDH A,[FF4D]  ; Read KEY1
-        0xCB, 0x7F,        # BIT 7,A       ; Test bit 7
-        0xC0,              # RET NZ        ; Return if CGB (bit 7 = 1, Z = 0)
-        # Continue with original code at offset 5
-    ])
-    
-    # Now append the original code starting from position 0
-    ultra_simple_patch.extend(rom_data[original_addr:original_addr + 18])  # 18 bytes of original = 23 total
-    
-    # Patch it
-    rom_data[original_addr:original_addr + len(ultra_simple_patch)] = ultra_simple_patch
-    patches.append((original_addr, original_code, bytes(ultra_simple_patch)))
+    # FIXED APPROACH: NOP out the LCD off instructions directly.
+    # We're building a CGB-only ROM, so LCD off during VBlank is unnecessary
+    # and can corrupt VRAM bank 1 attributes.
+    #
+    # Original layout (23 bytes at 0x0067):
+    #   0x0067: F0 FF  LDH A,[FFFF]   ; Save IE
+    #   0x0069: E0 98  LDH [FF98],A   ; Store IE
+    #   0x006B: CB 87  RES 0,A        ; (unused side effect)
+    #   0x006D: F0 44  LDH A,[FF44]   ; Read LY
+    #   0x006F: FE 91  CP 91h         ; Compare 145
+    #   0x0071: 38 FA  JR C,-6        ; Loop if < VBlank
+    #   0x0073: F0 40  LDH A,[FF40]   ; ← LCD OFF starts here
+    #   0x0075: E6 7F  AND 7Fh        ; ← Clear LCD enable bit
+    #   0x0077: E0 40  LDH [FF40],A   ; ← LCD OFF write
+    #   0x0079: F0 98  LDH A,[FF98]   ; Restore IE
+    #   0x007B: E0 FF  LDH [FFFF],A
+    #   0x007D: C9     RET
+    #
+    # Fix: NOP out the 6 bytes at 0x0073-0x0078 (LCD off sequence)
+    # This preserves VBlank wait + interrupt restore + RET
+
+    lcd_off_addr = 0x0073
+    lcd_off_original = bytes(rom_data[lcd_off_addr:lcd_off_addr + 6])
+    lcd_off_nops = bytes([0x00] * 6)  # 6 NOPs
+
+    rom_data[lcd_off_addr:lcd_off_addr + 6] = lcd_off_nops
+    patches.append((lcd_off_addr, lcd_off_original, lcd_off_nops))
     
     return rom_data, patches
 

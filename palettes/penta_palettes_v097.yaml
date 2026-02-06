@@ -1,4 +1,6 @@
 # Penta Dragon DX Palettes
+# v2.33: Multi-boss palette system (8 bosses) + turbo powerup
+# v2.32: Per-entity projectile colors + powerup support
 # v2.29: Projectile colorization with dynamic Palette 0
 # v0.98: Stage detection + Jet form palettes + Tile-based colorization
 #
@@ -21,16 +23,22 @@
 # Sara W: tiles 0x20-0x27 -> Palette 2 (skin/pink) OR SaraWitchJet in bonus stage
 # Sara D: tiles 0x28-0x2F -> Palette 1 (green) OR SaraDragonJet in bonus stage
 #
-# Boss detection via boss_flag at 0xFFBF:
+# Boss detection via boss_flag at 0xFFBF (v2.33: 8 bosses):
 #   boss_flag=0: Normal mode (tile-based palettes)
 #   boss_flag=1: Gargoyle miniboss -> Palette 6
 #   boss_flag=2: Spider miniboss -> Palette 7
+#   boss_flag=3: Crimson boss -> Palette 6
+#   boss_flag=4: Ice boss -> Palette 7
+#   boss_flag=5: Void boss -> Palette 6
+#   boss_flag=6: Poison boss -> Palette 7
+#   boss_flag=7: Knight boss -> Palette 6
+#   boss_flag=8: Angela (secret boss) -> Palette 7
 #
-# Normal mode tile ranges (v2.29 projectile sub-ranges):
-#   0x00-0x07: Sara projectiles -> Palette 0 (dynamic - pink for W, green for D)
-#   0x08-0x0F: Enemy projectiles -> Palette 3 (blue/dark)
-#   0x10-0x1F: Effects/explosions -> (TBD - currently Palette 0)
-#   0x30-0x3F: Crow/flying -> Palette 3
+# Normal mode tile ranges (VERIFIED via gameplay):
+#   0x00-0x07: Sara W projectiles (tile 0x01) -> Palette 3 (red, shared with Crow)
+#   0x08-0x0F: Enemy projectiles (tile 0x0F) -> Palette 0 (blue)
+#   0x10-0x1F: Effects/explosions -> Palette 0
+#   0x30-0x3F: Crow/flying -> Palette 3 (shared with Sara W projectiles)
 #   0x40-0x4F: Hornets/flying -> Palette 4
 #   0x50-0x5F: Ground (orc) -> Palette 5
 #   0x60-0x6F: Humanoid (soldier/moth/mage) -> Palette 6
@@ -87,14 +95,13 @@ bg_palettes:
     colors: ["7E10", "5C08", "3800", "0000"]  # Sky blue, Royal blue, Navy, Black
 
 # ============================================
-# SPRITE PALETTES - v2.29 Dynamic Palette 0 + Stage + Boss Detection
+# SPRITE PALETTES - VERIFIED MAPPINGS
 # ============================================
-# Palette 0: Sara projectiles (DYNAMIC - changes based on Sara form)
-#            Sara W (0xFFBE=0): Pink/red projectile colors
-#            Sara D (0xFFBE≠0): Green projectile colors
-# Palette 1: Sara D - Dragon form (green) OR Sara D Jet (cyan) in bonus stage
-# Palette 2: Sara W - Witch form (skin/pink) OR Sara W Jet (magenta) in bonus stage
-# Palette 3: Crow (dark blue/black) + Enemy projectiles (tiles 0x08-0x0F)
+# Palette 0: ENEMY PROJECTILES (tile 0x0F) + Effects - blue by default
+# Palette 1: Sara D sprite (green) OR Sara D Jet (cyan) in bonus stage
+# Palette 2: Sara W sprite (skin/pink) OR Sara W Jet (magenta) in bonus stage
+# Palette 3: SARA W PROJECTILES (tile 0x01) + Crow enemies (tiles 0x30-0x3F) - red
+#            NOTE: Changing Palette 3 affects BOTH Sara's shots AND Crow sprites!
 # Palette 4: Hornets (yellow/orange)
 # Palette 5: Orc/Ground (green/brown)
 # Palette 6: Humanoid (purple) OR Gargoyle boss (boss_flag=1)
@@ -102,17 +109,13 @@ bg_palettes:
 # ============================================
 
 obj_palettes:
-  # Palette 0 - SARA PROJECTILES (dynamic - changes based on Sara form)
-  # Sara W (0xFFBE=0): Pink/red projectile (SaraProjectileWitch)
-  # Sara D (0xFFBE≠0): Green projectile (SaraProjectileDragon)
-  # v2.29: Repurposed Effects palette for projectile colorization
+  # Palette 0 - ENEMY PROJECTILES (tile 0x0F) + Effects
+  # This palette colors enemy-fired projectiles (blue by default)
+  EnemyProjectile:
+    colors: ["0000", "7C00", "5800", "3000"]  # Trans, Bright blue, Medium blue, Dark blue
 
-  # Default Palette 0 - Sara W Projectile (pink/red)
-  SaraProjectileWitch:
-    colors: ["0000", "7C1F", "5817", "3010"]  # Trans, Bright pink, Pink-red, Dark red
-
-  # Alternative Palette 0 - Sara D Projectile (green) - loaded dynamically
-  # (Note: Not in default obj_palettes list, loaded separately)
+  # NOTE: SaraProjectileDragon is loaded dynamically into Palette 0 when Sara D is active
+  # This makes enemy projectiles green when playing as Sara D
   SaraProjectileDragon:
     colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Bright green, Dark green, Black
 
@@ -134,9 +137,10 @@ obj_palettes:
   SaraDragonJet:
     colors: ["0000", "7FE0", "4EC0", "2D80"]  # Trans, Bright cyan, Blue, Dark blue
 
-  # Palette 3 - CROW (dark blue/black - nocturnal bird)
-  Crow:
-    colors: ["0000", "4E73", "2529", "0000"]  # Trans, Blue-gray, Dark slate, Black
+  # Palette 3 - SARA W PROJECTILE (tile 0x01) + CROW enemies (tiles 0x30-0x3F)
+  # Changing this affects both Sara's shots AND crow enemy sprites
+  SaraProjectileAndCrow:
+    colors: ["0000", "001F", "0017", "000F"]  # Trans, Bright red, Medium red, Dark red
 
   # Palette 4 - HORNETS (yellow/orange - insects)
   Hornets:
@@ -157,11 +161,57 @@ obj_palettes:
     colors: ["0000", "7FE0", "3CC0", "0000"]  # Trans, Cyan, Dark cyan, Black
 
 # Boss override palettes (loaded when boss_flag is set)
+# v2.33: Table-based system supporting 8 bosses
+# Each boss has a target palette slot (6 or 7) and 4 colors
 boss_palettes:
-  # Gargoyle (replaces palette 6 when boss_flag=1)
+  # Boss 1: Gargoyle (replaces palette 6 when boss_flag=1)
   Gargoyle:
+    slot: 6
     colors: ["0000", "601F", "400F", "0000"]  # Trans, Dark magenta, Darker purple, Black
 
-  # Spider (replaces palette 7 when boss_flag=2)
+  # Boss 2: Spider (replaces palette 7 when boss_flag=2)
   Spider:
+    slot: 7
     colors: ["0000", "001F", "00BF", "0000"]  # Trans, Red, Orange, Black
+
+  # Boss 3: Crimson/Dragon boss (boss_flag=3)
+  Boss3_Crimson:
+    slot: 6
+    colors: ["0000", "0CBF", "0859", "040F"]  # Trans, Crimson, Dark crimson, Blood red
+
+  # Boss 4: Ice/Frost boss (boss_flag=4)
+  Boss4_Ice:
+    slot: 7
+    colors: ["0000", "7F94", "668A", "4940"]  # Trans, Ice blue, Frost blue, Deep blue
+
+  # Boss 5: Void/Dark boss (boss_flag=5)
+  Boss5_Void:
+    slot: 6
+    colors: ["0000", "70B4", "584F", "3C08"]  # Trans, Violet, Dark violet, Void purple
+
+  # Boss 6: Poison/Serpent boss (boss_flag=6)
+  Boss6_Poison:
+    slot: 7
+    colors: ["0000", "0BC8", "06C4", "01C0"]  # Trans, Toxic green, Poison, Dark green
+
+  # Boss 7: Knight/Gold boss (boss_flag=7)
+  Boss7_Knight:
+    slot: 6
+    colors: ["0000", "0F1F", "0A58", "0150"]  # Trans, Gold, Bronze, Dark bronze
+
+  # Boss 8: Angela - secret boss (boss_flag=8)
+  Angela:
+    slot: 7
+    colors: ["0000", "7FFF", "5AD6", "318C"]  # Trans, White, Silver, Dark gray
+
+# Powerup projectile palettes (loaded into Palette 0 when powerup active)
+# Read from 0xFFC0: 0=none, 1=spiral, 2=shield, 3=turbo
+powerup_palettes:
+  SpiralProjectile:
+    colors: ["0000", "7FE0", "5EC0", "3E80"]  # Trans, Cyan, Teal, Dark teal
+
+  ShieldProjectile:
+    colors: ["0000", "03FF", "02BF", "019F"]  # Trans, Gold, Dark gold, Deep gold
+
+  TurboProjectile:
+    colors: ["0000", "00FF", "00BF", "005F"]  # Trans, Orange, Dark orange, Red-orange
