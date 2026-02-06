@@ -506,6 +506,10 @@ def create_bg_colorizer_continuous(lookup_table_addr: int) -> bytes:
 
     Also checks 0xFFC1 (gameplay flag) to skip coloring on menus/title screens.
 
+    DUAL TILEMAP FIX: Game double-buffers between 0x9800 and 0x9C00 tilemaps,
+    alternating LCDC bit 3 every ~6 frames. We write palette attributes to BOTH
+    tilemaps (0x9800 and 0x9C00) for each tile to ensure colors are always visible.
+
     Code flow per call:
       1. Check 0xFFC1 - if zero (menu), return immediately
       2. For each of 2 rows:
@@ -514,7 +518,8 @@ def create_bg_colorizer_continuous(lookup_table_addr: int) -> bytes:
          c. For each of 32 tiles in row:
             - Switch to VRAM bank 0, STAT-wait, read tile ID
             - Look up palette from ROM table (no STAT needed)
-            - Switch to VRAM bank 1, STAT-wait, write attribute
+            - Switch to VRAM bank 1, STAT-wait, write to 0x9800 attr
+            - STAT-wait, write same palette to 0x9C00 attr (+0x0400)
          d. Increment row counter, wrap at 32
       3. Switch back to VRAM bank 0
       4. Return
@@ -596,7 +601,27 @@ def create_bg_colorizer_continuous(lookup_table_addr: int) -> bytes:
     stat_back = stat_wait - (len(code) + 2)
     code.extend([0x28, stat_back & 0xFF])  # JR Z, stat_wait (loop if mode 3)
 
-    code.extend([0x73])         # LD [HL], E (write palette attribute - VRAM safe now)
+    code.extend([0x73])         # LD [HL], E (write palette to 0x9800 tilemap - VRAM safe)
+
+    # === ALSO WRITE TO 0x9C00 TILEMAP (double-buffer fix) ===
+    # Game alternates LCDC bit 3 between 0x9800 and 0x9C00 every ~6 frames.
+    # Must color BOTH tilemaps or colors only visible ~50% of frames.
+    # 0x9C00 = 0x9800 + 0x0400, so H += 4.
+    code.extend([0xE5])         # PUSH HL (save 0x9800 pointer)
+    code.extend([0x7C])         # LD A, H
+    code.extend([0xC6, 0x04])   # ADD A, 0x04  (0x98xx -> 0x9Cxx)
+    code.extend([0x67])         # LD H, A
+
+    # STAT wait for 0x9C00 write
+    stat_wait_9c = len(code)
+    code.extend([0xF0, 0x41])   # LDH A, [0xFF41]
+    code.extend([0xE6, 0x03])   # AND 0x03
+    code.extend([0xFE, 0x03])   # CP 0x03
+    stat_9c_back = stat_wait_9c - (len(code) + 2)
+    code.extend([0x28, stat_9c_back & 0xFF])  # JR Z, stat_wait_9c
+
+    code.extend([0x73])         # LD [HL], E (write palette to 0x9C00 tilemap)
+    code.extend([0xE1])         # POP HL (restore 0x9800 pointer)
 
     # Next tile
     code.extend([0x23])         # INC HL
