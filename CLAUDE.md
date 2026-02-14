@@ -6,18 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v2.38 STABLE - Active-tilemap-only BG + scroll-edge + flip detection
+**Current Status**: v2.41 STABLE - STAT-safe BG colorizer (root cause fix)
 
-**What Works in v2.38** (fixes over v2.37):
-- **Active-tilemap-only BG**: Writes attributes to only the ACTIVE tilemap (LCDC bit 3)
-  - 3x throughput vs v2.37's dual-tilemap approach (26M/tile vs 48M/tile)
-  - ~128 tiles per VBlank, full 1024-tile sweep in ~8 frames
-  - 99.4% BG accuracy during scrolling (vs v2.37's ~60%)
-- **Flip detection**: When game swaps active tilemap (LCDC bit 3 changes),
-  automatically resets sweep counter to re-color the new tilemap from scratch
-- **Scroll-edge column**: Instantly colorizes the 32-tile edge column when SCX/8 changes
-- **HRAM temp for palette**: Uses FFEE to avoid clobbering C register (tilemap base)
-- All v2.37 features: ROM lookup table, both-buffer OBJ, input debounce, bosses
+**What Works in v2.41** (root cause fix over v2.36-v2.40):
+- **ROOT CAUSE FIXED**: Game services VBlank interrupts LATE (LY=2-6, already rendering)
+  - VRAM writes during LCD mode 3 are silently dropped
+  - This caused ALL BG colorization failures in v2.34-v2.40
+- **STAT mode check**: Waits for HBlank/VBlank (STAT bit 1 = 0) before VRAM access
+  - Mode 0 (HBlank) provides 42-71M per scanline, our ops need ~32M
+  - 96 tiles per frame via HBlank slots, full sweep in ~11 frames (~0.18s)
+- **100% BG accuracy**: Verified on ALL 15 gameplay save states at frames 30/120/300
+- **Dual-read dual-write**: Independent tile reads from 0x9800 and 0x9C00 tilemaps
+- **ROM lookup table**: 256-byte table at 0x6B00 (ROM always accessible, no STAT wait needed)
 - **Conservative tile categorization**:
   - Palette 0: Floor/edges/platforms (0x00-0x3F), arches/doorways (0x60-0x87)
   - Palette 1: Items (0x88-0xDF, bright gold)
@@ -55,8 +55,8 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 
 | Version | Tag | Status | Description |
 |---------|-----|--------|-------------|
-| v2.38 | `v2.38` | **STABLE (BEST)** | Active-tilemap-only BG + scroll-edge + flip detection |
-| v2.37 | `v2.37` | Obsolete | Dual-tilemap scroll-edge (~60% scroll accuracy) |
+| v2.41 | `v2.41` | **STABLE (BEST)** | STAT-safe BG colorizer, 100% accuracy on all save states |
+| v2.38 | `v2.38` | Obsolete | Active-tilemap-only BG (wrong root cause assumption) |
 | v2.36 | `v2.36` | Stable | Input fix + 48-tile BG + both-buffer OBJ |
 | v2.35 | `v2.35` | Broken | Bad input debounce + inverted FFCB buffer selection |
 | v2.34 | `v2.34` | Stable | Full BG colorization + STAT-safe VRAM access |
@@ -117,15 +117,17 @@ When boss_flag != 0:
   - Shadow colorizer sets E = slot for all non-Sara sprites
 ```
 
-**BG Tile Colorization** (v2.38):
+**BG Tile Colorization** (v2.41):
 ```
-Active-tilemap-only colorizer with ROM lookup table (VBlank-first):
-- ROM lookup table at 0x6B00 (256-byte tile→palette table in bank 13)
-- Writes ONLY to active tilemap (reads LCDC bit 3 to determine 0x9800 or 0x9C00)
-- Flip detection: when LCDC bit 3 changes, resets sweep counter to 0
-- ~128 tiles per VBlank (26M/tile), full 1024-tile sweep in ~8 frames
-- Scroll-edge: instantly colorizes 32-tile column when SCX/8 changes
-- Uses HRAM FFEE as temp to avoid clobbering C register (tilemap base)
+STAT-safe dual-read/dual-write colorizer with ROM lookup table:
+- ROOT CAUSE: Game's VBlank handler runs during rendering (LY=2-6), not VBlank
+- STAT mode check: waits for HBlank (STAT bit 1 = 0) before each VRAM access
+- ROM lookup table at 0x6B00 (256-byte tile→palette, always accessible)
+- Dual-read: reads tile IDs from BOTH 0x9800 and 0x9C00 tilemaps
+- Dual-write: writes palette attributes to BOTH tilemaps via VBK bank switching
+- 96 tiles/frame via HBlank slots (~6720M), full sweep in ~11 frames (~0.18s)
+- 100% accuracy verified on all 15 gameplay save states
+- Uses HRAM FFEE as temp for tilemap B palette
 - Skips menus via 0xFFC1 gameplay flag check
 - Tile categories (via lookup table at 0x6B00):
     Floor/edges (0x00-0x3F):   Palette 0 (blue-white)
@@ -153,14 +155,11 @@ Projectile colorization via dynamic palette loading:
 ### Build the Colorized ROM
 
 ```bash
-# Build v2.38 (BEST - active-tilemap BG + scroll-edge + flip detection)
-uv run python scripts/create_vblank_colorizer_v238.py
+# Build v2.41 (BEST - STAT-safe BG colorizer, 100% accuracy)
+uv run python scripts/create_vblank_colorizer_v241.py
 
 # Build v2.36 (fallback - fixed input + 48-tile BG + both-buffer OBJ)
 uv run python scripts/create_vblank_colorizer_v236.py
-
-# Build v2.34 (fallback - STAT-safe BG colorization)
-uv run python scripts/create_vblank_colorizer_v234.py
 
 # Build older versions
 uv run python scripts/create_vblank_colorizer_v233.py  # v2.33 (multi-boss, no BG)
