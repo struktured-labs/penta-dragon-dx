@@ -6,28 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v2.35 STABLE - Inline BG Palette Logic + VBlank-First Execution
+**Current Status**: v2.36 STABLE - Input Fix + 48-tile BG + Both-buffer OBJ
 
-**What Works in v2.35** (all v2.34 features plus):
-- **Inline tile-to-palette comparison**: 5-level CP/JR cascade replaces ROM lookup table
-  - Eliminates MBC1 bank-state dependency during VBlank callbacks
-  - No ROM reads needed for palette assignment
-- **VBlank-first BG colorizer**: Runs FIRST before palette/OBJ colorizers
-  - VRAM freely accessible during early VBlank - no STAT checks needed
-  - Removed all STAT wait loops (saves ~3000-5000 cycles)
-- **Conservative tile categorization** from real VRAM analysis:
+**What Works in v2.36** (fixes over v2.35):
+- **Input debounce**: 1 d-pad read + 8 button reads via loop (matches original game)
+  - Fixes phantom button presses and missed inputs from v2.35
+- **48 tiles per frame**: Full tilemap refresh every ~21 frames (~0.35s)
+  - VBlank has 4560 M-cycles, not 1000 (previous estimate was wrong!)
+  - BG colorizer uses ~3662 M + DMA 160 M = 3822 M (safely under budget)
+- **Both-buffer OBJ colorization**: Always colorizes C000 AND C100
+  - Fixed: single-buffer had inverted FFCB logic (DMA toggles before copy)
+  - WRAM writes don't need VBlank timing, can safely overrun
+- **Inline tile-to-palette comparison**: 5-level CP/JR cascade (no ROM table)
+- **VBlank-first BG colorizer**: VRAM freely accessible during VBlank
+- **Conservative tile categorization**:
   - Palette 0: Floor/edges/platforms (0x00-0x3F), arches/doorways (0x60-0x87)
   - Palette 1: Items (0x88-0xDF, bright gold)
   - Palette 6: Wall fill blocks (0x40-0x5F), decorative (0xE0-0xFD)
-- **Position counter at FFEA/FFEB**: Game overwrites FFE0/FFE1
-- **Independent tilemap reads**: 0x9800 and 0x9C00 tiles read separately
-- 12 tiles per frame, full tilemap refresh every ~85 frames (~1.4s)
 - **Game mode detection**: Skips BG coloring on menus/title (0xFFC1 check)
 - **Multi-boss palette system** (table-based lookup for 8 distinct bosses)
 - Per-entity projectile colors based on verified tile mapping
 - Powerup-based Palette 0 colors (0xFFC0 flag)
-- All v2.34 features intact (jet forms, BG items, tile-based monsters, bosses)
-- No flickering, stable colors
+- All v2.35 features intact (jet forms, BG items, tile-based monsters, bosses)
 
 ### What Works
 - CGB mode detection and compatibility
@@ -57,7 +57,8 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 
 | Version | Tag | Status | Description |
 |---------|-----|--------|-------------|
-| v2.35 | `v2.35` | **STABLE (BEST)** | Inline BG palette logic + VBlank-first execution |
+| v2.36 | `v2.36` | **STABLE (BEST)** | Input fix + 48-tile BG + both-buffer OBJ |
+| v2.35 | `v2.35` | Broken | Bad input debounce + inverted FFCB buffer selection |
 | v2.34 | `v2.34` | Stable | Full BG colorization + STAT-safe VRAM access |
 | v2.33 | `v2.33` | Stable | Multi-boss table (8 bosses) + turbo powerup |
 | v2.32 | `v2.32` | Stable | Per-entity projectile colors + powerup support |
@@ -151,18 +152,18 @@ Projectile colorization via dynamic palette loading:
 ### Build the Colorized ROM
 
 ```bash
-# Build v2.35 (BEST - inline BG palette logic + VBlank-first)
+# Build v2.36 (BEST - fixed input + 48-tile BG + both-buffer OBJ)
+uv run python scripts/create_vblank_colorizer_v236.py
+
+# Build v2.35 (fallback - inline BG palette + VBlank-first)
 uv run python scripts/create_vblank_colorizer_v235.py
 
 # Build v2.34 (fallback - STAT-safe BG colorization)
 uv run python scripts/create_vblank_colorizer_v234.py
 
-# Build v2.33 (fallback - multi-boss table + turbo powerup, no BG coloring)
-uv run python scripts/create_vblank_colorizer_v233.py
-
 # Build older versions
+uv run python scripts/create_vblank_colorizer_v233.py  # v2.33 (multi-boss, no BG)
 uv run python scripts/create_vblank_colorizer_v232.py  # v2.32 (per-entity projectiles)
-uv run python scripts/create_vblank_colorizer_v228.py  # v2.28 (no projectile coloring)
 ```
 
 Output: `rom/working/penta_dragon_dx_FIXED.gb`
@@ -198,26 +199,32 @@ Located in `save_states_for_claude/`, covering:
 
 The project includes an MCP server for programmatic mGBA control.
 
-**CRITICAL**: ALWAYS use MCP tools for ALL emulator operations. NEVER use bash/xvfb-run unless MCP tools are completely unavailable:
-- MCP tools run headless automatically (no windows, no desktop clutter)
-- MCP tools handle SDL audio dummy driver automatically
-- MCP tools are faster and more reliable than bash approaches
-- **USE THESE**: `mcp__mgba__mgba_run`, `mcp__mgba__mgba_read_range`, `mcp__mgba__mgba_run_lua`, etc.
+**CRITICAL: NEVER show the emulator GUI unless the user explicitly asks to see/play it.**
+All automated testing and verification MUST be headless. Use bash with proper headless settings for ALL emulator operations:
 
-| Tool | Description | Common Use Cases |
-|------|-------------|------------------|
-| `mgba_run` | Run ROM for N frames, capture screenshot | Visual verification, frame capture |
-| `mgba_read_memory` | Read specific memory addresses | Check flags, read state |
-| `mgba_read_range` | Read contiguous memory range | Scan HRAM/WRAM, find addresses |
-| `mgba_dump_oam` | Dump all 40 OAM sprite entries | Verify palette assignments |
-| `mgba_dump_entities` | Dump entity data from WRAM | Debug entity behavior |
-| `mgba_run_lua` | Execute custom Lua script | Complex testing, automation |
-| `mgba_run_sequence` | Run with button inputs, periodic screenshots | Gameplay testing, stability |
-
-**Fallback only if MCP broken**: Use bash with proper headless settings:
 ```bash
-unset DISPLAY
-SDL_AUDIODRIVER=dummy xvfb-run -a mgba-qt rom.gb --script script.lua -l 0
+# Standard headless pattern - use this for ALL automated emulator runs
+rm -f DONE && unset DISPLAY && unset WAYLAND_DISPLAY && \
+  QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy \
+  timeout 30 xvfb-run -a mgba-qt rom.gb -t state.ss0 --script script.lua -l 0
+```
+
+MCP tools (mgba_run, mgba_read_range, etc.) may be used for non-GUI operations like ROM analysis (mgba_xxd, mgba_search_bytes). For emulator execution that involves rendering frames, prefer bash with the headless pattern above to guarantee no GUI window appears on the user's desktop (especially on KDE Wayland where Qt may try to connect to the compositor).
+
+| Tool | Description | Safe for headless? |
+|------|-------------|-------------------|
+| `mgba_xxd` | Hex dump ROM bytes | Yes (no emulator) |
+| `mgba_search_bytes` | Search ROM for patterns | Yes (no emulator) |
+| `mgba_run` | Run ROM, capture screenshot | Use bash instead |
+| `mgba_read_memory` | Read memory addresses | Use bash instead |
+| `mgba_read_range` | Read memory range | Use bash instead |
+| `mgba_dump_oam` | Dump OAM sprite data | Use bash instead |
+| `mgba_run_lua` | Execute Lua script | Use bash instead |
+| `mgba_run_sequence` | Run with inputs | Use bash instead |
+
+**To launch for user testing (GUI)**: Only when explicitly asked:
+```bash
+./mgba-qt.sh rom/working/penta_dragon_dx_FIXED.gb -t save_states_for_claude/some_state.ss0
 ```
 
 ## Architecture
