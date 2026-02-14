@@ -6,19 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
 
-**Current Status**: v2.36 STABLE - Input Fix + 48-tile BG + Both-buffer OBJ
+**Current Status**: v2.38 STABLE - Active-tilemap-only BG + scroll-edge + flip detection
 
-**What Works in v2.36** (fixes over v2.35):
-- **Input debounce**: 1 d-pad read + 8 button reads via loop (matches original game)
-  - Fixes phantom button presses and missed inputs from v2.35
-- **48 tiles per frame**: Full tilemap refresh every ~21 frames (~0.35s)
-  - VBlank has 4560 M-cycles, not 1000 (previous estimate was wrong!)
-  - BG colorizer uses ~3662 M + DMA 160 M = 3822 M (safely under budget)
-- **Both-buffer OBJ colorization**: Always colorizes C000 AND C100
-  - Fixed: single-buffer had inverted FFCB logic (DMA toggles before copy)
-  - WRAM writes don't need VBlank timing, can safely overrun
-- **Inline tile-to-palette comparison**: 5-level CP/JR cascade (no ROM table)
-- **VBlank-first BG colorizer**: VRAM freely accessible during VBlank
+**What Works in v2.38** (fixes over v2.37):
+- **Active-tilemap-only BG**: Writes attributes to only the ACTIVE tilemap (LCDC bit 3)
+  - 3x throughput vs v2.37's dual-tilemap approach (26M/tile vs 48M/tile)
+  - ~128 tiles per VBlank, full 1024-tile sweep in ~8 frames
+  - 99.4% BG accuracy during scrolling (vs v2.37's ~60%)
+- **Flip detection**: When game swaps active tilemap (LCDC bit 3 changes),
+  automatically resets sweep counter to re-color the new tilemap from scratch
+- **Scroll-edge column**: Instantly colorizes the 32-tile edge column when SCX/8 changes
+- **HRAM temp for palette**: Uses FFEE to avoid clobbering C register (tilemap base)
+- All v2.37 features: ROM lookup table, both-buffer OBJ, input debounce, bosses
 - **Conservative tile categorization**:
   - Palette 0: Floor/edges/platforms (0x00-0x3F), arches/doorways (0x60-0x87)
   - Palette 1: Items (0x88-0xDF, bright gold)
@@ -27,7 +26,6 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 - **Multi-boss palette system** (table-based lookup for 8 distinct bosses)
 - Per-entity projectile colors based on verified tile mapping
 - Powerup-based Palette 0 colors (0xFFC0 flag)
-- All v2.35 features intact (jet forms, BG items, tile-based monsters, bosses)
 
 ### What Works
 - CGB mode detection and compatibility
@@ -57,7 +55,9 @@ Penta Dragon DX is a Game Boy Color colorization project that converts the origi
 
 | Version | Tag | Status | Description |
 |---------|-----|--------|-------------|
-| v2.36 | `v2.36` | **STABLE (BEST)** | Input fix + 48-tile BG + both-buffer OBJ |
+| v2.38 | `v2.38` | **STABLE (BEST)** | Active-tilemap-only BG + scroll-edge + flip detection |
+| v2.37 | `v2.37` | Obsolete | Dual-tilemap scroll-edge (~60% scroll accuracy) |
+| v2.36 | `v2.36` | Stable | Input fix + 48-tile BG + both-buffer OBJ |
 | v2.35 | `v2.35` | Broken | Bad input debounce + inverted FFCB buffer selection |
 | v2.34 | `v2.34` | Stable | Full BG colorization + STAT-safe VRAM access |
 | v2.33 | `v2.33` | Stable | Multi-boss table (8 bosses) + turbo powerup |
@@ -117,16 +117,17 @@ When boss_flag != 0:
   - Shadow colorizer sets E = slot for all non-Sara sprites
 ```
 
-**BG Tile Colorization** (v2.35):
+**BG Tile Colorization** (v2.38):
 ```
-Continuous colorizer with inline palette logic (VBlank-first):
-- Inline 5-level CP/JR comparison chain (no ROM table read needed)
-- Runs FIRST in VBlank handler - VRAM freely accessible, no STAT checks
-- Processes 12 tiles per frame, cycling all 1024 tilemap positions
-- Position counter at HRAM 0xFFEA/0xFFEB (game overwrites 0xFFE0/0xFFE1)
-- Reads tiles independently from both 0x9800 and 0x9C00 tilemaps
+Active-tilemap-only colorizer with ROM lookup table (VBlank-first):
+- ROM lookup table at 0x6B00 (256-byte tile→palette table in bank 13)
+- Writes ONLY to active tilemap (reads LCDC bit 3 to determine 0x9800 or 0x9C00)
+- Flip detection: when LCDC bit 3 changes, resets sweep counter to 0
+- ~128 tiles per VBlank (26M/tile), full 1024-tile sweep in ~8 frames
+- Scroll-edge: instantly colorizes 32-tile column when SCX/8 changes
+- Uses HRAM FFEE as temp to avoid clobbering C register (tilemap base)
 - Skips menus via 0xFFC1 gameplay flag check
-- Tile categories:
+- Tile categories (via lookup table at 0x6B00):
     Floor/edges (0x00-0x3F):   Palette 0 (blue-white)
     Wall fill (0x40-0x5F):     Palette 6 (blue-gray stone)
     Arches/doors (0x60-0x87):  Palette 0 (blend with floor)
@@ -152,11 +153,11 @@ Projectile colorization via dynamic palette loading:
 ### Build the Colorized ROM
 
 ```bash
-# Build v2.36 (BEST - fixed input + 48-tile BG + both-buffer OBJ)
-uv run python scripts/create_vblank_colorizer_v236.py
+# Build v2.38 (BEST - active-tilemap BG + scroll-edge + flip detection)
+uv run python scripts/create_vblank_colorizer_v238.py
 
-# Build v2.35 (fallback - inline BG palette + VBlank-first)
-uv run python scripts/create_vblank_colorizer_v235.py
+# Build v2.36 (fallback - fixed input + 48-tile BG + both-buffer OBJ)
+uv run python scripts/create_vblank_colorizer_v236.py
 
 # Build v2.34 (fallback - STAT-safe BG colorization)
 uv run python scripts/create_vblank_colorizer_v234.py
@@ -262,7 +263,11 @@ MCP tools (mgba_run, mgba_read_range, etc.) may be used for non-GUI operations l
 | `0xFFC0` | Powerup state: 0=none, 1=spiral, 2=shield, 3=turbo |
 | `0xFFCB` | DMA buffer toggle: alternates 0/1 each frame |
 | `0xFFD0` | **Stage flag: 0=Level 1, 1=Bonus stage** (v2.28+) |
-| `0xFFEA-0xFFEB` | BG colorizer position counter (16-bit, wraps at 1024) (v2.35+) |
+| `0xFFEA` | BG colorizer position counter low byte (v2.35+) |
+| `0xFFEB` | BG colorizer position counter high byte (0-3) (v2.35+) |
+| `0xFFEC` | Saved LCDC bit 3 for flip detection (0x00 or 0x08) (v2.38+) |
+| `0xFFED` | Previous SCX/8 for scroll-edge detection (0-31) (v2.37+) |
+| `0xFFEE` | BG colorizer temp palette storage (v2.38+) |
 | `0xFFC1` | Gameplay active flag: 0=menu, non-zero=gameplay (v2.34+) |
 | `0xFF6A` | OCPS - Object Color Palette Specification |
 | `0xFF6B` | OCPD - Object Color Palette Data |
