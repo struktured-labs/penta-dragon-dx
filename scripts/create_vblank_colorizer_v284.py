@@ -539,10 +539,16 @@ def create_combined_with_scroll_edge(bg_sweep_addr: int, cond_pal_addr: int,
     emit([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
 
     # ================================================================
-    # SCROLL-EDGE DETECTION
+    # SCROLL-EDGE DETECTION (skip on menus — FFC1=0)
     # ================================================================
     emit([0xF1])               # POP AF → A = prev SCX/8
     emit([0x47])               # LD B,A               ; B = prev_scx
+
+    # Menu check: skip edge coloring on title/menus
+    emit([0xF0, 0xC1])        # LDH A,[FFC1]         ; gameplay flag
+    emit([0xB7])               # OR A
+    # If menu (Z), A=0 → writes 0 to FFA9 at no_scroll (harmless)
+    emit_jr_fwd(0x28, 'no_scroll')  # JR Z → menu, skip edge
 
     emit([0xF0, 0x43])        # LDH A,[FF43]         ; SCX register
     emit([0xCB, 0x3F])        # SRL A
