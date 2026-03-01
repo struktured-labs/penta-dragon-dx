@@ -90,8 +90,77 @@ def create_bank_aware_vblank_hook(combined_addr: int) -> bytes:
     return bytes(total)
 
 
+def create_fast_menu_copy(base_addr: int, return_addr: int) -> bytes:
+    """Fast tile-only copy for menus (FFC1=0).
+
+    Replicates original game's tilemap copy: 24 rows × 24 tiles from C1A0
+    to VRAM with STAT waits, but NO palette attribute writes. Same speed
+    as the vanilla game.
+
+    Uses full DI for the entire copy — matches original game's behavior where
+    EI→DI between groups cancels the pending EI, so VBlank NEVER fires during
+    the copy. This preserves the game's HALT-based frame sync timing.
+
+    Entry: H = tilemap base hi (0x98 or 0x9C), set by caller.
+    """
+    code = bytearray()
+    targets = {}
+
+    def emit(opcodes):
+        code.extend(opcodes if isinstance(opcodes, (list, bytes, bytearray)) else [opcodes])
+
+    def mark(name):
+        targets[name] = len(code)
+
+    def emit_jr_back(opcode, name):
+        offset = targets[name] - (len(code) + 2)
+        assert -128 <= offset <= 127, f"JR to {name}: offset {offset}"
+        emit([opcode, offset & 0xFF])
+
+    # DI once at start — VBlank never fires during the entire copy
+    emit([0xF3])               # DI
+
+    # Init pointers (H already set by caller)
+    emit([0x2E, 0x00])        # LD L, 0x00
+    emit([0x11, 0xA0, 0xC1]) # LD DE, 0xC1A0        ; WRAM tile source
+    emit([0x0E, 24])          # LD C, 24             ; 24 rows
+
+    mark('fast_row')
+    emit([0x06, 6])            # LD B, 6              ; 6 groups per row
+
+    mark('fast_group')
+    # STAT wait: AND 0x02 blocks modes 2+3
+    mark('fast_stat')
+    emit([0xF0, 0x41])        # LDH A,[FF41]
+    emit([0xE6, 0x02])        # AND 0x02
+    emit_jr_back(0x20, 'fast_stat')  # JR NZ → wait
+
+    # Copy 4 tiles: LD A,[DE]; INC DE; LD [HL+],A × 4
+    for _ in range(4):
+        emit([0x1A, 0x13, 0x22])  # LD A,[DE]; INC DE; LD [HL+],A
+
+    emit([0x05])               # DEC B
+    emit_jr_back(0x20, 'fast_group')  # JR NZ → next group
+
+    # Skip 8 unused columns: HL += 8
+    emit([0x7D])               # LD A, L
+    emit([0xC6, 0x08])        # ADD 8
+    emit([0x6F])               # LD L, A
+    emit([0x30, 0x01])        # JR NC, +1
+    emit([0x24])               # INC H
+
+    emit([0x0D])               # DEC C
+    emit_jr_back(0x20, 'fast_row')  # JR NZ → next row
+
+    # Return via bridge (bridge does EI before returning to bank 1)
+    emit([0xC3, return_addr & 0xFF, (return_addr >> 8) & 0xFF])
+
+    return bytes(code)
+
+
 def create_enhanced_tilemap_copy(bg_table_addr: int, base_addr: int,
-                                  return_addr: int) -> bytes:
+                                  return_addr: int,
+                                  fast_menu_addr: int = 0) -> bytes:
     """Enhanced tilemap copy with mini-batch interleaving.
 
     For each of 24 rows, 6 mini-batches of 4 tiles each:
@@ -104,6 +173,7 @@ def create_enhanced_tilemap_copy(bg_table_addr: int, base_addr: int,
     Same total HBlank count (12 per row), just reordered for atomicity.
 
     Entry: H = tilemap base hi (0x98 or 0x9C), set by caller.
+    If fast_menu_addr != 0, checks FFC1 and jumps to fast path on menus.
     """
     bg_table_hi = (bg_table_addr >> 8) & 0xFF
     code = bytearray()
@@ -126,6 +196,15 @@ def create_enhanced_tilemap_copy(bg_table_addr: int, base_addr: int,
     def emit_jp_back(opcode, name):
         addr = base_addr + targets[name]
         emit([opcode, addr & 0xFF, (addr >> 8) & 0xFF])
+
+    # ================================================================
+    # MENU CHECK: Skip palette work on menus (FFC1=0)
+    # ================================================================
+    if fast_menu_addr:
+        emit([0xF0, 0xC1])    # LDH A,[FFC1]         ; gameplay flag
+        emit([0xB7])           # OR A
+        emit([0xCA, fast_menu_addr & 0xFF, (fast_menu_addr >> 8) & 0xFF])
+                               # JP Z, fast_menu_copy ; menus → tile-only copy
 
     # ================================================================
     # PREAMBLE: Save state, set hook flag, mask IE
@@ -514,6 +593,7 @@ def create_combined_with_scroll_edge(bg_sweep_addr: int, cond_pal_addr: int,
 
     # ================================================================
     # VBK SAFETY: Save current VBK, force to 0
+    # (ISR at 0x06D1 already saves AF/BC/DE/HL — no need to save here)
     # ================================================================
     emit([0xF0, 0x4F])        # LDH A,[FF4F]        ; read current VBK
     emit([0xF5])               # PUSH AF              ; save on stack
@@ -679,8 +759,13 @@ def create_combined_with_scroll_edge(bg_sweep_addr: int, cond_pal_addr: int,
     # AFTER_BG: Standard handler chain
     # ================================================================
     mark('after_bg')
+    # Menu early-out: skip palette + OBJ colorizer on menus (saves ~800M/frame)
+    emit([0xF0, 0xC1])        # LDH A,[FFC1]
+    emit([0xB7])               # OR A
+    emit_jr_fwd(0x28, 'just_dma')  # JR Z → menus: skip to DMA only
     emit([0xCD, cond_pal_addr & 0xFF, (cond_pal_addr >> 8) & 0xFF])
     emit([0xCD, shadow_main_addr & 0xFF, (shadow_main_addr >> 8) & 0xFF])
+    mark('just_dma')
     emit([0xCD, 0x80, 0xFF])  # CALL DMA (FF80)
 
     # ================================================================
@@ -730,32 +815,42 @@ def build_v284():
     tile_pal = create_tile_to_palette_subroutine()
     bg_table = create_bg_tile_table(ff_filter=False)
 
-    # Enhanced copy (hook) — mini-batch interleaved (unchanged from v2.83)
-    enhanced_copy = create_enhanced_tilemap_copy(bg_table_addr, enhanced_copy_addr,
-                                                  return_bridge_addr)
-    print(f"Enhanced tilemap copy: {len(enhanced_copy)} bytes at 0x{enhanced_copy_addr:04X}")
-
-    # BG sweep (fallback) — placed after enhanced copy
-    bg_sweep_addr = (enhanced_copy_addr + len(enhanced_copy) + 0xF) & ~0xF
+    # Two-pass layout: first pass without fast_menu_addr to determine sizes
+    enhanced_copy_tmp = create_enhanced_tilemap_copy(bg_table_addr, enhanced_copy_addr,
+                                                      return_bridge_addr, fast_menu_addr=0)
+    bg_sweep_addr = (enhanced_copy_addr + len(enhanced_copy_tmp) + 6 + 0xF) & ~0xF  # +6 for FFC1 check
     bg_sweep = create_bg_sweep_no_scroll(bg_table_addr, bg_sweep_addr)
-    print(f"BG sweep: {len(bg_sweep)} bytes at 0x{bg_sweep_addr:04X}")
-
-    # Conditional palette — always load (FFA9 repurposed for scroll detection)
     cond_pal_addr = (bg_sweep_addr + len(bg_sweep) + 0xF) & ~0xF
     cond_pal = create_conditional_palette_always(pal_loader_addr)
-    print(f"Cond palette (always-load): {len(cond_pal)} bytes at 0x{cond_pal_addr:04X}")
-
-    # Combined function: VBK safety + scroll-edge + hook flag + standard chain
     combined_addr = (cond_pal_addr + len(cond_pal) + 0xF) & ~0xF
     combined = create_combined_with_scroll_edge(
         bg_sweep_addr, cond_pal_addr, shadow_main_addr, bg_table_addr
     )
+
+    # Fast menu copy placed after combined
+    fast_menu_addr = (combined_addr + len(combined) + 0xF) & ~0xF
+    fast_menu_copy = create_fast_menu_copy(fast_menu_addr, return_bridge_addr)
+    print(f"Fast menu copy: {len(fast_menu_copy)} bytes at 0x{fast_menu_addr:04X}")
+
+    # Second pass: regenerate enhanced copy WITH fast_menu_addr
+    enhanced_copy = create_enhanced_tilemap_copy(bg_table_addr, enhanced_copy_addr,
+                                                  return_bridge_addr,
+                                                  fast_menu_addr=fast_menu_addr)
+    print(f"Enhanced tilemap copy: {len(enhanced_copy)} bytes at 0x{enhanced_copy_addr:04X}")
+
+    # Verify bg_sweep_addr still correct after second pass
+    bg_sweep_addr_check = (enhanced_copy_addr + len(enhanced_copy) + 0xF) & ~0xF
+    assert bg_sweep_addr_check == bg_sweep_addr, \
+        f"Layout shift! bg_sweep moved from {bg_sweep_addr:#x} to {bg_sweep_addr_check:#x}"
+
+    print(f"BG sweep: {len(bg_sweep)} bytes at 0x{bg_sweep_addr:04X}")
+    print(f"Cond palette (always-load): {len(cond_pal)} bytes at 0x{cond_pal_addr:04X}")
     print(f"Combined: {len(combined)} bytes at 0x{combined_addr:04X}")
     print(f"  → VBK safety + scroll-edge pre-coloring + hook check + CondPal + OBJ + DMA")
 
     # Verify layout
-    assert combined_addr + len(combined) <= bg_table_addr, \
-        f"Layout overflow: combined ends {combined_addr+len(combined):#x} > bg_table {bg_table_addr:#x}"
+    assert fast_menu_addr + len(fast_menu_copy) <= bg_table_addr, \
+        f"Layout overflow: fast_menu ends {fast_menu_addr+len(fast_menu_copy):#x} > bg_table {bg_table_addr:#x}"
 
     hook = create_bank_aware_vblank_hook(combined_addr)
 
@@ -769,6 +864,7 @@ def build_v284():
         ('bg_sweep', bg_sweep_addr, len(bg_sweep)),
         ('cond_pal', cond_pal_addr, len(cond_pal)),
         ('combined', combined_addr, len(combined)),
+        ('fast_menu', fast_menu_addr, len(fast_menu_copy)),
         ('bg_table', bg_table_addr, len(bg_table)),
     ]
     for i, (na, sa, sza) in enumerate(regions):
@@ -800,6 +896,7 @@ def build_v284():
     w(bg_sweep_addr, bg_sweep)
     w(bg_table_addr, bg_table)
     w(combined_addr, combined)
+    w(fast_menu_addr, fast_menu_copy)
 
     # =============================================
     # HOOK: Bank 1 trampoline at 0x42A7
