@@ -13,6 +13,7 @@ __pycache__/
 # Build artifacts
 CMakeCache.txt
 CMakeFiles/
+obj/
 
 # Temporary files
 tmp/
@@ -24,3 +25,9 @@ debug_*.png
 *.log
 tests/results/
 DONE
+
+# Extracted assets (derived from ROM, regenerate with scripts/extract_assets.py)
+assets/extracted/
+
+# Environment
+setenv.sh
