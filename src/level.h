@@ -18,7 +18,10 @@
 // Scroll state
 extern uint16_t scroll_x;       // World scroll position (pixels)
 extern uint8_t  scroll_col;     // Next column to load (world units)
-extern uint8_t  scroll_speed;   // Pixels per frame (0 = manual)
+extern uint8_t  auto_scroll;    // 0=player-driven, non-zero=auto-scroll speed
+
+// Camera threshold: when player X exceeds this, camera follows
+#define CAMERA_FOLLOW_X  80  // Center of screen
 
 // Initialize level (load initial screen)
 void level_init(void);
@@ -26,8 +29,9 @@ void level_init(void);
 // Load BG tiles into VRAM
 void level_load_tiles(void);
 
-// Update scrolling (called each frame)
-void level_update(void);
+// Update scrolling based on player position (player-driven)
+// Returns number of pixels scrolled this frame
+uint8_t level_update(uint8_t player_x, uint8_t player_moving_right);
 
 // Get a tile from the level map at world column, row
 uint8_t level_get_tile(uint16_t col, uint8_t row);
