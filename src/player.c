@@ -70,11 +70,17 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
         player.shoot_cd--;
     }
 
-    // Animation
-    player.anim_tick++;
-    if (player.anim_tick >= ANIM_SPEED) {
+    // Animation — only cycle frames when moving
+    if (keys & (J_LEFT | J_RIGHT | J_UP | J_DOWN)) {
+        player.anim_tick++;
+        if (player.anim_tick >= ANIM_SPEED) {
+            player.anim_tick = 0;
+            player.frame = (player.frame + 1) & 0x01; // 2 frames only
+        }
+    } else {
+        // Idle: reset to frame 0
         player.anim_tick = 0;
-        player.frame = (player.frame + 1) & 0x03;
+        player.frame = 0;
     }
 
     // Invulnerability countdown
