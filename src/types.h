@@ -19,9 +19,9 @@
 #define TILE_SARA_W      0   // 8 tiles (0-7)
 #define TILE_SARA_D      8   // 8 tiles (8-15)
 #define TILE_PROJECTILE  16  // 4 tiles (16-19)
-#define TILE_HORNET      20  // 8 tiles (20-27)
-#define TILE_CROW        28  // 8 tiles (28-35)
-#define TILE_ORC         36  // 8 tiles (36-43)
+#define TILE_HORNET      20  // 16 tiles (20-35)
+#define TILE_CROW        36  // 16 tiles (36-51)
+#define TILE_ORC         52  // 16 tiles (52-67)
 
 // OAM slot allocation (40 total)
 #define OAM_PLAYER       0   // 4 slots (0-3) for 16x16 Sara
@@ -41,11 +41,5 @@
 #define STATE_PLAYING  1
 #define STATE_BOSS     2
 #define STATE_DEAD     3
-
-// Fixed-point math (8.8 format for sub-pixel movement)
-typedef int16_t fixed_t;
-#define FIX(x)       ((fixed_t)((x) << 8))
-#define UNFIX(x)     ((int8_t)((x) >> 8))
-#define FIX_FRAC(x, f) ((fixed_t)(((x) << 8) | (f)))
 
 #endif /* __TYPES_H__ */

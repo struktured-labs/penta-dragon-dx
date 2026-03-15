@@ -37,6 +37,11 @@ static void game_init(void) {
     prev_keys = 0;
     game_state = STATE_PLAYING;
 
+    // Draw initial frame so sprites are visible immediately
+    player_draw();
+    projectile_draw();
+    enemy_draw();
+
     // Enable background and sprites
     SHOW_BKG;
     SHOW_SPRITES;
@@ -49,11 +54,11 @@ static void game_update(void) {
     // Player input and update
     player_update(keys, prev_keys);
 
-    // Shoot on A button (edge-triggered)
-    if ((keys & J_A) && !(prev_keys & J_A)) {
+    // Shoot on A button (hold to auto-fire with cooldown)
+    if (keys & J_A) {
         if (player.shoot_cd == 0) {
             projectile_spawn_player();
-            player.shoot_cd = 10;
+            player.shoot_cd = 8; // Auto-fire rate
         }
     }
 
@@ -69,9 +74,7 @@ static void game_update(void) {
 
     // Player-enemy collision
     if (player.invuln == 0) {
-        if (enemy_check_player_hit(
-                (uint8_t)UNFIX(player.x),
-                (uint8_t)UNFIX(player.y))) {
+        if (enemy_check_player_hit(player.x, player.y)) {
             player.hp--;
             player.invuln = 60; // 1 second of invulnerability
             if (player.hp == 0) {

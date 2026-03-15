@@ -10,9 +10,8 @@ Enemy enemies[MAX_ENEMIES];
 uint8_t enemy_count;
 
 #define ENEMY_ANIM_SPEED 16
-#define ENEMY_SHOOT_CD   90  // ~1.5 seconds
+#define ENEMY_SHOOT_CD   90
 
-// Enemy config table
 static const uint8_t enemy_hp[]      = { 0, 2, 2, 3, 3, 4 };
 static const uint8_t enemy_palette[] = { 0, 4, 3, 5, 6, 7 };
 
@@ -30,7 +29,7 @@ void enemy_load_tiles(void) {
     set_sprite_data(TILE_ORC, SPRITE_ORCS_TILE_COUNT, SPRITE_ORCS);
 }
 
-void enemy_spawn(uint8_t type, fixed_t x, fixed_t y) {
+void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
     uint8_t i;
     Enemy *e;
 
@@ -44,11 +43,10 @@ void enemy_spawn(uint8_t type, fixed_t x, fixed_t y) {
             e->palette = enemy_palette[type];
             e->frame = 0;
             e->anim_tick = 0;
-            e->shoot_cd = ENEMY_SHOOT_CD / 2; // Stagger initial shot
+            e->shoot_cd = ENEMY_SHOOT_CD / 2;
             e->ai_state = 0;
             e->ai_timer = 0;
 
-            // Set tile base and default velocity based on type
             switch (type) {
                 case ENEMY_HORNET:
                     e->tile_base = TILE_HORNET;
@@ -79,7 +77,6 @@ void enemy_spawn(uint8_t type, fixed_t x, fixed_t y) {
 }
 
 static void enemy_ai_hornet(Enemy *e) {
-    // Hornets: sine-wave pattern (up/down while moving left)
     e->ai_timer++;
     if (e->ai_timer >= 30) {
         e->ai_timer = 0;
@@ -89,22 +86,14 @@ static void enemy_ai_hornet(Enemy *e) {
 }
 
 static void enemy_ai_crow(Enemy *e) {
-    // Crows: fast diagonal swoop toward player
     if (e->ai_state == 0) {
-        // Phase 1: fly left
         e->ai_timer++;
         if (e->ai_timer >= 40) {
             e->ai_state = 1;
             e->ai_timer = 0;
-            // Dive toward player Y
-            if (UNFIX(player.y) > UNFIX(e->y)) {
-                e->dy = 2;
-            } else {
-                e->dy = -2;
-            }
+            e->dy = (player.y > e->y) ? 2 : -2;
         }
     } else {
-        // Phase 2: continue diagonal
         e->ai_timer++;
         if (e->ai_timer >= 30) {
             e->ai_state = 0;
@@ -115,18 +104,18 @@ static void enemy_ai_crow(Enemy *e) {
 }
 
 static void enemy_ai_orc(Enemy *e) {
-    // Orcs: slow march, periodic shooting
     e->shoot_cd--;
     if (e->shoot_cd == 0) {
         e->shoot_cd = ENEMY_SHOOT_CD;
-        projectile_spawn_enemy(e->x, e->y, -3, 0);
+        projectile_spawn_enemy(e->x, e->y + 4, -3, 0);
     }
 }
 
 void enemy_update(void) {
     uint8_t i;
     Enemy *e;
-    int16_t sx;
+    uint8_t new_x;
+    int16_t new_y;
 
     for (i = 0; i < MAX_ENEMIES; i++) {
         e = &enemies[i];
@@ -139,30 +128,29 @@ void enemy_update(void) {
             case ENEMY_ORC:    enemy_ai_orc(e);    break;
         }
 
-        // Movement
-        e->x += FIX(e->dx);
-        e->y += FIX(e->dy);
+        // Movement with signed arithmetic
+        new_x = (uint8_t)((int16_t)e->x + e->dx);
+        new_y = (int16_t)e->y + e->dy;
 
-        // Clamp Y to screen
-        if (e->y < FIX(16))  e->y = FIX(16);
-        if (e->y > FIX(136)) e->y = FIX(136);
+        // Clamp Y
+        if (new_y < 16)  new_y = 16;
+        if (new_y > 128) new_y = 128;
+        e->y = (uint8_t)new_y;
 
-        // Remove if off-screen left
-        sx = UNFIX(e->x);
-        if (sx < -16) {
+        // Remove if off-screen left (unsigned wrap: x > 200 after subtracting)
+        if (new_x > 200) {
             e->type = ENEMY_NONE;
             enemy_count--;
             continue;
         }
+        e->x = new_x;
 
         // Check hit by player projectile
-        if (projectile_check_hit(
-                (uint8_t)sx, (uint8_t)UNFIX(e->y), 16, 16)) {
+        if (projectile_check_hit(e->x, e->y, 16, 16)) {
             e->hp--;
             if (e->hp == 0) {
                 e->type = ENEMY_NONE;
                 enemy_count--;
-                // TODO: spawn explosion effect, score
             }
         }
 
@@ -188,19 +176,17 @@ void enemy_draw(void) {
         e = &enemies[i];
 
         if (e->type == ENEMY_NONE) {
-            // Hide all 4 sprites for this slot
             for (j = 0; j < 4; j++) {
                 move_sprite(oam_base + j, 0, 0);
             }
             continue;
         }
 
-        sx = (uint8_t)(UNFIX(e->x) + OAM_X_OFS);
-        sy = (uint8_t)(UNFIX(e->y) + OAM_Y_OFS);
+        sx = e->x + OAM_X_OFS;
+        sy = e->y + OAM_Y_OFS;
         tile = e->tile_base + e->frame * 4;
         flags = e->palette & 0x07;
 
-        // 16x16 as 4 8x8 tiles
         set_sprite_tile(oam_base,     tile);
         set_sprite_prop(oam_base,     flags);
         move_sprite(oam_base,         sx, sy);
@@ -222,19 +208,14 @@ void enemy_draw(void) {
 uint8_t enemy_check_player_hit(uint8_t px, uint8_t py) {
     uint8_t i;
     Enemy *e;
-    uint8_t ex, ey;
 
     for (i = 0; i < MAX_ENEMIES; i++) {
         e = &enemies[i];
         if (e->type == ENEMY_NONE) continue;
 
-        ex = (uint8_t)UNFIX(e->x);
-        ey = (uint8_t)UNFIX(e->y);
-
-        // AABB collision (12x12 hitbox centered in 16x16)
-        if (px + 12 > ex + 2 && px + 2 < ex + 14 &&
-            py + 12 > ey + 2 && py + 2 < ey + 14) {
-            return 1; // Hit!
+        if (px + 12 > e->x + 2 && px + 2 < e->x + 14 &&
+            py + 12 > e->y + 2 && py + 2 < e->y + 14) {
+            return 1;
         }
     }
     return 0;

@@ -294,8 +294,8 @@ static const uint8_t room_pattern[] = {
 };
 #define ROOM_PATTERN_LEN 24
 
-// Enemy spawn schedule
-#define SPAWN_INTERVAL 25
+// Enemy spawn schedule — first enemy at column 8 (~64 frames), then every 12
+#define SPAWN_INTERVAL 12
 static uint16_t next_spawn_col;
 static const uint8_t spawn_y[] = { 56, 40, 88, 72, 48, 80, 64 };
 static uint8_t spawn_y_idx;
@@ -312,7 +312,7 @@ void level_init(void) {
     scroll_x = 0;
     scroll_col = 21;
     scroll_speed = 1;
-    next_spawn_col = SPAWN_INTERVAL;
+    next_spawn_col = 8; // First enemy spawns early
     spawn_y_idx = 0;
     spawn_type_idx = 0;
 
@@ -374,7 +374,7 @@ void level_check_spawns(void) {
         uint8_t type = spawn_types[spawn_type_idx];
         uint8_t y = spawn_y[spawn_y_idx];
 
-        enemy_spawn(type, FIX(168), FIX(y));
+        enemy_spawn(type, 168, y);
 
         spawn_y_idx = (spawn_y_idx + 1) % sizeof(spawn_y);
         spawn_type_idx = (spawn_type_idx + 1) % sizeof(spawn_types);
