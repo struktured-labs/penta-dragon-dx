@@ -22,7 +22,7 @@ extern uint8_t  scroll_col;     // Next column to load (world units)
 extern uint8_t  auto_scroll;    // 0=player-driven, non-zero=auto-scroll speed
 
 // Vertical scroll limits
-#define SCROLL_Y_MAX    24      // Maximum downward scroll
+#define SCROLL_Y_MAX    12      // Original caps at SCY=12
 
 // Initialize level (load initial screen)
 void level_init(void);
