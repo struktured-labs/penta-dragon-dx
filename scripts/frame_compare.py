@@ -221,9 +221,13 @@ def main():
     orig_inputs = build_input_sequence(ORIG_MENU_PREFIX, GAMEPLAY_INPUTS, ORIG_GAMEPLAY_START)
     orig_captures = build_capture_frames(GAMEPLAY_CAPTURE_OFFSETS, ORIG_GAMEPLAY_START)
 
-    # Remake: no menu, gameplay starts at frame 5
-    remake_start = 5
-    remake_inputs = build_input_sequence([], GAMEPLAY_INPUTS, remake_start)
+    # Remake: has title screen now, press START to begin
+    REMAKE_MENU_PREFIX = [
+        (10,  K_START),  # Press START on title screen
+        (15,  0),
+    ]
+    remake_start = 60  # Gameplay active after title dismiss + init
+    remake_inputs = build_input_sequence(REMAKE_MENU_PREFIX, GAMEPLAY_INPUTS, remake_start)
     remake_captures = build_capture_frames(GAMEPLAY_CAPTURE_OFFSETS, remake_start)
 
     max_frame_orig = max(orig_captures) + 20

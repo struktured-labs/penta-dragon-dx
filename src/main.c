@@ -16,6 +16,7 @@
 #include "gamestate.h"
 #include "hud.h"
 #include "title.h"
+#include "itemmenu.h"
 
 static uint8_t prev_keys;
 static uint8_t game_state;  // STATE_TITLE, STATE_PLAYING, STATE_DEAD
@@ -43,8 +44,9 @@ static void game_init(void) {
 
     prev_keys = 0;
 
-    // Initialize HUD
+    // Initialize HUD and items
     hud_init();
+    itemmenu_init();
 
     // Draw initial frame
     player_draw();
@@ -68,6 +70,26 @@ static void game_update(void) {
     uint8_t was_hit;
     uint8_t hit_result;
     uint8_t pi;
+
+    // Item menu (START to open/close, handled first)
+    if (menu_open) {
+        itemmenu_update(keys, prev_keys);
+        prev_keys = keys;
+        return; // Menu absorbs all input
+    }
+
+    // START opens item menu (edge-triggered)
+    if ((keys & J_START) && !(prev_keys & J_START)) {
+        itemmenu_open();
+        itemmenu_draw();
+        prev_keys = keys;
+        return;
+    }
+
+    // B uses flash bomb directly (edge-triggered, no menu needed)
+    if ((keys & J_B) && !(prev_keys & J_B)) {
+        itemmenu_use_flash_bomb();
+    }
 
     // Player
     player_update(keys, prev_keys);
