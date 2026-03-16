@@ -7,6 +7,7 @@
 #define BOSS_NONE       0
 #define BOSS_GARGOYLE   1
 #define BOSS_SPIDER     2
+#define BOSS_CRIMSON    3
 
 // Boss OAM allocation: during boss sections, regular enemies are cleared
 // and the boss uses OAM slots 12-27 (16 slots for 4x4 sprite grid).
@@ -17,6 +18,7 @@
 // Boss HP values
 #define BOSS_GARGOYLE_HP  20
 #define BOSS_SPIDER_HP    25
+#define BOSS_CRIMSON_HP   35
 
 // Boss attack cooldown (frames)
 #define BOSS_SHOOT_CD     90
@@ -50,6 +52,9 @@ void boss_spawn_gargoyle(uint8_t x, uint8_t y);
 
 // Spawn the spider miniboss at the given position
 void boss_spawn_spider(uint8_t x, uint8_t y);
+
+// Spawn the Crimson boss (Stage 1 final boss)
+void boss_spawn_crimson(uint8_t x, uint8_t y);
 
 // Update boss AI, movement, and attacks (call once per frame)
 void boss_update(void);

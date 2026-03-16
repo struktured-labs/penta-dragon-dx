@@ -26,6 +26,7 @@ extern GameState game;
 #define SECT_ADVANCED   0x22  // Harder enemies (adds hornets + crows)
 #define SECT_BOSS_1     0x30  // Gargoyle miniboss
 #define SECT_BOSS_2     0x35  // Spider miniboss
+#define SECT_BOSS_3     0x3A  // Crimson (Stage 1 final boss)
 
 // Section durations (frames, from extraction data)
 #define SECT0_DURATION  5520  // Normal section

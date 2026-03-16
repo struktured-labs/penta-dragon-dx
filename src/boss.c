@@ -210,6 +210,133 @@ static void boss_ai_gargoyle(void) {
     }
 }
 
+// Crimson boss AI constants
+// Stage 1 final boss: faster, more aggressive, multi-shot attacks
+#define CRIMSON_X_MIN      20
+#define CRIMSON_X_MAX      128
+#define CRIMSON_SPEED      2    // Faster than minibosses
+#define CRIMSON_Y_HALF_P   25   // Fast vertical oscillation
+#define CRIMSON_SHOOT_CD   50   // Shoots more often
+#define CRIMSON_BURST_CD   10   // Burst fire interval
+
+void boss_spawn_crimson(uint8_t x, uint8_t y) {
+    boss.type = BOSS_CRIMSON;
+    boss.x = x;
+    boss.y = y;
+    boss.hp = BOSS_CRIMSON_HP;
+    boss.dx = -CRIMSON_SPEED;
+    boss.dy = 1;
+    boss.ai_state = 0;    // 0=patrol, 1=charge, 2=burst fire
+    boss.ai_timer = 0;
+    boss.attack_cd = CRIMSON_SHOOT_CD;
+    boss.frame = 0;
+    boss.anim_tick = 0;
+    boss.palette = 6;             // Crimson palette slot
+    boss.tile_base = TILE_HUMANOID; // Placeholder tiles
+}
+
+// Crimson AI: aggressive patrol with charge attacks and burst fire
+static void boss_ai_crimson(void) {
+    int8_t aim_dx;
+    int8_t aim_dy;
+
+    boss.ai_timer++;
+
+    switch (boss.ai_state) {
+        case 0: // Patrol phase
+            // Horizontal patrol (faster than minibosses)
+            if (boss.x <= CRIMSON_X_MIN) {
+                boss.dx = CRIMSON_SPEED;
+            } else if (boss.x >= CRIMSON_X_MAX) {
+                boss.dx = -CRIMSON_SPEED;
+            }
+
+            // Vertical oscillation
+            if (boss.ai_timer >= CRIMSON_Y_HALF_P) {
+                boss.ai_timer = 0;
+                boss.dy = -boss.dy;
+            }
+
+            // Apply movement
+            boss.x = (uint8_t)((int16_t)boss.x + boss.dx);
+            boss.y = (uint8_t)((int16_t)boss.y + boss.dy);
+            if (boss.y < 16) boss.y = 16;
+            if (boss.y > 96) boss.y = 96;
+
+            // Single aimed shot
+            boss.attack_cd--;
+            if (boss.attack_cd == 0) {
+                boss.attack_cd = CRIMSON_SHOOT_CD;
+
+                aim_dx = (boss.x > player.x) ? -3 : 3;
+                aim_dy = 0;
+                if (boss.y + 16 < player.y) aim_dy = 1;
+                else if (boss.y > player.y + 8) aim_dy = -1;
+
+                projectile_spawn_enemy(boss.x + 12, boss.y + 16, aim_dx, aim_dy);
+
+                // Every 3rd attack, switch to charge
+                if ((boss.ai_timer & 0x03) == 0 && boss.hp < 25) {
+                    boss.ai_state = 1;
+                    boss.ai_timer = 0;
+                }
+            }
+            break;
+
+        case 1: // Charge phase — rush toward player's Y position
+            if (boss.ai_timer < 30) {
+                // Pause briefly
+                boss.dx = 0;
+                boss.dy = 0;
+            } else if (boss.ai_timer < 60) {
+                // Rush toward player
+                boss.dx = -3;
+                boss.dy = (player.y > boss.y + 16) ? 2 : -2;
+                boss.x = (uint8_t)((int16_t)boss.x + boss.dx);
+                boss.y = (uint8_t)((int16_t)boss.y + boss.dy);
+                if (boss.x < CRIMSON_X_MIN) boss.x = CRIMSON_X_MIN;
+                if (boss.y < 16) boss.y = 16;
+                if (boss.y > 96) boss.y = 96;
+            } else {
+                // Switch to burst fire
+                boss.ai_state = 2;
+                boss.ai_timer = 0;
+                boss.attack_cd = CRIMSON_BURST_CD;
+            }
+            break;
+
+        case 2: // Burst fire — rapid 3-shot spread
+            boss.dx = 0;
+            boss.dy = 0;
+
+            boss.attack_cd--;
+            if (boss.attack_cd == 0) {
+                boss.attack_cd = CRIMSON_BURST_CD;
+                // Spread shot: left, straight, right
+                projectile_spawn_enemy(boss.x, boss.y + 8, -3, -1);
+                projectile_spawn_enemy(boss.x, boss.y + 16, -4, 0);
+                projectile_spawn_enemy(boss.x, boss.y + 24, -3, 1);
+            }
+
+            if (boss.ai_timer >= 40) {
+                // Return to patrol
+                boss.ai_state = 0;
+                boss.ai_timer = 0;
+                boss.dx = -CRIMSON_SPEED;
+                boss.dy = 1;
+                boss.attack_cd = CRIMSON_SHOOT_CD;
+            }
+            break;
+    }
+
+    // Animation
+    boss.anim_tick++;
+    if (boss.anim_tick >= BOSS_ANIM_SPEED) {
+        boss.anim_tick = 0;
+        boss.frame = (boss.frame + 1) & 0x01;
+    }
+}
+
 void boss_update(void) {
     if (boss.type == BOSS_NONE) return;
 
@@ -219,6 +346,9 @@ void boss_update(void) {
             break;
         case BOSS_SPIDER:
             boss_ai_spider();
+            break;
+        case BOSS_CRIMSON:
+            boss_ai_crimson();
             break;
         default:
             break;

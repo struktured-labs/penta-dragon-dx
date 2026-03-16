@@ -13,11 +13,13 @@ GameState game;
 // DCB8=3: desc=0x04 (normal again)
 // DCB8=4: desc=0x22 (advanced again)
 // DCB8=5: desc=0x35 (Spider miniboss)
+// After Spider, one more normal+advanced cycle, then Crimson (Stage 1 final boss)
 static const uint8_t section_descs[] = {
     SECT_NORMAL, SECT_ADVANCED, SECT_BOSS_1,
     SECT_NORMAL, SECT_ADVANCED, SECT_BOSS_2,
+    SECT_NORMAL, SECT_ADVANCED, SECT_BOSS_3,
 };
-#define NUM_SECTIONS 6
+#define NUM_SECTIONS 9
 
 // Room cycling per section (from extraction):
 // Section 0: rooms {01, 05} alternating every ~150 frames
@@ -69,8 +71,13 @@ void gamestate_next_section(void) {
     } else if (game.section_desc == SECT_BOSS_2) {
         game.boss_flag = 2; // Spider
         load_boss_palette(2);
-        enemy_init();  // Clear regular enemies for boss OAM slots
+        enemy_init();
         boss_spawn_spider(120, 40);
+    } else if (game.section_desc == SECT_BOSS_3) {
+        game.boss_flag = 3; // Crimson (Stage 1 final boss)
+        load_boss_palette(3);
+        enemy_init();
+        boss_spawn_crimson(130, 48);
     } else {
         game.boss_flag = 0;
         boss_init();  // Clear boss when leaving boss section
