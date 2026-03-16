@@ -5,21 +5,25 @@
 #include "palettes.h"
 
 GameState game;
+uint8_t game_stage;
 
-// Section sequence from original Level 1:
-// DCB8=0: desc=0x04 (normal, orcs+humanoids)
-// DCB8=1: desc=0x22 (advanced, adds hornets+crows)
-// DCB8=2: desc=0x30 (Gargoyle miniboss)
-// DCB8=3: desc=0x04 (normal again)
-// DCB8=4: desc=0x22 (advanced again)
-// DCB8=5: desc=0x35 (Spider miniboss)
-// After Spider, one more normal+advanced cycle, then Crimson (Stage 1 final boss)
+// Each stage: Normal → Advanced → Miniboss1 → Normal → Advanced → Miniboss2 →
+//             Normal → Advanced → Stage Boss
+// The stage boss changes per stage, minibosses repeat
 static const uint8_t section_descs[] = {
-    SECT_NORMAL, SECT_ADVANCED, SECT_BOSS_1,
-    SECT_NORMAL, SECT_ADVANCED, SECT_BOSS_2,
-    SECT_NORMAL, SECT_ADVANCED, SECT_BOSS_3,
+    SECT_NORMAL, SECT_ADVANCED, SECT_BOSS_1,   // Gargoyle
+    SECT_NORMAL, SECT_ADVANCED, SECT_BOSS_2,   // Spider
+    SECT_NORMAL, SECT_ADVANCED, 0xFF,          // Stage boss (replaced at runtime)
 };
 #define NUM_SECTIONS 9
+#define STAGE_BOSS_IDX 8  // Index of the stage boss in section_descs
+
+// Stage boss mapping: stage 1=Crimson, 2=Ice, 3=Void, 4=Poison, 5=Knight
+static const uint8_t stage_boss_descs[] = {
+    SECT_BOSS_3, SECT_BOSS_4, SECT_BOSS_5, SECT_BOSS_5, SECT_BOSS_5
+};
+static const uint8_t stage_boss_flags[] = { 3, 4, 5, 6, 7 };
+#define MAX_STAGES 5
 
 // Room cycling per section (from extraction):
 // Section 0: rooms {01, 05} alternating every ~150 frames
@@ -46,6 +50,7 @@ void gamestate_init(void) {
     game.hp = 10;
     game.lives = 3;
     game.section_timer = 0;
+    game_stage = 1;
     spawn_timer = SPAWN_CD_NORMAL;
 }
 
@@ -54,11 +59,31 @@ uint8_t gamestate_is_boss(void) {
 }
 
 void gamestate_next_section(void) {
+    uint8_t stage_idx;
+    uint8_t boss_id;
+
     game.section++;
+
+    // Check if we just beat the stage boss (section was the last one)
     if (game.section >= NUM_SECTIONS) {
-        game.section = 0; // Loop back (full dungeon cleared)
+        // Stage complete — advance to next stage
+        game.section = 0;
+        if (game_stage < MAX_STAGES) {
+            game_stage++;
+        }
+        // Difficulty scaling: shorter sections in later stages
+        // (enemies spawn faster, sections end sooner)
     }
-    game.section_desc = section_descs[game.section];
+
+    // Get section descriptor — override stage boss slot with current stage's boss
+    if (game.section == STAGE_BOSS_IDX) {
+        stage_idx = game_stage - 1;
+        if (stage_idx >= MAX_STAGES) stage_idx = MAX_STAGES - 1;
+        game.section_desc = stage_boss_descs[stage_idx];
+    } else {
+        game.section_desc = section_descs[game.section];
+    }
+
     game.section_timer = 0;
     game.progress = 0;
 
@@ -66,21 +91,28 @@ void gamestate_next_section(void) {
     if (game.section_desc == SECT_BOSS_1) {
         game.boss_flag = 1; // Gargoyle
         load_boss_palette(1);
-        enemy_init();  // Clear regular enemies for boss OAM slots
-        boss_spawn_gargoyle(120, 56);  // Spawn at right side of screen
+        enemy_init();
+        boss_spawn_gargoyle(120, 56);
     } else if (game.section_desc == SECT_BOSS_2) {
         game.boss_flag = 2; // Spider
         load_boss_palette(2);
         enemy_init();
         boss_spawn_spider(120, 40);
-    } else if (game.section_desc == SECT_BOSS_3) {
-        game.boss_flag = 3; // Crimson (Stage 1 final boss)
-        load_boss_palette(3);
+    } else if (game.section == STAGE_BOSS_IDX) {
+        // Stage boss — type depends on current stage
+        stage_idx = game_stage - 1;
+        if (stage_idx >= MAX_STAGES) stage_idx = MAX_STAGES - 1;
+        boss_id = stage_boss_flags[stage_idx];
+        game.boss_flag = boss_id;
+        load_boss_palette(boss_id);
         enemy_init();
+        // All stage bosses use Crimson's AI pattern but with increasing HP
         boss_spawn_crimson(130, 48);
+        // Scale HP by stage
+        boss.hp = 35 + (game_stage - 1) * 10;
     } else {
         game.boss_flag = 0;
-        boss_init();  // Clear boss when leaving boss section
+        boss_init();
     }
 }
 
@@ -95,9 +127,15 @@ static void spawn_section_enemies(void) {
     spawn_timer--;
     if (spawn_timer > 0) return;
 
-    // Reset spawn timer based on section difficulty
-    spawn_timer = (game.section_desc == SECT_ADVANCED) ?
-                  SPAWN_CD_ADVANCED : SPAWN_CD_NORMAL;
+    // Reset spawn timer — scales faster in later stages
+    {
+        uint8_t base_cd = (game.section_desc == SECT_ADVANCED) ?
+                          SPAWN_CD_ADVANCED : SPAWN_CD_NORMAL;
+        // Reduce by 10 per stage (min 30)
+        uint8_t stage_reduction = (game_stage - 1) * 10;
+        spawn_timer = (base_cd > stage_reduction + 30) ?
+                      base_cd - stage_reduction : 30;
+    }
 
     // Pick enemy type based on section
     y = 40 + (game.progress * 7) % 80; // Vary Y position

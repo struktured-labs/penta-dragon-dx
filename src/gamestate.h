@@ -27,6 +27,11 @@ extern GameState game;
 #define SECT_BOSS_1     0x30  // Gargoyle miniboss
 #define SECT_BOSS_2     0x35  // Spider miniboss
 #define SECT_BOSS_3     0x3A  // Crimson (Stage 1 final boss)
+#define SECT_BOSS_4     0x3F  // Ice (Stage 2 final boss)
+#define SECT_BOSS_5     0x44  // Void (Stage 3 final boss)
+
+// Current stage (1-5, advances after defeating stage boss)
+extern uint8_t game_stage;
 
 // Section durations (frames, from extraction data)
 #define SECT0_DURATION  5520  // Normal section
