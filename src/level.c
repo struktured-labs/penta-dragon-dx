@@ -128,7 +128,7 @@ void level_init(void) {
     uint8_t col;
     uint8_t tiles[LEVEL_HEIGHT];
 
-    scroll_x = 0;
+    scroll_x = 12; // Original starts at SCX=12
     scroll_y = 0;
     scroll_col = 21;
     scroll_tick = 0;
@@ -137,6 +137,10 @@ void level_init(void) {
     spawn_y_idx = 0;
     spawn_type_idx = 0;
     collected_count = 0;
+
+    // Set initial scroll position to match original (SCX=12)
+    SCX_REG = (uint8_t)(scroll_x & 0xFF);
+    SCY_REG = scroll_y;
 
     // Fill initial visible area (21 columns from the level data)
     for (col = 0; col < 21; col++) {
