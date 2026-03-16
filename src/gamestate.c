@@ -70,7 +70,7 @@ void gamestate_next_section(void) {
         game.boss_flag = 2; // Spider
         load_boss_palette(2);
         enemy_init();  // Clear regular enemies for boss OAM slots
-        // TODO: boss_spawn_spider() when implemented
+        boss_spawn_spider(120, 40);
     } else {
         game.boss_flag = 0;
         boss_init();  // Clear boss when leaving boss section

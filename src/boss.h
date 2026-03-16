@@ -48,6 +48,9 @@ void boss_init(void);
 // Spawn the gargoyle miniboss at the given position
 void boss_spawn_gargoyle(uint8_t x, uint8_t y);
 
+// Spawn the spider miniboss at the given position
+void boss_spawn_spider(uint8_t x, uint8_t y);
+
 // Update boss AI, movement, and attacks (call once per frame)
 void boss_update(void);
 

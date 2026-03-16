@@ -17,6 +17,18 @@ Boss boss;
 #define GARGOYLE_PATROL_SPEED  1   // Pixels per frame horizontal
 #define GARGOYLE_Y_HALF_PERIOD 30  // Frames per half Y oscillation
 
+// Spider AI constants (from extraction data):
+// Horizontal: dx=22 (much less than gargoyle, slow lateral drift)
+// Vertical: dy=42 (large bounce, primarily vertical movement)
+// Shoots faster than gargoyle (every 70 frames)
+#define SPIDER_X_MIN       40
+#define SPIDER_X_MAX      130
+#define SPIDER_Y_MIN       20
+#define SPIDER_Y_MAX      100
+#define SPIDER_X_HALF_PERIOD  60   // Frames per half X drift
+#define SPIDER_Y_HALF_PERIOD  20   // Frames per half Y bounce (fast)
+#define SPIDER_SHOOT_CD       70   // Faster shooting than gargoyle
+
 void boss_init(void) {
     uint8_t i;
 
@@ -54,6 +66,86 @@ void boss_spawn_gargoyle(uint8_t x, uint8_t y) {
     boss.anim_tick = 0;
     boss.palette = 6;               // Uses boss palette slot 6 (gargoyle)
     boss.tile_base = TILE_HUMANOID; // Reuse humanoid tiles until boss tiles extracted
+}
+
+void boss_spawn_spider(uint8_t x, uint8_t y) {
+    boss.type = BOSS_SPIDER;
+    boss.x = x;
+    boss.y = y;
+    boss.hp = BOSS_SPIDER_HP;
+    boss.dx = 1;                         // Start drifting right (slow)
+    boss.dy = -2;                        // Start bouncing up (fast)
+    boss.ai_state = 0;
+    boss.ai_timer = 0;
+    boss.attack_cd = SPIDER_SHOOT_CD / 2;  // First attack comes sooner
+    boss.frame = 0;
+    boss.anim_tick = 0;
+    boss.palette = 7;               // Uses boss palette slot 7 (spider)
+    boss.tile_base = TILE_HUMANOID; // Reuse humanoid tiles until boss tiles extracted
+}
+
+// Spider AI: slow horizontal drift with large vertical bounce.
+// The spider primarily bounces up and down with minimal lateral movement.
+// Shoots aimed at player every 70 frames (faster than gargoyle).
+static void boss_ai_spider(void) {
+    int8_t aim_dx;
+    int8_t aim_dy;
+
+    boss.ai_timer++;
+
+    // Slow horizontal drift: reverse direction every SPIDER_X_HALF_PERIOD frames
+    if (boss.ai_timer >= SPIDER_X_HALF_PERIOD) {
+        boss.ai_timer = 0;
+        boss.dx = -boss.dx;
+    }
+
+    // Large vertical bounce: reverse direction at Y boundaries
+    // Spider bounces fast with +/-2 pixels per frame
+    if (boss.y <= SPIDER_Y_MIN) {
+        boss.dy = 2;
+    } else if (boss.y >= SPIDER_Y_MAX) {
+        boss.dy = -2;
+    }
+
+    // Apply movement
+    boss.x = (uint8_t)((int16_t)boss.x + boss.dx);
+    boss.y = (uint8_t)((int16_t)boss.y + boss.dy);
+
+    // Clamp X to valid range
+    if (boss.x < SPIDER_X_MIN) boss.x = SPIDER_X_MIN;
+    if (boss.x > SPIDER_X_MAX) boss.x = SPIDER_X_MAX;
+
+    // Attack: fire projectile at player
+    if (boss.attack_cd > 0) {
+        boss.attack_cd--;
+    }
+    if (boss.attack_cd == 0) {
+        boss.attack_cd = SPIDER_SHOOT_CD;
+
+        // Aim toward player
+        aim_dx = -2;
+        aim_dy = 0;
+        if (boss.x > player.x + 16) {
+            aim_dx = -3;
+        } else if (boss.x + 32 < player.x) {
+            aim_dx = 3;
+        }
+        if (boss.y + 16 < player.y) {
+            aim_dy = 2;
+        } else if (boss.y > player.y + 8) {
+            aim_dy = -2;
+        }
+
+        // Fire from center of boss sprite
+        projectile_spawn_enemy(boss.x + 12, boss.y + 16, aim_dx, aim_dy);
+    }
+
+    // Animation
+    boss.anim_tick++;
+    if (boss.anim_tick >= BOSS_ANIM_SPEED) {
+        boss.anim_tick = 0;
+        boss.frame = (boss.frame + 1) & 0x01;
+    }
 }
 
 // Gargoyle AI: horizontal patrol with vertical oscillation.
@@ -124,6 +216,9 @@ void boss_update(void) {
     switch (boss.type) {
         case BOSS_GARGOYLE:
             boss_ai_gargoyle();
+            break;
+        case BOSS_SPIDER:
+            boss_ai_spider();
             break;
         default:
             break;

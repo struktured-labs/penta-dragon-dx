@@ -14,8 +14,12 @@
 #include "sound.h"
 #include "music.h"
 #include "gamestate.h"
+#include "hud.h"
+#include "title.h"
 
 static uint8_t prev_keys;
+static uint8_t game_state;  // STATE_TITLE, STATE_PLAYING, STATE_DEAD
+static uint8_t game_over_shown;
 
 static void game_init(void) {
     DISPLAY_OFF;
@@ -39,6 +43,9 @@ static void game_init(void) {
 
     prev_keys = 0;
 
+    // Initialize HUD
+    hud_init();
+
     // Draw initial frame
     player_draw();
     projectile_draw();
@@ -51,6 +58,9 @@ static void game_init(void) {
 
     // Start music after display is on (needs sound hardware fully ready)
     music_init();
+
+    game_state = STATE_PLAYING;
+    game_over_shown = 0;
 }
 
 static void game_update(void) {
@@ -76,7 +86,7 @@ static void game_update(void) {
     level_update(keys);
 
     // Game progression (handles section cycling + enemy spawning)
-    // NOTE: replaces old level_check_spawns() — do NOT call both
+    // NOTE: replaces old level_check_spawns() -- do NOT call both
     gamestate_update();
 
     // Update all
@@ -87,6 +97,9 @@ static void game_update(void) {
     // Sound state machines
     sound_update();
     music_update();
+
+    // HUD update
+    hud_update();
 
     // Player-enemy collision (regular enemies)
     if (player.invuln == 0) {
@@ -110,6 +123,7 @@ static void game_update(void) {
                 if (game.lives > 0) game.lives--;
                 if (game.lives == 0) {
                     game.gameplay_active = 0; // Game over
+                    game_state = STATE_DEAD;
                 } else {
                     // Respawn
                     game.hp = 10;
@@ -160,19 +174,44 @@ void main(void) {
         cpu_fast();
     }
 
-    game_init();
+    sound_init();
+    init_palettes();
+
+    // Start with title screen
+    title_init();
+    game_state = STATE_TITLE;
+    game_over_shown = 0;
 
     while (1) {
         wait_vbl_done();
 
-        if (game.gameplay_active) {
-            game_update();
-            game_draw();
-        } else {
-            // Game over — restart on START
-            if (joypad() & J_START) {
-                game_init();
-            }
+        switch (game_state) {
+            case STATE_TITLE:
+                if (title_update()) {
+                    title_cleanup();
+                    game_init();
+                }
+                break;
+
+            case STATE_PLAYING:
+                game_update();
+                game_draw();
+                break;
+
+            case STATE_DEAD:
+                // Game over state
+                if (!game_over_shown) {
+                    hud_game_over();
+                    music_pause();
+                    game_over_shown = 1;
+                }
+                // Wait for START to return to title
+                if (joypad() & J_START) {
+                    game_over_shown = 0;
+                    title_init();
+                    game_state = STATE_TITLE;
+                }
+                break;
         }
     }
 }
