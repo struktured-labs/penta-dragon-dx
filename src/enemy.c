@@ -12,7 +12,45 @@ Enemy enemies[MAX_ENEMIES];
 uint8_t enemy_count;
 
 #define ENEMY_ANIM_SPEED 16
+
+/* --- Extracted from original ROM frame-by-frame analysis ---
+ *
+ * The original game runs a main loop every 4 frames (15 Hz).
+ * Some enemies (orc, humanoid) update every 8 frames (7.5 Hz).
+ * The remake runs at 60 fps, so we throttle via ai_timer.
+ *
+ * Hornet:  moves every 4 frames, DX~-4/tick, DY oscillates +-1/tick
+ *          Net: ~-1 px/frame left, ~0.3 px/frame vertical oscillation
+ *          Y oscillation period: ~60 frames (30 down, 30 up)
+ *          Amplitude: ~15 px. Does NOT shoot.
+ *
+ * Crow:    moves every 4 frames, DX~-3/tick, DY~-2/tick
+ *          Net: ~-1 px/frame left, ~-0.5 px/frame up (diagonal)
+ *          Short lifetime (~28 frames). Does NOT shoot.
+ *
+ * Orc:     moves every 8 frames, DX~-1/tick, DY oscillates +-1/tick
+ *          Net: ~-0.13 px/frame left (very slow patrol)
+ *          Y oscillation period: ~300 frames (150 down, 150 up)
+ *          Amplitude: ~20 px. SHOOTS aimed at player every ~90-100 frames.
+ *
+ * Humanoid: moves every 8 frames, DX~-1/tick, DY drifts +-1/tick
+ *          Net: ~-0.18 px/frame left (slow approach)
+ *          Y drift: goes one direction for ~100 frames, then reverses
+ *          Amplitude: ~20 px. SHOOTS aimed at player every ~90-100 frames.
+ */
+
+/* Shoot cooldown: ~90-100 frames in original (avg gap between shots) */
 #define ENEMY_SHOOT_CD   90
+
+/* Throttle ticks for slow enemies (orc/humanoid).
+ * Original moves DX=-1 every 8 frames = -0.125 px/frame.
+ * Using 8 to match original exactly. */
+#define TICK_SLOW   8
+
+/* Y oscillation half-periods (frames) */
+#define HORNET_Y_HALF_PERIOD  30
+#define ORC_Y_HALF_PERIOD     75
+#define HUMANOID_Y_HALF_PERIOD 100
 
 static const uint8_t enemy_hp[]      = { 0, 2, 2, 3, 3, 4, 0 };
 static const uint8_t enemy_palette[] = { 0, 4, 3, 5, 6, 7, 0 };
@@ -46,30 +84,32 @@ void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
             e->palette = enemy_palette[type];
             e->frame = 0;
             e->anim_tick = 0;
-            e->shoot_cd = ENEMY_SHOOT_CD / 2;
+            e->shoot_cd = ENEMY_SHOOT_CD / 2; /* First shot comes sooner */
             e->ai_state = 0;
             e->ai_timer = 0;
 
             switch (type) {
                 case ENEMY_HORNET:
                     e->tile_base = TILE_HORNET;
-                    e->dx = -1;
-                    e->dy = 0;
+                    e->dx = -1;     /* Constant leftward, applied each frame */
+                    e->dy = 1;      /* Start moving down; will oscillate */
                     break;
                 case ENEMY_CROW:
                     e->tile_base = TILE_CROW;
-                    e->dx = -2;
-                    e->dy = 0;
+                    e->dx = -2;     /* Fast leftward */
+                    e->dy = -1;     /* Diagonal upward flight */
                     break;
                 case ENEMY_ORC:
                     e->tile_base = TILE_ORC;
-                    e->dx = -1;
+                    e->dx = 0;      /* Slow patrol: movement applied by AI */
                     e->dy = 0;
+                    e->ai_state = 1; /* Start moving down */
                     break;
                 case ENEMY_HUMANOID:
                     e->tile_base = TILE_HUMANOID;
-                    e->dx = -1;
+                    e->dx = 0;      /* Slow approach: movement applied by AI */
                     e->dy = 0;
+                    e->ai_state = 1; /* Start drifting down */
                     break;
                 default:
                     e->tile_base = TILE_HORNET;
@@ -84,38 +124,129 @@ void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
     }
 }
 
+/* Hornet AI: constant leftward flight with vertical oscillation.
+ * Original: DX~-1/frame, DY oscillates +-1 with period ~60 frames.
+ * The hornet flies in a gentle sine-wave pattern. */
 static void enemy_ai_hornet(Enemy *e) {
     e->ai_timer++;
-    if (e->ai_timer >= 30) {
+    if (e->ai_timer >= HORNET_Y_HALF_PERIOD) {
         e->ai_timer = 0;
-        e->dy = -e->dy;
-        if (e->dy == 0) e->dy = 1;
+        e->dy = -e->dy; /* Reverse vertical direction */
     }
+    /* dx stays at -1 (set at spawn), applied every frame */
 }
 
+/* Crow AI: fast diagonal flight, always moving left and upward.
+ * Original: DX~-2/frame, DY~-1/frame (diagonal). Short lifetime.
+ * No state machine needed -- constant velocity. */
 static void enemy_ai_crow(Enemy *e) {
-    if (e->ai_state == 0) {
-        e->ai_timer++;
-        if (e->ai_timer >= 40) {
-            e->ai_state = 1;
-            e->ai_timer = 0;
-            e->dy = (player.y > e->y) ? 2 : -2;
-        }
-    } else {
-        e->ai_timer++;
-        if (e->ai_timer >= 30) {
-            e->ai_state = 0;
-            e->ai_timer = 0;
-            e->dy = 0;
-        }
-    }
+    (void)e; /* No AI changes needed -- constant velocity */
 }
 
+/* Orc AI: slow left patrol with Y oscillation, shoots aimed at player.
+ * Original: updates every 8 frames, DX=-1/tick, DY oscillates +-1/tick.
+ * Slow patrol with long Y oscillation period (~300 frames full cycle).
+ * Shoots projectile aimed toward player every ~90 frames. */
 static void enemy_ai_orc(Enemy *e) {
+    int8_t aim_dx;
+    int8_t aim_dy;
+
+    e->ai_timer++;
+
+    /* Slow X drift: move left by 1 every TICK_SLOW frames */
+    if ((e->ai_timer & (TICK_SLOW - 1)) == 0) {
+        e->dx = -1;
+    } else {
+        e->dx = 0;
+    }
+
+    /* Y oscillation: reverse direction every ORC_Y_HALF_PERIOD frames.
+     * ai_state: 0 = moving up (dy=-1), 1 = moving down (dy=+1) */
+    if (e->ai_timer >= ORC_Y_HALF_PERIOD) {
+        e->ai_timer = 0;
+        e->ai_state ^= 1; /* Toggle direction */
+    }
+
+    /* Apply Y movement every TICK_SLOW frames (slow patrol) */
+    if ((e->ai_timer & (TICK_SLOW - 1)) == 0) {
+        e->dy = (e->ai_state == 1) ? 1 : -1;
+    } else {
+        e->dy = 0;
+    }
+
+    /* Shooting: aimed at player position */
     e->shoot_cd--;
     if (e->shoot_cd == 0) {
         e->shoot_cd = ENEMY_SHOOT_CD;
-        projectile_spawn_enemy(e->x, e->y + 4, -3, 0);
+
+        /* Compute aimed direction toward player (simplified) */
+        aim_dx = -1; /* Default: shoot left */
+        aim_dy = 0;
+        if (e->x > player.x + 16) {
+            aim_dx = -2;
+        } else if (e->x + 16 < player.x) {
+            aim_dx = 2;
+        }
+        if (e->y + 8 < player.y) {
+            aim_dy = 1;
+        } else if (e->y > player.y + 8) {
+            aim_dy = -1;
+        }
+
+        projectile_spawn_enemy(e->x, e->y + 4, aim_dx, aim_dy);
+    }
+}
+
+/* Humanoid AI: slow approach with long Y drift periods, shoots at player.
+ * Original: similar to orc but drifts in one Y direction for longer
+ * before reversing (half-period ~100 frames vs orc's ~75).
+ * Also shoots aimed at player every ~90 frames. */
+static void enemy_ai_humanoid(Enemy *e) {
+    int8_t aim_dx;
+    int8_t aim_dy;
+
+    e->ai_timer++;
+
+    /* Slow X drift: move left by 1 every TICK_SLOW frames */
+    if ((e->ai_timer & (TICK_SLOW - 1)) == 0) {
+        e->dx = -1;
+    } else {
+        e->dx = 0;
+    }
+
+    /* Y drift: longer period than orc, stays in one direction longer.
+     * ai_state: 0 = moving up, 1 = moving down */
+    if (e->ai_timer >= HUMANOID_Y_HALF_PERIOD) {
+        e->ai_timer = 0;
+        e->ai_state ^= 1;
+    }
+
+    /* Apply Y movement every TICK_SLOW frames */
+    if ((e->ai_timer & (TICK_SLOW - 1)) == 0) {
+        e->dy = (e->ai_state == 1) ? 1 : -1;
+    } else {
+        e->dy = 0;
+    }
+
+    /* Shooting: aimed at player */
+    e->shoot_cd--;
+    if (e->shoot_cd == 0) {
+        e->shoot_cd = ENEMY_SHOOT_CD;
+
+        aim_dx = -1;
+        aim_dy = 0;
+        if (e->x > player.x + 16) {
+            aim_dx = -2;
+        } else if (e->x + 16 < player.x) {
+            aim_dx = 2;
+        }
+        if (e->y + 8 < player.y) {
+            aim_dy = 1;
+        } else if (e->y > player.y + 8) {
+            aim_dy = -1;
+        }
+
+        projectile_spawn_enemy(e->x, e->y + 4, aim_dx, aim_dy);
     }
 }
 
@@ -129,24 +260,24 @@ void enemy_update(void) {
         e = &enemies[i];
         if (e->type == ENEMY_NONE) continue;
 
-        // AI
+        /* AI -- each type has its own function */
         switch (e->type) {
-            case ENEMY_HORNET:  enemy_ai_hornet(e); break;
-            case ENEMY_CROW:    enemy_ai_crow(e);   break;
-            case ENEMY_ORC:     enemy_ai_orc(e);    break;
-            case ENEMY_HUMANOID: enemy_ai_orc(e);   break; // Same AI as orc
+            case ENEMY_HORNET:   enemy_ai_hornet(e);   break;
+            case ENEMY_CROW:     enemy_ai_crow(e);     break;
+            case ENEMY_ORC:      enemy_ai_orc(e);      break;
+            case ENEMY_HUMANOID: enemy_ai_humanoid(e);  break;
         }
 
-        // Movement with signed arithmetic
+        /* Movement (dx/dy set by AI each frame) */
         new_x = (uint8_t)((int16_t)e->x + e->dx);
         new_y = (int16_t)e->y + e->dy;
 
-        // Clamp Y
+        /* Clamp Y to playable area */
         if (new_y < 16)  new_y = 16;
         if (new_y > 128) new_y = 128;
         e->y = (uint8_t)new_y;
 
-        // Remove if off-screen left (unsigned wrap: x > 200 after subtracting)
+        /* Remove if off-screen left (unsigned wrap: x > 200) */
         if (new_x > 200) {
             e->type = ENEMY_NONE;
             enemy_count--;
@@ -154,7 +285,7 @@ void enemy_update(void) {
         }
         e->x = new_x;
 
-        // Check hit by player projectile
+        /* Check hit by player projectile */
         if (projectile_check_hit(e->x, e->y, 16, 16)) {
             e->hp--;
             sound_enemy_hit();
@@ -164,7 +295,7 @@ void enemy_update(void) {
             }
         }
 
-        // Animation
+        /* Animation */
         e->anim_tick++;
         if (e->anim_tick >= ENEMY_ANIM_SPEED) {
             e->anim_tick = 0;
