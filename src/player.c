@@ -121,20 +121,21 @@ void player_draw(void) {
     //   slot2: BL tile=0x27 flags=0x20 (S_FLIPX)
     //   slot3: BR tile=0x26 flags=0x20 (S_FLIPX)
     if (player.dir == DIR_LEFT) {
-        // Flip: swap left/right columns
-        set_sprite_tile(OAM_PLAYER,     tile_base + 1); // TR->left
+        // Original left-facing: top swaps columns, bottom stays same order
+        // All 4 sprites get S_FLIPX (flags_top already has it for LEFT)
+        set_sprite_tile(OAM_PLAYER,     tile_base + 1); // TR→left
         set_sprite_prop(OAM_PLAYER,     flags_top);
         move_sprite(OAM_PLAYER,         sx, sy);
 
-        set_sprite_tile(OAM_PLAYER + 1, tile_base);     // TL->right
+        set_sprite_tile(OAM_PLAYER + 1, tile_base);     // TL→right
         set_sprite_prop(OAM_PLAYER + 1, flags_top);
         move_sprite(OAM_PLAYER + 1,     sx + 8, sy);
 
-        set_sprite_tile(OAM_PLAYER + 2, tile_base + 2); // BR->left (swapped)
+        set_sprite_tile(OAM_PLAYER + 2, tile_base + 3); // BL stays left (tile+3)
         set_sprite_prop(OAM_PLAYER + 2, flags_bot);
         move_sprite(OAM_PLAYER + 2,     sx, sy + 8);
 
-        set_sprite_tile(OAM_PLAYER + 3, tile_base + 3); // BL->right (swapped)
+        set_sprite_tile(OAM_PLAYER + 3, tile_base + 2); // BR stays right (tile+2)
         set_sprite_prop(OAM_PLAYER + 3, flags_bot);
         move_sprite(OAM_PLAYER + 3,     sx + 8, sy + 8);
     } else {

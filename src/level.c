@@ -141,6 +141,7 @@ static const uint8_t bg_tile_pal[256] = {
 #define COL_PILLAR     6  // Pillar column
 #define COL_ITEM       7  // Floor with item
 #define COL_VOID       8  // Mostly void (edge of map)
+#define COL_ITEM_R     9  // Right half of 2x2 item block
 
 // Generate a column of tiles based on type
 static void gen_column(uint8_t col_type, uint8_t *tiles, uint8_t col_idx) {
@@ -237,9 +238,16 @@ static void gen_column(uint8_t col_type, uint8_t *tiles, uint8_t col_idx) {
             break;
 
         case COL_ITEM:
-            // Floor with item in middle (2x2 item block)
+            // Floor with item — left column of 2x2 block
+            // Next column (COL_ITEM_R) provides right half
             tiles[7]  = T_ITEM_TL;
             tiles[8]  = T_ITEM_BL;
+            break;
+
+        case COL_ITEM_R:
+            // Right column of 2x2 item block
+            tiles[7]  = T_ITEM_TR;
+            tiles[8]  = T_ITEM_BR;
             break;
 
         case COL_VOID:
@@ -275,8 +283,8 @@ static const uint8_t room_pattern[] = {
     COL_FLOOR,      // 4: Open floor
     COL_PILLAR,     // 5: Pillar
     COL_FLOOR,      // 6: Open floor
-    COL_ITEM,       // 7: Item pickup
-    COL_FLOOR,      // 8: Open floor
+    COL_ITEM,       // 7: Item pickup (left half)
+    COL_ITEM_R,     // 8: Item pickup (right half)
     COL_FLOOR,      // 9: Open floor
     COL_FLOOR,      // 10: Open floor
     COL_FLOOR,      // 11: Open floor
