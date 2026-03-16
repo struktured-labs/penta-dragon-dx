@@ -16,13 +16,13 @@
 
 // Sprite tile allocation in VRAM
 // Each entity type gets a block of tiles
-#define TILE_SARA_W      0   // 8 tiles (0-7)
-#define TILE_SARA_D      8   // 8 tiles (8-15)
-#define TILE_PROJECTILE  16  // 4 tiles (16-19)
-#define TILE_HORNET      20  // 16 tiles (20-35)
-#define TILE_CROW        36  // 16 tiles (36-51)
-#define TILE_ORC         52  // 16 tiles (52-67)
-#define TILE_HUMANOID    68  // 16 tiles (68-83)
+#define TILE_SARA_W      0   // 16 tiles (0-15) — 4 animation frames
+#define TILE_SARA_D      16  // 16 tiles (16-31) — 4 animation frames
+#define TILE_PROJECTILE  32  // 4 tiles (32-35)
+#define TILE_HORNET      36  // 16 tiles (36-51)
+#define TILE_CROW        52  // 16 tiles (52-67)
+#define TILE_ORC         68  // 16 tiles (68-83)
+#define TILE_HUMANOID    84  // 16 tiles (84-99)
 
 // OAM slot allocation (40 total)
 #define OAM_PLAYER       0   // 4 slots (0-3) for 16x16 Sara

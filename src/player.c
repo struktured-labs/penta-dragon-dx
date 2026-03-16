@@ -1,6 +1,6 @@
 #include "player.h"
 
-#include "../assets/extracted/sprites/include/sprites_sara_witch.h"
+#include "../assets/extracted/sprites/include/sprites_sara_witch_16.h"
 #include "../assets/extracted/sprites/include/sprites_sara_dragon_real.h"
 
 Player player;
@@ -26,8 +26,8 @@ void player_init(void) {
 }
 
 void player_load_tiles(void) {
-    set_sprite_data(TILE_SARA_W, SPRITE_SARA_WITCH_TILE_COUNT,
-                    SPRITE_SARA_WITCH);
+    set_sprite_data(TILE_SARA_W, SPRITE_SARA_WITCH_16_COUNT,
+                    SPRITE_SARA_WITCH_16);
     set_sprite_data(TILE_SARA_D, SPRITE_SARA_DRAGON_REAL_NUM_TILES,
                     SPRITE_SARA_DRAGON_REAL);
 }
@@ -55,12 +55,13 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
         player.shoot_cd--;
     }
 
-    // Animation — only cycle when moving
+    // Animation — 4 frames when moving, idle = frame 1
+    // Original: 0x20(frame0), 0x24(idle/frame1), 0x28(frame2), 0x2C(frame3)
     if (keys & (J_LEFT | J_RIGHT | J_UP | J_DOWN)) {
         player.anim_tick++;
         if (player.anim_tick >= ANIM_SPEED) {
             player.anim_tick = 0;
-            player.frame = (player.frame + 1) & 0x01;
+            player.frame = (player.frame + 1) & 0x03; // 4 frames
         }
     } else {
         player.anim_tick = 0;
@@ -82,15 +83,15 @@ void player_draw(void) {
     uint8_t is_idle;
 
     if (player.form == 0) {
-        tile_base = TILE_SARA_W + (player.frame & 0x01) * 4;
+        tile_base = TILE_SARA_W + (player.frame & 0x03) * 4; // 4 frames
         palette = 2;
     } else {
-        tile_base = TILE_SARA_D + (player.frame & 0x01) * 4;
+        tile_base = TILE_SARA_D + (player.frame & 0x03) * 4; // 4 frames
         palette = 1;
     }
 
     // Idle = frame 1 (tiles 4-7, originally 0x24-0x27)
-    is_idle = (player.frame & 0x01);
+    is_idle = (player.frame == 1);
 
     // Original sprite flag analysis (verified frame-by-frame on original ROM):
     //
