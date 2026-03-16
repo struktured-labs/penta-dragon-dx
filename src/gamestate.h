@@ -31,6 +31,7 @@ extern GameState game;
 #define SECT_BOSS_5     0x44  // Void (Stage 3 final boss)
 
 // Current stage (1-5, 6=Angela final)
+#define MAX_STAGES 5
 extern uint8_t game_stage;
 
 // Apply BG palette theme for current stage

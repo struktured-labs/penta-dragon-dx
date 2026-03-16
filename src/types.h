@@ -42,5 +42,6 @@
 #define STATE_PLAYING  1
 #define STATE_BOSS     2
 #define STATE_DEAD     3
+#define STATE_VICTORY  4
 
 #endif /* __TYPES_H__ */

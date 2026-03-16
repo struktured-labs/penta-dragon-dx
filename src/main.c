@@ -170,7 +170,13 @@ static void game_update(void) {
                 if (hit_result) {
                     projectiles[pi].active = 0;  // Consume the projectile
                     if (hit_result == 2) {
-                        // Boss killed -- advance to next section
+                        // Boss killed
+                        if (game_stage > MAX_STAGES && game.boss_flag == 8) {
+                            // Angela defeated — victory!
+                            game_state = STATE_VICTORY;
+                            music_pause();
+                            break;
+                        }
                         gamestate_next_section();
                         break;
                     }
@@ -224,13 +230,26 @@ void main(void) {
                 break;
 
             case STATE_DEAD:
-                // Game over state
                 if (!game_over_shown) {
                     hud_game_over();
                     music_pause();
                     game_over_shown = 1;
                 }
-                // Wait for START to return to title
+                if (joypad() & J_START) {
+                    game_over_shown = 0;
+                    title_init();
+                    game_state = STATE_TITLE;
+                }
+                break;
+
+            case STATE_VICTORY:
+                // Victory! Show congratulations
+                if (!game_over_shown) {
+                    // Reuse HUD area for victory text
+                    hud_game_over(); // TODO: replace with hud_victory()
+                    sound_pickup();
+                    game_over_shown = 1;
+                }
                 if (joypad() & J_START) {
                     game_over_shown = 0;
                     title_init();

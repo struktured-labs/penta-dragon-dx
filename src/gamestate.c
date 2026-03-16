@@ -24,7 +24,6 @@ static const uint8_t stage_boss_descs[] = {
     SECT_BOSS_3, SECT_BOSS_4, SECT_BOSS_5, SECT_BOSS_5, SECT_BOSS_5
 };
 static const uint8_t stage_boss_flags[] = { 3, 4, 5, 6, 7 };
-#define MAX_STAGES 5
 
 // Room cycling per section (from extraction):
 // Section 0: rooms {01, 05} alternating every ~150 frames
