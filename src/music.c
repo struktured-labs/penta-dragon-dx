@@ -44,12 +44,15 @@ static uint8_t sfx_ch4_frames;
 
 // ---------- Internal helpers ----------
 
+// Wave RAM base address (0xFF30-0xFF3F, 16 bytes)
+#define WAVE_RAM_ADDR 0xFF30u
+
 static void load_wave_ram(void) {
     uint8_t i;
 
     NR30_REG = 0x00;  // disable wave channel before writing wave RAM
     for (i = 0; i < 16; i++) {
-        *((volatile uint8_t *)(0xFF30 + i)) = music_wave[i];
+        *((volatile uint8_t *)((uint16_t)(WAVE_RAM_ADDR + i))) = music_wave[i];
     }
     NR30_REG = MUSIC_CH3_ONOFF;
 }
@@ -66,14 +69,28 @@ static void init_channel(channel_state_t *ch, uint8_t len) {
 static const note_event_t *advance_channel(channel_state_t *ch,
                                             const note_event_t *data,
                                             uint8_t sfx_active) {
+    // Safety: if len is 0, do nothing (prevents div-by-zero / infinite loop)
+    if (ch->len == 0) {
+        return (const note_event_t *)0;
+    }
+
+    // Bounds-check pos in case of corruption
+    if (ch->pos >= ch->len) {
+        ch->pos = 0;
+    }
+
     // Always advance timer (keeps music in sync during SFX)
     if (ch->timer > 0) {
         ch->timer--;
     }
 
     if (ch->timer == 0) {
-        // Load next event
+        // Load next event duration, guarding against zero-duration events
+        // which would cause an infinite loop if left unchecked
         ch->timer = data[ch->pos].dur;
+        if (ch->timer == 0) {
+            ch->timer = 1;  // Floor to 1 frame to prevent infinite advance
+        }
         ch->pos++;
         if (ch->pos >= ch->len) {
             ch->pos = 0;
@@ -174,8 +191,16 @@ void music_update(void) {
     }
 
     if (drum_timer == 0) {
+        // Bounds-check drum_pos
+        if (drum_pos >= MUSIC_DRUM_LEN) {
+            drum_pos = 0;
+        }
+
         drum = &music_drums[drum_pos];
         drum_timer = drum->dur;
+        if (drum_timer == 0) {
+            drum_timer = 1;  // Floor to 1 frame to prevent infinite advance
+        }
 
         drum_pos++;
         if (drum_pos >= MUSIC_DRUM_LEN) {
