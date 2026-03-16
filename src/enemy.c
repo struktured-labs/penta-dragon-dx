@@ -280,7 +280,7 @@ void enemy_update(void) {
         /* Remove if off-screen left (unsigned wrap: x > 200) */
         if (new_x > 200) {
             e->type = ENEMY_NONE;
-            enemy_count--;
+            if (enemy_count > 0) enemy_count--;
             continue;
         }
         e->x = new_x;
@@ -291,7 +291,7 @@ void enemy_update(void) {
             sound_enemy_hit();
             if (e->hp == 0) {
                 e->type = ENEMY_NONE;
-                enemy_count--;
+                if (enemy_count > 0) enemy_count--;
             }
         }
 

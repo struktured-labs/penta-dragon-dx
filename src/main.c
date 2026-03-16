@@ -11,17 +11,14 @@
 #include "enemy.h"
 #include "level.h"
 #include "sound.h"
+#include "gamestate.h"
 
 static uint8_t prev_keys;
-static uint8_t game_state;
 
 static void game_init(void) {
     DISPLAY_OFF;
 
-    // Sound
     sound_init();
-
-    // Palettes
     init_palettes();
 
     // Tiles
@@ -35,9 +32,9 @@ static void game_init(void) {
     projectile_init();
     enemy_init();
     level_init();
+    gamestate_init();
 
     prev_keys = 0;
-    game_state = STATE_PLAYING;
 
     // Draw initial frame
     player_draw();
@@ -67,26 +64,41 @@ static void game_update(void) {
     // BG scroll (Sara stays fixed, world moves)
     level_update(keys);
 
-    // Enemies
-    level_check_spawns();
+    // Game progression (handles section cycling + enemy spawning)
+    // NOTE: replaces old level_check_spawns() — do NOT call both
+    gamestate_update();
 
     // Update all
     projectile_update();
     enemy_update();
 
-    // Sound state machine (drives multi-frame SFX)
+    // Sound state machine
     sound_update();
 
     // Player-enemy collision
     if (player.invuln == 0) {
         if (enemy_check_player_hit(player.x, player.y)) {
-            player.hp--;
+            game.hp--;
             player.invuln = 60;
             sound_player_hit();
-            if (player.hp == 0) {
-                game_state = STATE_DEAD;
+            if (game.hp == 0) {
+                game.lives--;
+                if (game.lives == 0) {
+                    game.gameplay_active = 0; // Game over
+                } else {
+                    // Respawn
+                    game.hp = 10;
+                    player_init();
+                    enemy_init();
+                    projectile_init();
+                }
             }
         }
+    }
+
+    // Check if boss defeated (enemy_count == 0 during boss section)
+    if (gamestate_is_boss() && enemy_count == 0 && game.section_timer > 60) {
+        gamestate_next_section();
     }
 
     prev_keys = keys;
@@ -108,10 +120,11 @@ void main(void) {
     while (1) {
         wait_vbl_done();
 
-        if (game_state == STATE_PLAYING) {
+        if (game.gameplay_active) {
             game_update();
             game_draw();
-        } else if (game_state == STATE_DEAD) {
+        } else {
+            // Game over — restart on START
             if (joypad() & J_START) {
                 game_init();
             }
