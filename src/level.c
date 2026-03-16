@@ -329,38 +329,47 @@ void level_load_tiles(void) {
     set_bkg_data(0, 255, BG_GAMEPLAY_TILES);
 }
 
-uint8_t level_update(uint8_t player_x, uint8_t player_moving_right) {
+int8_t level_update(uint8_t keys) {
     uint8_t tiles[LEVEL_HEIGHT];
     uint8_t old_pixel;
     uint8_t new_pixel;
-    uint8_t scroll_amount = 0;
+    int8_t scroll_amount = 0;
 
     old_pixel = (uint8_t)(scroll_x & 0x07);
 
     if (auto_scroll > 0) {
         // Auto-scroll mode (bonus stages)
-        scroll_amount = auto_scroll;
+        scroll_amount = (int8_t)auto_scroll;
     } else {
-        // Player-driven: scroll when Sara moves right past the camera threshold
-        if (player_moving_right && player_x > CAMERA_FOLLOW_X) {
-            scroll_amount = 2; // Match player speed
+        // Original behavior: BG scrolls when player presses LEFT/RIGHT
+        // Sara stays fixed on screen
+        if (keys & J_RIGHT) {
+            scroll_amount = 1; // ~1px/frame average (original does 4px/4frames)
+        }
+        // LEFT scrolling (back-track) — slower
+        if (keys & J_LEFT) {
+            if (scroll_x > 0) {
+                scroll_amount = -1;
+            }
         }
     }
 
     if (scroll_amount > 0) {
-        scroll_x += scroll_amount;
+        scroll_x += (uint8_t)scroll_amount;
         new_pixel = (uint8_t)(scroll_x & 0x07);
-
         SCX_REG = (uint8_t)(scroll_x & 0xFF);
 
         // Load next column when crossing tile boundary
-        if (new_pixel < old_pixel || (scroll_amount >= 8)) {
+        if (new_pixel < old_pixel) {
             uint8_t map_col = (uint8_t)((scroll_x >> 3) + 20) & 31;
             uint8_t pattern_idx = (uint8_t)(scroll_col % ROOM_PATTERN_LEN);
             gen_column(room_pattern[pattern_idx], tiles, scroll_col);
             write_column(map_col, tiles);
             scroll_col++;
         }
+    } else if (scroll_amount < 0 && scroll_x > 0) {
+        scroll_x--;
+        SCX_REG = (uint8_t)(scroll_x & 0xFF);
     }
 
     return scroll_amount;

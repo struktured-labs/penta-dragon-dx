@@ -62,18 +62,8 @@ static void game_update(void) {
         }
     }
 
-    // Player-driven scrolling: BG scrolls when Sara moves right
-    {
-        uint8_t moving_right = (keys & J_RIGHT) ? 1 : 0;
-        uint8_t scrolled = level_update(player.x, moving_right);
-
-        // When camera scrolls, pull Sara back so she stays at threshold
-        if (scrolled > 0 && player.x > CAMERA_FOLLOW_X) {
-            player.x -= scrolled;
-            if (player.x < CAMERA_FOLLOW_X)
-                player.x = CAMERA_FOLLOW_X;
-        }
-    }
+    // BG scrolls when player presses LEFT/RIGHT — Sara stays fixed on screen
+    level_update(keys);
 
     // Spawn enemies based on scroll position
     level_check_spawns();
