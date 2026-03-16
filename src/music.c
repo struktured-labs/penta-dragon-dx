@@ -101,15 +101,21 @@ static const note_event_t *advance_channel(channel_state_t *ch,
         if (ch->pos >= ch->len) {
             ch->pos = ch->loop_start;
         }
-        ch->needs_trigger = 1;
+        ch->needs_trigger = 0;
 
         // Don't write to hardware if SFX owns this channel
         if (sfx_active) {
-            ch->needs_trigger = 0;
             return (const note_event_t *)0;
         }
 
+        return &data[current_note];
+    }
+
+    // Handle external retrigger request (e.g., after resume or SFX ends)
+    if (ch->needs_trigger && !sfx_active) {
         ch->needs_trigger = 0;
+        // Retrigger the note currently being held (pos was already advanced)
+        current_note = (ch->pos > 0) ? ch->pos - 1 : ch->len - 1;
         return &data[current_note];
     }
 
