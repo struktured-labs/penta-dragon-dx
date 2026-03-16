@@ -76,13 +76,12 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
 void player_draw(void) {
     uint8_t tile_base;
     uint8_t palette;
-    uint8_t flags_top;
+    uint8_t flags_all;
     uint8_t flags_bot;
     uint8_t sx, sy;
+    uint8_t is_idle;
 
     if (player.form == 0) {
-        // Original uses tiles 0x24-0x27 for default pose
-        // Our VRAM: frame 0 = tiles 0-3, frame 1 = tiles 4-7
         tile_base = TILE_SARA_W + (player.frame & 0x01) * 4;
         palette = 2;
     } else {
@@ -90,18 +89,26 @@ void player_draw(void) {
         palette = 1;
     }
 
-    // Original flag pattern when facing RIGHT:
-    //   Top sprites: flags=0x00 (palette + no flip)
-    //   Bottom sprites: flags=0x20 (palette + S_FLIPX)
-    // When facing LEFT: all sprites get S_FLIPX (top and bottom)
-    flags_top = palette & 0x07;
-    flags_bot = (palette & 0x07) | S_FLIPX;  // Bottom always has S_FLIPX
-    if (player.dir == DIR_LEFT) {
-        flags_top |= S_FLIPX;
-        // flags_bot already has S_FLIPX
-    }
+    // Idle = frame 1 (tiles 4-7, originally 0x24-0x27)
+    is_idle = (player.frame & 0x01);
 
-    // Sara's screen position — X is always fixed at SARA_SCREEN_X
+    // Original sprite flag analysis (verified frame-by-frame on original ROM):
+    //
+    // FACING RIGHT:
+    //   Walking frames (0x20-0x23, 0x28-0x2B, 0x2C-0x2F):
+    //     ALL 4 sprites: flags=0x00 (no S_FLIPX anywhere)
+    //     Layout: TL=tile+0, TR=tile+1, BL=tile+2, BR=tile+3
+    //   Idle frame (0x24-0x27) only:
+    //     Top: flags=0x00, Bottom: flags=0x20 (S_FLIPX)
+    //     Layout: TL=tile+0, TR=tile+1, BL=tile+3(FLIPX), BR=tile+2(FLIPX)
+    //
+    // FACING LEFT (all frames):
+    //   ALL 4 sprites: flags=0x20 (S_FLIPX)
+    //   Columns swap: slot0=tile+1, slot1=tile+0, slot2=tile+3, slot3=tile+2
+
+    flags_all = palette & 0x07;
+
+    // Sara's screen position
     sx = SARA_SCREEN_X + OAM_X_OFS;
     sy = player.y + OAM_Y_OFS;
 
@@ -114,46 +121,56 @@ void player_draw(void) {
         return;
     }
 
-    // 2x2 sprite arrangement matching original:
-    // Original OAM (facing right, idle frame 0x24-0x27):
-    //   slot0: TL tile=0x24 flags=0x00
-    //   slot1: TR tile=0x25 flags=0x00
-    //   slot2: BL tile=0x27 flags=0x20 (S_FLIPX)
-    //   slot3: BR tile=0x26 flags=0x20 (S_FLIPX)
     if (player.dir == DIR_LEFT) {
-        // Original left-facing: top swaps columns, bottom stays same order
-        // All 4 sprites get S_FLIPX (flags_top already has it for LEFT)
-        set_sprite_tile(OAM_PLAYER,     tile_base + 1); // TR→left
-        set_sprite_prop(OAM_PLAYER,     flags_top);
+        // LEFT facing: all 4 sprites get S_FLIPX, columns swap
+        // Same layout for both idle and walking frames
+        flags_all |= S_FLIPX;
+
+        set_sprite_tile(OAM_PLAYER,     tile_base + 1); // TR→left column
+        set_sprite_prop(OAM_PLAYER,     flags_all);
         move_sprite(OAM_PLAYER,         sx, sy);
 
-        set_sprite_tile(OAM_PLAYER + 1, tile_base);     // TL→right
-        set_sprite_prop(OAM_PLAYER + 1, flags_top);
+        set_sprite_tile(OAM_PLAYER + 1, tile_base);     // TL→right column
+        set_sprite_prop(OAM_PLAYER + 1, flags_all);
         move_sprite(OAM_PLAYER + 1,     sx + 8, sy);
 
-        set_sprite_tile(OAM_PLAYER + 2, tile_base + 3); // BL stays left (tile+3)
-        set_sprite_prop(OAM_PLAYER + 2, flags_bot);
+        set_sprite_tile(OAM_PLAYER + 2, tile_base + 3); // BR→left column
+        set_sprite_prop(OAM_PLAYER + 2, flags_all);
         move_sprite(OAM_PLAYER + 2,     sx, sy + 8);
 
-        set_sprite_tile(OAM_PLAYER + 3, tile_base + 2); // BR stays right (tile+2)
-        set_sprite_prop(OAM_PLAYER + 3, flags_bot);
+        set_sprite_tile(OAM_PLAYER + 3, tile_base + 2); // BL→right column
+        set_sprite_prop(OAM_PLAYER + 3, flags_all);
         move_sprite(OAM_PLAYER + 3,     sx + 8, sy + 8);
     } else {
-        // Facing right: original layout
+        // RIGHT facing
         set_sprite_tile(OAM_PLAYER,     tile_base);     // TL
-        set_sprite_prop(OAM_PLAYER,     flags_top);
+        set_sprite_prop(OAM_PLAYER,     flags_all);
         move_sprite(OAM_PLAYER,         sx, sy);
 
         set_sprite_tile(OAM_PLAYER + 1, tile_base + 1); // TR
-        set_sprite_prop(OAM_PLAYER + 1, flags_top);
+        set_sprite_prop(OAM_PLAYER + 1, flags_all);
         move_sprite(OAM_PLAYER + 1,     sx + 8, sy);
 
-        set_sprite_tile(OAM_PLAYER + 2, tile_base + 3); // BL (tile+3, not +2)
-        set_sprite_prop(OAM_PLAYER + 2, flags_bot);
-        move_sprite(OAM_PLAYER + 2,     sx, sy + 8);
+        if (is_idle) {
+            // Idle frame (0x24-0x27): bottom tiles are swapped + S_FLIPX
+            // The idle pose's lower body tile art is drawn mirrored
+            flags_bot = (palette & 0x07) | S_FLIPX;
+            set_sprite_tile(OAM_PLAYER + 2, tile_base + 3); // BL = tile+3 (FLIPX)
+            set_sprite_prop(OAM_PLAYER + 2, flags_bot);
+            move_sprite(OAM_PLAYER + 2,     sx, sy + 8);
 
-        set_sprite_tile(OAM_PLAYER + 3, tile_base + 2); // BR (tile+2, not +3)
-        set_sprite_prop(OAM_PLAYER + 3, flags_bot);
-        move_sprite(OAM_PLAYER + 3,     sx + 8, sy + 8);
+            set_sprite_tile(OAM_PLAYER + 3, tile_base + 2); // BR = tile+2 (FLIPX)
+            set_sprite_prop(OAM_PLAYER + 3, flags_bot);
+            move_sprite(OAM_PLAYER + 3,     sx + 8, sy + 8);
+        } else {
+            // Walking frames: straight grid layout, NO S_FLIPX
+            set_sprite_tile(OAM_PLAYER + 2, tile_base + 2); // BL = tile+2
+            set_sprite_prop(OAM_PLAYER + 2, flags_all);
+            move_sprite(OAM_PLAYER + 2,     sx, sy + 8);
+
+            set_sprite_tile(OAM_PLAYER + 3, tile_base + 3); // BR = tile+3
+            set_sprite_prop(OAM_PLAYER + 3, flags_all);
+            move_sprite(OAM_PLAYER + 3,     sx + 8, sy + 8);
+        }
     }
 }

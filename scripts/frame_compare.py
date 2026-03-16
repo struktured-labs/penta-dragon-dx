@@ -117,16 +117,22 @@ local input_events = {{
 {input_lines}
 }}
 local input_idx = 1
+local current_mask = 0
 local capture_frames = {{{capture_set}}}
 local oam_log = {{}}
 
 callbacks:add("frame", function()
     frame = frame + 1
 
-    -- Apply inputs
+    -- Apply inputs: advance to the latest event at or before this frame
     while input_idx <= #input_events and input_events[input_idx].frame <= frame do
-        emu:setKeys(input_events[input_idx].mask)
+        current_mask = input_events[input_idx].mask
         input_idx = input_idx + 1
+    end
+    -- Re-apply current mask every frame (mGBA clears keys between frames)
+    emu:clearKeys(0xFF)
+    if current_mask ~= 0 then
+        emu:addKeys(current_mask)
     end
 
     -- Capture
