@@ -15,6 +15,7 @@ uint16_t scroll_x;
 uint8_t  scroll_y;
 uint8_t  scroll_col;
 uint8_t  auto_scroll;
+static uint8_t scroll_tick; // Counts frames for quantized 4px/4frame scroll
 
 // ============================================
 // Item collection tracking
@@ -130,6 +131,7 @@ void level_init(void) {
     scroll_x = 0;
     scroll_y = 0;
     scroll_col = 21;
+    scroll_tick = 0;
     auto_scroll = 0; // Player-driven scrolling (bonus stages override this)
     next_spawn_col = 5; // First enemy after a bit of scrolling
     spawn_y_idx = 0;
@@ -160,15 +162,25 @@ int8_t level_update(uint8_t keys) {
         // Auto-scroll mode (bonus stages)
         scroll_amount = (int8_t)auto_scroll;
     } else {
-        // Original behavior: BG scrolls when player presses LEFT/RIGHT
-        // Sara stays fixed on screen
+        // Original scroll: 4 pixels every 4 frames (quantized, not smooth)
+        // SCX cycles through {0, 4, 8, 12} within each 16px window
         if (keys & J_RIGHT) {
-            scroll_amount = 1; // ~1px/frame average (original does 4px/4frames)
+            scroll_tick++;
+            if (scroll_tick >= 4) {
+                scroll_tick = 0;
+                scroll_amount = 4;
+            }
+        } else {
+            scroll_tick = 0;
         }
-        // LEFT scrolling (back-track) -- slower
+        // LEFT scrolling (back-track)
         if (keys & J_LEFT) {
-            if (scroll_x > 0) {
-                scroll_amount = -1;
+            scroll_tick++;
+            if (scroll_tick >= 4) {
+                scroll_tick = 0;
+                if (scroll_x >= 4) {
+                    scroll_amount = -4;
+                }
             }
         }
     }
@@ -185,8 +197,8 @@ int8_t level_update(uint8_t keys) {
             write_column(map_col, tiles);
             scroll_col++;
         }
-    } else if (scroll_amount < 0 && scroll_x > 0) {
-        scroll_x--;
+    } else if (scroll_amount < 0 && scroll_x >= 4) {
+        scroll_x -= 4;
         SCX_REG = (uint8_t)(scroll_x & 0xFF);
     }
 
