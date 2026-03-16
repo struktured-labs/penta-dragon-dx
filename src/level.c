@@ -1,6 +1,8 @@
 #include "level.h"
 #include "enemy.h"
 #include "palettes.h"
+#include "itemmenu.h"
+#include "sound.h"
 
 // Use the GAMEPLAY tiles (extracted from VRAM during actual gameplay)
 // NOT the static ROM tiles (which are font/text characters)
@@ -13,6 +15,17 @@ uint16_t scroll_x;
 uint8_t  scroll_y;
 uint8_t  scroll_col;
 uint8_t  auto_scroll;
+
+// ============================================
+// Item collection tracking
+// ============================================
+// Track collected items by their level column + row.
+// Uses a circular buffer of recently collected positions
+// to prevent re-collecting the same item on level wrap.
+#define MAX_COLLECTED_ITEMS 32
+static uint16_t collected_cols[MAX_COLLECTED_ITEMS];
+static uint8_t  collected_rows[MAX_COLLECTED_ITEMS];
+static uint8_t  collected_count;
 
 // BG tile palette lookup -- matches the DX colorizer categories
 // Uses GAMEPLAY tile meanings from the original ROM:
@@ -121,6 +134,7 @@ void level_init(void) {
     next_spawn_col = 5; // First enemy after a bit of scrolling
     spawn_y_idx = 0;
     spawn_type_idx = 0;
+    collected_count = 0;
 
     // Fill initial visible area (21 columns from the level data)
     for (col = 0; col < 21; col++) {
@@ -225,5 +239,166 @@ void level_check_spawns(void) {
         spawn_y_idx = (spawn_y_idx + 1) % sizeof(spawn_y);
         spawn_type_idx = (spawn_type_idx + 1) % sizeof(spawn_types);
         next_spawn_col += SPAWN_INTERVAL;
+    }
+}
+
+// ============================================
+// Item pickup
+// ============================================
+
+// Check if an item at (data_col, row) was already collected
+static uint8_t is_item_collected(uint16_t data_col, uint8_t row) {
+    uint8_t i;
+    for (i = 0; i < collected_count; i++) {
+        if (collected_cols[i] == data_col && collected_rows[i] == row) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Mark an item at (data_col, row) as collected
+static void mark_item_collected(uint16_t data_col, uint8_t row) {
+    if (collected_count < MAX_COLLECTED_ITEMS) {
+        collected_cols[collected_count] = data_col;
+        collected_rows[collected_count] = row;
+        collected_count++;
+    } else {
+        // Circular: overwrite oldest entry
+        uint8_t idx = collected_count % MAX_COLLECTED_ITEMS;
+        collected_cols[idx] = data_col;
+        collected_rows[idx] = row;
+        collected_count++;
+    }
+}
+
+// Map item tile ID to inventory item type
+static uint8_t tile_to_item_type(uint8_t tile) {
+    // Item tiles come in 2x2 groups:
+    //   0x88/0x89 + 0x98/0x99: Flash bomb (first item pair)
+    //   0x8A/0x8B + 0x9A/0x9B: Potion
+    //   0x8C/0x8D + 0x9C/0x9D: Shield
+    if (tile >= 0x88 && tile <= 0x89) return ITEM_FLASH_BOMB;
+    if (tile >= 0x98 && tile <= 0x99) return ITEM_FLASH_BOMB;
+    if (tile >= 0x8A && tile <= 0x8B) return ITEM_POTION;
+    if (tile >= 0x9A && tile <= 0x9B) return ITEM_POTION;
+    if (tile >= 0x8C && tile <= 0x8D) return ITEM_SHIELD;
+    if (tile >= 0x9C && tile <= 0x9D) return ITEM_SHIELD;
+    // Anything else in item range: alternate flash bomb / potion
+    if (tile >= 0x90 && tile <= 0x97) return ITEM_FLASH_BOMB;
+    return ITEM_FLASH_BOMB; // Default
+}
+
+// Replace an item tile with floor in the hardware tilemap
+static void clear_item_hw(uint16_t world_col, uint8_t row) {
+    uint8_t map_col;
+    uint8_t floor_tile;
+    uint8_t floor_pal;
+
+    map_col = (uint8_t)(world_col & 31);
+    // Checkerboard floor: alternate based on row + col parity
+    floor_tile = ((world_col + row) & 1) ? 0x02 : 0x01;
+    floor_pal = bg_tile_pal[floor_tile];
+
+    // Write floor tile to hardware tilemap
+    set_bkg_tiles(map_col, row, 1, 1, &floor_tile);
+    // Write palette attribute
+    VBK_REG = 1;
+    set_bkg_tiles(map_col, row, 1, 1, &floor_pal);
+    VBK_REG = 0;
+}
+
+void level_check_item_pickup(void) {
+    uint16_t world_x;
+    uint8_t  world_y;
+    uint16_t tile_col;
+    uint8_t  tile_row;
+    uint8_t  tile;
+    uint16_t data_col;
+    uint8_t  item_type;
+    uint8_t  dx, dy;
+
+    // Sara's world position (she's fixed on screen, world scrolls)
+    // Sara screen: (72, 64), size 16x16
+    // Check the 2x2 tile area under Sara's center
+    world_x = scroll_x + 72;
+    world_y = scroll_y + 64;
+
+    // Check a 2x2 tile area (Sara is 16x16 = 2x2 tiles)
+    for (dy = 0; dy < 2; dy++) {
+        for (dx = 0; dx < 2; dx++) {
+            tile_col = (world_x + dx * 8) >> 3;
+            tile_row = (world_y + dy * 8) >> 3;
+
+            if (tile_row >= LEVEL_HEIGHT) continue;
+
+            tile = level_get_tile(tile_col, tile_row);
+
+            // Check if it's an item tile (0x88-0x9D)
+            if (tile >= 0x88 && tile <= 0x9D) {
+                data_col = tile_col % LEVEL1_NUM_COLUMNS;
+
+                // Skip if already collected
+                if (is_item_collected(data_col, tile_row)) continue;
+
+                // Determine item type from tile
+                item_type = tile_to_item_type(tile);
+
+                // Add to inventory
+                itemmenu_add_item(item_type);
+
+                // Mark as collected
+                mark_item_collected(data_col, tile_row);
+
+                // Clear all tiles in the 2x2 item group from hardware tilemap
+                // Items are placed in 2x2 groups (top-left=0x88, top-right=0x89,
+                // bottom-left=0x98, bottom-right=0x99, etc.)
+                // Clear this tile and try to clear neighboring item tiles
+                clear_item_hw(tile_col, tile_row);
+
+                // Check and clear adjacent item tiles in the 2x2 group
+                if (tile_row > 0) {
+                    uint8_t above = level_get_tile(tile_col, tile_row - 1);
+                    if (above >= 0x88 && above <= 0x9D) {
+                        if (!is_item_collected(tile_col % LEVEL1_NUM_COLUMNS, tile_row - 1)) {
+                            mark_item_collected(tile_col % LEVEL1_NUM_COLUMNS, tile_row - 1);
+                            clear_item_hw(tile_col, tile_row - 1);
+                        }
+                    }
+                }
+                if (tile_row + 1 < LEVEL_HEIGHT) {
+                    uint8_t below = level_get_tile(tile_col, tile_row + 1);
+                    if (below >= 0x88 && below <= 0x9D) {
+                        if (!is_item_collected(tile_col % LEVEL1_NUM_COLUMNS, tile_row + 1)) {
+                            mark_item_collected(tile_col % LEVEL1_NUM_COLUMNS, tile_row + 1);
+                            clear_item_hw(tile_col, tile_row + 1);
+                        }
+                    }
+                }
+                {
+                    uint16_t adj_col = tile_col + 1;
+                    uint8_t adj_tile = level_get_tile(adj_col, tile_row);
+                    if (adj_tile >= 0x88 && adj_tile <= 0x9D) {
+                        if (!is_item_collected(adj_col % LEVEL1_NUM_COLUMNS, tile_row)) {
+                            mark_item_collected(adj_col % LEVEL1_NUM_COLUMNS, tile_row);
+                            clear_item_hw(adj_col, tile_row);
+                        }
+                    }
+                }
+                if (tile_col > 0) {
+                    uint16_t adj_col = tile_col - 1;
+                    uint8_t adj_tile = level_get_tile(adj_col, tile_row);
+                    if (adj_tile >= 0x88 && adj_tile <= 0x9D) {
+                        if (!is_item_collected(adj_col % LEVEL1_NUM_COLUMNS, tile_row)) {
+                            mark_item_collected(adj_col % LEVEL1_NUM_COLUMNS, tile_row);
+                            clear_item_hw(adj_col, tile_row);
+                        }
+                    }
+                }
+
+                // Sound is played by itemmenu_add_item
+                return; // One pickup per frame
+            }
+        }
     }
 }

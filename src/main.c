@@ -107,6 +107,9 @@ static void game_update(void) {
     // BG scroll (Sara stays fixed, world moves)
     level_update(keys);
 
+    // Check for item pickups (Sara overlapping item tiles in BG)
+    level_check_item_pickup();
+
     // Game progression (handles section cycling + enemy spawning)
     // NOTE: replaces old level_check_spawns() -- do NOT call both
     gamestate_update();

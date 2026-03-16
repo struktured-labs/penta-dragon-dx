@@ -44,4 +44,7 @@ uint8_t level_is_solid(uint16_t world_x, uint8_t world_y);
 // Spawn enemies based on scroll position
 void level_check_spawns(void);
 
+// Check if Sara overlaps an item tile and collect it
+void level_check_item_pickup(void);
+
 #endif /* __LEVEL_H__ */
