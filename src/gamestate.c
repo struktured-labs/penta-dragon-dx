@@ -3,6 +3,7 @@
 #include "boss.h"
 #include "player.h"
 #include "palettes.h"
+#include <gb/cgb.h>
 
 GameState game;
 uint8_t game_stage;
@@ -70,9 +71,13 @@ void gamestate_next_section(void) {
         game.section = 0;
         if (game_stage < MAX_STAGES) {
             game_stage++;
+            // Apply stage-specific BG palette theme
+            gamestate_apply_stage_palette();
+        } else if (game_stage == MAX_STAGES) {
+            // All 5 stages cleared — trigger Angela (secret final boss)
+            game_stage = MAX_STAGES + 1; // Stage 6 = Angela
+            game.section = STAGE_BOSS_IDX; // Jump directly to boss
         }
-        // Difficulty scaling: shorter sections in later stages
-        // (enemies spawn faster, sections end sooner)
     }
 
     // Get section descriptor — override stage boss slot with current stage's boss
@@ -100,20 +105,58 @@ void gamestate_next_section(void) {
         boss_spawn_spider(120, 40);
     } else if (game.section == STAGE_BOSS_IDX) {
         // Stage boss — type depends on current stage
-        stage_idx = game_stage - 1;
-        if (stage_idx >= MAX_STAGES) stage_idx = MAX_STAGES - 1;
-        boss_id = stage_boss_flags[stage_idx];
-        game.boss_flag = boss_id;
-        load_boss_palette(boss_id);
-        enemy_init();
-        // All stage bosses use Crimson's AI pattern but with increasing HP
-        boss_spawn_crimson(130, 48);
-        // Scale HP by stage
-        boss.hp = 35 + (game_stage - 1) * 10;
+        if (game_stage > MAX_STAGES) {
+            // Angela — secret final boss (boss_flag=8)
+            game.boss_flag = 8;
+            load_boss_palette(8);
+            enemy_init();
+            boss_spawn_crimson(130, 40); // Uses Crimson AI but maxed stats
+            boss.hp = 99; // Maximum difficulty
+        } else {
+            stage_idx = game_stage - 1;
+            if (stage_idx >= MAX_STAGES) stage_idx = MAX_STAGES - 1;
+            boss_id = stage_boss_flags[stage_idx];
+            game.boss_flag = boss_id;
+            load_boss_palette(boss_id);
+            enemy_init();
+            boss_spawn_crimson(130, 48);
+            boss.hp = 35 + (game_stage - 1) * 10;
+        }
     } else {
         game.boss_flag = 0;
         boss_init();
     }
+}
+
+// Stage-specific BG palette themes (palette 0 = floor, palette 6 = walls)
+// Each stage shifts the dungeon colors for visual variety
+void gamestate_apply_stage_palette(void) {
+    // Stage BG palette 0 (floor) color schemes:
+    // Stage 1: Blue-white dungeon (default from palettes.h)
+    // Stage 2: Green-teal cavern
+    // Stage 3: Purple-dark void
+    // Stage 4: Red-orange lava
+    // Stage 5: Gold-white temple
+    static const palette_color_t stage_floor[5][4] = {
+        { 0x7FFF, 0x7E94, 0x3D4A, 0x0000 },  // 1: Blue-white (default)
+        { 0x7FFF, 0x03E0, 0x01A0, 0x0000 },  // 2: Green cavern
+        { 0x7FFF, 0x7C1F, 0x4C0F, 0x0000 },  // 3: Purple void
+        { 0x7FFF, 0x00DF, 0x001F, 0x0000 },  // 4: Red-orange lava
+        { 0x7FFF, 0x03FF, 0x02BF, 0x0000 },  // 5: Gold temple
+    };
+    static const palette_color_t stage_walls[5][4] = {
+        { 0x6F7B, 0x4E73, 0x2D4A, 0x0000 },  // 1: Blue-gray (default)
+        { 0x4EC0, 0x2D80, 0x1440, 0x0000 },  // 2: Dark green
+        { 0x5817, 0x3C0F, 0x1C07, 0x0000 },  // 3: Dark purple
+        { 0x00BF, 0x005F, 0x001F, 0x0000 },  // 4: Dark red
+        { 0x02DF, 0x019F, 0x005F, 0x0000 },  // 5: Dark gold
+    };
+
+    uint8_t idx = game_stage - 1;
+    if (idx >= 5) idx = 4; // Angela uses Stage 5 palette
+
+    set_bkg_palette(0, 1, stage_floor[idx]);
+    set_bkg_palette(6, 1, stage_walls[idx]);
 }
 
 // Spawn enemies based on current section type

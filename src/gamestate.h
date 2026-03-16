@@ -30,8 +30,11 @@ extern GameState game;
 #define SECT_BOSS_4     0x3F  // Ice (Stage 2 final boss)
 #define SECT_BOSS_5     0x44  // Void (Stage 3 final boss)
 
-// Current stage (1-5, advances after defeating stage boss)
+// Current stage (1-5, 6=Angela final)
 extern uint8_t game_stage;
+
+// Apply BG palette theme for current stage
+void gamestate_apply_stage_palette(void);
 
 // Section durations (frames, from extraction data)
 #define SECT0_DURATION  5520  // Normal section
