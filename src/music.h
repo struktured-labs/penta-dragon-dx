@@ -34,4 +34,8 @@ void music_sfx_ch1(uint8_t frames);
 // Music will yield Ch2 for the specified number of frames.
 void music_sfx_ch2(uint8_t frames);
 
+// Notify music that an SFX has taken over Ch4 (noise/drums).
+// Music will yield Ch4 drums for the specified number of frames.
+void music_sfx_ch4(uint8_t frames);
+
 #endif /* __MUSIC_H__ */

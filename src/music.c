@@ -1,23 +1,25 @@
 // Penta Dragon DX Remake - Background Music Player
 //
 // Replays the Level 1 BGM extracted from the original Penta Dragon ROM.
-// Three music channels:
+// Four music channels:
 //   Ch1 (square + sweep): Melody
 //   Ch2 (square):         Harmony / arpeggio accompaniment
 //   Ch3 (wave):           Bass line
+//   Ch4 (noise):          Kick/snare drum pattern
 //
-// Channel 4 (noise) is reserved for SFX (enemy_hit).
-// When an SFX triggers on Ch1 or Ch2, music yields that channel.
-//
-// The music data is stored as note_event_t arrays (freq + duration pairs)
-// that loop seamlessly.
+// SFX interaction:
+//   - sound_shoot() takes Ch1 for ~15 frames
+//   - sound_player_hit() takes Ch1+Ch4 for ~60 frames
+//   - sound_enemy_hit() takes Ch4 for ~15 frames
+//   - sound_pickup() takes Ch2 for ~20 frames
+// Music yields those channels during SFX and resumes after.
 
 #include "music.h"
 #include "music_data.h"
 #include <gb/gb.h>
 #include <gb/hardware.h>
 
-// Per-channel playback state
+// Per-channel playback state (for pitched channels)
 typedef struct {
     uint8_t pos;            // Current position in note array
     uint8_t timer;          // Frames remaining for current note
@@ -29,26 +31,26 @@ static channel_state_t ch1_state;
 static channel_state_t ch2_state;
 static channel_state_t ch3_state;
 
+// Drum channel state (Ch4)
+static uint8_t drum_pos;
+static uint8_t drum_timer;
+
 static uint8_t music_playing;
 
 // SFX yield counters: when > 0, music skips writing to that channel
-static uint8_t sfx_ch1_frames;   // Ch1 owned by SFX (shoot, player_hit)
-static uint8_t sfx_ch2_frames;   // Ch2 owned by SFX (pickup arpeggio)
+static uint8_t sfx_ch1_frames;
+static uint8_t sfx_ch2_frames;
+static uint8_t sfx_ch4_frames;
 
 // ---------- Internal helpers ----------
 
 static void load_wave_ram(void) {
     uint8_t i;
 
-    // Must disable wave channel before writing wave RAM
-    NR30_REG = 0x00;
-
-    // Write 16 bytes to wave RAM (0xFF30-0xFF3F)
+    NR30_REG = 0x00;  // disable wave channel before writing wave RAM
     for (i = 0; i < 16; i++) {
         *((volatile uint8_t *)(0xFF30 + i)) = music_wave[i];
     }
-
-    // Re-enable wave channel
     NR30_REG = MUSIC_CH3_ONOFF;
 }
 
@@ -59,25 +61,19 @@ static void init_channel(channel_state_t *ch, uint8_t len) {
     ch->needs_trigger = 1;
 }
 
-// Update a single channel's sequencer (advance timer, load next note)
-// Returns the note_event_t for the current note, or NULL if channel
-// is being yielded to SFX.
+// Advance sequencer and optionally trigger note.
+// Returns note_event_t* if a note should be triggered, NULL otherwise.
 static const note_event_t *advance_channel(channel_state_t *ch,
                                             const note_event_t *data,
-                                            uint8_t sfx_frames) {
-    const note_event_t *note;
-
-    // Always advance the sequencer timer, even during SFX
-    // This keeps the music in sync when the SFX ends
+                                            uint8_t sfx_active) {
+    // Always advance timer (keeps music in sync during SFX)
     if (ch->timer > 0) {
         ch->timer--;
     }
 
     if (ch->timer == 0) {
-        // Load next note event
-        note = &data[ch->pos];
-        ch->timer = note->dur;
-
+        // Load next event
+        ch->timer = data[ch->pos].dur;
         ch->pos++;
         if (ch->pos >= ch->len) {
             ch->pos = 0;
@@ -85,14 +81,13 @@ static const note_event_t *advance_channel(channel_state_t *ch,
         ch->needs_trigger = 1;
     }
 
-    // If SFX is active on this channel, don't write registers
-    if (sfx_frames > 0) {
+    // Don't write to hardware if SFX owns this channel
+    if (sfx_active) {
         return (const note_event_t *)0;
     }
 
     if (ch->needs_trigger) {
         ch->needs_trigger = 0;
-        // Return the current note (the one we just loaded or the current one)
         return &data[(ch->pos > 0) ? ch->pos - 1 : ch->len - 1];
     }
 
@@ -106,24 +101,30 @@ void music_init(void) {
     init_channel(&ch2_state, MUSIC_CH2_LEN);
     init_channel(&ch3_state, MUSIC_CH3_LEN);
 
+    drum_pos = 0;
+    drum_timer = 0;
+
     load_wave_ram();
 
     sfx_ch1_frames = 0;
     sfx_ch2_frames = 0;
+    sfx_ch4_frames = 0;
 
     music_playing = 1;
 }
 
 void music_update(void) {
     const note_event_t *note;
+    const drum_event_t *drum;
 
     if (!music_playing) return;
 
     // Decrement SFX yield counters
     if (sfx_ch1_frames > 0) sfx_ch1_frames--;
     if (sfx_ch2_frames > 0) sfx_ch2_frames--;
+    if (sfx_ch4_frames > 0) sfx_ch4_frames--;
 
-    // --- Channel 1: Melody (square + sweep) ---
+    // --- Channel 1: Melody ---
     note = advance_channel(&ch1_state, music_ch1, sfx_ch1_frames);
     if (note) {
         if (note->freq != MUSIC_REST) {
@@ -138,7 +139,7 @@ void music_update(void) {
         }
     }
 
-    // --- Channel 2: Harmony (square) ---
+    // --- Channel 2: Harmony ---
     note = advance_channel(&ch2_state, music_ch2, sfx_ch2_frames);
     if (note) {
         if (note->freq != MUSIC_REST) {
@@ -152,7 +153,7 @@ void music_update(void) {
         }
     }
 
-    // --- Channel 3: Bass (wave) --- (no SFX uses Ch3)
+    // --- Channel 3: Bass (wave) ---
     note = advance_channel(&ch3_state, music_ch3, 0);
     if (note) {
         if (note->freq != MUSIC_REST) {
@@ -165,17 +166,39 @@ void music_update(void) {
             NR30_REG = 0x00;
         }
     }
+
+    // --- Channel 4: Drums (noise) ---
+    // Always advance timer
+    if (drum_timer > 0) {
+        drum_timer--;
+    }
+
+    if (drum_timer == 0) {
+        drum = &music_drums[drum_pos];
+        drum_timer = drum->dur;
+
+        drum_pos++;
+        if (drum_pos >= MUSIC_DRUM_LEN) {
+            drum_pos = 0;
+        }
+
+        // Only write to hardware if SFX isn't using Ch4
+        if (sfx_ch4_frames == 0) {
+            NR41_REG = 0x00;
+            NR42_REG = drum->nr42;
+            NR43_REG = drum->nr43;
+            NR44_REG = 0x80;  // trigger
+        }
+    }
 }
 
 void music_pause(void) {
     music_playing = 0;
 
-    // Silence all music channels
-    NR12_REG = 0x00;
-    NR14_REG = 0x80;
-    NR22_REG = 0x00;
-    NR24_REG = 0x80;
-    NR30_REG = 0x00;
+    NR12_REG = 0x00;  NR14_REG = 0x80;  // Ch1 off
+    NR22_REG = 0x00;  NR24_REG = 0x80;  // Ch2 off
+    NR30_REG = 0x00;                     // Ch3 off
+    NR42_REG = 0x00;  NR44_REG = 0x80;  // Ch4 off
 }
 
 void music_resume(void) {
@@ -200,4 +223,8 @@ void music_sfx_ch1(uint8_t frames) {
 void music_sfx_ch2(uint8_t frames) {
     sfx_ch2_frames = frames;
     ch2_state.needs_trigger = 1;
+}
+
+void music_sfx_ch4(uint8_t frames) {
+    sfx_ch4_frames = frames;
 }

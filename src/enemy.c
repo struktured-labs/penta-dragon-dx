@@ -2,6 +2,7 @@
 #include "projectile.h"
 #include "player.h"
 #include "sound.h"
+#include "music.h"
 
 #include "../assets/extracted/sprites/include/sprites_hornets.h"
 #include "../assets/extracted/sprites/include/sprites_crows.h"
@@ -289,6 +290,7 @@ void enemy_update(void) {
         if (projectile_check_hit(e->x, e->y, 16, 16)) {
             e->hp--;
             sound_enemy_hit();
+            music_sfx_ch4(8);  // yield Ch4 drums during enemy hit SFX
             if (e->hp == 0) {
                 e->type = ENEMY_NONE;
                 if (enemy_count > 0) enemy_count--;

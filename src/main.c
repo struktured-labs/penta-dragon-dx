@@ -88,6 +88,7 @@ static void game_update(void) {
             player.invuln = 60;
             sound_player_hit();
             music_sfx_ch1(60);  // yield Ch1 melody during damage SFX
+            music_sfx_ch4(15);  // yield Ch4 drums during damage noise
             if (game.hp == 0) {
                 game.lives--;
                 if (game.lives == 0) {

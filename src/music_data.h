@@ -99,6 +99,23 @@ static const uint8_t music_wave[16] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
+// Drum pattern (Ch4 noise channel)
+// Simple kick-snare pattern: ~24 frames per hit
+// Extracted from original: NR43=0x00 (kick), NR43=0x55 (snare)
+typedef struct {
+    uint8_t nr43;    // Noise polynomial (0x00=kick, 0x55=snare)
+    uint8_t nr42;    // Envelope (volume + decay)
+    uint8_t dur;     // Duration in frames until next hit
+} drum_event_t;
+
+#define MUSIC_DRUM_LEN 4
+static const drum_event_t music_drums[MUSIC_DRUM_LEN] = {
+    {0x00, 0x81, 24},  // Kick:  NR43=0x00, vol=8 fast decay, hold 24f
+    {0x00, 0x51, 1},   // Ghost: NR43=0x00, vol=5 fast decay, hold 1f
+    {0x55, 0x81, 24},  // Snare: NR43=0x55, vol=8 fast decay, hold 24f
+    {0x00, 0x31, 2},   // Ghost: NR43=0x00, vol=3 fast decay, hold 2f
+};
+
 // Master volume and panning
 #define MUSIC_MASTER_VOL  0x77  // NR50: max volume both sides
 #define MUSIC_PANNING     0xFF  // NR51: all channels both speakers
