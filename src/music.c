@@ -1,11 +1,11 @@
 // Penta Dragon DX Remake - Background Music Player
 //
-// Replays the Level 1 BGM extracted from the original Penta Dragon ROM.
+// Replays the Level 1 GAMEPLAY BGM extracted from the original Penta Dragon ROM.
 // Four music channels:
-//   Ch1 (square + sweep): Melody
+//   Ch1 (square + sweep): Melody (8-note intro, then 87-note loop)
 //   Ch2 (square):         Harmony / arpeggio accompaniment
-//   Ch3 (wave):           Bass line
-//   Ch4 (noise):          Kick/snare drum pattern
+//   Ch3 (wave):           Bass/arpeggio line
+//   Ch4 (noise):          Snare percussion pattern
 //
 // SFX interaction:
 //   - sound_shoot() takes Ch1 for ~15 frames
@@ -25,6 +25,7 @@ typedef struct {
     uint8_t timer;          // Frames remaining for current note
     uint8_t len;            // Total events in this channel
     uint8_t needs_trigger;  // 1 = need to trigger note on next update
+    uint8_t loop_start;     // Position to loop back to (0 for Ch2/Ch3)
 } channel_state_t;
 
 static channel_state_t ch1_state;
@@ -57,11 +58,12 @@ static void load_wave_ram(void) {
     NR30_REG = MUSIC_CH3_ONOFF;
 }
 
-static void init_channel(channel_state_t *ch, uint8_t len) {
+static void init_channel(channel_state_t *ch, uint8_t len, uint8_t loop_start) {
     ch->pos = 0;
     ch->timer = 0;
     ch->len = len;
     ch->needs_trigger = 1;
+    ch->loop_start = loop_start;
 }
 
 // Advance sequencer and optionally trigger note.
@@ -69,6 +71,8 @@ static void init_channel(channel_state_t *ch, uint8_t len) {
 static const note_event_t *advance_channel(channel_state_t *ch,
                                             const note_event_t *data,
                                             uint8_t sfx_active) {
+    uint8_t current_note;
+
     // Safety: if len is 0, do nothing (prevents div-by-zero / infinite loop)
     if (ch->len == 0) {
         return (const note_event_t *)0;
@@ -76,7 +80,7 @@ static const note_event_t *advance_channel(channel_state_t *ch,
 
     // Bounds-check pos in case of corruption
     if (ch->pos >= ch->len) {
-        ch->pos = 0;
+        ch->pos = ch->loop_start;
     }
 
     // Always advance timer (keeps music in sync during SFX)
@@ -85,27 +89,28 @@ static const note_event_t *advance_channel(channel_state_t *ch,
     }
 
     if (ch->timer == 0) {
+        // Save the note index we're about to play BEFORE advancing
+        current_note = ch->pos;
+
         // Load next event duration, guarding against zero-duration events
-        // which would cause an infinite loop if left unchecked
         ch->timer = data[ch->pos].dur;
         if (ch->timer == 0) {
             ch->timer = 1;  // Floor to 1 frame to prevent infinite advance
         }
         ch->pos++;
         if (ch->pos >= ch->len) {
-            ch->pos = 0;
+            ch->pos = ch->loop_start;
         }
         ch->needs_trigger = 1;
-    }
 
-    // Don't write to hardware if SFX owns this channel
-    if (sfx_active) {
-        return (const note_event_t *)0;
-    }
+        // Don't write to hardware if SFX owns this channel
+        if (sfx_active) {
+            ch->needs_trigger = 0;
+            return (const note_event_t *)0;
+        }
 
-    if (ch->needs_trigger) {
         ch->needs_trigger = 0;
-        return &data[(ch->pos > 0) ? ch->pos - 1 : ch->len - 1];
+        return &data[current_note];
     }
 
     return (const note_event_t *)0;
@@ -114,9 +119,9 @@ static const note_event_t *advance_channel(channel_state_t *ch,
 // ---------- Public API ----------
 
 void music_init(void) {
-    init_channel(&ch1_state, MUSIC_CH1_LEN);
-    init_channel(&ch2_state, MUSIC_CH2_LEN);
-    init_channel(&ch3_state, MUSIC_CH3_LEN);
+    init_channel(&ch1_state, MUSIC_CH1_LEN, MUSIC_CH1_LOOP_START);
+    init_channel(&ch2_state, MUSIC_CH2_LEN, 0);
+    init_channel(&ch3_state, MUSIC_CH3_LEN, 0);
 
     drum_pos = 0;
     drum_timer = 0;
