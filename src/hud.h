@@ -12,4 +12,7 @@ void hud_update(void);
 // Show GAME OVER text on HUD
 void hud_game_over(void);
 
+// Show VICTORY text on HUD
+void hud_victory(void);
+
 #endif /* __HUD_H__ */

@@ -79,8 +79,8 @@ static void game_update(void) {
         return; // Menu absorbs all input
     }
 
-    // SELECT opens item menu (matches original — SELECT=status/items)
-    if ((keys & J_SELECT) && !(prev_keys & J_SELECT)) {
+    // START opens item menu
+    if ((keys & J_START) && !(prev_keys & J_START)) {
         itemmenu_open();
         itemmenu_draw();
         prev_keys = keys;
@@ -289,7 +289,7 @@ void main(void) {
 
             case STATE_VICTORY:
                 if (!game_over_shown) {
-                    hud_game_over();
+                    hud_victory();
                     sound_pickup();
                     game_over_shown = 1;
                 }
