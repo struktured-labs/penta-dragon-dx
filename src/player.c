@@ -1,7 +1,7 @@
 #include "player.h"
 
 #include "../assets/extracted/sprites/include/sprites_sara_witch.h"
-#include "../assets/extracted/sprites/include/sprites_sara_dragon.h"
+#include "../assets/extracted/sprites/include/sprites_sara_dragon_real.h"
 
 Player player;
 
@@ -28,8 +28,8 @@ void player_init(void) {
 void player_load_tiles(void) {
     set_sprite_data(TILE_SARA_W, SPRITE_SARA_WITCH_TILE_COUNT,
                     SPRITE_SARA_WITCH);
-    set_sprite_data(TILE_SARA_D, SPRITE_SARA_DRAGON_TILE_COUNT,
-                    SPRITE_SARA_DRAGON);
+    set_sprite_data(TILE_SARA_D, SPRITE_SARA_DRAGON_REAL_NUM_TILES,
+                    SPRITE_SARA_DRAGON_REAL);
 }
 
 void player_update(uint8_t keys, uint8_t prev_keys) {
