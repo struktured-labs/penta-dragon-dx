@@ -1,10 +1,12 @@
 #include "enemy.h"
 #include "projectile.h"
 #include "player.h"
+#include "sound.h"
 
 #include "../assets/extracted/sprites/include/sprites_hornets.h"
 #include "../assets/extracted/sprites/include/sprites_crows.h"
 #include "../assets/extracted/sprites/include/sprites_orcs.h"
+#include "../assets/extracted/sprites/include/sprites_humanoids.h"
 
 Enemy enemies[MAX_ENEMIES];
 uint8_t enemy_count;
@@ -12,8 +14,8 @@ uint8_t enemy_count;
 #define ENEMY_ANIM_SPEED 16
 #define ENEMY_SHOOT_CD   90
 
-static const uint8_t enemy_hp[]      = { 0, 2, 2, 3, 3, 4 };
-static const uint8_t enemy_palette[] = { 0, 4, 3, 5, 6, 7 };
+static const uint8_t enemy_hp[]      = { 0, 2, 2, 3, 3, 4, 0 };
+static const uint8_t enemy_palette[] = { 0, 4, 3, 5, 6, 7, 0 };
 
 void enemy_init(void) {
     uint8_t i;
@@ -27,6 +29,7 @@ void enemy_load_tiles(void) {
     set_sprite_data(TILE_HORNET, SPRITE_HORNETS_TILE_COUNT, SPRITE_HORNETS);
     set_sprite_data(TILE_CROW, SPRITE_CROWS_TILE_COUNT, SPRITE_CROWS);
     set_sprite_data(TILE_ORC, SPRITE_ORCS_TILE_COUNT, SPRITE_ORCS);
+    set_sprite_data(TILE_HUMANOID, SPRITE_HUMANOIDS_TILE_COUNT, SPRITE_HUMANOIDS);
 }
 
 void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
@@ -60,6 +63,11 @@ void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
                     break;
                 case ENEMY_ORC:
                     e->tile_base = TILE_ORC;
+                    e->dx = -1;
+                    e->dy = 0;
+                    break;
+                case ENEMY_HUMANOID:
+                    e->tile_base = TILE_HUMANOID;
                     e->dx = -1;
                     e->dy = 0;
                     break;
@@ -123,9 +131,10 @@ void enemy_update(void) {
 
         // AI
         switch (e->type) {
-            case ENEMY_HORNET: enemy_ai_hornet(e); break;
-            case ENEMY_CROW:   enemy_ai_crow(e);   break;
-            case ENEMY_ORC:    enemy_ai_orc(e);    break;
+            case ENEMY_HORNET:  enemy_ai_hornet(e); break;
+            case ENEMY_CROW:    enemy_ai_crow(e);   break;
+            case ENEMY_ORC:     enemy_ai_orc(e);    break;
+            case ENEMY_HUMANOID: enemy_ai_orc(e);   break; // Same AI as orc
         }
 
         // Movement with signed arithmetic
@@ -148,6 +157,7 @@ void enemy_update(void) {
         // Check hit by player projectile
         if (projectile_check_hit(e->x, e->y, 16, 16)) {
             e->hp--;
+            sound_enemy_hit();
             if (e->hp == 0) {
                 e->type = ENEMY_NONE;
                 enemy_count--;

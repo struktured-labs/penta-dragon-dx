@@ -294,14 +294,18 @@ static const uint8_t room_pattern[] = {
 };
 #define ROOM_PATTERN_LEN 24
 
-// Enemy spawn schedule — first enemy at column 8 (~64 frames), then every 12
-#define SPAWN_INTERVAL 12
+// Enemy spawn: first at column 3 (~24px scroll), then every 8 columns
+// Original: enemies appear within seconds, mostly Humanoids
+#define SPAWN_INTERVAL 8
 static uint16_t next_spawn_col;
-static const uint8_t spawn_y[] = { 56, 40, 88, 72, 48, 80, 64 };
+static const uint8_t spawn_y[] = { 52, 36, 84, 68, 44, 76, 60 };
 static uint8_t spawn_y_idx;
+// Match original Level 1: mostly humanoids, some orcs, rare hornets/crows
 static const uint8_t spawn_types[] = {
-    ENEMY_HORNET, ENEMY_CROW, ENEMY_HORNET,
-    ENEMY_ORC, ENEMY_HORNET, ENEMY_CROW
+    ENEMY_HUMANOID, ENEMY_HUMANOID, ENEMY_ORC,
+    ENEMY_HUMANOID, ENEMY_HUMANOID, ENEMY_HORNET,
+    ENEMY_HUMANOID, ENEMY_ORC, ENEMY_HUMANOID,
+    ENEMY_HUMANOID, ENEMY_CROW, ENEMY_HUMANOID
 };
 static uint8_t spawn_type_idx;
 
@@ -312,7 +316,7 @@ void level_init(void) {
     scroll_x = 0;
     scroll_col = 21;
     auto_scroll = 0; // Player-driven scrolling (bonus stages override this)
-    next_spawn_col = 8;
+    next_spawn_col = 3; // First enemy early (original has enemies within seconds)
     spawn_y_idx = 0;
     spawn_type_idx = 0;
 
