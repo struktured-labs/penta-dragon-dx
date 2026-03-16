@@ -5,7 +5,6 @@
 
 Projectile projectiles[MAX_PROJECTILES];
 
-#define PROJ_SPEED     4
 #define PROJ_TTL       60
 
 // Tile 0x00 is EMPTY, 0x01 is star, 0x03 is diamond
@@ -42,6 +41,30 @@ void projectile_spawn_player(void) {
                 p->palette = 3; // Sara W (red)
             } else {
                 p->palette = 1; // Sara D (green)
+            }
+            p->ttl = PROJ_TTL;
+            return;
+        }
+    }
+}
+
+void projectile_spawn_player_dir(int8_t dx, int8_t dy) {
+    uint8_t i;
+    Projectile *p;
+
+    for (i = 0; i < MAX_PROJECTILES; i++) {
+        p = &projectiles[i];
+        if (p->active == 0) {
+            p->x = player.x + 8;
+            p->y = player.y + 4;
+            p->dx = dx;
+            p->dy = dy;
+            p->active = 1;
+            p->tile = PROJ_PLAYER_TILE;
+            if (player.form == 0) {
+                p->palette = 3;
+            } else {
+                p->palette = 1;
             }
             p->ttl = PROJ_TTL;
             return;

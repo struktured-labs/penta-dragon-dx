@@ -57,6 +57,7 @@ void gamestate_init(void) {
     game.hp = 255; // Original: 255 units max HP
     game.lives = 3;
     game.section_timer = 0;
+    game.score = 0;
     game_stage = 1;
     bonus_pending = 0;
     spawn_timer = SPAWN_CD_NORMAL;

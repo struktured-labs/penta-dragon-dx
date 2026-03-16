@@ -126,6 +126,7 @@ static const unsigned char gameover_tiles[] = {
 // Track previous values to avoid redundant writes
 static uint8_t prev_hp;
 static uint8_t prev_lives;
+static uint16_t prev_score;
 
 void hud_init(void) {
     uint8_t row, col;
@@ -133,6 +134,7 @@ void hud_init(void) {
 
     prev_hp = 0xFF;     // Force first update
     prev_lives = 0xFF;
+    prev_score = 0xFFFF;
 
     // Load HUD font tiles into BG tile data at indices 0xF0-0xFF
     set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
@@ -165,43 +167,70 @@ void hud_init(void) {
 void hud_update(void) {
     uint8_t hp = game.hp;
     uint8_t lives = game.lives;
+    uint16_t score = game.score;
     uint8_t tile;
 
     // Only update if values changed
-    if (hp == prev_hp && lives == prev_lives) return;
-    prev_hp = hp;
-    prev_lives = lives;
+    if (hp == prev_hp && lives == prev_lives && score == prev_score) return;
 
-    // Row 0: heart HP_tens HP_ones   blank  x LIVES
-    // Col:   0     1       2         3      4 5
+    // HP and lives update
+    if (hp != prev_hp || lives != prev_lives) {
+        prev_hp = hp;
+        prev_lives = lives;
 
-    // Heart icon
-    tile = HUD_TILE_HEART;
-    set_win_tiles(0, 0, 1, 1, &tile);
+        // Row 0: heart HP_tens HP_ones  blank  x LIVES
+        tile = HUD_TILE_HEART;
+        set_win_tiles(0, 0, 1, 1, &tile);
 
-    // HP tens digit (show blank if 0)
-    if (hp >= 10) {
-        tile = HUD_TILE_0 + (hp / 10);
-    } else {
+        if (hp >= 10) {
+            tile = HUD_TILE_0 + (hp / 10);
+        } else {
+            tile = HUD_TILE_BLANK;
+        }
+        set_win_tiles(1, 0, 1, 1, &tile);
+
+        tile = HUD_TILE_0 + (hp % 10);
+        set_win_tiles(2, 0, 1, 1, &tile);
+
         tile = HUD_TILE_BLANK;
+        set_win_tiles(3, 0, 1, 1, &tile);
+
+        tile = HUD_TILE_X;
+        set_win_tiles(4, 0, 1, 1, &tile);
+
+        tile = HUD_TILE_0 + (lives % 10);
+        set_win_tiles(5, 0, 1, 1, &tile);
     }
-    set_win_tiles(1, 0, 1, 1, &tile);
 
-    // HP ones digit
-    tile = HUD_TILE_0 + (hp % 10);
-    set_win_tiles(2, 0, 1, 1, &tile);
+    // Score update (right side: cols 12-19)
+    if (score != prev_score) {
+        prev_score = score;
+        // Show score as 5-digit number right-aligned at cols 14-18
+        // Stage indicator at col 12-13: "S#"
+        tile = HUD_TILE_0 + (game_stage % 10);
+        set_win_tiles(13, 0, 1, 1, &tile);
 
-    // Blank separator
-    tile = HUD_TILE_BLANK;
-    set_win_tiles(3, 0, 1, 1, &tile);
+        // Score digits (5 digits: 10000s to 1s)
+        {
+            uint16_t s = score;
+            uint8_t d4 = (uint8_t)(s / 10000u); s -= d4 * 10000u;
+            uint8_t d3 = (uint8_t)(s / 1000u);  s -= d3 * 1000u;
+            uint8_t d2 = (uint8_t)(s / 100u);   s -= d2 * 100u;
+            uint8_t d1 = (uint8_t)(s / 10u);
+            uint8_t d0 = (uint8_t)(s % 10u);
 
-    // 'x' multiplier
-    tile = HUD_TILE_X;
-    set_win_tiles(4, 0, 1, 1, &tile);
-
-    // Lives count
-    tile = HUD_TILE_0 + (lives % 10);
-    set_win_tiles(5, 0, 1, 1, &tile);
+            tile = d4 ? (HUD_TILE_0 + d4) : HUD_TILE_BLANK;
+            set_win_tiles(15, 0, 1, 1, &tile);
+            tile = (d4 || d3) ? (HUD_TILE_0 + d3) : HUD_TILE_BLANK;
+            set_win_tiles(16, 0, 1, 1, &tile);
+            tile = (d4 || d3 || d2) ? (HUD_TILE_0 + d2) : HUD_TILE_BLANK;
+            set_win_tiles(17, 0, 1, 1, &tile);
+            tile = HUD_TILE_0 + d1;
+            set_win_tiles(18, 0, 1, 1, &tile);
+            tile = HUD_TILE_0 + d0;
+            set_win_tiles(19, 0, 1, 1, &tile);
+        }
+    }
 }
 
 void hud_game_over(void) {

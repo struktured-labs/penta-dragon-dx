@@ -17,6 +17,7 @@ typedef struct {
     uint8_t hp;             // Health points
     uint8_t lives;          // Remaining lives
     uint16_t section_timer; // Frames in current section
+    uint16_t score;         // Player score
 } GameState;
 
 extern GameState game;

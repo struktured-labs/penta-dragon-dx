@@ -99,7 +99,15 @@ static void game_update(void) {
     if (keys & J_A) {
         if (player.shoot_cd == 0) {
             projectile_spawn_player();
-            player.shoot_cd = 8;
+            // Spiral powerup: extra diagonal shots
+            if (player.powerup == 1) {
+                projectile_spawn_player_dir(
+                    (player.dir == DIR_RIGHT) ? PROJ_SPEED : -PROJ_SPEED, -2);
+                projectile_spawn_player_dir(
+                    (player.dir == DIR_RIGHT) ? PROJ_SPEED : -PROJ_SPEED, 2);
+            }
+            // Turbo powerup: faster cooldown
+            player.shoot_cd = (player.powerup == 3) ? 4 : 8;
             sound_shoot();
             music_sfx_ch1(15);  // yield Ch1 melody during shoot SFX
         }
@@ -138,6 +146,21 @@ static void game_update(void) {
         if (!was_hit && boss_check_player_hit(player.x, player.y)) {
             was_hit = 1;
         }
+        // Player-projectile collision (enemy shots)
+        if (!was_hit) {
+            for (pi = 0; pi < MAX_PROJECTILES; pi++) {
+                if (projectiles[pi].active == 2) {
+                    if (projectiles[pi].x + 4 > player.x &&
+                        projectiles[pi].x < player.x + 12 &&
+                        projectiles[pi].y + 4 > player.y &&
+                        projectiles[pi].y < player.y + 12) {
+                        projectiles[pi].active = 0;
+                        was_hit = 1;
+                        break;
+                    }
+                }
+            }
+        }
 
         if (was_hit) {
             if (game.hp > 0) game.hp--;
@@ -171,7 +194,8 @@ static void game_update(void) {
                 if (hit_result) {
                     projectiles[pi].active = 0;  // Consume the projectile
                     if (hit_result == 2) {
-                        // Boss killed
+                        // Boss killed — score bonus
+                        game.score += 100 + game_stage * 50;
                         if (game_stage > MAX_STAGES && boss.type == BOSS_PENTA) {
                             // Penta Dragon defeated — victory!
                             game_state = STATE_VICTORY;

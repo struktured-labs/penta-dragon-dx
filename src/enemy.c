@@ -1,6 +1,7 @@
 #include "enemy.h"
 #include "projectile.h"
 #include "player.h"
+#include "gamestate.h"
 #include "sound.h"
 #include "music.h"
 
@@ -292,6 +293,8 @@ void enemy_update(void) {
             sound_enemy_hit();
             music_sfx_ch4(8);  // yield Ch4 drums during enemy hit SFX
             if (e->hp == 0) {
+                // Score: varies by enemy type
+                game.score += (e->type >= ENEMY_ORC) ? 20 : 10;
                 e->type = ENEMY_NONE;
                 if (enemy_count > 0) enemy_count--;
             }

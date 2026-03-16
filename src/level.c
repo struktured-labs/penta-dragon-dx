@@ -1,5 +1,6 @@
 #include "level.h"
 #include "enemy.h"
+#include "player.h"
 #include "palettes.h"
 #include "itemmenu.h"
 #include "sound.h"
@@ -288,20 +289,28 @@ static void mark_item_collected(uint16_t data_col, uint8_t row) {
     }
 }
 
-// Map item tile ID to inventory item type
+// Powerup types (direct application, not inventory items)
+#define POWERUP_SPIRAL   0x81   // Returned as pseudo-item for special handling
+#define POWERUP_TURBO    0x82
+
+// Map item tile ID to inventory item type (or powerup pseudo-type)
 static uint8_t tile_to_item_type(uint8_t tile) {
     // Item tiles come in 2x2 groups:
     //   0x88/0x89 + 0x98/0x99: Flash bomb (first item pair)
     //   0x8A/0x8B + 0x9A/0x9B: Potion
     //   0x8C/0x8D + 0x9C/0x9D: Shield
+    //   0x8E/0x8F: Spiral powerup
+    //   0x90/0x91: Turbo powerup
+    //   0x92-0x97: Extra flash bombs / potions
     if (tile >= 0x88 && tile <= 0x89) return ITEM_FLASH_BOMB;
     if (tile >= 0x98 && tile <= 0x99) return ITEM_FLASH_BOMB;
     if (tile >= 0x8A && tile <= 0x8B) return ITEM_POTION;
     if (tile >= 0x9A && tile <= 0x9B) return ITEM_POTION;
     if (tile >= 0x8C && tile <= 0x8D) return ITEM_SHIELD;
     if (tile >= 0x9C && tile <= 0x9D) return ITEM_SHIELD;
-    // Anything else in item range: alternate flash bomb / potion
-    if (tile >= 0x90 && tile <= 0x97) return ITEM_FLASH_BOMB;
+    if (tile >= 0x8E && tile <= 0x8F) return POWERUP_SPIRAL;
+    if (tile >= 0x90 && tile <= 0x91) return POWERUP_TURBO;
+    if (tile >= 0x92 && tile <= 0x97) return ITEM_FLASH_BOMB;
     return ITEM_FLASH_BOMB; // Default
 }
 
@@ -360,8 +369,16 @@ void level_check_item_pickup(void) {
                 // Determine item type from tile
                 item_type = tile_to_item_type(tile);
 
-                // Add to inventory
-                itemmenu_add_item(item_type);
+                // Apply powerups directly or add to inventory
+                if (item_type == POWERUP_SPIRAL) {
+                    player.powerup = 1;
+                    sound_pickup();
+                } else if (item_type == POWERUP_TURBO) {
+                    player.powerup = 3;
+                    sound_pickup();
+                } else {
+                    itemmenu_add_item(item_type);
+                }
 
                 // Mark as collected
                 mark_item_collected(data_col, tile_row);

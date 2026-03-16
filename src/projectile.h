@@ -16,9 +16,12 @@ typedef struct {
 
 extern Projectile projectiles[MAX_PROJECTILES];
 
+#define PROJ_SPEED  4
+
 void projectile_init(void);
 void projectile_load_tiles(void);
 void projectile_spawn_player(void);
+void projectile_spawn_player_dir(int8_t dx, int8_t dy);
 void projectile_spawn_enemy(uint8_t x, uint8_t y, int8_t dx, int8_t dy);
 void projectile_update(void);
 void projectile_draw(void);
