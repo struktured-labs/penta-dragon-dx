@@ -11,6 +11,7 @@
 #include "enemy.h"
 #include "level.h"
 #include "sound.h"
+#include "music.h"
 #include "gamestate.h"
 
 static uint8_t prev_keys;
@@ -44,6 +45,9 @@ static void game_init(void) {
     SHOW_BKG;
     SHOW_SPRITES;
     DISPLAY_ON;
+
+    // Start music after display is on (needs sound hardware fully ready)
+    music_init();
 }
 
 static void game_update(void) {
@@ -58,6 +62,7 @@ static void game_update(void) {
             projectile_spawn_player();
             player.shoot_cd = 8;
             sound_shoot();
+            music_sfx_ch1(15);  // yield Ch1 melody during shoot SFX
         }
     }
 
@@ -72,8 +77,9 @@ static void game_update(void) {
     projectile_update();
     enemy_update();
 
-    // Sound state machine
+    // Sound state machines
     sound_update();
+    music_update();
 
     // Player-enemy collision
     if (player.invuln == 0) {
@@ -81,6 +87,7 @@ static void game_update(void) {
             game.hp--;
             player.invuln = 60;
             sound_player_hit();
+            music_sfx_ch1(60);  // yield Ch1 melody during damage SFX
             if (game.hp == 0) {
                 game.lives--;
                 if (game.lives == 0) {
