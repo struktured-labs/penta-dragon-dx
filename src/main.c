@@ -9,6 +9,7 @@
 #include "player.h"
 #include "projectile.h"
 #include "enemy.h"
+#include "boss.h"
 #include "level.h"
 #include "sound.h"
 #include "music.h"
@@ -32,6 +33,7 @@ static void game_init(void) {
     player_init();
     projectile_init();
     enemy_init();
+    boss_init();
     level_init();
     gamestate_init();
 
@@ -41,6 +43,7 @@ static void game_init(void) {
     player_draw();
     projectile_draw();
     enemy_draw();
+    boss_draw();
 
     SHOW_BKG;
     SHOW_SPRITES;
@@ -52,6 +55,9 @@ static void game_init(void) {
 
 static void game_update(void) {
     uint8_t keys = joypad();
+    uint8_t was_hit;
+    uint8_t hit_result;
+    uint8_t pi;
 
     // Player
     player_update(keys, prev_keys);
@@ -76,21 +82,32 @@ static void game_update(void) {
     // Update all
     projectile_update();
     enemy_update();
+    boss_update();
 
     // Sound state machines
     sound_update();
     music_update();
 
-    // Player-enemy collision
+    // Player-enemy collision (regular enemies)
     if (player.invuln == 0) {
+        was_hit = 0;
+
         if (enemy_check_player_hit(player.x, player.y)) {
-            game.hp--;
+            was_hit = 1;
+        }
+        // Player-boss collision
+        if (!was_hit && boss_check_player_hit(player.x, player.y)) {
+            was_hit = 1;
+        }
+
+        if (was_hit) {
+            if (game.hp > 0) game.hp--;
             player.invuln = 60;
             sound_player_hit();
-            music_sfx_ch1(60);  // yield Ch1 melody during damage SFX
-            music_sfx_ch4(15);  // yield Ch4 drums during damage noise
+            music_sfx_ch1(60);
+            music_sfx_ch4(15);
             if (game.hp == 0) {
-                game.lives--;
+                if (game.lives > 0) game.lives--;
                 if (game.lives == 0) {
                     game.gameplay_active = 0; // Game over
                 } else {
@@ -98,14 +115,33 @@ static void game_update(void) {
                     game.hp = 10;
                     player_init();
                     enemy_init();
+                    boss_init();
                     projectile_init();
                 }
             }
         }
     }
 
-    // Check if boss defeated (enemy_count == 0 during boss section)
-    if (gamestate_is_boss() && enemy_count == 0 && game.section_timer > 60) {
+    // Projectile-boss collision: check if player shots hit the boss
+    if (boss.type != BOSS_NONE) {
+        hit_result = 0;
+        for (pi = 0; pi < MAX_PROJECTILES; pi++) {
+            if (projectiles[pi].active == 1) {  // Player shot only
+                hit_result = boss_check_hit(projectiles[pi].x, projectiles[pi].y);
+                if (hit_result) {
+                    projectiles[pi].active = 0;  // Consume the projectile
+                    if (hit_result == 2) {
+                        // Boss killed -- advance to next section
+                        gamestate_next_section();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Check if boss defeated (fallback: enemy_count == 0 during boss section with no boss entity)
+    if (gamestate_is_boss() && boss.type == BOSS_NONE && game.section_timer > 60) {
         gamestate_next_section();
     }
 
@@ -116,6 +152,7 @@ static void game_draw(void) {
     player_draw();
     projectile_draw();
     enemy_draw();
+    boss_draw();
 }
 
 void main(void) {

@@ -1,5 +1,6 @@
 #include "gamestate.h"
 #include "enemy.h"
+#include "boss.h"
 #include "player.h"
 #include "palettes.h"
 
@@ -59,15 +60,20 @@ void gamestate_next_section(void) {
     game.section_timer = 0;
     game.progress = 0;
 
-    // Set boss flag
+    // Set boss flag and spawn boss
     if (game.section_desc == SECT_BOSS_1) {
         game.boss_flag = 1; // Gargoyle
         load_boss_palette(1);
+        enemy_init();  // Clear regular enemies for boss OAM slots
+        boss_spawn_gargoyle(120, 56);  // Spawn at right side of screen
     } else if (game.section_desc == SECT_BOSS_2) {
         game.boss_flag = 2; // Spider
         load_boss_palette(2);
+        enemy_init();  // Clear regular enemies for boss OAM slots
+        // TODO: boss_spawn_spider() when implemented
     } else {
         game.boss_flag = 0;
+        boss_init();  // Clear boss when leaving boss section
     }
 }
 
