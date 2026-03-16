@@ -17,6 +17,7 @@
 #include "hud.h"
 #include "title.h"
 #include "itemmenu.h"
+#include "bonus.h"
 
 static uint8_t prev_keys;
 static uint8_t game_state;  // STATE_TITLE, STATE_PLAYING, STATE_DEAD
@@ -242,11 +243,23 @@ void main(void) {
                 }
                 break;
 
+            case STATE_BONUS:
+                // Bonus stage (jet form corridor)
+                if (bonus_update(joypad())) {
+                    // Bonus complete — return to normal gameplay
+                    bonus_cleanup();
+                    DISPLAY_OFF;
+                    level_load_tiles();
+                    level_init();
+                    DISPLAY_ON;
+                    game_state = STATE_PLAYING;
+                }
+                bonus_draw();
+                break;
+
             case STATE_VICTORY:
-                // Victory! Show congratulations
                 if (!game_over_shown) {
-                    // Reuse HUD area for victory text
-                    hud_game_over(); // TODO: replace with hud_victory()
+                    hud_game_over();
                     sound_pickup();
                     game_over_shown = 1;
                 }
