@@ -21,7 +21,7 @@ void player_init(void) {
     player.anim_tick = 0;
     player.shoot_cd = 0;
     player.powerup = 0;
-    player.hp = 10;
+    player.hp = 255;
     player.invuln = 0;
 }
 

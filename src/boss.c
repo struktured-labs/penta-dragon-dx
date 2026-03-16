@@ -53,10 +53,10 @@ void boss_init(void) {
 }
 
 void boss_spawn_gargoyle(uint8_t x, uint8_t y) {
-    boss.type = BOSS_GARGOYLE;
+    boss.type = BOSS_MINIBOSS_1;
     boss.x = x;
     boss.y = y;
-    boss.hp = BOSS_GARGOYLE_HP;
+    boss.hp = BOSS_MINIBOSS_HP;
     boss.dx = -GARGOYLE_PATROL_SPEED;  // Start moving left
     boss.dy = 1;                        // Start oscillating down
     boss.ai_state = 0;
@@ -69,10 +69,10 @@ void boss_spawn_gargoyle(uint8_t x, uint8_t y) {
 }
 
 void boss_spawn_spider(uint8_t x, uint8_t y) {
-    boss.type = BOSS_SPIDER;
+    boss.type = BOSS_MINIBOSS_2;
     boss.x = x;
     boss.y = y;
-    boss.hp = BOSS_SPIDER_HP;
+    boss.hp = BOSS_MINIBOSS_HP;
     boss.dx = 1;                         // Start drifting right (slow)
     boss.dy = -2;                        // Start bouncing up (fast)
     boss.ai_state = 0;
@@ -220,10 +220,10 @@ static void boss_ai_gargoyle(void) {
 #define CRIMSON_BURST_CD   10   // Burst fire interval
 
 void boss_spawn_crimson(uint8_t x, uint8_t y) {
-    boss.type = BOSS_CRIMSON;
+    boss.type = BOSS_SHALAMAR;
     boss.x = x;
     boss.y = y;
-    boss.hp = BOSS_CRIMSON_HP;
+    boss.hp = BOSS_SHALAMAR_HP;
     boss.dx = -CRIMSON_SPEED;
     boss.dy = 1;
     boss.ai_state = 0;    // 0=patrol, 1=charge, 2=burst fire
@@ -451,14 +451,22 @@ void boss_update(void) {
     if (boss.type == BOSS_NONE) return;
 
     switch (boss.type) {
-        case BOSS_GARGOYLE:
+        case BOSS_MINIBOSS_1:
             boss_ai_gargoyle();
             break;
-        case BOSS_SPIDER:
+        case BOSS_MINIBOSS_2:
             boss_ai_spider();
             break;
-        case BOSS_CRIMSON:
-            boss_ai_crimson();
+        case BOSS_SHALAMAR:
+        case BOSS_RIFF:
+        case BOSS_CRYSTAL:
+            boss_ai_crimson(); // Stages 1-3 use Crimson-style 3-phase AI
+            break;
+        case BOSS_CAMEO:
+        case BOSS_TED:
+        case BOSS_TROOP:
+        case BOSS_FAZE:
+            boss_ai_crimson(); // Stages 4-7 also use 3-phase AI (TODO: unique AIs)
             break;
         case BOSS_PENTA:
             boss_ai_penta();

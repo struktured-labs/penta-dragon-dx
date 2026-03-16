@@ -30,8 +30,8 @@ extern GameState game;
 #define SECT_BOSS_4     0x3F  // Ice (Stage 2 final boss)
 #define SECT_BOSS_5     0x44  // Void (Stage 3 final boss)
 
-// Current stage (1-5, 6=Angela final)
-#define MAX_STAGES 5
+// Current stage (1-7, 8=Penta Dragon final)
+#define MAX_STAGES 7
 extern uint8_t game_stage;
 
 // Apply BG palette theme for current stage

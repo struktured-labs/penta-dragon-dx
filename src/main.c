@@ -79,8 +79,8 @@ static void game_update(void) {
         return; // Menu absorbs all input
     }
 
-    // START opens item menu (edge-triggered)
-    if ((keys & J_START) && !(prev_keys & J_START)) {
+    // SELECT opens item menu (matches original — SELECT=status/items)
+    if ((keys & J_SELECT) && !(prev_keys & J_SELECT)) {
         itemmenu_open();
         itemmenu_draw();
         prev_keys = keys;
@@ -152,7 +152,7 @@ static void game_update(void) {
                     game_state = STATE_DEAD;
                 } else {
                     // Respawn
-                    game.hp = 10;
+                    game.hp = 255;
                     player_init();
                     enemy_init();
                     boss_init();
@@ -172,7 +172,7 @@ static void game_update(void) {
                     projectiles[pi].active = 0;  // Consume the projectile
                     if (hit_result == 2) {
                         // Boss killed
-                        if (game_stage > MAX_STAGES && game.boss_flag == 9) {
+                        if (game_stage > MAX_STAGES && boss.type == BOSS_PENTA) {
                             // Penta Dragon defeated — victory!
                             game_state = STATE_VICTORY;
                             music_pause();

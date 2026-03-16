@@ -4,11 +4,19 @@
 #include "types.h"
 
 // Boss types
+// Boss IDs match FFBF values from original ROM
 #define BOSS_NONE       0
-#define BOSS_GARGOYLE   1
-#define BOSS_SPIDER     2
-#define BOSS_CRIMSON    3
-#define BOSS_PENTA      9   // Penta Dragon — true final boss
+#define BOSS_MINIBOSS_1 1   // Unnamed mini-boss (scorpion-like, appears during stages)
+#define BOSS_MINIBOSS_2 2   // Unnamed mini-boss (spider-like, appears during stages)
+#define BOSS_SHALAMAR   3   // Boss 1: Shalamar — scorpion, weak at head
+#define BOSS_RIFF       4   // Boss 2: Riff — ugly, black ball projectiles
+#define BOSS_CRYSTAL    5   // Boss 3: Crystal Dragon — warps via holes
+#define BOSS_CAMEO      6   // Boss 4: Cameo — chameleon, turns invisible
+#define BOSS_TED        7   // Boss 5: Ted — Mother Brain-like, vines
+#define BOSS_TROOP      8   // Boss 6: Troop — fireballs + homing missiles
+// FFBF doesn't go higher — Faze and Penta Dragon use different mechanisms
+#define BOSS_FAZE       9   // Boss 7: Faze — fills screen
+#define BOSS_PENTA      10  // Boss 8: Penta Dragon — five-headed final boss
 
 // Boss OAM allocation: during boss sections, regular enemies are cleared
 // and the boss uses OAM slots 12-27 (16 slots for 4x4 sprite grid).
@@ -17,10 +25,15 @@
 #define BOSS_OAM_SLOTS  16            // 4x4 grid
 
 // Boss HP values
-#define BOSS_GARGOYLE_HP  20
-#define BOSS_SPIDER_HP    25
-#define BOSS_CRIMSON_HP   35
-#define BOSS_PENTA_HP     120  // True final boss
+#define BOSS_MINIBOSS_HP  20   // Mini-bosses
+#define BOSS_SHALAMAR_HP  30   // Stage 1 boss
+#define BOSS_RIFF_HP      35   // Stage 2 boss
+#define BOSS_CRYSTAL_HP   35   // Stage 3 boss
+#define BOSS_CAMEO_HP     40   // Stage 4 boss
+#define BOSS_TED_HP       45   // Stage 5 boss
+#define BOSS_TROOP_HP     50   // Stage 6 boss
+#define BOSS_FAZE_HP      60   // Stage 7 boss
+#define BOSS_PENTA_HP     120  // Final boss — five-headed dragon
 
 // Boss attack cooldown (frames)
 #define BOSS_SHOOT_CD     90

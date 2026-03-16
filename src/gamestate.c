@@ -20,11 +20,17 @@ static const uint8_t section_descs[] = {
 #define NUM_SECTIONS 9
 #define STAGE_BOSS_IDX 8  // Index of the stage boss in section_descs
 
-// Stage boss mapping: stage 1=Crimson, 2=Ice, 3=Void, 4=Poison, 5=Knight
+// Stage boss mapping from FAQ:
+// Stage 1=Shalamar, 2=Riff, 3=Crystal Dragon, 4=Cameo,
+// 5=Ted, 6=Troop, 7=Faze, Final=Penta Dragon
 static const uint8_t stage_boss_descs[] = {
-    SECT_BOSS_3, SECT_BOSS_4, SECT_BOSS_5, SECT_BOSS_5, SECT_BOSS_5
+    SECT_BOSS_3, SECT_BOSS_3, SECT_BOSS_3, SECT_BOSS_4,
+    SECT_BOSS_4, SECT_BOSS_5, SECT_BOSS_5
 };
-static const uint8_t stage_boss_flags[] = { 3, 4, 5, 6, 7 };
+static const uint8_t stage_boss_flags[] = {
+    BOSS_SHALAMAR, BOSS_RIFF, BOSS_CRYSTAL, BOSS_CAMEO,
+    BOSS_TED, BOSS_TROOP, BOSS_FAZE
+};
 
 // Room cycling per section (from extraction):
 // Section 0: rooms {01, 05} alternating every ~150 frames
@@ -48,7 +54,7 @@ void gamestate_init(void) {
     game.progress = 0;
     game.sara_form = 0;
     game.powerup = 0;
-    game.hp = 10;
+    game.hp = 255; // Original: 255 units max HP
     game.lives = 3;
     game.section_timer = 0;
     game_stage = 1;
@@ -141,23 +147,27 @@ void gamestate_apply_stage_palette(void) {
     // Stage 3: Purple-dark void
     // Stage 4: Red-orange lava
     // Stage 5: Gold-white temple
-    static const palette_color_t stage_floor[5][4] = {
-        { 0x7FFF, 0x7E94, 0x3D4A, 0x0000 },  // 1: Blue-white (default)
-        { 0x7FFF, 0x03E0, 0x01A0, 0x0000 },  // 2: Green cavern
-        { 0x7FFF, 0x7C1F, 0x4C0F, 0x0000 },  // 3: Purple void
-        { 0x7FFF, 0x00DF, 0x001F, 0x0000 },  // 4: Red-orange lava
+    static const palette_color_t stage_floor[7][4] = {
+        { 0x7FFF, 0x7E94, 0x3D4A, 0x0000 },  // 1: Blue-white dungeon
+        { 0x7FFF, 0x03E0, 0x01A0, 0x0000 },  // 2: Green mountain/valley
+        { 0x7FFF, 0x7C1F, 0x4C0F, 0x0000 },  // 3: Purple cave (6 parts!)
+        { 0x7FFF, 0x00DF, 0x001F, 0x0000 },  // 4: Red-orange tower
         { 0x7FFF, 0x03FF, 0x02BF, 0x0000 },  // 5: Gold temple
+        { 0x7FFF, 0x5AD6, 0x318C, 0x0000 },  // 6: Silver mirror maze
+        { 0x7FFF, 0x4210, 0x2108, 0x0000 },  // 7: Dark final stage
     };
-    static const palette_color_t stage_walls[5][4] = {
-        { 0x6F7B, 0x4E73, 0x2D4A, 0x0000 },  // 1: Blue-gray (default)
+    static const palette_color_t stage_walls[7][4] = {
+        { 0x6F7B, 0x4E73, 0x2D4A, 0x0000 },  // 1: Blue-gray
         { 0x4EC0, 0x2D80, 0x1440, 0x0000 },  // 2: Dark green
         { 0x5817, 0x3C0F, 0x1C07, 0x0000 },  // 3: Dark purple
         { 0x00BF, 0x005F, 0x001F, 0x0000 },  // 4: Dark red
         { 0x02DF, 0x019F, 0x005F, 0x0000 },  // 5: Dark gold
+        { 0x4A52, 0x318C, 0x1CE7, 0x0000 },  // 6: Dark silver
+        { 0x2108, 0x1084, 0x0842, 0x0000 },  // 7: Near-black
     };
 
     uint8_t idx = game_stage - 1;
-    if (idx >= 5) idx = 4; // Angela uses Stage 5 palette
+    if (idx >= 7) idx = 6; // Penta Dragon uses Stage 7 palette
 
     set_bkg_palette(0, 1, stage_floor[idx]);
     set_bkg_palette(6, 1, stage_walls[idx]);

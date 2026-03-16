@@ -152,7 +152,7 @@ uint8_t itemmenu_update(uint8_t keys, uint8_t prev_keys) {
                     break;
                 case ITEM_POTION:
                     // Restore HP
-                    player.hp = 10;
+                    player.hp = 255;
                     sound_pickup();
                     break;
                 case ITEM_SHIELD:
