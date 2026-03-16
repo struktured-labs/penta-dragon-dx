@@ -337,6 +337,116 @@ static void boss_ai_crimson(void) {
     }
 }
 
+// Penta Dragon — true final boss. The five-headed dragon.
+// 4 phases based on HP thresholds (5 "heads" = 5 attack patterns):
+//   Phase 0 (HP>90): Slow patrol, single aimed shots
+//   Phase 1 (HP>60): Faster patrol, 3-shot spread
+//   Phase 2 (HP>30): Charge attacks + 5-shot fan
+//   Phase 3 (HP<=30): Enraged — fast erratic movement, rapid fire
+#define PENTA_X_MIN      16
+#define PENTA_X_MAX      132
+#define PENTA_SHOOT_CD_0 60
+#define PENTA_SHOOT_CD_1 40
+#define PENTA_SHOOT_CD_2 25
+#define PENTA_SHOOT_CD_3 12
+
+void boss_spawn_penta(uint8_t x, uint8_t y) {
+    boss.type = BOSS_PENTA;
+    boss.x = x;
+    boss.y = y;
+    boss.hp = BOSS_PENTA_HP;
+    boss.dx = -1;
+    boss.dy = 1;
+    boss.ai_state = 0;
+    boss.ai_timer = 0;
+    boss.attack_cd = PENTA_SHOOT_CD_0;
+    boss.frame = 0;
+    boss.anim_tick = 0;
+    boss.palette = 7;             // Use special palette slot
+    boss.tile_base = TILE_HUMANOID;
+}
+
+static void boss_ai_penta(void) {
+    uint8_t phase;
+    int8_t aim_dx;
+
+    boss.ai_timer++;
+
+    // Determine phase from HP
+    if (boss.hp > 90) phase = 0;
+    else if (boss.hp > 60) phase = 1;
+    else if (boss.hp > 30) phase = 2;
+    else phase = 3;
+
+    // Movement — gets faster and more erratic each phase
+    {
+        uint8_t speed = 1 + phase;
+        uint8_t y_period = 30 - phase * 5;
+
+        if (boss.x <= PENTA_X_MIN) boss.dx = speed;
+        else if (boss.x >= PENTA_X_MAX) boss.dx = -(int8_t)speed;
+
+        if (boss.ai_timer >= y_period) {
+            boss.ai_timer = 0;
+            boss.dy = -boss.dy;
+            if (boss.dy == 0) boss.dy = 1;
+        }
+
+        boss.x = (uint8_t)((int16_t)boss.x + boss.dx);
+        boss.y = (uint8_t)((int16_t)boss.y + boss.dy);
+        if (boss.y < 12) boss.y = 12;
+        if (boss.y > 100) boss.y = 100;
+    }
+
+    // Attacks — escalate per phase
+    boss.attack_cd--;
+    if (boss.attack_cd == 0) {
+        aim_dx = (boss.x > player.x) ? -3 : 3;
+
+        switch (phase) {
+            case 0: // Single aimed shot
+                boss.attack_cd = PENTA_SHOOT_CD_0;
+                projectile_spawn_enemy(boss.x, boss.y + 16, aim_dx, 0);
+                break;
+
+            case 1: // 3-shot spread
+                boss.attack_cd = PENTA_SHOOT_CD_1;
+                projectile_spawn_enemy(boss.x, boss.y + 8, aim_dx, -1);
+                projectile_spawn_enemy(boss.x, boss.y + 16, aim_dx, 0);
+                projectile_spawn_enemy(boss.x, boss.y + 24, aim_dx, 1);
+                break;
+
+            case 2: // 5-shot fan (the five heads)
+                boss.attack_cd = PENTA_SHOOT_CD_2;
+                projectile_spawn_enemy(boss.x, boss.y,      aim_dx, -2);
+                projectile_spawn_enemy(boss.x, boss.y + 8,  aim_dx, -1);
+                projectile_spawn_enemy(boss.x, boss.y + 16, aim_dx, 0);
+                projectile_spawn_enemy(boss.x, boss.y + 24, aim_dx, 1);
+                projectile_spawn_enemy(boss.x, boss.y + 30, aim_dx, 2);
+                break;
+
+            case 3: // Enraged — rapid alternating spread
+                boss.attack_cd = PENTA_SHOOT_CD_3;
+                if (boss.ai_timer & 0x01) {
+                    projectile_spawn_enemy(boss.x, boss.y + 8, -4, -1);
+                    projectile_spawn_enemy(boss.x, boss.y + 24, -4, 1);
+                } else {
+                    projectile_spawn_enemy(boss.x, boss.y + 16, -4, 0);
+                    projectile_spawn_enemy(boss.x, boss.y, 4, -2);
+                    projectile_spawn_enemy(boss.x, boss.y + 30, 4, 2);
+                }
+                break;
+        }
+    }
+
+    // Animation (faster when enraged)
+    boss.anim_tick++;
+    if (boss.anim_tick >= (phase >= 3 ? 8 : BOSS_ANIM_SPEED)) {
+        boss.anim_tick = 0;
+        boss.frame = (boss.frame + 1) & 0x01;
+    }
+}
+
 void boss_update(void) {
     if (boss.type == BOSS_NONE) return;
 
@@ -349,6 +459,9 @@ void boss_update(void) {
             break;
         case BOSS_CRIMSON:
             boss_ai_crimson();
+            break;
+        case BOSS_PENTA:
+            boss_ai_penta();
             break;
         default:
             break;

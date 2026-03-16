@@ -78,9 +78,9 @@ void gamestate_next_section(void) {
             game_stage++;
             gamestate_apply_stage_palette();
         } else if (game_stage == MAX_STAGES) {
-            // All 5 stages cleared — trigger Angela (secret final boss)
-            game_stage = MAX_STAGES + 1; // Stage 6 = Angela
-            game.section = STAGE_BOSS_IDX; // Jump directly to boss
+            // All 5 stages cleared — Penta Dragon (true final boss)
+            game_stage = MAX_STAGES + 1; // Stage 6 = Penta Dragon
+            game.section = STAGE_BOSS_IDX;
         }
     }
 
@@ -110,12 +110,12 @@ void gamestate_next_section(void) {
     } else if (game.section == STAGE_BOSS_IDX) {
         // Stage boss — type depends on current stage
         if (game_stage > MAX_STAGES) {
-            // Angela — secret final boss (boss_flag=8)
-            game.boss_flag = 8;
+            // Penta Dragon — true final boss
+            game.boss_flag = 9;
+            // Use Angela's palette (white/silver) for Penta Dragon
             load_boss_palette(8);
             enemy_init();
-            boss_spawn_crimson(130, 40); // Uses Crimson AI but maxed stats
-            boss.hp = 99; // Maximum difficulty
+            boss_spawn_penta(130, 48);
         } else {
             stage_idx = game_stage - 1;
             if (stage_idx >= MAX_STAGES) stage_idx = MAX_STAGES - 1;

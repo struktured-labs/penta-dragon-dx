@@ -172,8 +172,8 @@ static void game_update(void) {
                     projectiles[pi].active = 0;  // Consume the projectile
                     if (hit_result == 2) {
                         // Boss killed
-                        if (game_stage > MAX_STAGES && game.boss_flag == 8) {
-                            // Angela defeated — victory!
+                        if (game_stage > MAX_STAGES && game.boss_flag == 9) {
+                            // Penta Dragon defeated — victory!
                             game_state = STATE_VICTORY;
                             music_pause();
                             break;

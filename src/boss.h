@@ -8,6 +8,7 @@
 #define BOSS_GARGOYLE   1
 #define BOSS_SPIDER     2
 #define BOSS_CRIMSON    3
+#define BOSS_PENTA      9   // Penta Dragon — true final boss
 
 // Boss OAM allocation: during boss sections, regular enemies are cleared
 // and the boss uses OAM slots 12-27 (16 slots for 4x4 sprite grid).
@@ -19,6 +20,7 @@
 #define BOSS_GARGOYLE_HP  20
 #define BOSS_SPIDER_HP    25
 #define BOSS_CRIMSON_HP   35
+#define BOSS_PENTA_HP     120  // True final boss
 
 // Boss attack cooldown (frames)
 #define BOSS_SHOOT_CD     90
@@ -55,6 +57,9 @@ void boss_spawn_spider(uint8_t x, uint8_t y);
 
 // Spawn the Crimson boss (Stage 1 final boss)
 void boss_spawn_crimson(uint8_t x, uint8_t y);
+
+// Spawn Penta Dragon (true final boss — multi-phase)
+void boss_spawn_penta(uint8_t x, uint8_t y);
 
 // Update boss AI, movement, and attacks (call once per frame)
 void boss_update(void);
