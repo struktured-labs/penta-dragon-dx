@@ -37,6 +37,9 @@ extern uint8_t game_stage;
 // Apply BG palette theme for current stage
 void gamestate_apply_stage_palette(void);
 
+// Set by gamestate when a bonus stage should trigger (checked by main.c)
+extern uint8_t bonus_pending;
+
 // Section durations (frames, from extraction data)
 #define SECT0_DURATION  5520  // Normal section
 #define SECT1_DURATION  1860  // Advanced section

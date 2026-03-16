@@ -179,6 +179,12 @@ static void game_update(void) {
                             break;
                         }
                         gamestate_next_section();
+                        // Check if bonus stage should trigger
+                        if (bonus_pending) {
+                            bonus_pending = 0;
+                            bonus_init();
+                            game_state = STATE_BONUS;
+                        }
                         break;
                     }
                 }

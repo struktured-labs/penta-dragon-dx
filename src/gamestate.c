@@ -7,6 +7,7 @@
 
 GameState game;
 uint8_t game_stage;
+uint8_t bonus_pending;
 
 // Each stage: Normal → Advanced → Miniboss1 → Normal → Advanced → Miniboss2 →
 //             Normal → Advanced → Stage Boss
@@ -51,6 +52,7 @@ void gamestate_init(void) {
     game.lives = 3;
     game.section_timer = 0;
     game_stage = 1;
+    bonus_pending = 0;
     spawn_timer = SPAWN_CD_NORMAL;
 }
 
@@ -69,8 +71,11 @@ void gamestate_next_section(void) {
         // Stage complete — advance to next stage
         game.section = 0;
         if (game_stage < MAX_STAGES) {
+            // Bonus stage after odd stages (1, 3, 5)
+            if (game_stage & 0x01) {
+                bonus_pending = 1;
+            }
             game_stage++;
-            // Apply stage-specific BG palette theme
             gamestate_apply_stage_palette();
         } else if (game_stage == MAX_STAGES) {
             // All 5 stages cleared — trigger Angela (secret final boss)
