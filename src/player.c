@@ -5,21 +5,19 @@
 
 Player player;
 
-// Original game: Sara is fixed at screen position (76, 68)
-// D-pad scrolls the world, Sara stays put
-// UP/DOWN moves Sara vertically to dodge enemies
-#define SARA_SCREEN_X    76   // Fixed horizontal screen position
-#define SARA_MIN_Y       24   // Top movement limit
-#define SARA_MAX_Y       120  // Bottom movement limit
-#define PLAYER_SPEED_Y   2    // Vertical movement speed
+// Original game: Sara is fixed at screen position (72, 64)
+// D-pad scrolls the world (both SCX and SCY), Sara stays put
+// Original OAM slot 0: Y=80, X=80 → screen (72, 64), center (80, 72)
+#define SARA_SCREEN_X    72   // Fixed horizontal screen position (original: OAM_X=80, screen=72)
+#define SARA_SCREEN_Y    64   // Fixed vertical screen position (original: OAM_Y=80, screen=64)
 #define ANIM_SPEED       12
 
 void player_init(void) {
     player.x = SARA_SCREEN_X;  // Fixed — never changes
-    player.y = 68;              // Starting vertical position
+    player.y = SARA_SCREEN_Y;  // Fixed — BG scrolls vertically via SCY
     player.form = 0;
     player.dir = DIR_RIGHT;
-    player.frame = 0;
+    player.frame = 1;  // Idle = frame 1 (original uses tiles 0x24-0x27)
     player.anim_tick = 0;
     player.shoot_cd = 0;
     player.powerup = 0;
@@ -44,19 +42,8 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
         player.dir = DIR_RIGHT;
     }
 
-    // Vertical: Sara actually moves on screen to dodge enemies
-    if (keys & J_UP) {
-        if (player.y > SARA_MIN_Y + PLAYER_SPEED_Y)
-            player.y -= PLAYER_SPEED_Y;
-        else
-            player.y = SARA_MIN_Y;
-    }
-    if (keys & J_DOWN) {
-        if (player.y < SARA_MAX_Y - PLAYER_SPEED_Y)
-            player.y += PLAYER_SPEED_Y;
-        else
-            player.y = SARA_MAX_Y;
-    }
+    // Vertical: Sara stays fixed at SARA_SCREEN_Y
+    // BG scrolls vertically via SCY (handled by level_update)
 
     // Form toggle on SELECT (edge-triggered)
     if ((keys & J_SELECT) && !(prev_keys & J_SELECT)) {
@@ -77,7 +64,7 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
         }
     } else {
         player.anim_tick = 0;
-        player.frame = 0;
+        player.frame = 1;  // Idle = frame 1 (tiles 0x24-0x27 in original)
     }
 
     // Invulnerability countdown
@@ -89,7 +76,8 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
 void player_draw(void) {
     uint8_t tile_base;
     uint8_t palette;
-    uint8_t flags;
+    uint8_t flags_top;
+    uint8_t flags_bot;
     uint8_t sx, sy;
 
     if (player.form == 0) {
@@ -102,9 +90,15 @@ void player_draw(void) {
         palette = 1;
     }
 
-    flags = palette & 0x07;
+    // Original flag pattern when facing RIGHT:
+    //   Top sprites: flags=0x00 (palette + no flip)
+    //   Bottom sprites: flags=0x20 (palette + S_FLIPX)
+    // When facing LEFT: all sprites get S_FLIPX (top and bottom)
+    flags_top = palette & 0x07;
+    flags_bot = (palette & 0x07) | S_FLIPX;  // Bottom always has S_FLIPX
     if (player.dir == DIR_LEFT) {
-        flags |= S_FLIPX;
+        flags_top |= S_FLIPX;
+        // flags_bot already has S_FLIPX
     }
 
     // Sara's screen position — X is always fixed at SARA_SCREEN_X
@@ -121,41 +115,44 @@ void player_draw(void) {
     }
 
     // 2x2 sprite arrangement matching original:
-    // Original OAM: TL=0x24, TR=0x25, BL=0x27, BR=0x26
-    // The bottom tiles are swapped from naive order
+    // Original OAM (facing right, idle frame 0x24-0x27):
+    //   slot0: TL tile=0x24 flags=0x00
+    //   slot1: TR tile=0x25 flags=0x00
+    //   slot2: BL tile=0x27 flags=0x20 (S_FLIPX)
+    //   slot3: BR tile=0x26 flags=0x20 (S_FLIPX)
     if (player.dir == DIR_LEFT) {
         // Flip: swap left/right columns
-        set_sprite_tile(OAM_PLAYER,     tile_base + 1); // TR→left
-        set_sprite_prop(OAM_PLAYER,     flags);
+        set_sprite_tile(OAM_PLAYER,     tile_base + 1); // TR->left
+        set_sprite_prop(OAM_PLAYER,     flags_top);
         move_sprite(OAM_PLAYER,         sx, sy);
 
-        set_sprite_tile(OAM_PLAYER + 1, tile_base);     // TL→right
-        set_sprite_prop(OAM_PLAYER + 1, flags);
+        set_sprite_tile(OAM_PLAYER + 1, tile_base);     // TL->right
+        set_sprite_prop(OAM_PLAYER + 1, flags_top);
         move_sprite(OAM_PLAYER + 1,     sx + 8, sy);
 
-        set_sprite_tile(OAM_PLAYER + 2, tile_base + 2); // BR→left (swapped)
-        set_sprite_prop(OAM_PLAYER + 2, flags);
+        set_sprite_tile(OAM_PLAYER + 2, tile_base + 2); // BR->left (swapped)
+        set_sprite_prop(OAM_PLAYER + 2, flags_bot);
         move_sprite(OAM_PLAYER + 2,     sx, sy + 8);
 
-        set_sprite_tile(OAM_PLAYER + 3, tile_base + 3); // BL→right (swapped)
-        set_sprite_prop(OAM_PLAYER + 3, flags);
+        set_sprite_tile(OAM_PLAYER + 3, tile_base + 3); // BL->right (swapped)
+        set_sprite_prop(OAM_PLAYER + 3, flags_bot);
         move_sprite(OAM_PLAYER + 3,     sx + 8, sy + 8);
     } else {
         // Facing right: original layout
         set_sprite_tile(OAM_PLAYER,     tile_base);     // TL
-        set_sprite_prop(OAM_PLAYER,     flags);
+        set_sprite_prop(OAM_PLAYER,     flags_top);
         move_sprite(OAM_PLAYER,         sx, sy);
 
         set_sprite_tile(OAM_PLAYER + 1, tile_base + 1); // TR
-        set_sprite_prop(OAM_PLAYER + 1, flags);
+        set_sprite_prop(OAM_PLAYER + 1, flags_top);
         move_sprite(OAM_PLAYER + 1,     sx + 8, sy);
 
         set_sprite_tile(OAM_PLAYER + 2, tile_base + 3); // BL (tile+3, not +2)
-        set_sprite_prop(OAM_PLAYER + 2, flags);
+        set_sprite_prop(OAM_PLAYER + 2, flags_bot);
         move_sprite(OAM_PLAYER + 2,     sx, sy + 8);
 
         set_sprite_tile(OAM_PLAYER + 3, tile_base + 2); // BR (tile+2, not +3)
-        set_sprite_prop(OAM_PLAYER + 3, flags);
+        set_sprite_prop(OAM_PLAYER + 3, flags_bot);
         move_sprite(OAM_PLAYER + 3,     sx + 8, sy + 8);
     }
 }

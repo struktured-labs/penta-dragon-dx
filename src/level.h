@@ -17,8 +17,12 @@
 
 // Scroll state
 extern uint16_t scroll_x;       // World scroll position (pixels)
+extern uint8_t  scroll_y;       // Vertical scroll position (pixels, written to SCY)
 extern uint8_t  scroll_col;     // Next column to load (world units)
 extern uint8_t  auto_scroll;    // 0=player-driven, non-zero=auto-scroll speed
+
+// Vertical scroll limits
+#define SCROLL_Y_MAX    24      // Maximum downward scroll
 
 // Initialize level (load initial screen)
 void level_init(void);

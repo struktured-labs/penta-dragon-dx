@@ -7,6 +7,7 @@
 #include "../assets/extracted/bg/include/bg_gameplay.h"
 
 uint16_t scroll_x;
+uint8_t  scroll_y;
 uint8_t  scroll_col;
 uint8_t  auto_scroll;
 
@@ -314,6 +315,7 @@ void level_init(void) {
     uint8_t tiles[LEVEL_HEIGHT];
 
     scroll_x = 0;
+    scroll_y = 0;
     scroll_col = 21;
     auto_scroll = 0; // Player-driven scrolling (bonus stages override this)
     next_spawn_col = 3; // First enemy early (original has enemies within seconds)
@@ -375,6 +377,19 @@ int8_t level_update(uint8_t keys) {
         scroll_x--;
         SCX_REG = (uint8_t)(scroll_x & 0xFF);
     }
+
+    // Vertical scrolling: BG scrolls when UP/DOWN pressed (Sara stays fixed)
+    if (keys & J_UP) {
+        if (scroll_y > 0) {
+            scroll_y--;
+        }
+    }
+    if (keys & J_DOWN) {
+        if (scroll_y < SCROLL_Y_MAX) {
+            scroll_y++;
+        }
+    }
+    SCY_REG = scroll_y;
 
     return scroll_amount;
 }
