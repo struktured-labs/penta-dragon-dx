@@ -285,9 +285,8 @@ void main(void) {
                     if (title_result >= 1) {
                         title_cleanup();
                         game_init();
-                        // Show STAGE 01 overlay using window layer
                         hud_stage_intro(game_stage);
-                        intro_timer = 180; // ~3 seconds
+                        intro_timer = 180;
                         game_state = STATE_STAGE_INTRO;
                     }
                 }
