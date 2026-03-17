@@ -85,7 +85,8 @@ void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
             e->type = type;
             e->x = x;
             e->y = y;
-            e->hp = enemy_hp[type];
+            // HP scales with stage: +1 HP per 2 stages
+            e->hp = enemy_hp[type] + (game_stage - 1) / 2;
             e->palette = enemy_palette[type];
             e->frame = 0;
             e->anim_tick = 0;
