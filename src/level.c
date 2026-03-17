@@ -5,11 +5,8 @@
 #include "itemmenu.h"
 #include "sound.h"
 
-// BG tile data is in ROM bank 2 (4096 bytes)
+// BG tiles + level data in ROM bank 2
 #include "data_bank2.h"
-
-// Level 1 tilemap data extracted from the original Penta Dragon ROM
-#include "level_data.h"
 
 uint16_t scroll_x;
 uint8_t  scroll_y;
@@ -82,7 +79,9 @@ static const uint8_t bg_tile_pal[256] = {
 // Level data lookup (replaces procedural gen)
 // ============================================
 
-// Get a column from the level data (wraps when past the end)
+// Level data still in bank 1 (static const in header)
+#include "level_data.h"
+
 static void get_level_column(uint8_t *tiles, uint16_t col_idx) {
     uint8_t i;
     uint16_t data_col = col_idx % LEVEL1_NUM_COLUMNS;

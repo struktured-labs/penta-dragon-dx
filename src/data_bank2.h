@@ -11,4 +11,11 @@ BANKREF_EXTERN(bg_tiles_bank)
 extern const unsigned char BG_GAMEPLAY_TILES[];
 #define BG_GAMEPLAY_TILES_TILE_COUNT 256
 
+// Level data constants
+#define LEVEL1_NUM_COLUMNS 154
+
+// Banked level data accessors
+extern uint8_t banked_get_tile(uint16_t col, uint8_t row) __banked;
+extern void banked_get_column(uint8_t *tiles, uint16_t col_idx) __banked;
+
 #endif /* __DATA_BANK2_H__ */

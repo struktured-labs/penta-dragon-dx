@@ -18,3 +18,6 @@ BANKREF(bg_tiles_bank)
 void load_bg_tiles_banked(void) __banked {
     set_bkg_data(0, 255, BG_GAMEPLAY_TILES);
 }
+
+// Level data stays in bank 1 (banked function calls with parameters
+// cause stack issues — keep frequently-accessed data in main bank)
