@@ -10,6 +10,7 @@
 #include "../assets/extracted/sprites/include/sprites_crows.h"
 #include "../assets/extracted/sprites/include/sprites_orcs.h"
 #include "../assets/extracted/sprites/include/sprites_humanoids.h"
+#include "../assets/extracted/sprites/include/sprites_special_catfish.h"
 
 Enemy enemies[MAX_ENEMIES];
 uint8_t enemy_count;
@@ -71,6 +72,7 @@ void enemy_load_tiles(void) {
     set_sprite_data(TILE_CROW, SPRITE_CROWS_TILE_COUNT, SPRITE_CROWS);
     set_sprite_data(TILE_ORC, SPRITE_ORCS_TILE_COUNT, SPRITE_ORCS);
     set_sprite_data(TILE_HUMANOID, SPRITE_HUMANOIDS_TILE_COUNT, SPRITE_HUMANOIDS);
+    set_sprite_data(TILE_CATFISH, SPRITE_SPECIAL_CATFISH_TILE_COUNT, SPRITE_SPECIAL_CATFISH);
 }
 
 void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
@@ -113,6 +115,12 @@ void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
                     e->dx = 0;      /* Slow approach: movement applied by AI */
                     e->dy = 0;
                     e->ai_state = 1; /* Start drifting down */
+                    break;
+                case ENEMY_CATFISH:
+                    e->tile_base = TILE_CATFISH;
+                    e->dx = -1;     /* Slow leftward drift */
+                    e->dy = 0;
+                    e->ai_state = 1; /* Start oscillating */
                     break;
                 default:
                     e->tile_base = TILE_HORNET;
@@ -253,6 +261,45 @@ static void enemy_ai_humanoid(Enemy *e) {
     }
 }
 
+/* Catfish AI: slow, tanky, shoots frequently.
+ * Drifts left slowly with gentle vertical oscillation.
+ * Fires aimed shots more often than other enemies. */
+#define CATFISH_SHOOT_CD   60
+#define CATFISH_Y_HALF_P   40
+static void enemy_ai_catfish(Enemy *e) {
+    int8_t aim_dx;
+    int8_t aim_dy;
+
+    e->ai_timer++;
+
+    /* Slow leftward drift */
+    e->dx = -1;
+
+    /* Gentle Y oscillation */
+    if (e->ai_timer >= CATFISH_Y_HALF_P) {
+        e->ai_timer = 0;
+        e->ai_state ^= 1;
+    }
+    e->dy = (e->ai_state == 1) ? 1 : -1;
+
+    /* Frequent aimed shooting */
+    e->shoot_cd--;
+    if (e->shoot_cd == 0) {
+        e->shoot_cd = CATFISH_SHOOT_CD;
+
+        aim_dx = (e->x > player.x + 8) ? -3 : 3;
+        aim_dy = 0;
+        if (e->y + 8 < player.y) aim_dy = 1;
+        else if (e->y > player.y + 8) aim_dy = -1;
+
+        projectile_spawn_enemy(e->x, e->y + 4, aim_dx, aim_dy);
+        /* Sometimes fire a second shot diagonally */
+        if (e->ai_timer & 0x04) {
+            projectile_spawn_enemy(e->x, e->y + 12, aim_dx, aim_dy ? -aim_dy : 1);
+        }
+    }
+}
+
 void enemy_update(void) {
     uint8_t i;
     Enemy *e;
@@ -269,6 +316,7 @@ void enemy_update(void) {
             case ENEMY_CROW:     enemy_ai_crow(e);     break;
             case ENEMY_ORC:      enemy_ai_orc(e);      break;
             case ENEMY_HUMANOID: enemy_ai_humanoid(e);  break;
+            case ENEMY_CATFISH:  enemy_ai_catfish(e);   break;
         }
 
         /* Movement (dx/dy set by AI each frame) */

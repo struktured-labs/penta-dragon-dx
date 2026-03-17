@@ -23,6 +23,7 @@
 #define TILE_CROW        52  // 16 tiles (52-67)
 #define TILE_ORC         68  // 16 tiles (68-83)
 #define TILE_HUMANOID    84  // 16 tiles (84-99)
+#define TILE_CATFISH     100 // 16 tiles (100-115)
 
 // OAM slot allocation (40 total)
 #define OAM_PLAYER       0   // 4 slots (0-3) for 16x16 Sara

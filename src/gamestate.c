@@ -203,13 +203,14 @@ static void spawn_section_enemies(void) {
         // Section 0: only humanoids and orcs
         type = (game.progress & 0x03) < 3 ? ENEMY_HUMANOID : ENEMY_ORC;
     } else {
-        // Section 1: mix all types
+        // Section 1: mix all types including catfish
         switch (game.progress & 0x07) {
-            case 0: case 1: case 4: type = ENEMY_HUMANOID; break;
-            case 2: case 5:         type = ENEMY_ORC;      break;
-            case 3:                 type = ENEMY_HORNET;   break;
-            case 6:                 type = ENEMY_CROW;     break;
-            default:                type = ENEMY_HUMANOID; break;
+            case 0: case 4: type = ENEMY_HUMANOID; break;
+            case 1: case 5: type = ENEMY_ORC;      break;
+            case 2:         type = ENEMY_HORNET;   break;
+            case 3:         type = ENEMY_CROW;     break;
+            case 6:         type = ENEMY_CATFISH;  break;
+            default:        type = ENEMY_HUMANOID; break;
         }
     }
 
