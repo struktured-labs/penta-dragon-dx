@@ -217,7 +217,25 @@ static void spawn_section_enemies(void) {
         }
     }
 
-    enemy_spawn(type, 168, y);
+    // Spawn from varied positions (right edge and top)
+    {
+        uint8_t spawn_side = game.progress & 0x03;
+        uint8_t sx, sy;
+        if (spawn_side < 2) {
+            // Right edge
+            sx = 168;
+            sy = y;
+        } else if (spawn_side == 2) {
+            // Top edge
+            sx = 40 + (game.progress * 13) % 100;
+            sy = 8;
+        } else {
+            // Right-upper diagonal
+            sx = 168;
+            sy = 20 + (game.progress * 11) % 40;
+        }
+        enemy_spawn(type, sx, sy);
+    }
     game.progress++;
 }
 
