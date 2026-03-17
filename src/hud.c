@@ -128,6 +128,7 @@ static uint8_t prev_hp;
 static uint8_t prev_lives;
 static uint16_t prev_score;
 static uint8_t prev_powerup;
+static uint8_t prev_form;
 
 void hud_init(void) {
     uint8_t row, col;
@@ -137,6 +138,7 @@ void hud_init(void) {
     prev_lives = 0xFF;
     prev_score = 0xFFFF;
     prev_powerup = 0xFF;
+    prev_form = 0xFF;
 
     // Load HUD font tiles into BG tile data at indices 0xF0-0xFF
     set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
@@ -171,11 +173,20 @@ void hud_update(void) {
     uint8_t lives = game.lives;
     uint16_t score = game.score;
     uint8_t powerup = game.powerup;
+    uint8_t form = game.sara_form;
     uint8_t tile;
 
     // Only update if values changed
     if (hp == prev_hp && lives == prev_lives &&
-        score == prev_score && powerup == prev_powerup) return;
+        score == prev_score && powerup == prev_powerup &&
+        form == prev_form) return;
+
+    // Form indicator at col 10: slash=Witch, X=Dragon
+    if (form != prev_form) {
+        prev_form = form;
+        tile = (form == 0) ? HUD_TILE_SLASH : HUD_TILE_X;
+        set_win_tiles(10, 0, 1, 1, &tile);
+    }
 
     // Powerup indicator at cols 7-8
     if (powerup != prev_powerup) {
