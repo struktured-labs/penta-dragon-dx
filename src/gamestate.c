@@ -8,6 +8,7 @@
 GameState game;
 uint8_t game_stage;
 uint8_t bonus_pending;
+uint8_t stage_changed;
 
 // Each stage: Normal → Advanced → Miniboss1 → Normal → Advanced → Miniboss2 →
 //             Normal → Advanced → Stage Boss
@@ -61,6 +62,7 @@ void gamestate_init(void) {
     game.next_life_at = 5000;
     game_stage = 1;
     bonus_pending = 0;
+    stage_changed = 0;
     spawn_timer = SPAWN_CD_NORMAL;
 }
 
@@ -84,6 +86,7 @@ void gamestate_next_section(void) {
                 bonus_pending = 1;
             }
             game_stage++;
+            stage_changed = 1;
             gamestate_apply_stage_palette();
         } else if (game_stage == MAX_STAGES) {
             // All 5 stages cleared — Penta Dragon (true final boss)

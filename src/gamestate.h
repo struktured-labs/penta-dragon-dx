@@ -42,6 +42,9 @@ void gamestate_apply_stage_palette(void);
 // Set by gamestate when a bonus stage should trigger (checked by main.c)
 extern uint8_t bonus_pending;
 
+// Set when stage number changes (checked by main.c for stage intro screen)
+extern uint8_t stage_changed;
+
 // Section durations (frames, from extraction data)
 #define SECT0_DURATION  5520  // Normal section
 #define SECT1_DURATION  1860  // Advanced section

@@ -222,6 +222,12 @@ static void game_update(void) {
                             bonus_pending = 0;
                             bonus_init();
                             game_state = STATE_BONUS;
+                        } else if (stage_changed) {
+                            // Stage advanced — show stage intro
+                            stage_changed = 0;
+                            hud_stage_intro(game_stage);
+                            intro_timer = 120;
+                            game_state = STATE_STAGE_INTRO;
                         }
                         break;
                     }
@@ -296,13 +302,11 @@ void main(void) {
             case STATE_BONUS:
                 // Bonus stage (jet form corridor)
                 if (bonus_update(joypad())) {
-                    // Bonus complete — return to normal gameplay
+                    // Bonus complete — show stage intro then gameplay
                     bonus_cleanup();
-                    DISPLAY_OFF;
-                    level_load_tiles();
-                    level_init();
-                    DISPLAY_ON;
-                    game_state = STATE_PLAYING;
+                    hud_stage_intro(game_stage);
+                    intro_timer = 120;
+                    game_state = STATE_STAGE_INTRO;
                 }
                 bonus_draw();
                 break;
@@ -311,7 +315,24 @@ void main(void) {
                 intro_timer--;
                 if (intro_timer == 0) {
                     hud_stage_intro_cleanup();
-                    game_init();
+                    if (game.gameplay_active) {
+                        // Returning from bonus/stage change — reload tiles
+                        DISPLAY_OFF;
+                        level_load_tiles();
+                        player_load_tiles();
+                        projectile_load_tiles();
+                        enemy_load_tiles();
+                        level_init();
+                        hud_init();
+                        player_draw();
+                        SHOW_BKG;
+                        SHOW_SPRITES;
+                        DISPLAY_ON;
+                        game_state = STATE_PLAYING;
+                    } else {
+                        // First game start
+                        game_init();
+                    }
                 }
                 break;
 
