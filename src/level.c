@@ -167,19 +167,14 @@ int8_t level_update(uint8_t keys) {
         // Auto-scroll mode (bonus stages)
         scroll_amount = (int8_t)auto_scroll;
     } else {
-        // Original scroll: 4 pixels every 4 frames (quantized, not smooth)
-        // SCX cycles through {0, 4, 8, 12} within each 16px window
+        // Horizontal scroll: 4 pixels every 4 frames (quantized)
         if (keys & J_RIGHT) {
             scroll_tick++;
             if (scroll_tick >= 4) {
                 scroll_tick = 0;
                 scroll_amount = 4;
             }
-        } else {
-            scroll_tick = 0;
-        }
-        // LEFT scrolling (back-track)
-        if (keys & J_LEFT) {
+        } else if (keys & J_LEFT) {
             scroll_tick++;
             if (scroll_tick >= 4) {
                 scroll_tick = 0;
@@ -187,6 +182,8 @@ int8_t level_update(uint8_t keys) {
                     scroll_amount = -4;
                 }
             }
+        } else {
+            scroll_tick = 0;
         }
     }
 
@@ -209,15 +206,12 @@ int8_t level_update(uint8_t keys) {
 
     // Vertical scrolling: BG scrolls when UP/DOWN pressed (Sara stays fixed)
     if (keys & J_UP) {
-        if (scroll_y > 0) {
-            scroll_y--;
-        }
+        if (scroll_y > 0) scroll_y--;
     }
     if (keys & J_DOWN) {
-        if (scroll_y < SCROLL_Y_MAX) {
-            scroll_y++;
-        }
+        if (scroll_y < SCROLL_Y_MAX) scroll_y++;
     }
+    SCY_REG = scroll_y;
     SCY_REG = scroll_y;
 
     return scroll_amount;

@@ -55,17 +55,20 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
         player.shoot_cd--;
     }
 
-    // Animation — 4 frames when moving, idle = frame 1
-    // Original: 0x20(frame0), 0x24(idle/frame1), 0x28(frame2), 0x2C(frame3)
+    // Animation — 3 walking frames (0, 2, 3), idle = frame 1
+    // Frame 1 has special idle pose (S_FLIPX on bottom tiles) so skip during walk
     if (keys & (J_LEFT | J_RIGHT | J_UP | J_DOWN)) {
         player.anim_tick++;
         if (player.anim_tick >= ANIM_SPEED) {
             player.anim_tick = 0;
-            player.frame = (player.frame + 1) & 0x03; // 4 frames
+            // Cycle through walking frames: 0 → 2 → 3 → 0
+            if (player.frame == 0) player.frame = 2;
+            else if (player.frame == 2) player.frame = 3;
+            else player.frame = 0;
         }
     } else {
         player.anim_tick = 0;
-        player.frame = 1;  // Idle = frame 1 (tiles 0x24-0x27 in original)
+        player.frame = 1;  // Idle = frame 1
     }
 
     // Invulnerability countdown
