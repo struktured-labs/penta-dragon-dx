@@ -307,3 +307,84 @@ void hud_victory(void) {
     tile = 0xF5; set_win_tiles(col++, 0, 1, 1, &tile); // N
     tile = 0xF6; set_win_tiles(col++, 0, 1, 1, &tile); // !
 }
+
+// "STAGE" letter tiles for stage intro
+static const unsigned char stage_letters[] = {
+    // 'S' - 0xF0
+    0x3C, 0x3C, 0x66, 0x66, 0x60, 0x60, 0x3C, 0x3C,
+    0x06, 0x06, 0x66, 0x66, 0x3C, 0x3C, 0x00, 0x00,
+    // 'T' - 0xF1
+    0x7E, 0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18,
+    0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x00,
+    // 'A' - 0xF2
+    0x18, 0x18, 0x3C, 0x3C, 0x66, 0x66, 0x7E, 0x7E,
+    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00,
+    // 'G' - 0xF3
+    0x3C, 0x3C, 0x66, 0x66, 0x60, 0x60, 0x6E, 0x6E,
+    0x66, 0x66, 0x66, 0x66, 0x3C, 0x3C, 0x00, 0x00,
+    // 'E' - 0xF4
+    0x7E, 0x7E, 0x60, 0x60, 0x60, 0x60, 0x7C, 0x7C,
+    0x60, 0x60, 0x60, 0x60, 0x7E, 0x7E, 0x00, 0x00,
+};
+
+void hud_stage_intro(uint8_t stage) {
+    uint8_t row, col;
+    uint8_t tile;
+
+    DISPLAY_OFF;
+    HIDE_WIN;
+    HIDE_SPRITES;
+
+    // Load "STAGE" letter tiles into 0xF0-0xF4
+    set_bkg_data(HUD_TILE_BASE, 5, stage_letters);
+
+    // Clear BG tilemap
+    tile = HUD_TILE_BLANK;
+    for (row = 0; row < 18; row++) {
+        for (col = 0; col < 20; col++) {
+            set_bkg_tiles(col, row, 1, 1, &tile);
+        }
+    }
+
+    // Set palette attributes (palette 2 for text)
+    VBK_REG = 1;
+    tile = 2;
+    for (row = 0; row < 18; row++) {
+        for (col = 0; col < 20; col++) {
+            set_bkg_tiles(col, row, 1, 1, &tile);
+        }
+    }
+    VBK_REG = 0;
+
+    // "STAGE" centered on row 7 (5 chars, start col 5)
+    col = 5;
+    tile = 0xF0; set_bkg_tiles(col++, 7, 1, 1, &tile); // S
+    tile = 0xF1; set_bkg_tiles(col++, 7, 1, 1, &tile); // T
+    tile = 0xF2; set_bkg_tiles(col++, 7, 1, 1, &tile); // A
+    tile = 0xF3; set_bkg_tiles(col++, 7, 1, 1, &tile); // G
+    tile = 0xF4; set_bkg_tiles(col++, 7, 1, 1, &tile); // E
+
+    // Stage number (two digits) at col 11-12
+    // Use HUD digit tiles (still loaded from hud_init)
+    set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
+    tile = HUD_TILE_BLANK;
+    set_bkg_tiles(11, 7, 1, 1, &tile);
+    if (stage >= 10) {
+        tile = HUD_TILE_0 + (stage / 10);
+    } else {
+        tile = HUD_TILE_0; // "0" prefix
+    }
+    set_bkg_tiles(11, 7, 1, 1, &tile);
+    tile = HUD_TILE_0 + (stage % 10);
+    set_bkg_tiles(12, 7, 1, 1, &tile);
+
+    SCX_REG = 0;
+    SCY_REG = 0;
+    SHOW_BKG;
+    DISPLAY_ON;
+}
+
+void hud_stage_intro_cleanup(void) {
+    // Restore digit tiles for HUD
+    set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
+}

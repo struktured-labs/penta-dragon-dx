@@ -44,5 +44,6 @@
 #define STATE_DEAD     3
 #define STATE_VICTORY  4
 #define STATE_BONUS    5
+#define STATE_STAGE_INTRO 6
 
 #endif /* __TYPES_H__ */

@@ -22,6 +22,7 @@
 static uint8_t prev_keys;
 static uint8_t game_state;  // STATE_TITLE, STATE_PLAYING, STATE_DEAD
 static uint8_t game_over_shown;
+static uint8_t intro_timer;  // Stage intro display countdown
 
 static void game_init(void) {
     DISPLAY_OFF;
@@ -251,14 +252,12 @@ void main(void) {
             case STATE_TITLE:
                 {
                     uint8_t title_result = title_update();
-                    if (title_result == 1) {
-                        // GAME START
+                    if (title_result >= 1) {
                         title_cleanup();
-                        game_init();
-                    } else if (title_result == 2) {
-                        // OPENING START — skip prologue for now, go to game
-                        title_cleanup();
-                        game_init();
+                        // Show stage intro before gameplay
+                        hud_stage_intro(1);
+                        intro_timer = 120; // ~2 seconds
+                        game_state = STATE_STAGE_INTRO;
                     }
                 }
                 break;
@@ -293,6 +292,14 @@ void main(void) {
                     game_state = STATE_PLAYING;
                 }
                 bonus_draw();
+                break;
+
+            case STATE_STAGE_INTRO:
+                intro_timer--;
+                if (intro_timer == 0) {
+                    hud_stage_intro_cleanup();
+                    game_init();
+                }
                 break;
 
             case STATE_VICTORY:

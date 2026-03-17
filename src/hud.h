@@ -15,4 +15,10 @@ void hud_game_over(void);
 // Show VICTORY text on HUD
 void hud_victory(void);
 
+// Show "STAGE XX" intro screen (uses BG layer, hides window)
+void hud_stage_intro(uint8_t stage);
+
+// Clean up stage intro (reload gameplay tiles)
+void hud_stage_intro_cleanup(void);
+
 #endif /* __HUD_H__ */
