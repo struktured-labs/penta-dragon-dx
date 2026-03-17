@@ -133,7 +133,7 @@ void level_init(void) {
     scroll_y = 0;
     scroll_col = 21;
     scroll_tick = 0;
-    auto_scroll = 0; // Player-driven scrolling (bonus stages override this)
+    auto_scroll = 1; // Auto-scroll right (matches original game)
     next_spawn_col = 5; // First enemy after a bit of scrolling
     spawn_y_idx = 0;
     spawn_type_idx = 0;
@@ -163,28 +163,12 @@ int8_t level_update(uint8_t keys) {
 
     old_pixel = (uint8_t)(scroll_x & 0x07);
 
-    if (auto_scroll > 0) {
-        // Auto-scroll mode (bonus stages)
-        scroll_amount = (int8_t)auto_scroll;
-    } else {
-        // Horizontal scroll: 4 pixels every 4 frames (quantized)
-        if (keys & J_RIGHT) {
-            scroll_tick++;
-            if (scroll_tick >= 4) {
-                scroll_tick = 0;
-                scroll_amount = 4;
-            }
-        } else if (keys & J_LEFT) {
-            scroll_tick++;
-            if (scroll_tick >= 4) {
-                scroll_tick = 0;
-                if (scroll_x >= 4) {
-                    scroll_amount = -4;
-                }
-            }
-        } else {
-            scroll_tick = 0;
-        }
+    // Auto-scroll: constant rightward scroll (matches original game)
+    // Original: ~1px/frame, quantized as 4px every 4 frames
+    scroll_tick++;
+    if (scroll_tick >= 4) {
+        scroll_tick = 0;
+        scroll_amount = 4;
     }
 
     if (scroll_amount > 0) {
@@ -199,19 +183,15 @@ int8_t level_update(uint8_t keys) {
             write_column(map_col, tiles);
             scroll_col++;
         }
-    } else if (scroll_amount < 0 && scroll_x >= 4) {
-        scroll_x -= 4;
-        SCX_REG = (uint8_t)(scroll_x & 0xFF);
     }
 
-    // Vertical scrolling: BG scrolls when UP/DOWN pressed (Sara stays fixed)
+    // Vertical scrolling: D-pad UP/DOWN moves Sara vertically
     if (keys & J_UP) {
         if (scroll_y > 0) scroll_y--;
     }
     if (keys & J_DOWN) {
         if (scroll_y < SCROLL_Y_MAX) scroll_y++;
     }
-    SCY_REG = scroll_y;
     SCY_REG = scroll_y;
 
     return scroll_amount;
