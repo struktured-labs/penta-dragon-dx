@@ -90,7 +90,12 @@ void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
             e->palette = enemy_palette[type];
             e->frame = 0;
             e->anim_tick = 0;
-            e->shoot_cd = ENEMY_SHOOT_CD / 2; /* First shot comes sooner */
+            /* Shoot cooldown scales with stage: faster in later stages */
+            {
+                uint8_t cd = ENEMY_SHOOT_CD - (game_stage - 1) * 8;
+                if (cd < 40) cd = 40;
+                e->shoot_cd = cd / 2;
+            }
             e->ai_state = 0;
             e->ai_timer = 0;
             e->hit_flash = 0;
@@ -190,7 +195,10 @@ static void enemy_ai_orc(Enemy *e) {
     /* Shooting: aimed at player position */
     e->shoot_cd--;
     if (e->shoot_cd == 0) {
-        e->shoot_cd = ENEMY_SHOOT_CD;
+        {
+                uint8_t cd = ENEMY_SHOOT_CD - (game_stage - 1) * 8;
+                e->shoot_cd = (cd < 40) ? 40 : cd;
+            }
 
         /* Compute aimed direction toward player (simplified) */
         aim_dx = -1; /* Default: shoot left */
@@ -244,7 +252,10 @@ static void enemy_ai_humanoid(Enemy *e) {
     /* Shooting: aimed at player */
     e->shoot_cd--;
     if (e->shoot_cd == 0) {
-        e->shoot_cd = ENEMY_SHOOT_CD;
+        {
+                uint8_t cd = ENEMY_SHOOT_CD - (game_stage - 1) * 8;
+                e->shoot_cd = (cd < 40) ? 40 : cd;
+            }
 
         aim_dx = -1;
         aim_dy = 0;
