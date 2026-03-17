@@ -12,7 +12,7 @@ ASSETDIR = assets/extracted
 # Flags
 LCCFLAGS  = -Wa-l -Wl-m -Wl-j -Wl-yt0x1B -Wl-yo4 -Wl-ya4
 # -yt0x1B = MBC5+RAM+BATTERY
-# -yo4    = 4 ROM banks (64KB, expandable)
+# -yo4    = 4 ROM banks (64KB)
 # -ya4    = 4 RAM banks
 
 # CGB mode flag

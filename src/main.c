@@ -133,25 +133,6 @@ static void game_update(void) {
     // Update all
     projectile_update();
 
-    // Player shots can destroy enemy shots (projectile-vs-projectile)
-    {
-        uint8_t pa, pb;
-        for (pa = 0; pa < MAX_PROJECTILES; pa++) {
-            if (projectiles[pa].active != 1) continue; // Player shot
-            for (pb = 0; pb < MAX_PROJECTILES; pb++) {
-                if (projectiles[pb].active != 2) continue; // Enemy shot
-                if (projectiles[pa].x + 6 > projectiles[pb].x &&
-                    projectiles[pa].x < projectiles[pb].x + 6 &&
-                    projectiles[pa].y + 6 > projectiles[pb].y &&
-                    projectiles[pa].y < projectiles[pb].y + 6) {
-                    projectiles[pb].active = 0; // Destroy enemy shot
-                    game.score += 5; // Small bonus
-                    break;
-                }
-            }
-        }
-    }
-
     enemy_update();
     boss_update();
 
