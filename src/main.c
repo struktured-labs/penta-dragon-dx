@@ -249,9 +249,17 @@ void main(void) {
 
         switch (game_state) {
             case STATE_TITLE:
-                if (title_update()) {
-                    title_cleanup();
-                    game_init();
+                {
+                    uint8_t title_result = title_update();
+                    if (title_result == 1) {
+                        // GAME START
+                        title_cleanup();
+                        game_init();
+                    } else if (title_result == 2) {
+                        // OPENING START — skip prologue for now, go to game
+                        title_cleanup();
+                        game_init();
+                    }
                 }
                 break;
 
