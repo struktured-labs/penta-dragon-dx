@@ -10,7 +10,7 @@ Player player;
 // Starting position: center-ish (72, 64)
 #define SARA_START_X     72
 #define SARA_START_Y     64
-#define SARA_SPEED       1    // Pixels per frame
+#define SARA_SPEED       2    // Pixels per frame (matches original)
 #define SARA_X_MIN       8    // Left screen bound
 #define SARA_X_MAX       144  // Right screen bound (160 - 16)
 #define SARA_Y_MIN       8    // Top screen bound
