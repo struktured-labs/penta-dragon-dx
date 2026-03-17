@@ -177,7 +177,12 @@ static void game_update(void) {
         }
 
         if (was_hit) {
-            if (game.hp > 0) game.hp--;
+            {
+                // Damage scales with stage (1 in stage 1, up to 4 in stage 7)
+                uint8_t dmg = 1 + (game_stage - 1) / 2;
+                if (game.hp > dmg) game.hp -= dmg;
+                else game.hp = 0;
+            }
             player.invuln = 60;
             sound_player_hit();
             music_sfx_ch1(60);
