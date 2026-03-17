@@ -24,6 +24,7 @@ typedef struct {
     uint8_t palette;
     uint8_t ai_state;
     int16_t ai_timer;
+    uint8_t hit_flash;  // Frames of hit flash remaining
 } Enemy;
 
 extern Enemy enemies[MAX_ENEMIES];

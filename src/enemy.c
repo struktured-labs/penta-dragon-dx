@@ -92,6 +92,7 @@ void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
             e->shoot_cd = ENEMY_SHOOT_CD / 2; /* First shot comes sooner */
             e->ai_state = 0;
             e->ai_timer = 0;
+            e->hit_flash = 0;
 
             switch (type) {
                 case ENEMY_HORNET:
@@ -339,6 +340,7 @@ void enemy_update(void) {
         /* Check hit by player projectile */
         if (projectile_check_hit(e->x, e->y, 16, 16)) {
             e->hp--;
+            e->hit_flash = 6;
             sound_enemy_hit();
             music_sfx_ch4(8);  // yield Ch4 drums during enemy hit SFX
             if (e->hp == 0) {
@@ -389,7 +391,13 @@ void enemy_draw(void) {
         sx = e->x + OAM_X_OFS;
         sy = e->y + OAM_Y_OFS;
         tile = e->tile_base + e->frame * 4;
-        flags = e->palette & 0x07;
+        // Hit flash: briefly use palette 0
+        if (e->hit_flash > 0) {
+            e->hit_flash--;
+            flags = 0;
+        } else {
+            flags = e->palette & 0x07;
+        }
 
         set_sprite_tile(oam_base,     tile);
         set_sprite_prop(oam_base,     flags);
