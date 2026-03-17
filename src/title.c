@@ -23,8 +23,8 @@
 #define TL_S    0xEA
 #define TL_T    0xEB
 #define TL_X    0xEC
-#define TL_SPC  0xED
-#define TL_DASH 0xEE
+#define TL_M    0xED
+#define TL_SPC  0xEE
 #define TL_ARR  0xEF  // Arrow cursor ">"
 
 // Custom 8x8 font tiles (2bpp, 16 bytes each)
@@ -68,11 +68,11 @@ static const unsigned char title_font[] = {
     // 0xEC: 'X'
     0x66, 0x66, 0x66, 0x66, 0x3C, 0x3C, 0x18, 0x18,
     0x3C, 0x3C, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00,
-    // 0xED: space (blank)
+    // 0xED: 'M'
+    0x63, 0x63, 0x77, 0x77, 0x7F, 0x7F, 0x6B, 0x6B,
+    0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x00, 0x00,
+    // 0xEE: space (blank)
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // 0xEE: dash/decoration
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7E, 0x7E,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // 0xEF: arrow cursor ">"
     0x60, 0x60, 0x30, 0x30, 0x18, 0x18, 0x0C, 0x0C,
@@ -97,7 +97,7 @@ static const uint8_t menu_opening[] = {
 #define MENU_OPENING_LEN 13
 // "GAME   START"
 static const uint8_t menu_game[] = {
-    TL_G, TL_A, TL_R, TL_E, TL_SPC, TL_SPC, TL_SPC,
+    TL_G, TL_A, TL_M, TL_E, TL_SPC, TL_SPC, TL_SPC,
     TL_S, TL_T, TL_A, TL_R, TL_T
 };
 #define MENU_GAME_LEN 12
@@ -179,14 +179,11 @@ void title_init(void) {
         set_bkg_tiles(start_col + i, ROW_DRAGON, 1, 1, &title_dragon[i]);
     }
 
-    // "— DX —" centered on row 7
+    // "DX" centered on row 7
     start_col = (20 - 2) / 2;
-    blank = TL_DASH;
-    set_bkg_tiles(start_col - 2, ROW_DX, 1, 1, &blank);
     for (i = 0; i < 2; i++) {
         set_bkg_tiles(start_col + i, ROW_DX, 1, 1, &title_dx[i]);
     }
-    set_bkg_tiles(start_col + 3, ROW_DX, 1, 1, &blank);
 
     // "OPENING START" at row 11, col 4
     for (i = 0; i < MENU_OPENING_LEN; i++) {
