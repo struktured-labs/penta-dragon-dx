@@ -216,6 +216,7 @@ static void game_update(void) {
                     // Respawn
                     game.hp = 255;
                     player_init();
+                    player.invuln = 120; // 2 seconds respawn protection
                     enemy_init();
                     boss_init();
                     projectile_init();
