@@ -18,6 +18,7 @@ typedef struct {
     uint8_t lives;          // Remaining lives
     uint16_t section_timer; // Frames in current section
     uint16_t score;         // Player score
+    uint16_t next_life_at;  // Score threshold for next extra life
 } GameState;
 
 extern GameState game;

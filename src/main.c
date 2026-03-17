@@ -133,6 +133,13 @@ static void game_update(void) {
     sound_update();
     music_update();
 
+    // Extra life every 5000 points
+    if (game.score >= game.next_life_at) {
+        game.lives++;
+        game.next_life_at += 5000;
+        sound_pickup();
+    }
+
     // HUD update
     hud_update();
 

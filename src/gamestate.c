@@ -58,6 +58,7 @@ void gamestate_init(void) {
     game.lives = 3;
     game.section_timer = 0;
     game.score = 0;
+    game.next_life_at = 5000;
     game_stage = 1;
     bonus_pending = 0;
     spawn_timer = SPAWN_CD_NORMAL;
