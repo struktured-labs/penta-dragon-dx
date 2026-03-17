@@ -1,45 +1,40 @@
 #include "hud.h"
 #include "gamestate.h"
+#include "itemmenu.h"
 
 #include <string.h>
 
 // ============================================
-// HUD using Window layer at bottom of screen
-// Window position: WY=128, WX=7 (16 pixel tall strip)
-// Uses BG tiles 0xF0-0xFF for HUD font (digits 0-9, HP, LV, heart, blank, etc.)
+// HUD matching original Penta Dragon layout:
+// Window layer at bottom of screen (3 tile rows)
+// Row 0: [icon] H.P [bar segments...]
+// Row 1: Item name (MEGA_FLASH, MEDICAL, etc.)
+// Row 2: Lives indicator
 // ============================================
 
-// Custom 8x8 tile data for HUD font (compact pixel font)
-// Tiles loaded at BG tile indices 0xF0-0xFF
-// 0xF0 = '0', 0xF1 = '1', ... 0xF9 = '9'
-// 0xFA = heart (HP icon)
-// 0xFB = 'x' (multiplier)
-// 0xFC = blank
-// 0xFD = 'H'
-// 0xFE = 'P'
-// 0xFF = slash '/'
-
+// Tile assignments at 0xF0-0xFF
 #define HUD_TILE_BASE   0xF0
-#define HUD_TILE_0      0xF0
-#define HUD_TILE_HEART  0xFA
-#define HUD_TILE_X      0xFB
-#define HUD_TILE_BLANK  0xFC
-#define HUD_TILE_H      0xFD
-#define HUD_TILE_P      0xFE
-#define HUD_TILE_SLASH  0xFF
+#define HUD_TILE_0      0xF0  // '0'-'9' digits
+#define HUD_TILE_HEART  0xFA  // HP icon
+#define HUD_TILE_FULL   0xFB  // Bar full segment
+#define HUD_TILE_BLANK  0xFC  // Empty/space
+#define HUD_TILE_EMPTY  0xFD  // Bar empty segment
+#define HUD_TILE_DOT    0xFE  // Period '.'
+#define HUD_TILE_X      0xFF  // 'x' multiplier
 
-// Window map position
-#define HUD_WIN_Y   128   // Bottom 16px of 144px screen
-#define HUD_WIN_X   7     // Window WX=7 means left edge of screen
+#define HUD_NUM_TILES  16
 
-// HUD layout (row 0 of window tilemap):
-// Col 0-1: heart icon + HP value (2 digits)
-// Col 3: blank
-// Col 4-5: "x" + lives count
-// Cols 7+: blank
+// Window position: 3 rows from bottom (24px)
+#define HUD_WIN_Y   120
+#define HUD_WIN_X   7
 
-// Custom tile data for digits 0-9, heart, x, blank, H, P, slash
-// Each tile is 16 bytes (8x8, 2bpp)
+// HP bar: 12 segments = cols 4-15 on row 0
+// Each segment represents ~21 HP (255/12 ≈ 21)
+#define HP_BAR_START  4
+#define HP_BAR_LEN    12
+#define HP_PER_SEG    21
+
+// Custom tile data (2bpp, 16 bytes each)
 static const unsigned char hud_tiles[] = {
     // 0xF0: '0'
     0x3C, 0x3C, 0x66, 0x66, 0x6E, 0x6E, 0x76, 0x76,
@@ -71,269 +66,184 @@ static const unsigned char hud_tiles[] = {
     // 0xF9: '9'
     0x3C, 0x3C, 0x66, 0x66, 0x66, 0x66, 0x3E, 0x3E,
     0x06, 0x06, 0x06, 0x06, 0x3C, 0x3C, 0x00, 0x00,
-    // 0xFA: heart (HP icon)
+    // 0xFA: heart/shield icon
     0x00, 0x00, 0x66, 0x66, 0xFF, 0xFF, 0xFF, 0xFF,
     0x7E, 0x7E, 0x3C, 0x3C, 0x18, 0x18, 0x00, 0x00,
-    // 0xFB: 'x' (multiplier)
-    0x00, 0x00, 0x00, 0x00, 0x42, 0x42, 0x24, 0x24,
-    0x18, 0x18, 0x24, 0x24, 0x42, 0x42, 0x00, 0x00,
+    // 0xFB: bar FULL segment (solid block)
+    0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+    0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
     // 0xFC: blank
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // 0xFD: 'H'
-    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x7E, 0x7E,
-    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00,
-    // 0xFE: 'P'
-    0x7C, 0x7C, 0x66, 0x66, 0x66, 0x66, 0x7C, 0x7C,
-    0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x00, 0x00,
-    // 0xFF: '/'
-    0x06, 0x06, 0x06, 0x06, 0x0C, 0x0C, 0x18, 0x18,
-    0x30, 0x30, 0x60, 0x60, 0x60, 0x60, 0x00, 0x00,
+    // 0xFD: bar EMPTY segment (dashed)
+    0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+    0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+    // 0xFE: dot/period '.'
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x18, 0x18, 0x18, 0x18, 0x00, 0x00,
+    // 0xFF: 'x' multiplier
+    0x00, 0x00, 0x00, 0x00, 0x42, 0x42, 0x24, 0x24,
+    0x18, 0x18, 0x24, 0x24, 0x42, 0x42, 0x00, 0x00,
 };
 
-#define HUD_NUM_TILES  16
-
-// G A M E  O V E R tiles (using existing HUD tile slot area)
-// We reuse the digit area for "GAME OVER" letters
-// To keep it simple: spell out with whatever tiles we have,
-// or define additional letter tiles.
-// Letters needed: G, A, M, E, O, V, R
-// We'll store them as a second tileset loaded on game over only.
+// Letter tile sets (loaded on demand for GAME OVER / YOU WIN / STAGE)
 static const unsigned char gameover_tiles[] = {
-    // 'G' - replaces tile 0xF0
-    0x3C, 0x3C, 0x66, 0x66, 0x60, 0x60, 0x6E, 0x6E,
-    0x66, 0x66, 0x66, 0x66, 0x3C, 0x3C, 0x00, 0x00,
-    // 'A' - replaces tile 0xF1
-    0x18, 0x18, 0x3C, 0x3C, 0x66, 0x66, 0x7E, 0x7E,
-    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00,
-    // 'M' - replaces tile 0xF2
-    0x63, 0x63, 0x77, 0x77, 0x7F, 0x7F, 0x6B, 0x6B,
-    0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x00, 0x00,
-    // 'E' - replaces tile 0xF3
-    0x7E, 0x7E, 0x60, 0x60, 0x60, 0x60, 0x7C, 0x7C,
-    0x60, 0x60, 0x60, 0x60, 0x7E, 0x7E, 0x00, 0x00,
-    // 'O' - replaces tile 0xF4
-    0x3C, 0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-    0x66, 0x66, 0x66, 0x66, 0x3C, 0x3C, 0x00, 0x00,
-    // 'V' - replaces tile 0xF5
-    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-    0x66, 0x66, 0x3C, 0x3C, 0x18, 0x18, 0x00, 0x00,
-    // 'R' - replaces tile 0xF6
-    0x7C, 0x7C, 0x66, 0x66, 0x66, 0x66, 0x7C, 0x7C,
-    0x6C, 0x6C, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00,
+    // G A M E O V R (7 tiles at 0xF0-0xF6)
+    0x3C,0x3C,0x66,0x66,0x60,0x60,0x6E,0x6E,0x66,0x66,0x66,0x66,0x3C,0x3C,0x00,0x00,
+    0x18,0x18,0x3C,0x3C,0x66,0x66,0x7E,0x7E,0x66,0x66,0x66,0x66,0x66,0x66,0x00,0x00,
+    0x63,0x63,0x77,0x77,0x7F,0x7F,0x6B,0x6B,0x63,0x63,0x63,0x63,0x63,0x63,0x00,0x00,
+    0x7E,0x7E,0x60,0x60,0x60,0x60,0x7C,0x7C,0x60,0x60,0x60,0x60,0x7E,0x7E,0x00,0x00,
+    0x3C,0x3C,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x3C,0x00,0x00,
+    0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x3C,0x18,0x18,0x00,0x00,
+    0x7C,0x7C,0x66,0x66,0x66,0x66,0x7C,0x7C,0x6C,0x6C,0x66,0x66,0x66,0x66,0x00,0x00,
 };
 
-// Track previous values to avoid redundant writes
+static const unsigned char victory_tiles[] = {
+    // Y O U W I N ! (7 tiles at 0xF0-0xF6)
+    0x66,0x66,0x66,0x66,0x3C,0x3C,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x00,0x00,
+    0x3C,0x3C,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x3C,0x00,0x00,
+    0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x3C,0x00,0x00,
+    0x63,0x63,0x63,0x63,0x63,0x63,0x6B,0x6B,0x7F,0x7F,0x77,0x77,0x63,0x63,0x00,0x00,
+    0x7E,0x7E,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x7E,0x7E,0x00,0x00,
+    0x66,0x66,0x76,0x76,0x7E,0x7E,0x7E,0x7E,0x6E,0x6E,0x66,0x66,0x66,0x66,0x00,0x00,
+    0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x00,0x00,0x18,0x18,0x00,0x00,
+};
+
+static const unsigned char stage_letters[] = {
+    // S T A G E (5 tiles at 0xF0-0xF4)
+    0x3C,0x3C,0x66,0x66,0x60,0x60,0x3C,0x3C,0x06,0x06,0x66,0x66,0x3C,0x3C,0x00,0x00,
+    0x7E,0x7E,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x00,0x00,
+    0x18,0x18,0x3C,0x3C,0x66,0x66,0x7E,0x7E,0x66,0x66,0x66,0x66,0x66,0x66,0x00,0x00,
+    0x3C,0x3C,0x66,0x66,0x60,0x60,0x6E,0x6E,0x66,0x66,0x66,0x66,0x3C,0x3C,0x00,0x00,
+    0x7E,0x7E,0x60,0x60,0x60,0x60,0x7C,0x7C,0x60,0x60,0x60,0x60,0x7E,0x7E,0x00,0x00,
+};
+
+// Track previous values
 static uint8_t prev_hp;
 static uint8_t prev_lives;
-static uint16_t prev_score;
-static uint8_t prev_powerup;
-static uint8_t prev_form;
 
 void hud_init(void) {
     uint8_t row, col;
     uint8_t blank = HUD_TILE_BLANK;
+    uint8_t tile;
 
-    prev_hp = 0xFF;     // Force first update
+    prev_hp = 0xFF;
     prev_lives = 0xFF;
-    prev_score = 0xFFFF;
-    prev_powerup = 0xFF;
-    prev_form = 0xFF;
 
-    // Load HUD font tiles into BG tile data at indices 0xF0-0xFF
+    // Load HUD tiles
     set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
 
-    // Set window position: bottom 16 pixels of screen
+    // Window at bottom: 3 tile rows
     move_win(HUD_WIN_X, HUD_WIN_Y);
 
-    // Clear the window tilemap (2 rows)
-    for (row = 0; row < 2; row++) {
+    // Clear window tilemap (3 rows)
+    for (row = 0; row < 3; row++) {
         for (col = 0; col < 20; col++) {
             set_win_tiles(col, row, 1, 1, &blank);
         }
     }
 
-    // Set window palette attributes (all palette 0 = white text on dark)
-    // Use BG palette 2 for HUD (purple/decorative gives nice contrast)
+    // Set palette (palette 0 for bar contrast)
     VBK_REG = 1;
-    for (row = 0; row < 2; row++) {
-        uint8_t pal = 2;
+    blank = 0;
+    for (row = 0; row < 3; row++) {
         for (col = 0; col < 20; col++) {
-            set_win_tiles(col, row, 1, 1, &pal);
+            set_win_tiles(col, row, 1, 1, &blank);
         }
     }
     VBK_REG = 0;
 
-    // Enable window layer
+    // Row 0 static labels: [heart] H . P
+    tile = HUD_TILE_HEART;
+    set_win_tiles(0, 0, 1, 1, &tile);
+    // H (reuse '8' shape rotated — actually just use the bar)
+    // Simpler: just show the bar directly after icon
+    // [heart] [===========     ]
+    // Skip H.P text, just show icon + bar (saves tile slots)
+
+    // Row 2: x LIVES
+    tile = HUD_TILE_X;
+    set_win_tiles(0, 2, 1, 1, &tile);
+
     SHOW_WIN;
 }
 
 void hud_update(void) {
     uint8_t hp = game.hp;
     uint8_t lives = game.lives;
-    uint16_t score = game.score;
-    uint8_t powerup = game.powerup;
-    uint8_t form = game.sara_form;
     uint8_t tile;
+    uint8_t col;
 
-    // Only update if values changed
-    if (hp == prev_hp && lives == prev_lives &&
-        score == prev_score && powerup == prev_powerup &&
-        form == prev_form) return;
+    if (hp == prev_hp && lives == prev_lives) return;
 
-    // Form indicator at col 10: slash=Witch, X=Dragon
-    if (form != prev_form) {
-        prev_form = form;
-        tile = (form == 0) ? HUD_TILE_SLASH : HUD_TILE_X;
-        set_win_tiles(10, 0, 1, 1, &tile);
-    }
-
-    // Powerup indicator at cols 7-8
-    if (powerup != prev_powerup) {
-        prev_powerup = powerup;
-        if (powerup == 1) {
-            // Spiral: show "P" + slash
-            tile = HUD_TILE_P;
-            set_win_tiles(7, 0, 1, 1, &tile);
-            tile = HUD_TILE_SLASH;
-            set_win_tiles(8, 0, 1, 1, &tile);
-        } else if (powerup == 3) {
-            // Turbo: show "HP" (reuse H and P)
-            tile = HUD_TILE_H;
-            set_win_tiles(7, 0, 1, 1, &tile);
-            tile = HUD_TILE_P;
-            set_win_tiles(8, 0, 1, 1, &tile);
-        } else {
-            tile = HUD_TILE_BLANK;
-            set_win_tiles(7, 0, 1, 1, &tile);
-            set_win_tiles(8, 0, 1, 1, &tile);
-        }
-    }
-
-    // HP and lives update
-    if (hp != prev_hp || lives != prev_lives) {
+    // HP bar update (row 0, cols 1-16)
+    if (hp != prev_hp) {
         prev_hp = hp;
-        prev_lives = lives;
+        uint8_t filled = hp / HP_PER_SEG;
+        if (filled > HP_BAR_LEN) filled = HP_BAR_LEN;
 
-        // Row 0: heart HP_tens HP_ones  blank  x LIVES
-        tile = HUD_TILE_HEART;
-        set_win_tiles(0, 0, 1, 1, &tile);
+        for (col = 0; col < HP_BAR_LEN; col++) {
+            tile = (col < filled) ? HUD_TILE_FULL : HUD_TILE_EMPTY;
+            set_win_tiles(1 + col, 0, 1, 1, &tile);
+        }
 
-        if (hp >= 10) {
-            tile = HUD_TILE_0 + (hp / 10);
+        // Show numeric HP after bar (cols 14-16)
+        if (hp >= 100) {
+            tile = HUD_TILE_0 + (hp / 100);
+            set_win_tiles(14, 0, 1, 1, &tile);
         } else {
             tile = HUD_TILE_BLANK;
+            set_win_tiles(14, 0, 1, 1, &tile);
         }
-        set_win_tiles(1, 0, 1, 1, &tile);
-
+        tile = HUD_TILE_0 + ((hp / 10) % 10);
+        set_win_tiles(15, 0, 1, 1, &tile);
         tile = HUD_TILE_0 + (hp % 10);
-        set_win_tiles(2, 0, 1, 1, &tile);
-
-        tile = HUD_TILE_BLANK;
-        set_win_tiles(3, 0, 1, 1, &tile);
-
-        tile = HUD_TILE_X;
-        set_win_tiles(4, 0, 1, 1, &tile);
-
-        tile = HUD_TILE_0 + (lives % 10);
-        set_win_tiles(5, 0, 1, 1, &tile);
+        set_win_tiles(16, 0, 1, 1, &tile);
     }
 
-    // Score update (right side: cols 12-19)
-    if (score != prev_score) {
-        prev_score = score;
-        // Show score as 5-digit number right-aligned at cols 14-18
-        // Stage indicator at col 12-13: "S#"
-        tile = HUD_TILE_0 + (game_stage % 10);
-        set_win_tiles(13, 0, 1, 1, &tile);
-
-        // Score digits (5 digits: 10000s to 1s)
-        {
-            uint16_t s = score;
-            uint8_t d4 = (uint8_t)(s / 10000u); s -= d4 * 10000u;
-            uint8_t d3 = (uint8_t)(s / 1000u);  s -= d3 * 1000u;
-            uint8_t d2 = (uint8_t)(s / 100u);   s -= d2 * 100u;
-            uint8_t d1 = (uint8_t)(s / 10u);
-            uint8_t d0 = (uint8_t)(s % 10u);
-
-            tile = d4 ? (HUD_TILE_0 + d4) : HUD_TILE_BLANK;
-            set_win_tiles(15, 0, 1, 1, &tile);
-            tile = (d4 || d3) ? (HUD_TILE_0 + d3) : HUD_TILE_BLANK;
-            set_win_tiles(16, 0, 1, 1, &tile);
-            tile = (d4 || d3 || d2) ? (HUD_TILE_0 + d2) : HUD_TILE_BLANK;
-            set_win_tiles(17, 0, 1, 1, &tile);
-            tile = HUD_TILE_0 + d1;
-            set_win_tiles(18, 0, 1, 1, &tile);
-            tile = HUD_TILE_0 + d0;
-            set_win_tiles(19, 0, 1, 1, &tile);
-        }
+    // Lives (row 2)
+    if (lives != prev_lives) {
+        prev_lives = lives;
+        tile = HUD_TILE_0 + (lives % 10);
+        set_win_tiles(1, 2, 1, 1, &tile);
     }
 }
 
 void hud_game_over(void) {
-    uint8_t blank = HUD_TILE_BLANK;
+    uint8_t tile = HUD_TILE_BLANK;
     uint8_t col;
 
-    // Load GAME OVER letter tiles (overwrites digit tiles temporarily)
     set_bkg_data(HUD_TILE_BASE, 7, gameover_tiles);
 
-    // Clear row 0
     for (col = 0; col < 20; col++) {
-        set_win_tiles(col, 0, 1, 1, &blank);
+        set_win_tiles(col, 0, 1, 1, &tile);
+        set_win_tiles(col, 1, 1, 1, &tile);
     }
 
-    // Write "GAME OVER" centered (20 cols, 9 chars = start at col 5)
-    // G=0xF0, A=0xF1, M=0xF2, E=0xF3, blank, O=0xF4, V=0xF5, E=0xF3, R=0xF6
+    // "GAME OVER" centered on row 0
     col = 5;
-    blank = 0xF0; set_win_tiles(col++, 0, 1, 1, &blank); // G
-    blank = 0xF1; set_win_tiles(col++, 0, 1, 1, &blank); // A
-    blank = 0xF2; set_win_tiles(col++, 0, 1, 1, &blank); // M
-    blank = 0xF3; set_win_tiles(col++, 0, 1, 1, &blank); // E
-    blank = HUD_TILE_BLANK; set_win_tiles(col++, 0, 1, 1, &blank); // space
-    blank = 0xF4; set_win_tiles(col++, 0, 1, 1, &blank); // O
-    blank = 0xF5; set_win_tiles(col++, 0, 1, 1, &blank); // V
-    blank = 0xF3; set_win_tiles(col++, 0, 1, 1, &blank); // E
-    blank = 0xF6; set_win_tiles(col++, 0, 1, 1, &blank); // R
+    tile = 0xF0; set_win_tiles(col++, 0, 1, 1, &tile); // G
+    tile = 0xF1; set_win_tiles(col++, 0, 1, 1, &tile); // A
+    tile = 0xF2; set_win_tiles(col++, 0, 1, 1, &tile); // M
+    tile = 0xF3; set_win_tiles(col++, 0, 1, 1, &tile); // E
+    tile = HUD_TILE_BLANK; set_win_tiles(col++, 0, 1, 1, &tile);
+    tile = 0xF4; set_win_tiles(col++, 0, 1, 1, &tile); // O
+    tile = 0xF5; set_win_tiles(col++, 0, 1, 1, &tile); // V
+    tile = 0xF3; set_win_tiles(col++, 0, 1, 1, &tile); // E
+    tile = 0xF6; set_win_tiles(col++, 0, 1, 1, &tile); // R
 }
-
-// "YOU WIN" letter tiles
-static const unsigned char victory_tiles[] = {
-    // 'Y' - 0xF0
-    0x66, 0x66, 0x66, 0x66, 0x3C, 0x3C, 0x18, 0x18,
-    0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x00,
-    // 'O' - 0xF1
-    0x3C, 0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-    0x66, 0x66, 0x66, 0x66, 0x3C, 0x3C, 0x00, 0x00,
-    // 'U' - 0xF2
-    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-    0x66, 0x66, 0x66, 0x66, 0x3C, 0x3C, 0x00, 0x00,
-    // 'W' - 0xF3
-    0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x6B, 0x6B,
-    0x7F, 0x7F, 0x77, 0x77, 0x63, 0x63, 0x00, 0x00,
-    // 'I' - 0xF4
-    0x7E, 0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18,
-    0x18, 0x18, 0x18, 0x18, 0x7E, 0x7E, 0x00, 0x00,
-    // 'N' - 0xF5
-    0x66, 0x66, 0x76, 0x76, 0x7E, 0x7E, 0x7E, 0x7E,
-    0x6E, 0x6E, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00,
-    // '!' - 0xF6
-    0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18,
-    0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00,
-};
 
 void hud_victory(void) {
     uint8_t tile = HUD_TILE_BLANK;
     uint8_t col;
 
-    // Load YOU WIN letter tiles
     set_bkg_data(HUD_TILE_BASE, 7, victory_tiles);
 
-    // Clear row 0
     for (col = 0; col < 20; col++) {
         set_win_tiles(col, 0, 1, 1, &tile);
+        set_win_tiles(col, 1, 1, 1, &tile);
     }
 
-    // Write "YOU WIN!" centered (7 chars = start at col 6)
     col = 6;
     tile = 0xF0; set_win_tiles(col++, 0, 1, 1, &tile); // Y
     tile = 0xF1; set_win_tiles(col++, 0, 1, 1, &tile); // O
@@ -345,25 +255,6 @@ void hud_victory(void) {
     tile = 0xF6; set_win_tiles(col++, 0, 1, 1, &tile); // !
 }
 
-// "STAGE" letter tiles for stage intro
-static const unsigned char stage_letters[] = {
-    // 'S' - 0xF0
-    0x3C, 0x3C, 0x66, 0x66, 0x60, 0x60, 0x3C, 0x3C,
-    0x06, 0x06, 0x66, 0x66, 0x3C, 0x3C, 0x00, 0x00,
-    // 'T' - 0xF1
-    0x7E, 0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18,
-    0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x00,
-    // 'A' - 0xF2
-    0x18, 0x18, 0x3C, 0x3C, 0x66, 0x66, 0x7E, 0x7E,
-    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00,
-    // 'G' - 0xF3
-    0x3C, 0x3C, 0x66, 0x66, 0x60, 0x60, 0x6E, 0x6E,
-    0x66, 0x66, 0x66, 0x66, 0x3C, 0x3C, 0x00, 0x00,
-    // 'E' - 0xF4
-    0x7E, 0x7E, 0x60, 0x60, 0x60, 0x60, 0x7C, 0x7C,
-    0x60, 0x60, 0x60, 0x60, 0x7E, 0x7E, 0x00, 0x00,
-};
-
 void hud_stage_intro(uint8_t stage) {
     uint8_t row, col;
     uint8_t tile;
@@ -372,10 +263,8 @@ void hud_stage_intro(uint8_t stage) {
     HIDE_WIN;
     HIDE_SPRITES;
 
-    // Load "STAGE" letter tiles into 0xF0-0xF4
     set_bkg_data(HUD_TILE_BASE, 5, stage_letters);
 
-    // Clear BG tilemap
     tile = HUD_TILE_BLANK;
     for (row = 0; row < 18; row++) {
         for (col = 0; col < 20; col++) {
@@ -383,9 +272,8 @@ void hud_stage_intro(uint8_t stage) {
         }
     }
 
-    // Set palette attributes (palette 2 for text)
     VBK_REG = 1;
-    tile = 2;
+    tile = 0;
     for (row = 0; row < 18; row++) {
         for (col = 0; col < 20; col++) {
             set_bkg_tiles(col, row, 1, 1, &tile);
@@ -393,23 +281,20 @@ void hud_stage_intro(uint8_t stage) {
     }
     VBK_REG = 0;
 
-    // "STAGE" centered on row 7 (5 chars, start col 5)
+    // "STAGE" centered on row 7
     col = 5;
-    tile = 0xF0; set_bkg_tiles(col++, 7, 1, 1, &tile); // S
-    tile = 0xF1; set_bkg_tiles(col++, 7, 1, 1, &tile); // T
-    tile = 0xF2; set_bkg_tiles(col++, 7, 1, 1, &tile); // A
-    tile = 0xF3; set_bkg_tiles(col++, 7, 1, 1, &tile); // G
-    tile = 0xF4; set_bkg_tiles(col++, 7, 1, 1, &tile); // E
+    tile = 0xF0; set_bkg_tiles(col++, 7, 1, 1, &tile);
+    tile = 0xF1; set_bkg_tiles(col++, 7, 1, 1, &tile);
+    tile = 0xF2; set_bkg_tiles(col++, 7, 1, 1, &tile);
+    tile = 0xF3; set_bkg_tiles(col++, 7, 1, 1, &tile);
+    tile = 0xF4; set_bkg_tiles(col++, 7, 1, 1, &tile);
 
-    // Stage number (two digits) at col 11-12
-    // Use HUD digit tiles (still loaded from hud_init)
+    // Stage number
     set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
-    tile = HUD_TILE_BLANK;
-    set_bkg_tiles(11, 7, 1, 1, &tile);
     if (stage >= 10) {
         tile = HUD_TILE_0 + (stage / 10);
     } else {
-        tile = HUD_TILE_0; // "0" prefix
+        tile = HUD_TILE_0;
     }
     set_bkg_tiles(11, 7, 1, 1, &tile);
     tile = HUD_TILE_0 + (stage % 10);
@@ -422,6 +307,5 @@ void hud_stage_intro(uint8_t stage) {
 }
 
 void hud_stage_intro_cleanup(void) {
-    // Restore digit tiles for HUD
     set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
 }
