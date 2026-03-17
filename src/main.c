@@ -282,15 +282,13 @@ void main(void) {
             case STATE_TITLE:
                 {
                     uint8_t title_result = title_update();
-                    if (title_result == 1) {
-                        // GAME START — go directly to gameplay
+                    if (title_result >= 1) {
                         title_cleanup();
                         game_init();
-                    } else if (title_result == 2) {
-                        // OPENING START — TODO: story screen
-                        // For now, same as GAME START
-                        title_cleanup();
-                        game_init();
+                        // Show STAGE 01 overlay using window layer
+                        hud_stage_intro(game_stage);
+                        intro_timer = 180; // ~3 seconds
+                        game_state = STATE_STAGE_INTRO;
                     }
                 }
                 break;
@@ -327,6 +325,10 @@ void main(void) {
 
             case STATE_STAGE_INTRO:
                 intro_timer--;
+                // Skip on A or START press
+                if (intro_timer > 10 && (joypad() & (J_A | J_START))) {
+                    intro_timer = 1;
+                }
                 if (intro_timer == 0) {
                     hud_stage_intro_cleanup();
                     if (game.gameplay_active) {

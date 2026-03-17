@@ -259,53 +259,60 @@ void hud_stage_intro(uint8_t stage) {
     uint8_t row, col;
     uint8_t tile;
 
-    DISPLAY_OFF;
-    HIDE_WIN;
-    HIDE_SPRITES;
-
+    // Use window layer as full-screen overlay (doesn't touch BG tilemap)
+    // Load STAGE letter tiles temporarily
     set_bkg_data(HUD_TILE_BASE, 5, stage_letters);
 
+    // Clear window tilemap (18 rows = full screen)
     tile = HUD_TILE_BLANK;
     for (row = 0; row < 18; row++) {
         for (col = 0; col < 20; col++) {
-            set_bkg_tiles(col, row, 1, 1, &tile);
+            set_win_tiles(col, row, 1, 1, &tile);
         }
     }
 
+    // Set window palette (palette 0)
     VBK_REG = 1;
     tile = 0;
     for (row = 0; row < 18; row++) {
         for (col = 0; col < 20; col++) {
-            set_bkg_tiles(col, row, 1, 1, &tile);
+            set_win_tiles(col, row, 1, 1, &tile);
         }
     }
     VBK_REG = 0;
 
-    // "STAGE" centered on row 7
+    // "STAGE" centered on window row 7
     col = 5;
-    tile = 0xF0; set_bkg_tiles(col++, 7, 1, 1, &tile);
-    tile = 0xF1; set_bkg_tiles(col++, 7, 1, 1, &tile);
-    tile = 0xF2; set_bkg_tiles(col++, 7, 1, 1, &tile);
-    tile = 0xF3; set_bkg_tiles(col++, 7, 1, 1, &tile);
-    tile = 0xF4; set_bkg_tiles(col++, 7, 1, 1, &tile);
+    tile = 0xF0; set_win_tiles(col++, 7, 1, 1, &tile); // S
+    tile = 0xF1; set_win_tiles(col++, 7, 1, 1, &tile); // T
+    tile = 0xF2; set_win_tiles(col++, 7, 1, 1, &tile); // A
+    tile = 0xF3; set_win_tiles(col++, 7, 1, 1, &tile); // G
+    tile = 0xF4; set_win_tiles(col++, 7, 1, 1, &tile); // E
 
-    // Stage number
-    set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
-    if (stage >= 10) {
-        tile = HUD_TILE_0 + (stage / 10);
-    } else {
-        tile = HUD_TILE_0;
+    // Stage number — load just 2 digit tiles at 0xF5-0xF6
+    // (doesn't overwrite STAGE letters at 0xF0-0xF4)
+    {
+        uint8_t tens = (stage >= 10) ? (stage / 10) : 0;
+        uint8_t ones = stage % 10;
+        // Load just the 2 digit tiles we need
+        set_bkg_data(HUD_TILE_BASE + 5, 1, &hud_tiles[tens * 16]);
+        set_bkg_data(HUD_TILE_BASE + 6, 1, &hud_tiles[ones * 16]);
+        tile = HUD_TILE_BASE + 5;
+        set_win_tiles(11, 7, 1, 1, &tile);
+        tile = HUD_TILE_BASE + 6;
+        set_win_tiles(12, 7, 1, 1, &tile);
     }
-    set_bkg_tiles(11, 7, 1, 1, &tile);
-    tile = HUD_TILE_0 + (stage % 10);
-    set_bkg_tiles(12, 7, 1, 1, &tile);
 
-    SCX_REG = 0;
-    SCY_REG = 0;
-    SHOW_BKG;
-    DISPLAY_ON;
+    // Move window to top of screen (covers everything)
+    move_win(HUD_WIN_X, 0);
+    SHOW_WIN;
 }
 
 void hud_stage_intro_cleanup(void) {
+    // Restore HUD tiles and window position
     set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
+    move_win(HUD_WIN_X, HUD_WIN_Y);
+    // Reinitialize HUD display
+    prev_hp = 0xFF;
+    prev_lives = 0xFF;
 }
