@@ -74,6 +74,12 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
         }
     }
 
+    // Clamp Sara to screen bounds (safety against auto-scroll push)
+    if (player.x < SARA_X_MIN) player.x = SARA_X_MIN;
+    if (player.x > SARA_X_MAX) player.x = SARA_X_MAX;
+    if (player.y < SARA_Y_MIN) player.y = SARA_Y_MIN;
+    if (player.y > SARA_Y_MAX) player.y = SARA_Y_MAX;
+
     // Form toggle on SELECT (edge-triggered)
     if ((keys & J_SELECT) && !(prev_keys & J_SELECT)) {
         player.form ^= 1;
