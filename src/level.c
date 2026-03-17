@@ -1,6 +1,7 @@
 #include "level.h"
 #include "enemy.h"
 #include "player.h"
+#include "gamestate.h"
 #include "palettes.h"
 #include "itemmenu.h"
 #include "sound.h"
@@ -164,11 +165,15 @@ int8_t level_update(uint8_t keys) {
     old_pixel = (uint8_t)(scroll_x & 0x07);
 
     // Auto-scroll: constant rightward scroll (matches original game)
-    // Original: ~1px/frame, quantized as 4px every 4 frames
-    scroll_tick++;
-    if (scroll_tick >= 4) {
+    // Pauses during boss fights (boss arena is fixed)
+    if (!gamestate_is_boss()) {
+        scroll_tick++;
+        if (scroll_tick >= 4) {
+            scroll_tick = 0;
+            scroll_amount = 4;
+        }
+    } else {
         scroll_tick = 0;
-        scroll_amount = 4;
     }
 
     if (scroll_amount > 0) {

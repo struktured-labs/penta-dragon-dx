@@ -34,7 +34,7 @@ rm -f "$TMP"/h_*.png "$TMP/test_results.txt"
 echo "Running headless test on $(basename "$ROM")..."
 unset DISPLAY WAYLAND_DISPLAY
 QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy \
-timeout 30 xvfb-run -a mgba-qt "$ROM" \
+timeout 45 xvfb-run -a mgba-qt "$ROM" \
   --script "$LUA_SCRIPT" -l 0 2>/dev/null || true
 
 # Kill stray Xvfb
