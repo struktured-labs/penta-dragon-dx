@@ -41,18 +41,12 @@ $(BINDIR)/$(PROJECT).gbc: $(OBJS)
 clean:
 	rm -rf $(OBJDIR) $(BINDIR)/$(PROJECT).gbc $(BINDIR)/$(PROJECT).map $(BINDIR)/$(PROJECT).noi
 
-# Run in emulator (headless for testing)
+# Headless gameplay test (screenshots + input injection)
 test: all
-	@echo "Running headless test..."
-	@rm -f tmp/test_done.txt
-	@unset DISPLAY && unset WAYLAND_DISPLAY && \
-	QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy \
-	timeout 10 xvfb-run -a mgba-qt $(BINDIR)/$(PROJECT).gbc \
-		--script tmp/screenshot_test.lua -l 0 || true
-	@echo "Screenshot saved to tmp/remake_test.png"
+	@bash scripts/test_headless.sh $(BINDIR)/$(PROJECT).gbc
 
 # Run for human play (GUI)
 play: all
-	./mgba-qt.sh $(BINDIR)/$(PROJECT).gbc &
+	@bash /home/struktured/projects/penta-dragon-dx-claude/scripts/launch_mgba.sh $(BINDIR)/$(PROJECT).gbc
 
 .PHONY: all clean dirs test play
