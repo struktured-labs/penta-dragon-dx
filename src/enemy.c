@@ -2,6 +2,7 @@
 #include "projectile.h"
 #include "player.h"
 #include "gamestate.h"
+#include "itemmenu.h"
 #include "sound.h"
 #include "music.h"
 
@@ -295,6 +296,15 @@ void enemy_update(void) {
             if (e->hp == 0) {
                 // Score: varies by enemy type
                 game.score += (e->type >= ENEMY_ORC) ? 20 : 10;
+                // Item drop: ~25% chance based on progress counter
+                {
+                    uint8_t drop_roll = (game.progress * 7 + e->x) & 0x0F;
+                    if (drop_roll < 4) {
+                        // Drop an item
+                        uint8_t item = (drop_roll < 2) ? ITEM_FLASH_BOMB : ITEM_POTION;
+                        itemmenu_add_item(item);
+                    }
+                }
                 e->type = ENEMY_NONE;
                 if (enemy_count > 0) enemy_count--;
             }
