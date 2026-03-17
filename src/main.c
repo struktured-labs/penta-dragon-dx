@@ -213,8 +213,12 @@ static void game_update(void) {
                 if (hit_result) {
                     projectiles[pi].active = 0;  // Consume the projectile
                     if (hit_result == 2) {
-                        // Boss killed — score bonus
+                        // Boss killed — score bonus + item reward
                         game.score += 100 + game_stage * 50;
+                        itemmenu_add_item(ITEM_POTION);
+                        if (game_stage >= 3) {
+                            itemmenu_add_item(ITEM_SHIELD);
+                        }
                         if (game_stage > MAX_STAGES && boss.type == BOSS_PENTA) {
                             // Penta Dragon defeated — victory!
                             game_state = STATE_VICTORY;
