@@ -55,6 +55,7 @@ typedef struct {
     uint8_t  anim_tick;     // Animation counter
     uint8_t  palette;       // CGB palette slot
     uint8_t  tile_base;     // VRAM tile base for this boss
+    uint8_t  hit_flash;     // Frames remaining of hit flash effect
 } Boss;
 
 extern Boss boss;

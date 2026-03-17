@@ -44,7 +44,8 @@ void boss_init(void) {
     boss.frame = 0;
     boss.anim_tick = 0;
     boss.palette = 6;
-    boss.tile_base = TILE_HUMANOID;  // Reuse humanoid tiles for now
+    boss.tile_base = TILE_HUMANOID;
+    boss.hit_flash = 0;
 
     // Clear boss OAM slots
     for (i = 0; i < BOSS_OAM_SLOTS; i++) {
@@ -773,7 +774,13 @@ void boss_draw(void) {
         return;
     }
 
-    flags = boss.palette & 0x07;
+    // Hit flash: use palette 0 (white/blue) when flashing
+    if (boss.hit_flash > 0) {
+        boss.hit_flash--;
+        flags = 0; // Palette 0 = flash white
+    } else {
+        flags = boss.palette & 0x07;
+    }
 
     // Base tile for current animation frame (humanoid has 4 tiles per frame)
     tile = boss.tile_base + boss.frame * 4;
@@ -805,6 +812,7 @@ uint8_t boss_check_hit(uint8_t px, uint8_t py) {
         py >= boss.y && py < boss.y + 32) {
 
         boss.hp--;
+        boss.hit_flash = 8; // Flash white for 8 frames
         sound_enemy_hit();
         music_sfx_ch4(8);
 
