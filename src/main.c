@@ -282,12 +282,15 @@ void main(void) {
             case STATE_TITLE:
                 {
                     uint8_t title_result = title_update();
-                    if (title_result >= 1) {
+                    if (title_result == 1) {
+                        // GAME START — go directly to gameplay
                         title_cleanup();
-                        // Show stage intro before gameplay
-                        hud_stage_intro(1);
-                        intro_timer = 120; // ~2 seconds
-                        game_state = STATE_STAGE_INTRO;
+                        game_init();
+                    } else if (title_result == 2) {
+                        // OPENING START — TODO: story screen
+                        // For now, same as GAME START
+                        title_cleanup();
+                        game_init();
                     }
                 }
                 break;
