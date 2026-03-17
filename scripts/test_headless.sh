@@ -20,7 +20,7 @@ fi
 # Pre-check: verify no bank span warnings in map file
 MAP_FILE="${ROM%.gbc}.map"
 if [ -f "$MAP_FILE" ]; then
-    CODE_SIZE=$(grep "^_CODE" "$MAP_FILE" | grep -oP '\d+(?=\. bytes)')
+    CODE_SIZE=$(grep "^_CODE " "$MAP_FILE" | grep -oP '\d+(?=\. bytes)')
     if [ -n "$CODE_SIZE" ] && [ "$CODE_SIZE" -gt 32000 ]; then
         echo "WARNING: _CODE size is ${CODE_SIZE} bytes (bank 1 limit ~32000)"
         echo "Risk of bank span crash!"

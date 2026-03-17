@@ -5,9 +5,8 @@
 #include "itemmenu.h"
 #include "sound.h"
 
-// Use the GAMEPLAY tiles (extracted from VRAM during actual gameplay)
-// NOT the static ROM tiles (which are font/text characters)
-#include "../assets/extracted/bg/include/bg_gameplay.h"
+// BG tile data is in ROM bank 2 (4096 bytes)
+#include "data_bank2.h"
 
 // Level 1 tilemap data extracted from the original Penta Dragon ROM
 #include "level_data.h"
@@ -150,9 +149,11 @@ void level_init(void) {
     }
 }
 
+// Banked tile loader in data_bank2.c — __banked handles bank switching
+extern void load_bg_tiles_banked(void) __banked;
+
 void level_load_tiles(void) {
-    // Load the GAMEPLAY BG tiles (extracted from VRAM during actual gameplay)
-    set_bkg_data(0, 255, BG_GAMEPLAY_TILES);
+    load_bg_tiles_banked();
 }
 
 int8_t level_update(uint8_t keys) {
