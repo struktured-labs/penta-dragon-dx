@@ -107,8 +107,14 @@ static void game_update(void) {
                 projectile_spawn_player_dir(
                     (player.dir == DIR_RIGHT) ? PROJ_SPEED : -PROJ_SPEED, 2);
             }
-            // Turbo powerup: faster cooldown
-            player.shoot_cd = (player.powerup == 3) ? 4 : 8;
+            // Shoot cooldown: Dragon form faster, Turbo powerup fastest
+            if (player.powerup == 3) {
+                player.shoot_cd = 4;
+            } else if (player.form == 1) {
+                player.shoot_cd = 6; // Dragon: faster fire rate
+            } else {
+                player.shoot_cd = 8; // Witch: standard
+            }
             sound_shoot();
             music_sfx_ch1(15);  // yield Ch1 melody during shoot SFX
         }

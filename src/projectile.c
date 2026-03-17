@@ -25,13 +25,25 @@ void projectile_load_tiles(void) {
 void projectile_spawn_player(void) {
     uint8_t i;
     Projectile *p;
+    int8_t speed;
+    uint8_t ttl;
+
+    // Dragon form: faster projectiles, shorter range
+    // Witch form: slower projectiles, longer range
+    if (player.form == 1) {
+        speed = 5;  // Dragon: fast
+        ttl = 40;   // Shorter range
+    } else {
+        speed = PROJ_SPEED;  // Witch: standard
+        ttl = PROJ_TTL;      // Long range
+    }
 
     for (i = 0; i < MAX_PROJECTILES; i++) {
         p = &projectiles[i];
         if (p->active == 0) {
-            p->x = player.x + 8; // Spawn ahead of player
-            p->y = player.y + 4; // Center vertically
-            p->dx = (player.dir == DIR_RIGHT) ? PROJ_SPEED : -PROJ_SPEED;
+            p->x = player.x + 8;
+            p->y = player.y + 4;
+            p->dx = (player.dir == DIR_RIGHT) ? speed : -speed;
             p->dy = 0;
             p->active = 1;
             p->tile = PROJ_PLAYER_TILE;
@@ -42,7 +54,7 @@ void projectile_spawn_player(void) {
             } else {
                 p->palette = 1; // Sara D (green)
             }
-            p->ttl = PROJ_TTL;
+            p->ttl = ttl;
             return;
         }
     }
