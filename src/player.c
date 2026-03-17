@@ -71,6 +71,10 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
     // Invulnerability countdown
     if (player.invuln > 0) {
         player.invuln--;
+        // Shield powerup expires with invulnerability
+        if (player.invuln == 0 && player.powerup == 2) {
+            player.powerup = 0;
+        }
     }
 }
 

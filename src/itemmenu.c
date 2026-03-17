@@ -156,8 +156,9 @@ uint8_t itemmenu_update(uint8_t keys, uint8_t prev_keys) {
                     sound_pickup();
                     break;
                 case ITEM_SHIELD:
-                    // Temporary invulnerability
+                    // Temporary invulnerability + shield powerup
                     player.invuln = 180; // 3 seconds
+                    player.powerup = 2;  // Shield aura
                     sound_pickup();
                     break;
             }
