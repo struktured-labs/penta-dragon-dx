@@ -313,8 +313,8 @@ void level_check_item_pickup(void) {
     // Sara's world position (she's fixed on screen, world scrolls)
     // Sara screen: (72, 64), size 16x16
     // Check the 2x2 tile area under Sara's center
-    world_x = scroll_x + 72;
-    world_y = scroll_y + 64;
+    world_x = scroll_x + player.x;
+    world_y = scroll_y + player.y;
 
     // Check a 2x2 tile area (Sara is 16x16 = 2x2 tiles)
     for (dy = 0; dy < 2; dy++) {
