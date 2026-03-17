@@ -121,6 +121,8 @@ static const unsigned char stage_letters[] = {
 // Track previous values
 static uint8_t prev_hp;
 static uint8_t prev_lives;
+static uint8_t hud_show_timer;  // Frames remaining to show HUD (0 = hidden)
+#define HUD_SHOW_DURATION 180   // 3 seconds
 
 void hud_init(void) {
     uint8_t row, col;
@@ -129,6 +131,7 @@ void hud_init(void) {
 
     prev_hp = 0xFF;
     prev_lives = 0xFF;
+    hud_show_timer = HUD_SHOW_DURATION; // Show initially
 
     // Load HUD tiles
     set_bkg_data(HUD_TILE_BASE, HUD_NUM_TILES, hud_tiles);
@@ -174,7 +177,20 @@ void hud_update(void) {
     uint8_t tile;
     uint8_t col;
 
+    // Auto-hide HUD (matching original — HUD only shows on changes)
+    if (hud_show_timer > 0) {
+        hud_show_timer--;
+        if (hud_show_timer == 0) {
+            HIDE_WIN;
+        }
+    }
+
     if (hp == prev_hp && lives == prev_lives) return;
+
+    // Values changed — show HUD
+    hud_show_timer = HUD_SHOW_DURATION;
+    SHOW_WIN;
+    move_win(HUD_WIN_X, HUD_WIN_Y);
 
     // HP bar update (row 0, cols 1-16)
     if (hp != prev_hp) {
