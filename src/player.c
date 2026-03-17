@@ -1,4 +1,5 @@
 #include "player.h"
+#include "level.h"
 
 #include "../assets/extracted/sprites/include/sprites_sara_witch_16.h"
 #include "../assets/extracted/sprites/include/sprites_sara_dragon_real.h"
@@ -38,20 +39,39 @@ void player_load_tiles(void) {
 }
 
 void player_update(uint8_t keys, uint8_t prev_keys) {
-    // Sara moves freely within screen bounds (original behavior)
+    // Sara moves freely within screen bounds with terrain collision
+    uint16_t wx;
+    uint8_t wy;
+
     if (keys & J_LEFT) {
         player.dir = DIR_LEFT;
-        if (player.x > SARA_X_MIN) player.x -= SARA_SPEED;
+        if (player.x > SARA_X_MIN) {
+            wx = scroll_x + player.x - SARA_SPEED;
+            wy = player.y + 8;
+            if (!level_is_solid(wx, wy)) player.x -= SARA_SPEED;
+        }
     }
     if (keys & J_RIGHT) {
         player.dir = DIR_RIGHT;
-        if (player.x < SARA_X_MAX) player.x += SARA_SPEED;
+        if (player.x < SARA_X_MAX) {
+            wx = scroll_x + player.x + 16 + SARA_SPEED;
+            wy = player.y + 8;
+            if (!level_is_solid(wx, wy)) player.x += SARA_SPEED;
+        }
     }
     if (keys & J_UP) {
-        if (player.y > SARA_Y_MIN) player.y -= SARA_SPEED;
+        if (player.y > SARA_Y_MIN) {
+            wx = scroll_x + player.x + 8;
+            wy = player.y - SARA_SPEED;
+            if (!level_is_solid(wx, wy)) player.y -= SARA_SPEED;
+        }
     }
     if (keys & J_DOWN) {
-        if (player.y < SARA_Y_MAX) player.y += SARA_SPEED;
+        if (player.y < SARA_Y_MAX) {
+            wx = scroll_x + player.x + 8;
+            wy = player.y + 16 + SARA_SPEED;
+            if (!level_is_solid(wx, wy)) player.y += SARA_SPEED;
+        }
     }
 
     // Form toggle on SELECT (edge-triggered)
