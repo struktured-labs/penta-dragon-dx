@@ -185,14 +185,7 @@ int8_t level_update(uint8_t keys) {
         }
     }
 
-    // Vertical scrolling: D-pad UP/DOWN moves Sara vertically
-    if (keys & J_UP) {
-        if (scroll_y > 0) scroll_y--;
-    }
-    if (keys & J_DOWN) {
-        if (scroll_y < SCROLL_Y_MAX) scroll_y++;
-    }
-    SCY_REG = scroll_y;
+    // Vertical: Sara moves freely (handled by player.c), no BG vertical scroll
 
     return scroll_amount;
 }

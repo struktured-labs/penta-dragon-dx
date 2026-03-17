@@ -5,16 +5,21 @@
 
 Player player;
 
-// Original game: Sara is fixed at screen position (72, 64)
-// D-pad scrolls the world (both SCX and SCY), Sara stays put
-// Original OAM slot 0: Y=80, X=80 → screen (72, 64), center (80, 72)
-#define SARA_SCREEN_X    72   // Fixed horizontal screen position (original: OAM_X=80, screen=72)
-#define SARA_SCREEN_Y    64   // Fixed vertical screen position (original: OAM_Y=80, screen=64)
+// Original game: Sara moves freely within screen bounds
+// BG auto-scrolls right, Sara walks with D-pad
+// Starting position: center-ish (72, 64)
+#define SARA_START_X     72
+#define SARA_START_Y     64
+#define SARA_SPEED       1    // Pixels per frame
+#define SARA_X_MIN       8    // Left screen bound
+#define SARA_X_MAX       144  // Right screen bound (160 - 16)
+#define SARA_Y_MIN       8    // Top screen bound
+#define SARA_Y_MAX       112  // Bottom bound (above HUD at 120 - 8)
 #define ANIM_SPEED       12
 
 void player_init(void) {
-    player.x = SARA_SCREEN_X;  // Fixed — never changes
-    player.y = SARA_SCREEN_Y;  // Fixed — BG scrolls vertically via SCY
+    player.x = SARA_START_X;
+    player.y = SARA_START_Y;
     player.form = 0;
     player.dir = DIR_RIGHT;
     player.frame = 1;  // Idle = frame 1 (original uses tiles 0x24-0x27)
@@ -33,17 +38,21 @@ void player_load_tiles(void) {
 }
 
 void player_update(uint8_t keys, uint8_t prev_keys) {
-    // Horizontal: Sara doesn't move — BG scrolls (handled by level.c)
-    // Only set facing direction
+    // Sara moves freely within screen bounds (original behavior)
     if (keys & J_LEFT) {
         player.dir = DIR_LEFT;
+        if (player.x > SARA_X_MIN) player.x -= SARA_SPEED;
     }
     if (keys & J_RIGHT) {
         player.dir = DIR_RIGHT;
+        if (player.x < SARA_X_MAX) player.x += SARA_SPEED;
     }
-
-    // Vertical: Sara stays fixed at SARA_SCREEN_Y
-    // BG scrolls vertically via SCY (handled by level_update)
+    if (keys & J_UP) {
+        if (player.y > SARA_Y_MIN) player.y -= SARA_SPEED;
+    }
+    if (keys & J_DOWN) {
+        if (player.y < SARA_Y_MAX) player.y += SARA_SPEED;
+    }
 
     // Form toggle on SELECT (edge-triggered)
     if ((keys & J_SELECT) && !(prev_keys & J_SELECT)) {
@@ -117,7 +126,7 @@ void player_draw(void) {
     flags_all = palette & 0x07;
 
     // Sara's screen position
-    sx = SARA_SCREEN_X + OAM_X_OFS;
+    sx = player.x + OAM_X_OFS;
     sy = player.y + OAM_Y_OFS;
 
     // Invulnerability blink

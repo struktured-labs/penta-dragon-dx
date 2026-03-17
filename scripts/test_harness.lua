@@ -92,10 +92,10 @@ callbacks:add("frame", function()
         end
     end
 
-    -- Phase 8: RIGHT+A combat 300 frames
+    -- Phase 8: Shoot only (A) for 200 frames, let auto-scroll advance
     if phase == 8 then
-        if frame == GAME_START + 300 then emu:setKeys(0x11) end
-        if frame == GAME_START + 600 then
+        if frame == GAME_START + 300 then emu:setKeys(0x01) end  -- A only
+        if frame == GAME_START + 500 then
             emu:setKeys(0)
             emu:screenshot("tmp/h_combat.png")
             screenshots = screenshots + 1
@@ -105,9 +105,9 @@ callbacks:add("frame", function()
 
     -- Phase 9: START for menu
     if phase == 9 then
-        if frame == GAME_START + 610 then emu:setKeys(0x08) end
-        if frame == GAME_START + 613 then emu:setKeys(0) end
-        if frame == GAME_START + 620 then
+        if frame == GAME_START + 510 then emu:setKeys(0x08) end
+        if frame == GAME_START + 513 then emu:setKeys(0) end
+        if frame == GAME_START + 520 then
             emu:screenshot("tmp/h_menu.png")
             screenshots = screenshots + 1
             phase = 10
@@ -115,7 +115,7 @@ callbacks:add("frame", function()
     end
 
     -- Done
-    if phase == 10 and frame == GAME_START + 625 then
+    if phase == 10 and frame == GAME_START + 525 then
         console:log("Test complete: " .. screenshots .. " screenshots")
         emu:quit()
     end
