@@ -176,8 +176,8 @@ static void game_update(void) {
 
         if (was_hit) {
             {
-                // Damage scales with stage (1 in stage 1, up to 4 in stage 7)
-                uint8_t dmg = 1 + (game_stage - 1) / 2;
+                // Damage: 15 base + 5 per stage (matches OG's significant HP chunks)
+                uint8_t dmg = 15 + (game_stage - 1) * 5;
                 if (game.hp > dmg) game.hp -= dmg;
                 else game.hp = 0;
             }
