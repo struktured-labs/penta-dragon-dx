@@ -7,8 +7,9 @@ Projectile projectiles[MAX_PROJECTILES];
 
 #define PROJ_TTL       60
 
-// Tile 0x00 is EMPTY, 0x01 is star, 0x03 is diamond
-#define PROJ_PLAYER_TILE  (TILE_PROJECTILE + 1)
+// Tile 0x00 is EMPTY, 0x01 is star (witch), 0x02 is fire (dragon), 0x03 is diamond (enemy)
+#define PROJ_WITCH_TILE   (TILE_PROJECTILE + 1)
+#define PROJ_DRAGON_TILE  (TILE_PROJECTILE + 2)
 #define PROJ_ENEMY_TILE   (TILE_PROJECTILE + 3)
 
 void projectile_init(void) {
@@ -46,13 +47,12 @@ void projectile_spawn_player(void) {
             p->dx = (player.dir == DIR_RIGHT) ? speed : -speed;
             p->dy = 0;
             p->active = 1;
-            p->tile = PROJ_PLAYER_TILE;
-            if (player.powerup > 0) {
-                p->palette = 0;
-            } else if (player.form == 0) {
-                p->palette = 3; // Sara W (red)
+            if (player.form == 0) {
+                p->tile = PROJ_WITCH_TILE;
+                p->palette = (player.powerup > 0) ? 0 : 3;
             } else {
-                p->palette = 1; // Sara D (green)
+                p->tile = PROJ_DRAGON_TILE;
+                p->palette = (player.powerup > 0) ? 0 : 1;
             }
             p->ttl = ttl;
             return;
@@ -72,12 +72,8 @@ void projectile_spawn_player_dir(int8_t dx, int8_t dy) {
             p->dx = dx;
             p->dy = dy;
             p->active = 1;
-            p->tile = PROJ_PLAYER_TILE;
-            if (player.form == 0) {
-                p->palette = 3;
-            } else {
-                p->palette = 1;
-            }
+            p->tile = (player.form == 0) ? PROJ_WITCH_TILE : PROJ_DRAGON_TILE;
+            p->palette = (player.form == 0) ? 3 : 1;
             p->ttl = PROJ_TTL;
             return;
         }
