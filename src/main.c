@@ -20,9 +20,10 @@
 #include "bonus.h"
 
 static uint8_t prev_keys;
-static uint8_t game_state;  // STATE_TITLE, STATE_PLAYING, STATE_DEAD
+static uint8_t game_state;
 static uint8_t game_over_shown;
-static uint8_t intro_timer;  // Stage intro display countdown
+static uint8_t intro_timer;
+static uint8_t shake_timer;  // Screen shake frames remaining
 
 static void game_init(void) {
     DISPLAY_OFF;
@@ -181,6 +182,7 @@ static void game_update(void) {
                 else game.hp = 0;
             }
             player.invuln = 60;
+            shake_timer = 8;  // Screen shake on hit
             sound_player_hit();
             music_sfx_ch1(60);
             music_sfx_ch4(15);
@@ -256,6 +258,12 @@ static void game_draw(void) {
     projectile_draw();
     enemy_draw();
     boss_draw();
+
+    // Screen shake effect
+    if (shake_timer > 0) {
+        shake_timer--;
+        SCY_REG += (shake_timer & 0x01) ? 2 : -2;
+    }
 }
 
 void main(void) {
