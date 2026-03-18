@@ -324,6 +324,63 @@ static void enemy_ai_catfish(Enemy *e) {
     }
 }
 
+/* Dragonfly AI: fast dive toward player Y, pull up, repeat */
+static void enemy_ai_dragonfly(Enemy *e) {
+    e->ai_timer++;
+    e->dx = -2; /* Fast leftward */
+
+    /* Dive toward player Y, then pull away */
+    if (e->ai_state == 0) {
+        /* Dive phase */
+        if (e->y < player.y) e->dy = 2;
+        else e->dy = -2;
+        if (e->ai_timer >= 30) {
+            e->ai_state = 1;
+            e->ai_timer = 0;
+        }
+    } else {
+        /* Pull-up phase — move away from player */
+        if (e->y < 60) e->dy = -1;
+        else e->dy = 1;
+        if (e->ai_timer >= 20) {
+            e->ai_state = 0;
+            e->ai_timer = 0;
+        }
+    }
+}
+
+/* Soldier AI: strafe left, fire aimed bursts */
+#define SOLDIER_SHOOT_CD 50
+static void enemy_ai_soldier(Enemy *e) {
+    e->ai_timer++;
+
+    /* Strafe: move left steadily */
+    if ((e->ai_timer & (TICK_SLOW - 1)) == 0) {
+        e->dx = -2; /* Faster than humanoid */
+    } else {
+        e->dx = 0;
+    }
+
+    /* Vertical: track player Y loosely */
+    if (e->y + 8 < player.y) e->dy = 1;
+    else if (e->y > player.y + 8) e->dy = -1;
+    else e->dy = 0;
+
+    /* Burst fire: 2 rapid shots */
+    e->shoot_cd--;
+    if (e->shoot_cd == 0 || e->shoot_cd == 5) {
+        int8_t aim_dx = (e->x > player.x + 8) ? -3 : 3;
+        int8_t aim_dy = 0;
+        if (e->y + 8 < player.y) aim_dy = 1;
+        else if (e->y > player.y + 8) aim_dy = -1;
+        projectile_spawn_enemy(e->x, e->y + 4, aim_dx, aim_dy);
+    }
+    if (e->shoot_cd == 0) {
+        uint8_t cd = SOLDIER_SHOOT_CD - (game_stage - 1) * 6;
+        e->shoot_cd = (cd < 25) ? 25 : cd;
+    }
+}
+
 void enemy_update(void) {
     uint8_t i;
     Enemy *e;
@@ -341,8 +398,8 @@ void enemy_update(void) {
             case ENEMY_ORC:      enemy_ai_orc(e);      break;
             case ENEMY_HUMANOID: enemy_ai_humanoid(e);  break;
             case ENEMY_CATFISH:  enemy_ai_catfish(e);   break;
-            case ENEMY_DRAGONFLY: enemy_ai_hornet(e);  break; /* Faster hornet AI */
-            case ENEMY_SOLDIER: enemy_ai_humanoid(e);  break; /* Faster humanoid AI */
+            case ENEMY_DRAGONFLY: enemy_ai_dragonfly(e); break;
+            case ENEMY_SOLDIER:  enemy_ai_soldier(e);  break;
         }
 
         /* Movement (dx/dy set by AI each frame) */
