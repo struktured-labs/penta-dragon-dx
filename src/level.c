@@ -190,7 +190,15 @@ int8_t level_update(uint8_t keys) {
         }
     }
 
-    // Vertical: Sara moves freely (handled by player.c), no BG vertical scroll
+    // Vertical: BG tracks Sara's Y position (original scrolls SCY with player)
+    // Center the view around Sara — offset so Sara at center shows SCY=0
+    {
+        int8_t target_scy = (int8_t)(player.y) - 56;
+        if (target_scy < 0) target_scy = 0;
+        if (target_scy > 12) target_scy = 12;  // Match original max SCY
+        scroll_y = (uint8_t)target_scy;
+        SCY_REG = scroll_y;
+    }
 
     return scroll_amount;
 }
