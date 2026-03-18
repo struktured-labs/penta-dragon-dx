@@ -42,6 +42,8 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
     // Sara moves freely within screen bounds with terrain collision
     uint16_t wx;
     uint8_t wy;
+    uint8_t old_x = player.x;
+    uint8_t old_y = player.y;
 
     if (keys & J_LEFT) {
         player.dir = DIR_LEFT;
@@ -90,9 +92,8 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
         player.shoot_cd--;
     }
 
-    // Animation — 3 walking frames (0, 2, 3), idle = frame 1
-    // Frame 1 has special idle pose (S_FLIPX on bottom tiles) so skip during walk
-    if (keys & (J_LEFT | J_RIGHT | J_UP | J_DOWN)) {
+    // Animation — only animate if Sara actually moved
+    if (player.x != old_x || player.y != old_y) {
         player.anim_tick++;
         if (player.anim_tick >= ANIM_SPEED) {
             player.anim_tick = 0;
