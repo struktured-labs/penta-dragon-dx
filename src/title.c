@@ -202,7 +202,7 @@ void title_init(void) {
     }
 
     // Initialize state
-    menu_cursor = 1; // Default to GAME START (like original defaults to OPENING)
+    menu_cursor = 0; // Default to OPENING START (matches original)
     blink_timer = 0;
     blink_visible = 1;
     prev_keys = 0xFF; // Prevent immediate selection on entry
