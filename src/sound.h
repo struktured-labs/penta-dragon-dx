@@ -26,6 +26,9 @@ void sound_player_hit(void);
 // Note: uses wait_vbl_done() internally for timing between notes
 void sound_pickup(void);
 
+// Low rumble warning sound when boss spawns
+void sound_boss_warning(void);
+
 // Call once per frame from the main loop to advance multi-frame
 // sound effects (pickup arpeggio). Returns immediately if idle.
 void sound_update(void);

@@ -3,6 +3,8 @@
 #include "boss.h"
 #include "player.h"
 #include "palettes.h"
+#include "sound.h"
+#include "music.h"
 #include <gb/cgb.h>
 
 GameState game;
@@ -113,11 +115,17 @@ void gamestate_next_section(void) {
         load_boss_palette(1);
         enemy_init();
         boss_spawn_gargoyle(120, 56);
+        sound_boss_warning();
+        music_sfx_ch1(30);
+        music_sfx_ch4(20);
     } else if (game.section_desc == SECT_BOSS_2) {
         game.boss_flag = 2; // Spider
         load_boss_palette(2);
         enemy_init();
         boss_spawn_spider(120, 40);
+        sound_boss_warning();
+        music_sfx_ch1(30);
+        music_sfx_ch4(20);
     } else if (game.section == STAGE_BOSS_IDX) {
         // Stage boss — type depends on current stage
         if (game_stage > MAX_STAGES) {

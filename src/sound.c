@@ -193,6 +193,20 @@ void sound_pickup(void) {
     pickup_timer = 6;  // hold for 6 frames (~100ms at 60fps)
 }
 
+void sound_boss_warning(void) {
+    // Low rumbling warning — Ch4 noise + Ch1 low tone
+    NR41_REG = 0x00;
+    NR42_REG = 0xA3;  // vol=10, decrease, period=3
+    NR43_REG = 0x61;  // shift=6, 7-bit, div=1 (deep rumble)
+    NR44_REG = 0x80;
+
+    NR10_REG = 0x00;
+    NR11_REG = 0xC0;  // 75% duty
+    NR12_REG = 0x71;  // vol=7, decrease, period=1
+    NR13_REG = 0x00;  // Low frequency
+    NR14_REG = 0x82;
+}
+
 // ---------- Per-frame update ----------
 
 void sound_update(void) {
