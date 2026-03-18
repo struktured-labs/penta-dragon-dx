@@ -47,6 +47,8 @@ void itemmenu_open(void) {
 void itemmenu_close(void) {
     menu_open = 0;
     music_resume();
+    // Restore window to HUD position
+    move_win(7, 120);
 }
 
 // Write a simple menu tile row to window layer
@@ -61,26 +63,21 @@ void itemmenu_draw(void) {
 
     if (!menu_open) return;
 
-    // Fill menu background (using tile 0x00 = empty)
-    for (i = 0; i < 20; i++) row_buf[i] = 0x00;
+    // Fill menu background
+    for (i = 0; i < 20; i++) row_buf[i] = 0xFC; // HUD blank
 
     // Move window to cover gameplay area
-    move_win(7, 40);  // Show window from Y=40
+    move_win(7, 40);
 
-    // Row 0: Header "ITEMS" (using floor tiles as visual separator)
-    row_buf[0] = 0x14; // Solid block
-    row_buf[1] = 0x14;
-    row_buf[2] = 0x00;
-    // "ITEMS" — we don't have alphabet tiles in gameplay VRAM
-    // Use simple visual indicators instead
-    row_buf[3] = 0x14;
-    row_buf[4] = 0x14;
-    row_buf[5] = 0x14;
-    row_buf[6] = 0x14;
-    row_buf[7] = 0x14;
-    row_buf[8] = 0x00;
-    row_buf[9] = 0x14;
-    row_buf[10] = 0x14;
+    // Clear all visible window rows first
+    for (i = 0; i < 20; i++) row_buf[i] = 0xFC;
+    {
+        uint8_t r;
+        for (r = 0; r < 13; r++) write_menu_row(r, row_buf, 20);
+    }
+
+    // Row 0: Header bar
+    for (i = 0; i < 20; i++) row_buf[i] = 0xFB;
     write_menu_row(0, row_buf, 20);
 
     // Set window palette attributes
@@ -89,36 +86,39 @@ void itemmenu_draw(void) {
     write_menu_row(0, row_buf, 20);
     VBK_REG = 0;
 
-    // Row 1-3: Item entries
+    // Row 1-3: Item entries using HUD digit tiles (0xF0-0xF9)
+    // Format: [cursor] [icon] [icon] _ x [count]
+    // HUD tiles: 0xFA=heart, 0xFB=bar, 0xFC=blank, 0xFD=bar_empty, 0xFE=dot, 0xFF=x
+
     // Flash bomb
-    for (i = 0; i < 20; i++) row_buf[i] = 0x00;
-    row_buf[0] = (menu_cursor == ITEM_FLASH_BOMB) ? 0x05 : 0x00; // Cursor indicator
-    row_buf[1] = 0x02; // Item icon (floor tile as placeholder)
-    row_buf[2] = 0x03;
-    row_buf[4] = 0x01; // "x"
-    row_buf[5] = item_counts[ITEM_FLASH_BOMB]; // Count (as tile ID — shows as glyph)
+    for (i = 0; i < 20; i++) row_buf[i] = 0xFC; // HUD blank
+    row_buf[0] = (menu_cursor == ITEM_FLASH_BOMB) ? 0xFA : 0xFC;
+    row_buf[1] = 0x88; // Flash bomb item tile
+    row_buf[2] = 0x89;
+    row_buf[4] = 0xFF; // 'x' from HUD
+    row_buf[5] = 0xF0 + (item_counts[ITEM_FLASH_BOMB] % 10); // Digit tile
     write_menu_row(1, row_buf, 20);
 
     // Potion
-    for (i = 0; i < 20; i++) row_buf[i] = 0x00;
-    row_buf[0] = (menu_cursor == ITEM_POTION) ? 0x05 : 0x00;
-    row_buf[1] = 0x04;
-    row_buf[2] = 0x03;
-    row_buf[4] = 0x01;
-    row_buf[5] = item_counts[ITEM_POTION];
+    for (i = 0; i < 20; i++) row_buf[i] = 0xFC;
+    row_buf[0] = (menu_cursor == ITEM_POTION) ? 0xFA : 0xFC;
+    row_buf[1] = 0x8A; // Potion item tile
+    row_buf[2] = 0x8B;
+    row_buf[4] = 0xFF;
+    row_buf[5] = 0xF0 + (item_counts[ITEM_POTION] % 10);
     write_menu_row(2, row_buf, 20);
 
     // Shield
-    for (i = 0; i < 20; i++) row_buf[i] = 0x00;
-    row_buf[0] = (menu_cursor == ITEM_SHIELD) ? 0x05 : 0x00;
-    row_buf[1] = 0x06;
-    row_buf[2] = 0x03;
-    row_buf[4] = 0x01;
-    row_buf[5] = item_counts[ITEM_SHIELD];
+    for (i = 0; i < 20; i++) row_buf[i] = 0xFC;
+    row_buf[0] = (menu_cursor == ITEM_SHIELD) ? 0xFA : 0xFC;
+    row_buf[1] = 0x8C; // Shield item tile
+    row_buf[2] = 0x8D;
+    row_buf[4] = 0xFF;
+    row_buf[5] = 0xF0 + (item_counts[ITEM_SHIELD] % 10);
     write_menu_row(3, row_buf, 20);
 
     // Row 4: separator
-    for (i = 0; i < 20; i++) row_buf[i] = 0x14;
+    for (i = 0; i < 20; i++) row_buf[i] = 0xFC;
     write_menu_row(4, row_buf, 20);
 }
 
