@@ -47,8 +47,8 @@ void itemmenu_open(void) {
 void itemmenu_close(void) {
     menu_open = 0;
     music_resume();
-    // Restore window to HUD position
-    move_win(7, 120);
+    // Restore HUD
+    hud_init();
 }
 
 // Write a simple menu tile row to window layer
