@@ -316,6 +316,7 @@ void main(void) {
                 }
                 if (joypad() & J_START) {
                     game_over_shown = 0;
+                    music_init();
                     title_init();
                     game_state = STATE_TITLE;
                 }
@@ -370,6 +371,7 @@ void main(void) {
                 }
                 if (joypad() & J_START) {
                     game_over_shown = 0;
+                    music_init();
                     title_init();
                     game_state = STATE_TITLE;
                 }
