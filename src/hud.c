@@ -227,48 +227,58 @@ void hud_update(void) {
 
 void hud_game_over(void) {
     uint8_t tile = HUD_TILE_BLANK;
-    uint8_t col;
+    uint8_t col, row;
 
     set_bkg_data(HUD_TILE_BASE, 7, gameover_tiles);
 
-    for (col = 0; col < 20; col++) {
-        set_win_tiles(col, 0, 1, 1, &tile);
-        set_win_tiles(col, 1, 1, 1, &tile);
+    // Full screen overlay
+    for (row = 0; row < 18; row++) {
+        for (col = 0; col < 20; col++) {
+            set_win_tiles(col, row, 1, 1, &tile);
+        }
     }
+    move_win(HUD_WIN_X, 0);
+    SHOW_WIN;
+    HIDE_SPRITES;
 
-    // "GAME OVER" centered on row 0
+    // "GAME OVER" centered on row 8
     col = 5;
-    tile = 0xF0; set_win_tiles(col++, 0, 1, 1, &tile); // G
-    tile = 0xF1; set_win_tiles(col++, 0, 1, 1, &tile); // A
-    tile = 0xF2; set_win_tiles(col++, 0, 1, 1, &tile); // M
-    tile = 0xF3; set_win_tiles(col++, 0, 1, 1, &tile); // E
-    tile = HUD_TILE_BLANK; set_win_tiles(col++, 0, 1, 1, &tile);
-    tile = 0xF4; set_win_tiles(col++, 0, 1, 1, &tile); // O
-    tile = 0xF5; set_win_tiles(col++, 0, 1, 1, &tile); // V
-    tile = 0xF3; set_win_tiles(col++, 0, 1, 1, &tile); // E
-    tile = 0xF6; set_win_tiles(col++, 0, 1, 1, &tile); // R
+    tile = 0xF0; set_win_tiles(col++, 8, 1, 1, &tile); // G
+    tile = 0xF1; set_win_tiles(col++, 8, 1, 1, &tile); // A
+    tile = 0xF2; set_win_tiles(col++, 8, 1, 1, &tile); // M
+    tile = 0xF3; set_win_tiles(col++, 8, 1, 1, &tile); // E
+    tile = HUD_TILE_BLANK; set_win_tiles(col++, 8, 1, 1, &tile);
+    tile = 0xF4; set_win_tiles(col++, 8, 1, 1, &tile); // O
+    tile = 0xF5; set_win_tiles(col++, 8, 1, 1, &tile); // V
+    tile = 0xF3; set_win_tiles(col++, 8, 1, 1, &tile); // E
+    tile = 0xF6; set_win_tiles(col++, 8, 1, 1, &tile); // R
 }
 
 void hud_victory(void) {
     uint8_t tile = HUD_TILE_BLANK;
-    uint8_t col;
+    uint8_t col, row;
 
     set_bkg_data(HUD_TILE_BASE, 7, victory_tiles);
 
-    for (col = 0; col < 20; col++) {
-        set_win_tiles(col, 0, 1, 1, &tile);
-        set_win_tiles(col, 1, 1, 1, &tile);
+    // Full screen overlay
+    for (row = 0; row < 18; row++) {
+        for (col = 0; col < 20; col++) {
+            set_win_tiles(col, row, 1, 1, &tile);
+        }
     }
+    move_win(HUD_WIN_X, 0);
+    SHOW_WIN;
+    HIDE_SPRITES;
 
     col = 6;
-    tile = 0xF0; set_win_tiles(col++, 0, 1, 1, &tile); // Y
-    tile = 0xF1; set_win_tiles(col++, 0, 1, 1, &tile); // O
-    tile = 0xF2; set_win_tiles(col++, 0, 1, 1, &tile); // U
-    tile = HUD_TILE_BLANK; set_win_tiles(col++, 0, 1, 1, &tile);
-    tile = 0xF3; set_win_tiles(col++, 0, 1, 1, &tile); // W
-    tile = 0xF4; set_win_tiles(col++, 0, 1, 1, &tile); // I
-    tile = 0xF5; set_win_tiles(col++, 0, 1, 1, &tile); // N
-    tile = 0xF6; set_win_tiles(col++, 0, 1, 1, &tile); // !
+    tile = 0xF0; set_win_tiles(col++, 8, 1, 1, &tile); // Y
+    tile = 0xF1; set_win_tiles(col++, 8, 1, 1, &tile); // O
+    tile = 0xF2; set_win_tiles(col++, 8, 1, 1, &tile); // U
+    tile = HUD_TILE_BLANK; set_win_tiles(col++, 8, 1, 1, &tile);
+    tile = 0xF3; set_win_tiles(col++, 8, 1, 1, &tile); // W
+    tile = 0xF4; set_win_tiles(col++, 8, 1, 1, &tile); // I
+    tile = 0xF5; set_win_tiles(col++, 8, 1, 1, &tile); // N
+    tile = 0xF6; set_win_tiles(col++, 8, 1, 1, &tile); // !
 }
 
 void hud_stage_intro(uint8_t stage) {
