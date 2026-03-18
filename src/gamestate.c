@@ -203,16 +203,23 @@ static void spawn_section_enemies(void) {
     y = 40 + (game.progress * 7) % 80; // Vary Y position
 
     if (game.section_desc == SECT_NORMAL) {
-        // Section 0: only humanoids and orcs
-        type = (game.progress & 0x03) < 3 ? ENEMY_HUMANOID : ENEMY_ORC;
-    } else {
-        // Section 1: mix all types including catfish
+        // Normal: humanoids, orcs, soldiers in later stages
         switch (game.progress & 0x07) {
-            case 0: case 4: type = ENEMY_HUMANOID; break;
-            case 1: case 5: type = ENEMY_ORC;      break;
+            case 0: case 1: case 4: type = ENEMY_HUMANOID; break;
+            case 2: case 5:         type = ENEMY_ORC;      break;
+            case 3:                 type = (game_stage >= 3) ? ENEMY_SOLDIER : ENEMY_HUMANOID; break;
+            default:                type = ENEMY_HUMANOID; break;
+        }
+    } else {
+        // Advanced: all types
+        switch (game.progress & 0x07) {
+            case 0:         type = ENEMY_HUMANOID; break;
+            case 1:         type = ENEMY_ORC;      break;
             case 2:         type = ENEMY_HORNET;   break;
             case 3:         type = ENEMY_CROW;     break;
-            case 6:         type = ENEMY_CATFISH;  break;
+            case 4:         type = ENEMY_CATFISH;  break;
+            case 5:         type = (game_stage >= 2) ? ENEMY_DRAGONFLY : ENEMY_HORNET; break;
+            case 6:         type = (game_stage >= 4) ? ENEMY_SOLDIER : ENEMY_HUMANOID; break;
             default:        type = ENEMY_HUMANOID; break;
         }
     }

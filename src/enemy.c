@@ -56,8 +56,8 @@ uint8_t enemy_count;
 #define ORC_Y_HALF_PERIOD     75
 #define HUMANOID_Y_HALF_PERIOD 100
 
-static const uint8_t enemy_hp[]      = { 0, 2, 2, 3, 3, 4, 0 };
-static const uint8_t enemy_palette[] = { 0, 4, 3, 5, 6, 7, 0 };
+static const uint8_t enemy_hp[]      = { 0, 2, 2, 3, 3, 4, 3, 4 };
+static const uint8_t enemy_palette[] = { 0, 4, 3, 5, 6, 7, 4, 6 };
 
 void enemy_init(void) {
     uint8_t i;
@@ -125,9 +125,20 @@ void enemy_spawn(uint8_t type, uint8_t x, uint8_t y) {
                     break;
                 case ENEMY_CATFISH:
                     e->tile_base = TILE_CATFISH;
-                    e->dx = -1;     /* Slow leftward drift */
+                    e->dx = -1;
                     e->dy = 0;
-                    e->ai_state = 1; /* Start oscillating */
+                    e->ai_state = 1;
+                    break;
+                case ENEMY_DRAGONFLY:
+                    e->tile_base = TILE_HORNET; /* Reuse hornet tiles */
+                    e->dx = -2;     /* Faster than hornet */
+                    e->dy = 2;      /* Wider oscillation */
+                    break;
+                case ENEMY_SOLDIER:
+                    e->tile_base = TILE_HUMANOID; /* Reuse humanoid tiles */
+                    e->dx = 0;
+                    e->dy = 0;
+                    e->ai_state = 1;
                     break;
                 default:
                     e->tile_base = TILE_HORNET;
@@ -330,6 +341,8 @@ void enemy_update(void) {
             case ENEMY_ORC:      enemy_ai_orc(e);      break;
             case ENEMY_HUMANOID: enemy_ai_humanoid(e);  break;
             case ENEMY_CATFISH:  enemy_ai_catfish(e);   break;
+            case ENEMY_DRAGONFLY: enemy_ai_hornet(e);  break; /* Faster hornet AI */
+            case ENEMY_SOLDIER: enemy_ai_humanoid(e);  break; /* Faster humanoid AI */
         }
 
         /* Movement (dx/dy set by AI each frame) */

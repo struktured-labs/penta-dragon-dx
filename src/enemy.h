@@ -9,6 +9,8 @@
 #define ENEMY_ORC       3
 #define ENEMY_HUMANOID  4
 #define ENEMY_CATFISH   5
+#define ENEMY_DRAGONFLY 6  // Fast hornet variant
+#define ENEMY_SOLDIER   7  // Fast humanoid variant
 
 typedef struct {
     uint8_t x;
