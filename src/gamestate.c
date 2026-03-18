@@ -41,8 +41,8 @@ static const uint8_t sect0_rooms[] = { 1, 5 };
 static const uint8_t sect1_rooms[] = { 2, 3, 4 };
 
 // Enemy types per section
-#define SPAWN_CD_NORMAL   90   // Frames between spawns in normal sections
-#define SPAWN_CD_ADVANCED 60   // Faster spawning
+#define SPAWN_CD_NORMAL   60   // Frames between spawns in normal sections
+#define SPAWN_CD_ADVANCED 40   // Faster spawning
 static uint8_t spawn_timer;
 
 void gamestate_init(void) {
@@ -224,22 +224,30 @@ static void spawn_section_enemies(void) {
         }
     }
 
-    // Spawn from varied positions (right edge and top)
+    // Spawn from varied positions matching OG density
     {
-        uint8_t spawn_side = game.progress & 0x03;
+        uint8_t spawn_side = game.progress & 0x07;
         uint8_t sx, sy;
-        if (spawn_side < 2) {
-            // Right edge
+        if (spawn_side < 3) {
+            // Right edge (most common)
             sx = 168;
             sy = y;
-        } else if (spawn_side == 2) {
+        } else if (spawn_side == 3) {
             // Top edge
             sx = 40 + (game.progress * 13) % 100;
             sy = 8;
-        } else {
-            // Right-upper diagonal
+        } else if (spawn_side == 4) {
+            // Bottom edge
+            sx = 40 + (game.progress * 17) % 100;
+            sy = 120;
+        } else if (spawn_side == 5) {
+            // Right-upper
             sx = 168;
             sy = 20 + (game.progress * 11) % 40;
+        } else {
+            // Mid-screen right (closer to Sara)
+            sx = 140;
+            sy = 30 + (game.progress * 9) % 70;
         }
         enemy_spawn(type, sx, sy);
     }
