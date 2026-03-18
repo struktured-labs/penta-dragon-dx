@@ -136,10 +136,6 @@ static void game_update(void) {
     enemy_update();
     boss_update();
 
-    // Sound state machines
-    sound_update();
-    music_update();
-
     // Extra life every 5000 points
     if (game.score >= game.next_life_at) {
         game.lives++;
@@ -270,6 +266,9 @@ void main(void) {
     sound_init();
     init_palettes();
 
+    // Start music on title screen (matches original)
+    music_init();
+
     // Start with title screen
     title_init();
     game_state = STATE_TITLE;
@@ -277,6 +276,10 @@ void main(void) {
 
     while (1) {
         wait_vbl_done();
+
+        // Music runs in all states
+        music_update();
+        sound_update();
 
         switch (game_state) {
             case STATE_TITLE:
