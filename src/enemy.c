@@ -481,37 +481,30 @@ void enemy_draw(void) {
             flags = e->palette & 0x07;
         }
 
-        // Face toward Sara (flip when Sara is to the left)
-        if (e->x > player.x + 8 &&
-            (e->type == ENEMY_ORC || e->type == ENEMY_HUMANOID ||
-             e->type == ENEMY_SOLDIER || e->type == ENEMY_CATFISH)) {
-            flags |= S_FLIPX;
-            // Flipped: swap columns
-            set_sprite_tile(oam_base,     tile + 1);
-            set_sprite_prop(oam_base,     flags);
-            move_sprite(oam_base,         sx, sy);
-            set_sprite_tile(oam_base + 1, tile);
+        // Face toward Sara (flip ground enemies when Sara is left)
+        {
+            uint8_t tl, tr, bl, br;
+            if (e->x > player.x + 8 &&
+                e->type >= ENEMY_ORC && e->type != ENEMY_DRAGONFLY) {
+                flags |= S_FLIPX;
+                tl = tile + 1; tr = tile;
+                bl = tile + 3; br = tile + 2;
+            } else {
+                tl = tile; tr = tile + 1;
+                bl = tile + 2; br = tile + 3;
+            }
+            set_sprite_tile(oam_base, tl);
+            set_sprite_prop(oam_base, flags);
+            move_sprite(oam_base, sx, sy);
+            set_sprite_tile(oam_base + 1, tr);
             set_sprite_prop(oam_base + 1, flags);
-            move_sprite(oam_base + 1,     sx + 8, sy);
-            set_sprite_tile(oam_base + 2, tile + 3);
+            move_sprite(oam_base + 1, sx + 8, sy);
+            set_sprite_tile(oam_base + 2, bl);
             set_sprite_prop(oam_base + 2, flags);
-            move_sprite(oam_base + 2,     sx, sy + 8);
-            set_sprite_tile(oam_base + 3, tile + 2);
+            move_sprite(oam_base + 2, sx, sy + 8);
+            set_sprite_tile(oam_base + 3, br);
             set_sprite_prop(oam_base + 3, flags);
-            move_sprite(oam_base + 3,     sx + 8, sy + 8);
-        } else {
-            set_sprite_tile(oam_base,     tile);
-            set_sprite_prop(oam_base,     flags);
-            move_sprite(oam_base,         sx, sy);
-            set_sprite_tile(oam_base + 1, tile + 1);
-            set_sprite_prop(oam_base + 1, flags);
-            move_sprite(oam_base + 1,     sx + 8, sy);
-            set_sprite_tile(oam_base + 2, tile + 2);
-            set_sprite_prop(oam_base + 2, flags);
-            move_sprite(oam_base + 2,     sx, sy + 8);
-            set_sprite_tile(oam_base + 3, tile + 3);
-            set_sprite_prop(oam_base + 3, flags);
-            move_sprite(oam_base + 3,     sx + 8, sy + 8);
+            move_sprite(oam_base + 3, sx + 8, sy + 8);
         }
     }
 }
