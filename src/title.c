@@ -209,9 +209,9 @@ void title_init(void) {
 
     draw_cursor();
 
-    // Reset scroll
-    SCX_REG = 0;
-    SCY_REG = 0;
+    // Match OG title screen scroll position
+    SCX_REG = 8;
+    SCY_REG = 8;
 
     // Hide window during title
     HIDE_WIN;

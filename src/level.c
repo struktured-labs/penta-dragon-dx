@@ -128,11 +128,11 @@ void level_init(void) {
     uint8_t col;
     uint8_t tiles[LEVEL_HEIGHT];
 
-    scroll_x = 12; // Original starts at SCX=12
+    scroll_x = 8; // Verified: OG gameplay settles at SCX=8
     scroll_y = 0;
     scroll_col = 21;
     scroll_tick = 0;
-    auto_scroll = 1; // Auto-scroll right (matches original game)
+    auto_scroll = 0; // No auto-scroll (OG uses room-based SCX)
     next_spawn_col = 5; // First enemy after a bit of scrolling
     spawn_y_idx = 0;
     spawn_type_idx = 0;
@@ -183,15 +183,8 @@ int8_t level_update(uint8_t keys) {
         }
     }
 
-    // Vertical: BG tracks Sara's Y position (original scrolls SCY with player)
-    // Center the view around Sara — offset so Sara at center shows SCY=0
-    {
-        int8_t target_scy = (int8_t)(player.y) - 56;
-        if (target_scy < 0) target_scy = 0;
-        if (target_scy > 12) target_scy = 12;  // Match original max SCY
-        scroll_y = (uint8_t)target_scy;
-        SCY_REG = scroll_y;
-    }
+    // OG: SCY=0 always (verified via dual-ROM comparison)
+    SCY_REG = 0;
 
     return scroll_amount;
 }
