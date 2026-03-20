@@ -160,15 +160,16 @@ int8_t level_update(uint8_t keys) {
     // Verified: OG SCY cycles through {0, 4, 8, 12} with D-pad (60-sec comparison)
     static uint8_t scy_tick = 0;
 
+    // OG: SCY in 4px steps {0,4,8,12}, every ~4 frames with D-pad
     if (keys & J_DOWN) {
         scy_tick++;
-        if (scy_tick >= 10) {
+        if (scy_tick >= 4) {
             scy_tick = 0;
             if (scroll_y < 12) scroll_y += 4;
         }
     } else if (keys & J_UP) {
         scy_tick++;
-        if (scy_tick >= 10) {
+        if (scy_tick >= 4) {
             scy_tick = 0;
             if (scroll_y >= 4) scroll_y -= 4;
         }
