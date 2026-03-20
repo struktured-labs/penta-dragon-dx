@@ -270,7 +270,7 @@ void gamestate_update(void) {
     {
         uint8_t new_room = game.room;
         if (!gamestate_is_boss()) {
-            uint16_t room_interval = 210; // Verified: OG first room change ~210 frames into gameplay
+            uint16_t room_interval = 390; // Verified: OG room change ~390 frames into gameplay
             uint8_t room_idx;
             if (game.section_desc == SECT_NORMAL) {
                 room_idx = (uint8_t)((game.section_timer / room_interval) % 2);

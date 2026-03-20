@@ -22,7 +22,7 @@
 static uint8_t prev_keys;
 static uint8_t game_state;
 static uint8_t game_over_shown;
-static uint8_t intro_timer;
+static uint16_t intro_timer;
 static uint8_t shake_timer;  // Screen shake frames remaining
 
 static void game_init(void) {
@@ -297,7 +297,7 @@ void main(void) {
                         title_cleanup();
                         game_init();
                         hud_stage_intro(game_stage);
-                        intro_timer = 450; // OG stage screen lasts ~450 frames (verified)
+                        intro_timer = 390; // OG: A at F150, gameplay at F540 = 390 frames (verified)
                         game_state = STATE_STAGE_INTRO;
                     }
                 }
@@ -336,10 +336,7 @@ void main(void) {
 
             case STATE_STAGE_INTRO:
                 intro_timer--;
-                // Skip on A or START press
-                if (intro_timer > 10 && (joypad() & (J_A | J_START))) {
-                    intro_timer = 1;
-                }
+                // OG: stage screen is NOT skippable (verified — fixed duration)
                 if (intro_timer == 0) {
                     hud_stage_intro_cleanup();
                     if (game.gameplay_active) {

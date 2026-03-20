@@ -5,9 +5,9 @@ local frame = 0
 local phase = 0
 local screenshots = 0
 
--- Stage intro lasts ~450 frames (matching OG)
--- Press A at frame 250 to skip it faster
-local GAME_START = 500  -- gameplay active after skip
+-- Stage intro: 390 frames, not skippable (matching OG)
+-- A at ~140, intro ends at ~530, gameplay by ~550
+local GAME_START = 600
 
 callbacks:add("frame", function()
     frame = frame + 1
@@ -25,9 +25,8 @@ callbacks:add("frame", function()
         if frame == 135 then emu:setKeys(0) end
         if frame == 140 then emu:setKeys(0x01) end   -- A to confirm
         if frame == 145 then emu:setKeys(0) end
-        -- Skip stage intro by pressing A again
-        if frame == 250 then emu:setKeys(0x01) end   -- A to skip stage screen
-        if frame == 253 then emu:setKeys(0); phase = 2 end
+        -- Stage intro not skippable (matching OG)
+        if frame == 145 then phase = 2 end
     end
 
     -- Phase 2: Gameplay captured
