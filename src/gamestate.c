@@ -44,9 +44,10 @@ static const uint8_t sect1_rooms[] = { 3, 5, 3 };
 static const uint8_t room_scx[] = { 0, 8, 8, 8, 8, 12, 8, 8 }; // indexed by room number
 
 // Enemy types per section
-#define SPAWN_CD_NORMAL   60   // Frames between spawns in normal sections
-#define SPAWN_CD_ADVANCED 40   // Faster spawning
+#define SPAWN_CD_NORMAL   60
+#define SPAWN_CD_ADVANCED 40
 static uint8_t spawn_timer;
+static uint16_t scx_delay; // Delay before room SCX applies (OG: ~180 frames)
 
 void gamestate_init(void) {
     game.room = 5; // First room (verified)
@@ -62,6 +63,7 @@ void gamestate_init(void) {
     game.lives = 3;
     game.section_timer = 0;
     game.score = 0;
+    scx_delay = 180; // OG delays SCX update ~180 frames after gameplay starts
     game.next_life_at = 5000;
     game_stage = 1;
     bonus_pending = 0;
@@ -287,11 +289,13 @@ void gamestate_update(void) {
         }
         if (new_room != game.room) {
             game.room = new_room;
-            // OG: SCX set once per room transition (verified — no continuous update)
-            if (new_room < 8) {
-                scroll_x = room_scx[new_room];
-                SCX_REG = (uint8_t)scroll_x;
-            }
+        }
+        // OG: SCX delayed ~180 frames after gameplay starts (verified)
+        if (scx_delay > 0) {
+            scx_delay--;
+        } else if (game.room < 8) {
+            scroll_x = room_scx[game.room];
+            SCX_REG = (uint8_t)scroll_x;
         }
     }
 

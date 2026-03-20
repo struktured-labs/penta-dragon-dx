@@ -128,18 +128,17 @@ void level_init(void) {
     uint8_t col;
     uint8_t tiles[LEVEL_HEIGHT];
 
-    scroll_x = 12; // Room 5 starts at SCX=12 (verified: OG first room=5, SCX=12)
+    scroll_x = 0;  // SCX starts at 0; gamestate sets room SCX after delay
     scroll_y = 0;
     scroll_col = 21;
     scroll_tick = 0;
-    auto_scroll = 0; // No auto-scroll (OG uses room-based SCX)
-    next_spawn_col = 5; // First enemy after a bit of scrolling
+    auto_scroll = 0;
+    next_spawn_col = 5;
     spawn_y_idx = 0;
     spawn_type_idx = 0;
     collected_count = 0;
 
-    // Set initial scroll position to match original (SCX=12)
-    SCX_REG = (uint8_t)(scroll_x & 0xFF);
+    // Don't set SCX here — gamestate handles room-based SCX with delay
     SCY_REG = scroll_y;
 
     // Fill initial visible area (21 columns from the level data)
