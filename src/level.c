@@ -164,13 +164,18 @@ int8_t level_update(uint8_t keys) {
 
     old_pixel = (uint8_t)(scroll_x & 0x07);
 
-    // Auto-scroll: constant rightward scroll (matches original game)
-    // Pauses during boss fights (boss arena is fixed)
-    if (!gamestate_is_boss()) {
+    // Player-controlled scroll (OG: SCX stays fixed without D-pad input)
+    if (keys & J_RIGHT) {
         scroll_tick++;
         if (scroll_tick >= 4) {
             scroll_tick = 0;
             scroll_amount = 4;
+        }
+    } else if (keys & J_LEFT) {
+        scroll_tick++;
+        if (scroll_tick >= 4) {
+            scroll_tick = 0;
+            if (scroll_x >= 4) scroll_amount = -4;
         }
     } else {
         scroll_tick = 0;
