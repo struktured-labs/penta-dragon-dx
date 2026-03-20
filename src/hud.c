@@ -329,12 +329,17 @@ void hud_stage_intro(uint8_t stage) {
         set_win_tiles(12, 7, 1, 1, &tile);
     }
 
-    // Move window to top of screen (covers everything)
-    // Reset scroll to 0,0 matching OG stage intro (verified)
+    // Reset scroll + hide sprites to match OG (verified: OAM at 0,0 during intro)
     SCX_REG = 0;
     SCY_REG = 0;
+    // Clear Sara OAM to (0,0) matching OG behavior
+    {
+        uint8_t s;
+        for (s = 0; s < 40; s++) move_sprite(s, 0, 0);
+    }
     move_win(HUD_WIN_X, 0);
     SHOW_WIN;
+    HIDE_SPRITES;
 }
 
 void hud_stage_intro_cleanup(void) {
