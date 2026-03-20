@@ -297,7 +297,7 @@ void main(void) {
                         title_cleanup();
                         game_init();
                         hud_stage_intro(game_stage);
-                        intro_timer = 180;
+                        intro_timer = 450; // OG stage screen lasts ~450 frames (verified)
                         game_state = STATE_STAGE_INTRO;
                     }
                 }

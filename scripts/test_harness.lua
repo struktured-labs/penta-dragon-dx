@@ -5,9 +5,9 @@ local frame = 0
 local phase = 0
 local screenshots = 0
 
--- Offset: stage intro adds ~180 frames after game start
--- Press A at frame 200 to skip it faster
-local GAME_START = 500  -- gameplay active by this frame
+-- Stage intro lasts ~450 frames (matching OG)
+-- Press A at frame 250 to skip it faster
+local GAME_START = 500  -- gameplay active after skip
 
 callbacks:add("frame", function()
     frame = frame + 1

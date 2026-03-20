@@ -266,25 +266,31 @@ static void spawn_section_enemies(void) {
 void gamestate_update(void) {
     game.section_timer++;
 
-    // Room cycling — each room has its own SCX offset (verified)
-    if (!gamestate_is_boss()) {
-        uint16_t room_interval = 150;
-        uint8_t room_idx;
-        if (game.section_desc == SECT_NORMAL) {
-            room_idx = (uint8_t)((game.section_timer / room_interval) % 2);
-            game.room = sect0_rooms[room_idx];
-        } else if (game.section_desc == SECT_ADVANCED) {
-            room_interval = 90;
-            room_idx = (uint8_t)((game.section_timer / room_interval) % 3);
-            game.room = sect1_rooms[room_idx];
+    // Room cycling — SCX only changes on actual room transitions
+    {
+        uint8_t new_room = game.room;
+        if (!gamestate_is_boss()) {
+            uint16_t room_interval = 210; // Verified: OG first room change ~210 frames into gameplay
+            uint8_t room_idx;
+            if (game.section_desc == SECT_NORMAL) {
+                room_idx = (uint8_t)((game.section_timer / room_interval) % 2);
+                new_room = sect0_rooms[room_idx];
+            } else if (game.section_desc == SECT_ADVANCED) {
+                room_interval = 90;
+                room_idx = (uint8_t)((game.section_timer / room_interval) % 3);
+                new_room = sect1_rooms[room_idx];
+            }
+        } else {
+            new_room = 3;
         }
-        // Update SCX from room (verified: room 5→12, room 3→8)
-        if (game.room < 8) {
-            scroll_x = room_scx[game.room];
-            SCX_REG = (uint8_t)scroll_x;
+        if (new_room != game.room) {
+            game.room = new_room;
+            // OG: SCX set once per room transition (verified — no continuous update)
+            if (new_room < 8) {
+                scroll_x = room_scx[new_room];
+                SCX_REG = (uint8_t)scroll_x;
+            }
         }
-    } else {
-        game.room = 3;
     }
 
     // Section advancement (non-boss: timer-based)
