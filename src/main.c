@@ -336,6 +336,10 @@ void main(void) {
 
             case STATE_STAGE_INTRO:
                 intro_timer--;
+                // OG stage screen is skippable via A/START (verified: extended test)
+                if (intro_timer > 60 && (joypad() & (J_A | J_START))) {
+                    intro_timer = 1;
+                }
                 if (intro_timer == 0) {
                     hud_stage_intro_cleanup();
                     if (game.gameplay_active) {
