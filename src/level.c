@@ -157,34 +157,11 @@ void level_load_tiles(void) {
 }
 
 int8_t level_update(uint8_t keys) {
-    uint8_t tiles[LEVEL_HEIGHT];
-    uint8_t old_pixel;
-    uint8_t new_pixel;
-    int8_t scroll_amount = 0;
-
-    old_pixel = (uint8_t)(scroll_x & 0x07);
-
     // OG: NO D-pad scroll. SCX set by room/section system only.
-    // Verified: OG SCX stays fixed at room value even with RIGHT held.
-
-    if (scroll_amount > 0) {
-        scroll_x += (uint8_t)scroll_amount;
-        new_pixel = (uint8_t)(scroll_x & 0x07);
-        SCX_REG = (uint8_t)(scroll_x & 0xFF);
-
-        // Load next column when crossing tile boundary
-        if (new_pixel < old_pixel) {
-            uint8_t map_col = (uint8_t)((scroll_x >> 3) + 20) & 31;
-            get_level_column(tiles, scroll_col);
-            write_column(map_col, tiles);
-            scroll_col++;
-        }
-    }
-
-    // OG: SCY=0 always (verified via dual-ROM comparison)
+    // SCY=0 always. Both verified via dual-ROM state comparison.
+    (void)keys;  // Suppress unused parameter warning
     SCY_REG = 0;
-
-    return scroll_amount;
+    return 0;
 }
 
 uint8_t level_get_tile(uint16_t col, uint8_t row) {

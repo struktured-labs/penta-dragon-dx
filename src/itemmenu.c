@@ -59,7 +59,6 @@ static void write_menu_row(uint8_t row, const uint8_t *tiles, uint8_t count) {
 void itemmenu_draw(void) {
     uint8_t row_buf[20];
     uint8_t i;
-    uint8_t pal;
 
     if (!menu_open) return;
 

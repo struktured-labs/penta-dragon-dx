@@ -321,11 +321,11 @@ void hud_stage_intro(uint8_t stage) {
         uint8_t tens = (stage >= 10) ? (stage / 10) : 0;
         uint8_t ones = stage % 10;
         // Load just the 2 digit tiles we need
-        set_bkg_data(HUD_TILE_BASE + 5, 1, &hud_tiles[tens * 16]);
-        set_bkg_data(HUD_TILE_BASE + 6, 1, &hud_tiles[ones * 16]);
-        tile = HUD_TILE_BASE + 5;
+        set_bkg_data((uint8_t)(HUD_TILE_BASE + 5), 1, &hud_tiles[tens * 16]);
+        set_bkg_data((uint8_t)(HUD_TILE_BASE + 6), 1, &hud_tiles[ones * 16]);
+        tile = (uint8_t)(HUD_TILE_BASE + 5);
         set_win_tiles(11, 7, 1, 1, &tile);
-        tile = HUD_TILE_BASE + 6;
+        tile = (uint8_t)(HUD_TILE_BASE + 6);
         set_win_tiles(12, 7, 1, 1, &tile);
     }
 
