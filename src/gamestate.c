@@ -280,12 +280,12 @@ void gamestate_update(void) {
     {
         uint8_t new_room = game.room;
         if (!gamestate_is_boss()) {
-            uint16_t room_interval = 30; // OG alternates rooms rapidly (~30 frames)
+            uint16_t room_interval = 390; // OG: room 5 for ~390 frames then room 3
             uint8_t room_idx;
             if (game.section_desc == SECT_NORMAL) {
-                // OG: rapidly alternates rooms (verified 60-sec comparison)
-                room_idx = (uint8_t)((game.section_timer / room_interval) % 2);
-                new_room = sect0_rooms[room_idx];
+                // FFBD is OG's dual-buffer toggle (structural, not gameplay)
+                // Set room based on section timer for SCX purposes only
+                new_room = (game.section_timer < room_interval) ? 5 : 3;
             } else if (game.section_desc == SECT_ADVANCED) {
                 room_interval = 90;
                 room_idx = (uint8_t)((game.section_timer / room_interval) % 3);
