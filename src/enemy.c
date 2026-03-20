@@ -391,6 +391,16 @@ void enemy_update(void) {
         e = &enemies[i];
         if (e->type == ENEMY_NONE) continue;
 
+        /* Death animation: flash for 12 frames then remove */
+        if (e->hp == 0 && e->hit_flash > 0) {
+            e->hit_flash--;
+            if (e->hit_flash == 0) {
+                e->type = ENEMY_NONE;
+                if (enemy_count > 0) enemy_count--;
+            }
+            continue; /* Skip AI/movement during death */
+        }
+
         /* AI -- each type has its own function */
         switch (e->type) {
             case ENEMY_HORNET:   enemy_ai_hornet(e);   break;
@@ -428,17 +438,18 @@ void enemy_update(void) {
             if (e->hp == 0) {
                 // Score: varies by enemy type
                 game.score += (e->type >= ENEMY_ORC) ? 20 : 10;
-                // Item drop: ~25% chance based on progress counter
+                // Item drop: ~25% chance
                 {
                     uint8_t drop_roll = (game.progress * 7 + e->x) & 0x0F;
                     if (drop_roll < 4) {
-                        // Drop an item
                         uint8_t item = (drop_roll < 2) ? ITEM_FLASH_BOMB : ITEM_POTION;
                         itemmenu_add_item(item);
                     }
                 }
-                e->type = ENEMY_NONE;
-                if (enemy_count > 0) enemy_count--;
+                // Start death animation (12 frames of flash)
+                e->hit_flash = 12;
+                e->dx = 0;
+                e->dy = 0;
             }
         }
 
