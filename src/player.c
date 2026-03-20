@@ -122,13 +122,10 @@ void player_draw(void) {
     sx = player.x + OAM_X_OFS;
     sy = player.y + OAM_Y_OFS;
 
-    // Invulnerability blink
-    if (player.invuln > 0 && (player.invuln & 0x02)) {
-        move_sprite(OAM_PLAYER,     0, 0);
-        move_sprite(OAM_PLAYER + 1, 0, 0);
-        move_sprite(OAM_PLAYER + 2, 0, 0);
-        move_sprite(OAM_PLAYER + 3, 0, 0);
-        return;
+    // Invulnerability blink — OG keeps Sara at (80,80) always (verified)
+    // Use palette flash instead of hiding sprite at (0,0)
+    if (player.invuln > 0 && (player.invuln & 0x04)) {
+        flags_all = 0; // Flash to palette 0 (white/blue)
     }
 
     if (player.dir == DIR_LEFT) {
