@@ -297,7 +297,7 @@ void main(void) {
                         title_cleanup();
                         game_init();
                         hud_stage_intro(game_stage);
-                        intro_timer = 390; // OG: A at F150, gameplay at F540 = 390 frames (verified)
+                        intro_timer = 360; // 390 - ~30 frames for game_init overhead
                         game_state = STATE_STAGE_INTRO;
                     }
                 }
