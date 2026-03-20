@@ -294,14 +294,18 @@ void gamestate_update(void) {
         } else {
             new_room = 3;
         }
+        // Update SCX when room changes (room 5→SCX=12, room 3→SCX=8)
+        if (new_room != game.room && scx_delay == 0 && new_room < 8) {
+            scroll_x = room_scx[new_room];
+            SCX_REG = (uint8_t)scroll_x;
+        }
         game.room = new_room;
-        // OG: SCX=12 during rapid room alternation (verified 60-sec)
-        // Delay 180 frames after gameplay starts, then SCX=12 always
+        // Delay 180 frames after gameplay starts before first SCX set
         if (scx_delay > 0) {
             scx_delay--;
             if (scx_delay == 0) {
-                scroll_x = 12;
-                SCX_REG = 12;
+                scroll_x = room_scx[game.room];
+                SCX_REG = (uint8_t)scroll_x;
             }
         }
     }
