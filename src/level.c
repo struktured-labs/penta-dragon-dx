@@ -164,10 +164,23 @@ int8_t level_update(uint8_t keys) {
 
     old_pixel = (uint8_t)(scroll_x & 0x07);
 
-    // OG: SCX is controlled by the game's room/section system,
-    // NOT by D-pad input. Sara walks freely within the screen.
-    // SCX changes only on room transitions.
-    // (scroll_amount stays 0 — no player-controlled scroll)
+    // OG: D-pad scrolls BG slowly. Sara stays fixed at (72,64).
+    // Verified rate: ~4px per 10 frames
+    if (keys & J_RIGHT) {
+        scroll_tick++;
+        if (scroll_tick >= 10) {
+            scroll_tick = 0;
+            scroll_amount = 4;
+        }
+    } else if (keys & J_LEFT) {
+        scroll_tick++;
+        if (scroll_tick >= 10) {
+            scroll_tick = 0;
+            if (scroll_x >= 4) scroll_amount = -4;
+        }
+    } else {
+        scroll_tick = 0;
+    }
 
     if (scroll_amount > 0) {
         scroll_x += (uint8_t)scroll_amount;

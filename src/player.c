@@ -39,48 +39,14 @@ void player_load_tiles(void) {
 }
 
 void player_update(uint8_t keys, uint8_t prev_keys) {
-    // Sara moves freely within screen bounds with terrain collision
-    uint16_t wx;
-    uint8_t wy;
-    uint8_t old_x = player.x;
-    uint8_t old_y = player.y;
+    // OG: Sara is FIXED at screen (72, 64). D-pad controls BG scroll.
+    // Verified via verifier: OAM0 always at Y=80, X=80 in OG.
+    player.x = SARA_START_X;  // Always 72
+    player.y = SARA_START_Y;  // Always 64
 
-    if (keys & J_LEFT) {
-        player.dir = DIR_LEFT;
-        if (player.x > SARA_X_MIN) {
-            wx = scroll_x + player.x - SARA_SPEED;
-            wy = player.y + 8;
-            if (!level_is_solid(wx, wy)) player.x -= SARA_SPEED;
-        }
-    }
-    if (keys & J_RIGHT) {
-        player.dir = DIR_RIGHT;
-        if (player.x < SARA_X_MAX) {
-            wx = scroll_x + player.x + 16 + SARA_SPEED;
-            wy = player.y + 8;
-            if (!level_is_solid(wx, wy)) player.x += SARA_SPEED;
-        }
-    }
-    if (keys & J_UP) {
-        if (player.y > SARA_Y_MIN) {
-            wx = scroll_x + player.x + 8;
-            wy = player.y - SARA_SPEED;
-            if (!level_is_solid(wx, wy)) player.y -= SARA_SPEED;
-        }
-    }
-    if (keys & J_DOWN) {
-        if (player.y < SARA_Y_MAX) {
-            wx = scroll_x + player.x + 8;
-            wy = player.y + 16 + SARA_SPEED;
-            if (!level_is_solid(wx, wy)) player.y += SARA_SPEED;
-        }
-    }
-
-    // Clamp Sara to screen bounds (safety against auto-scroll push)
-    if (player.x < SARA_X_MIN) player.x = SARA_X_MIN;
-    if (player.x > SARA_X_MAX) player.x = SARA_X_MAX;
-    if (player.y < SARA_Y_MIN) player.y = SARA_Y_MIN;
-    if (player.y > SARA_Y_MAX) player.y = SARA_Y_MAX;
+    // Set facing direction from D-pad
+    if (keys & J_LEFT) player.dir = DIR_LEFT;
+    if (keys & J_RIGHT) player.dir = DIR_RIGHT;
 
     // Form toggle on SELECT (edge-triggered)
     if ((keys & J_SELECT) && !(prev_keys & J_SELECT)) {
@@ -93,7 +59,7 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
     }
 
     // Animation — only animate if Sara actually moved
-    if (player.x != old_x || player.y != old_y) {
+    if (keys & (J_LEFT | J_RIGHT | J_UP | J_DOWN)) {
         player.anim_tick++;
         if (player.anim_tick >= ANIM_SPEED) {
             player.anim_tick = 0;
