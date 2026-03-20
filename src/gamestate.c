@@ -160,6 +160,10 @@ void gamestate_next_section(void) {
 
 // Stage-specific BG palette themes (palette 0 = floor, palette 6 = walls)
 // Each stage shifts the dungeon colors for visual variety
+uint8_t gamestate_in_transition(void) {
+    return (scx_delay > 0) ? 1 : 0;
+}
+
 void gamestate_apply_stage_palette(void) {
     // Stage BG palette 0 (floor) color schemes:
     // Stage 1: Blue-white dungeon (default from palettes.h)

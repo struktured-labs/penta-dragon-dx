@@ -39,6 +39,9 @@ extern uint8_t game_stage;
 // Apply BG palette theme for current stage
 void gamestate_apply_stage_palette(void);
 
+// Returns 1 if in the gameplay startup transition (OG hides sprites for 180 frames)
+uint8_t gamestate_in_transition(void);
+
 // Set by gamestate when a bonus stage should trigger (checked by main.c)
 extern uint8_t bonus_pending;
 

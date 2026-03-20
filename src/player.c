@@ -1,5 +1,6 @@
 #include "player.h"
 #include "level.h"
+#include "gamestate.h"
 
 #include "../assets/extracted/sprites/include/sprites_sara_witch_16.h"
 #include "../assets/extracted/sprites/include/sprites_sara_dragon_real.h"
@@ -117,6 +118,15 @@ void player_draw(void) {
     //   Columns swap: slot0=tile+1, slot1=tile+0, slot2=tile+3, slot3=tile+2
 
     flags_all = palette & 0x07;
+
+    // OG hides Sara for 180 frames after gameplay starts (verified)
+    if (gamestate_in_transition()) {
+        move_sprite(OAM_PLAYER,     0, 0);
+        move_sprite(OAM_PLAYER + 1, 0, 0);
+        move_sprite(OAM_PLAYER + 2, 0, 0);
+        move_sprite(OAM_PLAYER + 3, 0, 0);
+        return;
+    }
 
     // Sara's screen position
     sx = player.x + OAM_X_OFS;
