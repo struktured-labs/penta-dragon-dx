@@ -2,6 +2,7 @@
 #include "enemy.h"
 #include "boss.h"
 #include "player.h"
+#include "level.h"
 #include "palettes.h"
 #include "sound.h"
 #include "music.h"
@@ -35,12 +36,12 @@ static const uint8_t stage_boss_flags[] = {
     BOSS_TED, BOSS_TROOP, BOSS_FAZE
 };
 
-// Room cycling per section (from extraction):
-// Section 0: rooms {01, 05} alternating every ~150 frames
-// Section 1: rooms {02, 03, 04} cycling
-// Section 2+: room 03 (boss arena)
-static const uint8_t sect0_rooms[] = { 5, 3 };  // Verified via dual-ROM comparison
+// Room cycling (verified via dual-ROM verifier)
+// OG rooms: 5 and 3, with SCX offsets per room
+static const uint8_t sect0_rooms[] = { 5, 3 };
 static const uint8_t sect1_rooms[] = { 3, 5, 3 };
+// SCX offset per room (verified: room 5→SCX=12, room 3→SCX=8)
+static const uint8_t room_scx[] = { 0, 8, 8, 8, 8, 12, 8, 8 }; // indexed by room number
 
 // Enemy types per section
 #define SPAWN_CD_NORMAL   60   // Frames between spawns in normal sections
@@ -48,7 +49,7 @@ static const uint8_t sect1_rooms[] = { 3, 5, 3 };
 static uint8_t spawn_timer;
 
 void gamestate_init(void) {
-    game.room = 1;
+    game.room = 5; // First room (verified)
     game.section = 0;
     game.section_desc = section_descs[0];
     game.boss_flag = 0;
@@ -265,11 +266,10 @@ static void spawn_section_enemies(void) {
 void gamestate_update(void) {
     game.section_timer++;
 
-    // Room cycling
+    // Room cycling — each room has its own SCX offset (verified)
     if (!gamestate_is_boss()) {
         uint16_t room_interval = 150;
         uint8_t room_idx;
-
         if (game.section_desc == SECT_NORMAL) {
             room_idx = (uint8_t)((game.section_timer / room_interval) % 2);
             game.room = sect0_rooms[room_idx];
@@ -278,8 +278,13 @@ void gamestate_update(void) {
             room_idx = (uint8_t)((game.section_timer / room_interval) % 3);
             game.room = sect1_rooms[room_idx];
         }
+        // Update SCX from room (verified: room 5→12, room 3→8)
+        if (game.room < 8) {
+            scroll_x = room_scx[game.room];
+            SCX_REG = (uint8_t)scroll_x;
+        }
     } else {
-        game.room = 3; // Boss arena
+        game.room = 3;
     }
 
     // Section advancement (non-boss: timer-based)

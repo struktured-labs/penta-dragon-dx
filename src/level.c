@@ -128,7 +128,7 @@ void level_init(void) {
     uint8_t col;
     uint8_t tiles[LEVEL_HEIGHT];
 
-    scroll_x = 8; // Verified: OG gameplay settles at SCX=8
+    scroll_x = 12; // Room 5 starts at SCX=12 (verified: OG first room=5, SCX=12)
     scroll_y = 0;
     scroll_col = 21;
     scroll_tick = 0;

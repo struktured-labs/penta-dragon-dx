@@ -330,6 +330,9 @@ void hud_stage_intro(uint8_t stage) {
     }
 
     // Move window to top of screen (covers everything)
+    // Reset scroll to 0,0 matching OG stage intro (verified)
+    SCX_REG = 0;
+    SCY_REG = 0;
     move_win(HUD_WIN_X, 0);
     SHOW_WIN;
 }
