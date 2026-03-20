@@ -47,7 +47,9 @@ static const uint8_t room_scx[] = { 0, 8, 8, 8, 8, 12, 8, 8 }; // indexed by roo
 #define SPAWN_CD_NORMAL   60
 #define SPAWN_CD_ADVANCED 40
 static uint8_t spawn_timer;
-static uint16_t scx_delay; // Delay before room SCX applies (OG: ~180 frames)
+static uint16_t scx_delay;    // Delay before room SCX applies (OG: ~180 frames)
+static uint8_t scx_anim;      // Room transition scroll animation frames remaining
+static uint8_t scx_target;    // Target SCX for animation
 
 void gamestate_init(void) {
     game.room = 5; // First room (verified)
@@ -63,7 +65,9 @@ void gamestate_init(void) {
     game.lives = 3;
     game.section_timer = 0;
     game.score = 0;
-    scx_delay = 180; // OG delays SCX update ~180 frames after gameplay starts
+    scx_delay = 180;
+    scx_anim = 0;
+    scx_target = 12; // Room 5 SCX
     game.next_life_at = 5000;
     game_stage = 1;
     bonus_pending = 0;
@@ -289,13 +293,32 @@ void gamestate_update(void) {
         }
         if (new_room != game.room) {
             game.room = new_room;
+            // Start scroll animation to new room SCX (OG cycles 0→4→8→12 for ~60 frames)
+            if (new_room < 8 && scx_delay == 0) {
+                scx_target = room_scx[new_room];
+                scx_anim = 60;
+            }
         }
         // OG: SCX delayed ~180 frames after gameplay starts (verified)
         if (scx_delay > 0) {
             scx_delay--;
-        } else if (game.room < 8) {
-            scroll_x = room_scx[game.room];
-            SCX_REG = (uint8_t)scroll_x;
+            if (scx_delay == 0) {
+                // Delay over — set initial room SCX
+                scroll_x = room_scx[game.room];
+                SCX_REG = (uint8_t)scroll_x;
+            }
+        } else if (scx_anim > 0) {
+            // Room transition: cycle 0→4→8→12 ascending (OG verified)
+            scx_anim--;
+            {
+                uint8_t step = (60 - scx_anim) / 5;
+                scroll_x = (step % 4) * 4;
+                SCX_REG = (uint8_t)scroll_x;
+            }
+            if (scx_anim == 0) {
+                scroll_x = scx_target;
+                SCX_REG = (uint8_t)scroll_x;
+            }
         }
     }
 
