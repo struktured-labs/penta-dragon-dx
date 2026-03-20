@@ -217,7 +217,8 @@ void title_init(void) {
     HIDE_WIN;
 
     SHOW_BKG;
-    HIDE_SPRITES;
+    SHOW_SPRITES;  // OG keeps OBJ enabled on title (LCDC=0x83)
+    HIDE_WIN;
     DISPLAY_ON;
 }
 

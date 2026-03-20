@@ -39,8 +39,8 @@ static const uint8_t stage_boss_flags[] = {
 // Section 0: rooms {01, 05} alternating every ~150 frames
 // Section 1: rooms {02, 03, 04} cycling
 // Section 2+: room 03 (boss arena)
-static const uint8_t sect0_rooms[] = { 1, 5 };
-static const uint8_t sect1_rooms[] = { 2, 3, 4 };
+static const uint8_t sect0_rooms[] = { 5, 3 };  // Verified via dual-ROM comparison
+static const uint8_t sect1_rooms[] = { 3, 5, 3 };
 
 // Enemy types per section
 #define SPAWN_CD_NORMAL   60   // Frames between spawns in normal sections
@@ -298,4 +298,12 @@ void gamestate_update(void) {
     // Sync powerup state with player
     game.powerup = player.powerup;
     game.sara_form = player.form;
+
+    // Mirror game state to HRAM (matches OG memory map for verifier)
+    *((volatile uint8_t *)0xFFBD) = game.room;
+    *((volatile uint8_t *)0xFFBE) = game.sara_form;
+    *((volatile uint8_t *)0xFFBF) = game.boss_flag;
+    *((volatile uint8_t *)0xFFC0) = game.powerup;
+    *((volatile uint8_t *)0xFFC1) = game.gameplay_active;
+    *((volatile uint8_t *)0xFFD0) = game.stage_flag;
 }
