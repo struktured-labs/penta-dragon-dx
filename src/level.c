@@ -156,10 +156,26 @@ void level_load_tiles(void) {
 }
 
 int8_t level_update(uint8_t keys) {
-    // OG: NO D-pad scroll. SCX set by room/section system only.
-    // SCY=0 always. Both verified via dual-ROM state comparison.
-    (void)keys;  // Suppress unused parameter warning
-    SCY_REG = 0;
+    // OG: SCX set by room system (not D-pad). SCY controlled by UP/DOWN.
+    // Verified: OG SCY cycles through {0, 4, 8, 12} with D-pad (60-sec comparison)
+    static uint8_t scy_tick = 0;
+
+    if (keys & J_DOWN) {
+        scy_tick++;
+        if (scy_tick >= 10) {
+            scy_tick = 0;
+            if (scroll_y < 12) scroll_y += 4;
+        }
+    } else if (keys & J_UP) {
+        scy_tick++;
+        if (scy_tick >= 10) {
+            scy_tick = 0;
+            if (scroll_y >= 4) scroll_y -= 4;
+        }
+    } else {
+        scy_tick = 0;
+    }
+    SCY_REG = scroll_y;
     return 0;
 }
 

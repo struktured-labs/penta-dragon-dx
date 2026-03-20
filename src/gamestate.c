@@ -36,10 +36,10 @@ static const uint8_t stage_boss_flags[] = {
     BOSS_TED, BOSS_TROOP, BOSS_FAZE
 };
 
-// Room cycling (verified via dual-ROM verifier)
-// OG rooms: 5 and 3, with SCX offsets per room
-static const uint8_t sect0_rooms[] = { 5, 3 };
-static const uint8_t sect1_rooms[] = { 3, 5, 3 };
+// Room cycling (verified via 60-second dual-ROM comparison)
+// OG rapidly alternates rooms 5 and 1 during gameplay
+static const uint8_t sect0_rooms[] = { 5, 1 };
+static const uint8_t sect1_rooms[] = { 5, 1, 5 };
 // SCX offset per room (verified: room 5→SCX=12, room 3→SCX=8)
 static const uint8_t room_scx[] = { 0, 8, 8, 8, 8, 12, 8, 8 }; // indexed by room number
 
@@ -280,12 +280,11 @@ void gamestate_update(void) {
     {
         uint8_t new_room = game.room;
         if (!gamestate_is_boss()) {
-            uint16_t room_interval = 390; // Verified: matches OG first transition timing
+            uint16_t room_interval = 30; // OG alternates rooms rapidly (~30 frames)
             uint8_t room_idx;
             if (game.section_desc == SECT_NORMAL) {
-                // OG: room changes once then stays (5→3, verified)
-                room_idx = (uint8_t)(game.section_timer / room_interval);
-                if (room_idx > 1) room_idx = 1;
+                // OG: rapidly alternates rooms (verified 60-sec comparison)
+                room_idx = (uint8_t)((game.section_timer / room_interval) % 2);
                 new_room = sect0_rooms[room_idx];
             } else if (game.section_desc == SECT_ADVANCED) {
                 room_interval = 90;
@@ -295,33 +294,14 @@ void gamestate_update(void) {
         } else {
             new_room = 3;
         }
-        if (new_room != game.room) {
-            game.room = new_room;
-            // Start scroll animation to new room SCX (OG cycles 0→4→8→12 for ~60 frames)
-            if (new_room < 8 && scx_delay == 0) {
-                scx_target = room_scx[new_room];
-                scx_anim = 60;
-            }
-        }
-        // OG: SCX delayed ~180 frames after gameplay starts (verified)
+        game.room = new_room;
+        // OG: SCX=12 during rapid room alternation (verified 60-sec)
+        // Delay 180 frames after gameplay starts, then SCX=12 always
         if (scx_delay > 0) {
             scx_delay--;
             if (scx_delay == 0) {
-                // Delay over — set initial room SCX
-                scroll_x = room_scx[game.room];
-                SCX_REG = (uint8_t)scroll_x;
-            }
-        } else if (scx_anim > 0) {
-            // Room transition: cycle 0→4→8→12 ascending (OG verified)
-            scx_anim--;
-            {
-                uint8_t step = (60 - scx_anim) / 5;
-                scroll_x = (step % 4) * 4;
-                SCX_REG = (uint8_t)scroll_x;
-            }
-            if (scx_anim == 0) {
-                scroll_x = scx_target;
-                SCX_REG = (uint8_t)scroll_x;
+                scroll_x = 12;
+                SCX_REG = 12;
             }
         }
     }
