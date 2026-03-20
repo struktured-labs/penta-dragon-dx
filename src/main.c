@@ -297,7 +297,7 @@ void main(void) {
                         title_cleanup();
                         game_init();
                         hud_stage_intro(game_stage);
-                        intro_timer = 360; // 390 - ~30 frames for game_init overhead
+                        intro_timer = 360;
                         game_state = STATE_STAGE_INTRO;
                     }
                 }
@@ -336,11 +336,9 @@ void main(void) {
 
             case STATE_STAGE_INTRO:
                 intro_timer--;
-                // OG: stage screen is NOT skippable (verified — fixed duration)
                 if (intro_timer == 0) {
                     hud_stage_intro_cleanup();
                     if (game.gameplay_active) {
-                        // Returning from bonus/stage change — reload tiles
                         DISPLAY_OFF;
                         level_load_tiles();
                         player_load_tiles();
@@ -348,13 +346,11 @@ void main(void) {
                         enemy_load_tiles();
                         level_init();
                         hud_init();
-                        player_draw();
                         SHOW_BKG;
                         SHOW_SPRITES;
                         DISPLAY_ON;
                         game_state = STATE_PLAYING;
                     } else {
-                        // First game start
                         game_init();
                     }
                 }
