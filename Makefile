@@ -49,14 +49,10 @@ test: all
 play: all
 	@bash /home/struktured/projects/penta-dragon-dx-claude/scripts/launch_mgba.sh $(BINDIR)/$(PROJECT).gbc
 
-# Verify against original ROM (requires OG ROM at known path)
-OG_ROM = /home/struktured/projects/penta-dragon-dx-claude/rom/Penta\ Dragon\ \(J\).gb
+# Verify against original ROM
 VERIFIER = /home/struktured/projects/gb-game-verifier
 
 verify: all
-	@echo "Running OG vs Remake comparison..."
-	@bash $(VERIFIER)/run_comparison.sh "$(OG_ROM)" $(BINDIR)/$(PROJECT).gbc 1800 30
-	@echo ""
-	@python3 $(VERIFIER)/regression_test.py tmp/verify_og/state.csv tmp/verify_rm/state.csv --threshold 90
+	@bash scripts/run_verify.sh
 
 .PHONY: all clean dirs test play verify
