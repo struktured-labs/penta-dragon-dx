@@ -140,12 +140,12 @@ int8_t level_update(uint8_t keys) {
     static uint8_t scy_tick = 0;
 
     // OG: SCY impulse on edge, gradual decay to 0
-    // DOWN: 0→4→8→12→decay (verified via RL pipeline)
-    // UP:   0→12→8→4→decay (verified: OG UP triggers SCY=12 impulse)
+    // DOWN: impulse to 4, sustained→8→12 (frame-precise: first_change=frame3, peak=4)
+    // UP:   impulse to 12, decays 12→8→4→0 (frame-precise: first_change=frame3, peak=12)
     {
         if ((keys & J_DOWN) || (keys & J_UP)) {
             if (scy_tick == 0) {
-                if (keys & J_DOWN) scroll_y = 8;
+                if (keys & J_DOWN) scroll_y = 4;  // OG: peaks at 4 (was 8, corrected)
                 else scroll_y = 12;  // UP: impulse to 12 (verified OG)
             }
             scy_tick = 1;
