@@ -51,6 +51,8 @@ static uint16_t scx_delay;    // Delay before room SCX applies (OG: ~180 frames)
 static uint8_t scx_anim;      // Room transition scroll animation frames remaining
 static uint8_t scx_target;    // Target SCX for animation
 static uint16_t scroll_dist;  // Accumulated scroll distance (OG DC81 equivalent)
+static uint8_t  room_pending; // OG uses FFCE→FFBD 2-step copy (6 frame delay)
+static uint8_t  room_delay;   // Frames until pending room takes effect
 
 void gamestate_init(void) {
     game.room = 5; // First room (verified)
@@ -68,6 +70,8 @@ void gamestate_init(void) {
     game.score = 0;
     scx_delay = 45;  // 180 frames / 4 (game tick runs at 15 Hz)
     scroll_dist = 0;
+    room_pending = 0;
+    room_delay = 0;
     scx_anim = 0;
     scx_target = 12; // Room 5 SCX
     game.next_life_at = 5000;
@@ -282,43 +286,58 @@ void gamestate_update(uint8_t keys) {
     game.section_timer++;
 
     // OG room transitions are SCROLL-DRIVEN, not timer-driven.
-    // DC81 decrements during RIGHT movement; room changes at threshold.
-    // NOOP test: room stays at 5 indefinitely without RIGHT input.
-    // (Bug #13: was timer-based, now scroll-distance-based)
-    if (keys & J_RIGHT) {
+    // DC81 decrements by 4 per tick during RIGHT/LEFT movement.
+    // FFCE (next room) set after 1 tick of scroll (DC81: 200→196).
+    // NOOP: room stays at 5 indefinitely. (Bug #13)
+    if ((keys & J_RIGHT) || (keys & J_LEFT)) {
         scroll_dist++;
     }
 
-    // Room cycling — based on accumulated scroll distance
+    // Room cycling — OG uses 2-step FFCE→FFBD mechanism with ~6 frame delay
+    // Step 1: Room handler sets FFCE (pending room) based on scroll position
+    // Step 2: Next tick copies FFCE to FFBD
     {
-        uint8_t new_room = game.room;
-        if (!gamestate_is_boss()) {
-            // OG: DC81 starts at 200, room transitions when ~12 pixels scrolled
-            // At 15 Hz tick rate, ~56 ticks of RIGHT = room transition
-            uint16_t room_threshold = 12;  // Scroll distance for room change
+        // Process pending room transition (FFCE→FFBD copy, ~6 frame delay)
+        if (room_delay > 0) {
+            room_delay--;
+            if (room_delay == 0 && room_pending != 0) {
+                if (room_pending != game.room && scx_delay == 0) {
+                    scx_target = room_scx[room_pending];
+                    scx_anim = 60;
+                }
+                game.room = room_pending;
+                room_pending = 0;
+            }
+        }
+
+        // Check for new room transition (only after scx_delay)
+        uint8_t target_room = game.room;
+        if (scx_delay == 0 && !gamestate_is_boss()) {
+            uint16_t room_threshold = 1;
             uint8_t room_idx;
             if (game.section_desc == SECT_NORMAL) {
-                new_room = (scroll_dist < room_threshold) ? 5 : 3;
+                target_room = (scroll_dist < room_threshold) ? 5 : 3;
             } else if (game.section_desc == SECT_ADVANCED) {
                 room_idx = (uint8_t)((scroll_dist / room_threshold) % 3);
-                new_room = sect1_rooms[room_idx];
+                target_room = sect1_rooms[room_idx];
             }
-        } else {
-            new_room = 3;
+        } else if (gamestate_is_boss()) {
+            target_room = 3;
         }
-        // Update SCX when room changes
-        if (new_room != game.room && scx_delay == 0 && new_room < 8) {
-            // OG: room 5→3 triggers scroll animation (0→4→8→12 cycle, ~60 frames)
-            scx_target = room_scx[new_room];
-            scx_anim = 60;
+
+        // Set pending room (OG: FFCE set, then 6-frame delay before FFBD copy)
+        if (target_room != game.room && room_pending == 0) {
+            room_pending = target_room;
+            room_delay = 5;  // OG: FFCE set at frame 17, FFBD copy at frame 23 = ~5 ticks
         }
-        game.room = new_room;
+
         // Delay 180 frames after gameplay starts before first SCX set
         if (scx_delay > 0) {
             scx_delay--;
             if (scx_delay == 0) {
                 scroll_x = room_scx[game.room];
                 SCX_REG = (uint8_t)scroll_x;
+                scroll_dist = 0;  // Reset scroll distance when gameplay begins
             }
         } else if (scx_anim > 0) {
             // Room transition scroll: cycle 0→4→8→12 ascending
