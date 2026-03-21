@@ -256,9 +256,12 @@ static void game_update(void) {
 
 static void game_draw(void) {
     player_draw();
-    projectile_draw();
-    enemy_draw();
-    boss_draw();
+    // OG: no sprites visible during 180-frame transition (verified)
+    if (!gamestate_in_transition()) {
+        projectile_draw();
+        enemy_draw();
+        boss_draw();
+    }
 
     // Screen shake effect
     if (shake_timer > 0) {
