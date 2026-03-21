@@ -135,33 +135,23 @@ void level_load_tiles(void) {
 }
 
 int8_t level_update(uint8_t keys) {
-    // OG: SCX set by room system (not D-pad). SCY controlled by UP/DOWN.
-    // Verified: OG SCY cycles through {0, 4, 8, 12} with D-pad (60-sec comparison)
-    static uint8_t scy_tick = 0;
+    // OG SCY model (frame-precise analysis via RL pipeline):
+    //   - Runs on a 4-frame game tick (not every VBlank)
+    //   - DOWN: +4 per tick, wraps mod 16 (0→4→8→12→0→...)
+    //   - UP:   -4 per tick, wraps mod 16 (0→12→8→4→0→...)
+    //   - NO DECAY: SCY stays at last value until next input
+    //   - Response delay: 0-3 frames (waits for next tick alignment)
+    static uint8_t game_tick = 0;
 
-    // OG: SCY impulse on edge, gradual decay to 0
-    // DOWN: impulse to 4, sustained→8→12 (frame-precise: first_change=frame3, peak=4)
-    // UP:   impulse to 12, decays 12→8→4→0 (frame-precise: first_change=frame3, peak=12)
-    {
-        if ((keys & J_DOWN) || (keys & J_UP)) {
-            if (scy_tick == 0) {
-                if (keys & J_DOWN) scroll_y = 4;  // OG: peaks at 4 (was 8, corrected)
-                else scroll_y = 12;  // UP: impulse to 12 (verified OG)
-            }
-            scy_tick = 1;
-        } else {
-            scy_tick = 0;
+    game_tick = (game_tick + 1) & 3;
+    if (game_tick == 0) {
+        if (keys & J_DOWN) {
+            scroll_y = (scroll_y + 4) & 0x0F;
+        } else if (keys & J_UP) {
+            if (scroll_y == 0) scroll_y = 12;
+            else scroll_y = (scroll_y - 4) & 0x0F;
         }
-        // Decay: -4 every 30 frames (always, even during input)
-        if (scroll_y > 0) {
-            static uint8_t decay_tick = 0;
-            decay_tick++;
-            if (decay_tick >= 30) {
-                decay_tick = 0;
-                scroll_y -= 4;
-                if (scroll_y > 200) scroll_y = 0;
-            }
-        }
+        // No else: SCY stays at last value (no decay — verified OG)
     }
     SCY_REG = scroll_y;
     return 0;
