@@ -229,6 +229,7 @@ static void game_update(void) {
                         // Check if bonus stage should trigger
                         if (bonus_pending) {
                             bonus_pending = 0;
+                            stage_changed = 0; // Clear — bonus subsumes stage intro
                             bonus_init();
                             game_state = STATE_BONUS;
                         } else if (stage_changed) {
