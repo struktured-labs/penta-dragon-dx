@@ -141,7 +141,7 @@ static void game_update(void) {
         static uint8_t logic_tick = 2;
         logic_tick = (logic_tick + 1) & 3;
         if (logic_tick == 0) {
-            gamestate_update();
+            gamestate_update(keys);
         }
     }
 

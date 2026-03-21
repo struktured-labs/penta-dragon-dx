@@ -50,6 +50,7 @@ static uint8_t spawn_timer;
 static uint16_t scx_delay;    // Delay before room SCX applies (OG: ~180 frames)
 static uint8_t scx_anim;      // Room transition scroll animation frames remaining
 static uint8_t scx_target;    // Target SCX for animation
+static uint16_t scroll_dist;  // Accumulated scroll distance (OG DC81 equivalent)
 
 void gamestate_init(void) {
     game.room = 5; // First room (verified)
@@ -66,6 +67,7 @@ void gamestate_init(void) {
     game.section_timer = 0;
     game.score = 0;
     scx_delay = 45;  // 180 frames / 4 (game tick runs at 15 Hz)
+    scroll_dist = 0;
     scx_anim = 0;
     scx_target = 12; // Room 5 SCX
     game.next_life_at = 5000;
@@ -276,22 +278,29 @@ static void spawn_section_enemies(void) {
     game.progress++;
 }
 
-void gamestate_update(void) {
+void gamestate_update(uint8_t keys) {
     game.section_timer++;
 
-    // Room cycling — SCX only changes on actual room transitions
+    // OG room transitions are SCROLL-DRIVEN, not timer-driven.
+    // DC81 decrements during RIGHT movement; room changes at threshold.
+    // NOOP test: room stays at 5 indefinitely without RIGHT input.
+    // (Bug #13: was timer-based, now scroll-distance-based)
+    if (keys & J_RIGHT) {
+        scroll_dist++;
+    }
+
+    // Room cycling — based on accumulated scroll distance
     {
         uint8_t new_room = game.room;
         if (!gamestate_is_boss()) {
-            uint16_t room_interval = 56; // OG: transitions at tick 56 (verified PyBoy)
+            // OG: DC81 starts at 200, room transitions when ~12 pixels scrolled
+            // At 15 Hz tick rate, ~56 ticks of RIGHT = room transition
+            uint16_t room_threshold = 12;  // Scroll distance for room change
             uint8_t room_idx;
             if (game.section_desc == SECT_NORMAL) {
-                // FFBD is OG's dual-buffer toggle (structural, not gameplay)
-                // Set room based on section timer for SCX purposes only
-                new_room = (game.section_timer < room_interval) ? 5 : 3;
+                new_room = (scroll_dist < room_threshold) ? 5 : 3;
             } else if (game.section_desc == SECT_ADVANCED) {
-                room_interval = 23; // 90 frames / 4 ticks
-                room_idx = (uint8_t)((game.section_timer / room_interval) % 3);
+                room_idx = (uint8_t)((scroll_dist / room_threshold) % 3);
                 new_room = sect1_rooms[room_idx];
             }
         } else {

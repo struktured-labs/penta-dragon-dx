@@ -57,7 +57,7 @@ extern uint8_t stage_changed;
 void gamestate_init(void);
 
 // Update section/room progression each frame
-void gamestate_update(void);
+void gamestate_update(uint8_t keys);
 
 // Advance to next section
 void gamestate_next_section(void);
