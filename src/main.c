@@ -135,7 +135,10 @@ static void game_update(void) {
     // Verified via RL pipeline: remake was 4x too fast, causing room
     // transitions at frame 155 instead of frame 620.
     {
-        static uint8_t logic_tick = 0;
+        // OG tick phase = 1 (fires at frame offsets 5,9,13...)
+        // Remake phase alignment: init to 2 so first fire at frame 5
+        // (2→3→0=fire at frame 3 from init, +2 offset = frame 5)
+        static uint8_t logic_tick = 2;
         logic_tick = (logic_tick + 1) & 3;
         if (logic_tick == 0) {
             gamestate_update();

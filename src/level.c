@@ -141,7 +141,8 @@ int8_t level_update(uint8_t keys) {
     //   - UP:   -4 per tick, wraps mod 16 (0→12→8→4→0→...)
     //   - NO DECAY: SCY stays at last value until next input
     //   - Response delay: 0-3 frames (waits for next tick alignment)
-    static uint8_t game_tick = 0;
+    // Phase-aligned with OG tick (phase=1, fires at frame offsets 5,9,13...)
+    static uint8_t game_tick = 2;
 
     game_tick = (game_tick + 1) & 3;
     if (game_tick == 0) {
