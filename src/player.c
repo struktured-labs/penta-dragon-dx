@@ -11,11 +11,7 @@ Player player;
 // Starting position: center-ish (72, 64)
 #define SARA_START_X     72
 #define SARA_START_Y     64
-#define SARA_SPEED       2    // Pixels per frame (matches original)
-#define SARA_X_MIN       8    // Left screen bound
-#define SARA_X_MAX       144  // Right screen bound (160 - 16)
-#define SARA_Y_MIN       8    // Top screen bound
-#define SARA_Y_MAX       112  // Bottom bound (above HUD at 120 - 8)
+// Sara is fixed at (72,64) — verified via OAM comparison
 #define ANIM_SPEED       12
 
 void player_init(void) {
