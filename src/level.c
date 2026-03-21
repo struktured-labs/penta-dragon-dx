@@ -140,13 +140,13 @@ int8_t level_update(uint8_t keys) {
     static uint8_t scy_tick = 0;
 
     // OG: SCY impulse on edge, gradual decay to 0
-    // Single press: 0→8→4→0 (verified 100% on DOWN test)
-    // Rapid alternation: complex (OG engine timing dependent)
+    // DOWN: 0→4→8→12→decay (verified via RL pipeline)
+    // UP:   0→12→8→4→decay (verified: OG UP triggers SCY=12 impulse)
     {
         if ((keys & J_DOWN) || (keys & J_UP)) {
             if (scy_tick == 0) {
                 if (keys & J_DOWN) scroll_y = 8;
-                else if (scroll_y >= 4) scroll_y -= 4;
+                else scroll_y = 12;  // UP: impulse to 12 (verified OG)
             }
             scy_tick = 1;
         } else {
