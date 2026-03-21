@@ -48,9 +48,9 @@ extern uint8_t bonus_pending;
 // Set when stage number changes (checked by main.c for stage intro screen)
 extern uint8_t stage_changed;
 
-// Section durations (frames, from extraction data)
-#define SECT0_DURATION  5520  // Normal section
-#define SECT1_DURATION  1860  // Advanced section
+// Section durations (game ticks, ~15 Hz = every 4th VBlank)
+#define SECT0_DURATION  1380  // Normal section (5520 frames / 4)
+#define SECT1_DURATION   465  // Advanced section (1860 frames / 4)
 // Boss sections end when boss HP reaches 0
 
 // Initialize game state for new game

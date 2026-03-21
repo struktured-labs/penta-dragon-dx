@@ -65,7 +65,7 @@ void gamestate_init(void) {
     game.lives = 23; // OG: starts with 23 lives (verified via PyBoy FFDD=0x17)
     game.section_timer = 0;
     game.score = 0;
-    scx_delay = 180;
+    scx_delay = 45;  // 180 frames / 4 (game tick runs at 15 Hz)
     scx_anim = 0;
     scx_target = 12; // Room 5 SCX
     game.next_life_at = 5000;
@@ -283,14 +283,14 @@ void gamestate_update(void) {
     {
         uint8_t new_room = game.room;
         if (!gamestate_is_boss()) {
-            uint16_t room_interval = 390; // OG: room 5 for ~390 frames then room 3
+            uint16_t room_interval = 98; // OG: 390 frames / 4 ticks
             uint8_t room_idx;
             if (game.section_desc == SECT_NORMAL) {
                 // FFBD is OG's dual-buffer toggle (structural, not gameplay)
                 // Set room based on section timer for SCX purposes only
                 new_room = (game.section_timer < room_interval) ? 5 : 3;
             } else if (game.section_desc == SECT_ADVANCED) {
-                room_interval = 90;
+                room_interval = 23; // 90 frames / 4 ticks
                 room_idx = (uint8_t)((game.section_timer / room_interval) % 3);
                 new_room = sect1_rooms[room_idx];
             }

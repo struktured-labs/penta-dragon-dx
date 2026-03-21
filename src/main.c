@@ -130,8 +130,17 @@ static void game_update(void) {
     level_check_item_pickup();
 
     // Game progression (handles section cycling + enemy spawning)
-    // NOTE: replaces old level_check_spawns() -- do NOT call both
-    gamestate_update();
+    // OG runs game logic at ~15 Hz (every 4th VBlank), not every frame.
+    // section_timer, room transitions, enemy spawning all on 4-frame tick.
+    // Verified via RL pipeline: remake was 4x too fast, causing room
+    // transitions at frame 155 instead of frame 620.
+    {
+        static uint8_t logic_tick = 0;
+        logic_tick = (logic_tick + 1) & 3;
+        if (logic_tick == 0) {
+            gamestate_update();
+        }
+    }
 
     // Update all
     projectile_update();
