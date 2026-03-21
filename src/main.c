@@ -357,6 +357,10 @@ void main(void) {
                         SHOW_BKG;
                         SHOW_SPRITES;
                         DISPLAY_ON;
+                        // Reset section_timer so room transitions start from
+                        // gameplay begin, matching OG behavior (verified via
+                        // RL pipeline: OG starts at room=5 with timer=0)
+                        game.section_timer = 0;
                         game_state = STATE_PLAYING;
                     } else {
                         game_init();
