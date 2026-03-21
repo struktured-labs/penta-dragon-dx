@@ -12,7 +12,7 @@
 uint16_t scroll_x;
 uint8_t  scroll_y;
 uint8_t  scroll_col;
-uint8_t  auto_scroll;
+// auto_scroll removed — OG doesn't auto-scroll (verified)
 static uint8_t scroll_tick; // Counts frames for quantized 4px/4frame scroll
 
 // ============================================
@@ -105,24 +105,7 @@ static void write_column(uint8_t map_col, uint8_t *tiles) {
     }
 }
 
-// ============================================
-// Enemy spawning
-// ============================================
-
-// Enemy spawn: first at column 5, then every 10 columns
-// Original: enemies appear as you enter a room area
-#define SPAWN_INTERVAL 10
-static uint16_t next_spawn_col;
-static const uint8_t spawn_y[] = { 52, 36, 84, 68, 44, 76, 60 };
-static uint8_t spawn_y_idx;
-// Match original Level 1: mostly humanoids, some orcs, rare hornets/crows
-static const uint8_t spawn_types[] = {
-    ENEMY_HUMANOID, ENEMY_HUMANOID, ENEMY_ORC,
-    ENEMY_HUMANOID, ENEMY_HUMANOID, ENEMY_HORNET,
-    ENEMY_HUMANOID, ENEMY_ORC, ENEMY_HUMANOID,
-    ENEMY_HUMANOID, ENEMY_CROW, ENEMY_HUMANOID
-};
-static uint8_t spawn_type_idx;
+// Enemy spawning handled by gamestate_update → spawn_section_enemies
 
 void level_init(void) {
     uint8_t col;
@@ -132,10 +115,7 @@ void level_init(void) {
     scroll_y = 0;
     scroll_col = 21;
     scroll_tick = 0;
-    auto_scroll = 0;
-    next_spawn_col = 5;
-    spawn_y_idx = 0;
-    spawn_type_idx = 0;
+    // No auto-scroll, no level-based spawning (both verified)
     collected_count = 0;
 
     // Don't set SCX here — gamestate handles room-based SCX with delay
@@ -202,20 +182,7 @@ uint8_t level_is_solid(uint16_t world_x, uint8_t world_y) {
            (tile == 0xFE);
 }
 
-void level_check_spawns(void) {
-    uint16_t current_col = scroll_x >> 3;
-
-    if (current_col >= next_spawn_col && enemy_count < MAX_ENEMIES) {
-        uint8_t type = spawn_types[spawn_type_idx];
-        uint8_t y = spawn_y[spawn_y_idx];
-
-        enemy_spawn(type, 168, y);
-
-        spawn_y_idx = (spawn_y_idx + 1) % sizeof(spawn_y);
-        spawn_type_idx = (spawn_type_idx + 1) % sizeof(spawn_types);
-        next_spawn_col += SPAWN_INTERVAL;
-    }
-}
+// level_check_spawns removed — spawning handled by gamestate
 
 // ============================================
 // Item pickup

@@ -19,7 +19,7 @@
 extern uint16_t scroll_x;       // World scroll position (pixels)
 extern uint8_t  scroll_y;       // Vertical scroll position (pixels, written to SCY)
 extern uint8_t  scroll_col;     // Next column to load (world units)
-extern uint8_t  auto_scroll;    // 0=player-driven, non-zero=auto-scroll speed
+// auto_scroll removed — OG doesn't auto-scroll (verified via verifier)
 
 // Vertical scroll limits
 #define SCROLL_Y_MAX    12      // Original caps at SCY=12
@@ -42,7 +42,7 @@ uint8_t level_get_tile(uint16_t col, uint8_t row);
 uint8_t level_is_solid(uint16_t world_x, uint8_t world_y);
 
 // Spawn enemies based on scroll position
-void level_check_spawns(void);
+// level_check_spawns removed — spawning in gamestate.c
 
 // Check if Sara overlaps an item tile and collect it
 void level_check_item_pickup(void);
