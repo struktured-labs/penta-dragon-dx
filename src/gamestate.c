@@ -294,10 +294,11 @@ void gamestate_update(void) {
         } else {
             new_room = 3;
         }
-        // Update SCX when room changes (room 5→SCX=12, room 3→SCX=8)
+        // Update SCX when room changes
         if (new_room != game.room && scx_delay == 0 && new_room < 8) {
-            scroll_x = room_scx[new_room];
-            SCX_REG = (uint8_t)scroll_x;
+            // OG: room 5→3 triggers scroll animation (0→4→8→12 cycle, ~60 frames)
+            scx_target = room_scx[new_room];
+            scx_anim = 60;
         }
         game.room = new_room;
         // Delay 180 frames after gameplay starts before first SCX set
@@ -305,6 +306,15 @@ void gamestate_update(void) {
             scx_delay--;
             if (scx_delay == 0) {
                 scroll_x = room_scx[game.room];
+                SCX_REG = (uint8_t)scroll_x;
+            }
+        } else if (scx_anim > 0) {
+            // Room transition scroll: cycle 0→4→8→12 ascending
+            scx_anim--;
+            scroll_x = (((60 - scx_anim) / 5) % 4) * 4;
+            SCX_REG = (uint8_t)scroll_x;
+            if (scx_anim == 0) {
+                scroll_x = scx_target;
                 SCX_REG = (uint8_t)scroll_x;
             }
         }
