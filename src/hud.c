@@ -329,9 +329,8 @@ void hud_stage_intro(uint8_t stage) {
         set_win_tiles(12, 7, 1, 1, &tile);
     }
 
-    // Reset scroll + hide sprites to match OG (verified: OAM at 0,0 during intro)
-    SCX_REG = 0;
-    SCY_REG = 0;
+    // OG keeps title SCX/SCY (8,8) for ~90 frames before resetting to 0,0
+    // Don't reset here — STATE_STAGE_INTRO handler resets after delay
     // Clear Sara OAM to (0,0) matching OG behavior
     {
         uint8_t s;

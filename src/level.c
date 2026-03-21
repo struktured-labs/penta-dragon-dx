@@ -118,8 +118,7 @@ void level_init(void) {
     // No auto-scroll, no level-based spawning (both verified)
     collected_count = 0;
 
-    // Don't set SCX here — gamestate handles room-based SCX with delay
-    SCY_REG = scroll_y;
+    // Don't set SCX/SCY here — handled by stage intro + gamestate
 
     // Fill initial visible area (21 columns from the level data)
     for (col = 0; col < 21; col++) {

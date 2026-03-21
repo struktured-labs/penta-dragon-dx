@@ -335,6 +335,11 @@ void main(void) {
 
             case STATE_STAGE_INTRO:
                 intro_timer--;
+                // OG resets SCX/SCY to 0 ~90 frames after A press (verified)
+                if (intro_timer == 290) {
+                    SCX_REG = 0;
+                    SCY_REG = 0;
+                }
                 // OG stage screen is skippable via A/START (verified: extended test)
                 if (intro_timer > 60 && (joypad() & (J_A | J_START))) {
                     intro_timer = 1;
