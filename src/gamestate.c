@@ -337,11 +337,13 @@ void gamestate_update(void) {
     game.powerup = player.powerup;
     game.sara_form = player.form;
 
-    // Mirror game state to HRAM (matches OG memory map for verifier)
+    // Mirror game state to HRAM (matches OG memory map, verified via scanner)
     *((volatile uint8_t *)0xFFBD) = game.room;
     *((volatile uint8_t *)0xFFBE) = game.sara_form;
     *((volatile uint8_t *)0xFFBF) = game.boss_flag;
     *((volatile uint8_t *)0xFFC0) = game.powerup;
     *((volatile uint8_t *)0xFFC1) = game.gameplay_active;
     *((volatile uint8_t *)0xFFD0) = game.stage_flag;
+    *((volatile uint8_t *)0xFFE5) = game.room;  // Scanner: FFE5 also tracks room
+    *((volatile uint8_t *)0xFFDD) = game.lives;  // Scanner: FFDD=3 at start
 }
