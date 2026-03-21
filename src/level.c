@@ -139,22 +139,29 @@ int8_t level_update(uint8_t keys) {
     // Verified: OG SCY cycles through {0, 4, 8, 12} with D-pad (60-sec comparison)
     static uint8_t scy_tick = 0;
 
-    // OG: SCY changes correlate with D-pad but aren't simple mapping.
-    // Use original direction (DOWN increases SCY) with 4px/4frame rate.
-    if (keys & J_DOWN) {
-        scy_tick++;
-        if (scy_tick >= 4) {
+    // OG: SCY impulse on edge, gradual decay to 0
+    // Single press: 0→8→4→0 (verified 100% on DOWN test)
+    // Rapid alternation: complex (OG engine timing dependent)
+    {
+        if ((keys & J_DOWN) || (keys & J_UP)) {
+            if (scy_tick == 0) {
+                if (keys & J_DOWN) scroll_y = 8;
+                else if (scroll_y >= 4) scroll_y -= 4;
+            }
+            scy_tick = 1;
+        } else {
             scy_tick = 0;
-            if (scroll_y < 12) scroll_y += 4;
         }
-    } else if (keys & J_UP) {
-        scy_tick++;
-        if (scy_tick >= 4) {
-            scy_tick = 0;
-            if (scroll_y >= 4) scroll_y -= 4;
+        // Decay: -4 every 30 frames (always, even during input)
+        if (scroll_y > 0) {
+            static uint8_t decay_tick = 0;
+            decay_tick++;
+            if (decay_tick >= 30) {
+                decay_tick = 0;
+                scroll_y -= 4;
+                if (scroll_y > 200) scroll_y = 0;
+            }
         }
-    } else {
-        scy_tick = 0;
     }
     SCY_REG = scroll_y;
     return 0;
