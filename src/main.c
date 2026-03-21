@@ -81,8 +81,10 @@ static void game_update(void) {
         return; // Menu absorbs all input
     }
 
-    // START opens item menu
-    if ((keys & J_START) && !(prev_keys & J_START)) {
+    // OG: SELECT opens item menu (verified via ROM disassembly at 0x0A6C).
+    // START also opens it for convenience (remake addition).
+    if (((keys & J_SELECT) && !(prev_keys & J_SELECT)) ||
+        ((keys & J_START) && !(prev_keys & J_START))) {
         itemmenu_open();
         itemmenu_draw();
         prev_keys = keys;

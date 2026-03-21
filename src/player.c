@@ -44,10 +44,10 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
     if (keys & J_LEFT) player.dir = DIR_LEFT;
     if (keys & J_RIGHT) player.dir = DIR_RIGHT;
 
-    // Form toggle on SELECT (edge-triggered)
-    if ((keys & J_SELECT) && !(prev_keys & J_SELECT)) {
-        player.form ^= 1;
-    }
+    // OG: SELECT opens item/inventory menu (not direct form toggle).
+    // Form changes are driven by inventory items (FFE1 state machine).
+    // The item menu is handled in main.c via itemmenu_open().
+    // (Bug #9: was incorrectly toggling form directly on SELECT)
 
     // Shoot cooldown
     if (player.shoot_cd > 0) {
