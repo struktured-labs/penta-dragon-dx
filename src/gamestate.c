@@ -62,7 +62,7 @@ void gamestate_init(void) {
     game.sara_form = 0;
     game.powerup = 0;
     game.hp = 255; // Original: 255 units max HP
-    game.lives = 3;
+    game.lives = 23; // OG: starts with 23 lives (verified via PyBoy FFDD=0x17)
     game.section_timer = 0;
     game.score = 0;
     scx_delay = 180;
@@ -73,6 +73,9 @@ void gamestate_init(void) {
     bonus_pending = 0;
     stage_changed = 0;
     spawn_timer = SPAWN_CD_NORMAL;
+
+    // Initialize OG-compatible countdown timer at DCBB
+    *((volatile uint8_t *)0xDCBB) = 255;
 }
 
 uint8_t gamestate_is_boss(void) {
@@ -346,4 +349,5 @@ void gamestate_update(void) {
     *((volatile uint8_t *)0xFFD0) = game.stage_flag;
     *((volatile uint8_t *)0xFFE5) = game.room;  // Scanner: FFE5 also tracks room
     *((volatile uint8_t *)0xFFDD) = game.lives;  // Scanner: FFDD=3 at start
+    *((volatile uint8_t *)0xDCBB) = (uint8_t)(255 - (game.section_timer & 0xFF));  // OG: DCBB countdown from 255
 }
