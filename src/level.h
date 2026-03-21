@@ -39,7 +39,7 @@ int8_t level_update(uint8_t keys);
 uint8_t level_get_tile(uint16_t col, uint8_t row);
 
 // Check if a world position is solid (for collision)
-uint8_t level_is_solid(uint16_t world_x, uint8_t world_y);
+// level_is_solid removed — Sara fixed at (80,80)
 
 // Spawn enemies based on scroll position
 // level_check_spawns removed — spawning in gamestate.c

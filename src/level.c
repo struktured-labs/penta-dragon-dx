@@ -166,20 +166,7 @@ uint8_t level_get_tile(uint16_t col, uint8_t row) {
     return level1_data[data_col][row];
 }
 
-uint8_t level_is_solid(uint16_t world_x, uint8_t world_y) {
-    uint16_t col = world_x >> 3;
-    uint8_t row = world_y >> 3;
-    uint8_t tile = level_get_tile(col, row);
-    // Wall/pillar/platform tiles are solid
-    // 0x13-0x1E: Pillar components
-    // 0x20-0x39: Platform/staircase
-    // 0x40-0x59: Wall structure
-    // 0xFE: Void (not walkable)
-    return (tile >= 0x13 && tile <= 0x1E) ||
-           (tile >= 0x20 && tile <= 0x39) ||
-           (tile >= 0x40 && tile <= 0x59) ||
-           (tile == 0xFE);
-}
+// level_is_solid removed — Sara doesn't move (verified fixed at 80,80)
 
 // level_check_spawns removed — spawning handled by gamestate
 

@@ -1,5 +1,4 @@
 #include "player.h"
-#include "level.h"
 #include "gamestate.h"
 
 #include "../assets/extracted/sprites/include/sprites_sara_witch_16.h"
