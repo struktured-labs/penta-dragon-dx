@@ -283,7 +283,7 @@ void gamestate_update(void) {
     {
         uint8_t new_room = game.room;
         if (!gamestate_is_boss()) {
-            uint16_t room_interval = 98; // OG: 390 frames / 4 ticks
+            uint16_t room_interval = 56; // OG: transitions at tick 56 (verified PyBoy)
             uint8_t room_idx;
             if (game.section_desc == SECT_NORMAL) {
                 // FFBD is OG's dual-buffer toggle (structural, not gameplay)
