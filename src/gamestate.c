@@ -68,7 +68,7 @@ void gamestate_init(void) {
     game.lives = 23; // OG: starts with 23 lives (verified via PyBoy FFDD=0x17)
     game.section_timer = 0;
     game.score = 0;
-    scx_delay = 45;  // 180 frames / 4 (game tick runs at 15 Hz)
+    scx_delay = 180; // Runs every frame (60 Hz) via gamestate_animate_scx
     scroll_dist = 0;
     room_pending = 0;
     room_delay = 0;
@@ -301,10 +301,7 @@ void gamestate_update(uint8_t keys) {
         if (room_delay > 0) {
             room_delay--;
             if (room_delay == 0 && room_pending != 0) {
-                if (room_pending != game.room && scx_delay == 0) {
-                    scx_target = room_scx[room_pending];
-                    scx_anim = 60;
-                }
+                // Animation already started when pending was set
                 game.room = room_pending;
                 room_pending = 0;
             }
@@ -325,30 +322,18 @@ void gamestate_update(uint8_t keys) {
             target_room = 3;
         }
 
-        // Set pending room (OG: FFCE set, then 6-frame delay before FFBD copy)
+        // Set pending room (OG: FFCE set ~4 ticks after scroll starts,
+        // animation begins 1 tick before FFBD copy, FFBD copies 1 tick later)
         if (target_room != game.room && room_pending == 0) {
             room_pending = target_room;
-            room_delay = 5;  // OG: FFCE set at frame 17, FFBD copy at frame 23 = ~5 ticks
+            room_delay = 5;  // OG: ~5 ticks from first scroll to room change
+        }
+        // Start animation 1 tick before room changes (OG: SCX drops at step 5, room at step 6)
+        if (room_pending != 0 && room_delay == 1 && scx_delay == 0) {
+            scx_target = room_scx[room_pending];
+            scx_anim = 60;
         }
 
-        // Delay 180 frames after gameplay starts before first SCX set
-        if (scx_delay > 0) {
-            scx_delay--;
-            if (scx_delay == 0) {
-                scroll_x = room_scx[game.room];
-                SCX_REG = (uint8_t)scroll_x;
-                scroll_dist = 0;  // Reset scroll distance when gameplay begins
-            }
-        } else if (scx_anim > 0) {
-            // Room transition scroll: cycle 0→4→8→12 ascending
-            scx_anim--;
-            scroll_x = (((60 - scx_anim) / 5) % 4) * 4;
-            SCX_REG = (uint8_t)scroll_x;
-            if (scx_anim == 0) {
-                scroll_x = scx_target;
-                SCX_REG = (uint8_t)scroll_x;
-            }
-        }
     }
 
     // Section advancement (non-boss: timer-based)
@@ -378,4 +363,25 @@ void gamestate_update(uint8_t keys) {
     *((volatile uint8_t *)0xFFE5) = game.room;  // Scanner: FFE5 also tracks room
     *((volatile uint8_t *)0xFFDD) = game.lives;  // Scanner: FFDD=3 at start
     *((volatile uint8_t *)0xDCBB) = (uint8_t)(255 - (game.section_timer & 0xFF));  // OG: DCBB countdown from 255
+}
+
+void gamestate_animate_scx(void) {
+    // SCX animation runs every frame (60 Hz), not on game tick
+    // scx_delay also runs every frame (it's a VBlank frame counter)
+    if (scx_delay > 0) {
+        scx_delay--;
+        if (scx_delay == 0) {
+            scroll_x = room_scx[game.room];
+            SCX_REG = (uint8_t)scroll_x;
+            scroll_dist = 0;
+        }
+    } else if (scx_anim > 0) {
+        scx_anim--;
+        scroll_x = (((60 - scx_anim) / 5) % 4) * 4;
+        SCX_REG = (uint8_t)scroll_x;
+        if (scx_anim == 0) {
+            scroll_x = scx_target;
+            SCX_REG = (uint8_t)scroll_x;
+        }
+    }
 }

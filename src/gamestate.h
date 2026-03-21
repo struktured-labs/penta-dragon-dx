@@ -58,6 +58,7 @@ void gamestate_init(void);
 
 // Update section/room progression each frame
 void gamestate_update(uint8_t keys);
+void gamestate_animate_scx(void);  // Runs every frame (60 Hz), not on game tick
 
 // Advance to next section
 void gamestate_next_section(void);

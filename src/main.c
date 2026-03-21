@@ -144,6 +144,8 @@ static void game_update(void) {
             gamestate_update(keys);
         }
     }
+    // SCX animation runs every frame (60 Hz), not on game tick
+    gamestate_animate_scx();
 
     // Update all
     projectile_update();
