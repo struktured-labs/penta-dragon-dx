@@ -484,9 +484,8 @@ void enemy_draw(void) {
         sx = e->x + OAM_X_OFS;
         sy = e->y + OAM_Y_OFS;
         tile = e->tile_base + e->frame * 4;
-        // Hit flash: briefly use palette 0
+        // Hit flash: use palette 0 (decrement handled in enemy_update)
         if (e->hit_flash > 0) {
-            e->hit_flash--;
             flags = 0;
         } else {
             flags = e->palette & 0x07;
@@ -527,6 +526,7 @@ uint8_t enemy_check_player_hit(uint8_t px, uint8_t py) {
     for (i = 0; i < MAX_ENEMIES; i++) {
         e = &enemies[i];
         if (e->type == ENEMY_NONE) continue;
+        if (e->hp == 0) continue;  // Skip dying enemies
 
         if (px + 12 > e->x + 2 && px + 2 < e->x + 14 &&
             py + 12 > e->y + 2 && py + 2 < e->y + 14) {
