@@ -14,7 +14,7 @@ uint8_t  scroll_y;
 uint8_t  scroll_col;
 // auto_scroll removed — OG doesn't auto-scroll (verified)
 static uint8_t scroll_tick;
-static uint8_t room_loaded;  // 0=sparse initial, 1=full room content loaded
+static uint8_t current_stage; // Which progressive stage is loaded (0=initial, 1-4=stages)
 
 // ============================================
 // Item collection tracking
@@ -117,7 +117,7 @@ void level_init(void) {
     scroll_col = 32;
     scroll_tick = 0;
     collected_count = 0;
-    room_loaded = 0;  // Full room content not yet loaded
+    current_stage = 0;
 
     // Fill initial visible area + border columns (matches OG layout)
     for (col = 0; col < 32; col++) {
