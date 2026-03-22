@@ -8,7 +8,8 @@
 
 // BG tiles + level data in ROM bank 2
 #include "data_bank2.h"
-#include "level_data_extracted.h"
+// level_data_extracted.h has 127 columns but needs tile ID remapping
+// before use (OG metatile IDs ≠ remake tile IDs)
 
 uint16_t scroll_x;
 uint8_t  scroll_y;
@@ -87,10 +88,9 @@ static const uint8_t bg_tile_pal[256] = {
 
 static void get_level_column(uint8_t *tiles, uint16_t col_idx) {
     uint8_t i;
-    // Use RE-extracted level data (127 columns from metatile expansion)
-    uint16_t data_col = col_idx % LEVEL1_EXTRACTED_COLUMNS;
+    uint16_t data_col = col_idx % LEVEL1_NUM_COLUMNS;
     for (i = 0; i < LEVEL_HEIGHT; i++) {
-        tiles[i] = level1_extracted[data_col][i];
+        tiles[i] = level1_data[data_col][i];
     }
 }
 
@@ -160,9 +160,7 @@ int8_t level_update(uint8_t keys) {
     //   world_x = scroll_x + 72, world_y = scroll_y + 64
     // Check collision BEFORE scrolling to block movement into walls
     // OG scroll limit: DC81 stops at 140 (60px total = 15 game ticks of RIGHT)
-    // 127 columns × 8 pixels = 1016 pixels total level width
-    // Screen is 20 tiles (160px), so max scroll = (127-20)*8 = 856px
-    #define SCROLL_MAX 856
+    #define SCROLL_MAX 60  // OG scroll limit (DC81=140)
 
     if (game_tick == 0) {
         if (keys & J_RIGHT) {
@@ -194,9 +192,9 @@ int8_t level_update(uint8_t keys) {
 }
 
 uint8_t level_get_tile(uint16_t col, uint8_t row) {
-    uint16_t data_col = col % LEVEL1_EXTRACTED_COLUMNS;
+    uint16_t data_col = col % LEVEL1_NUM_COLUMNS;
     if (row >= LEVEL_HEIGHT) return 0x00;
-    return level1_extracted[data_col][row];
+    return level1_data[data_col][row];
 }
 
 uint8_t level_is_solid(uint16_t world_x, uint8_t world_y) {
