@@ -113,12 +113,12 @@ void level_init(void) {
 
     scroll_x = 0;  // SCX starts at 0; gamestate sets room SCX after delay
     scroll_y = 0;
-    scroll_col = 23;
+    scroll_col = 32;
     scroll_tick = 0;
     collected_count = 0;
 
     // Fill initial visible area + border columns (matches OG layout)
-    for (col = 0; col < 23; col++) {
+    for (col = 0; col < 32; col++) {
         get_level_column(tiles, col);
         write_column(col & 31, tiles);
     }
