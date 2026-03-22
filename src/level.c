@@ -150,34 +150,34 @@ int8_t level_update(uint8_t keys) {
     }
     SCY_REG = scroll_y;
 
-    // OG horizontal scroll: D-pad RIGHT/LEFT scrolls the world
-    // Sara stays fixed at (72,64), BG scrolls around her.
-    // OG scrolls ~1px per frame when holding RIGHT (DC81 decrements by 4 per 4 frames)
-    // SCX_REG handles sub-tile offset (0-7), new tile columns loaded at boundaries
+    // OG horizontal scroll: column-based tilemap shifting.
+    // SCX_REG stays FIXED at room base (e.g. 12 for room 5).
+    // Visual scroll comes from writing new tile columns to VRAM.
+    // OG: DC81 decrements by 4 per game tick during RIGHT,
+    //      new column loaded every 2 ticks (8px = 1 tile width).
     if (game_tick == 0) {
         if (keys & J_RIGHT) {
-            scroll_x += 4;
-            // When we cross a tile boundary (every 8 pixels), load next column
+            scroll_x += 4;  // Internal position tracker (not written to SCX_REG)
+            // Load next tile column every 8 pixels
             if ((scroll_x & 7) == 0) {
                 get_level_column(tiles, scroll_col);
                 write_column(scroll_col & 31, tiles);
                 scroll_col++;
             }
-            SCX_REG = (uint8_t)(scroll_x & 0xFF);
         } else if (keys & J_LEFT) {
             if (scroll_x >= 4) {
                 scroll_x -= 4;
                 if ((scroll_x & 7) == 4) {
-                    // Load column on left edge
                     uint16_t left_col = (scroll_x >> 3);
                     if (left_col > 0) {
                         get_level_column(tiles, left_col - 1);
                         write_column((left_col - 1) & 31, tiles);
                     }
                 }
-                SCX_REG = (uint8_t)(scroll_x & 0xFF);
             }
         }
+        // SCX_REG is NOT updated here — it's managed by gamestate_animate_scx
+        // for room transitions only. The OG keeps SCX fixed during scrolling.
     }
 
     return 0;
