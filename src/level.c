@@ -13,7 +13,8 @@ uint16_t scroll_x;
 uint8_t  scroll_y;
 uint8_t  scroll_col;
 // auto_scroll removed — OG doesn't auto-scroll (verified)
-static uint8_t scroll_tick; // Counts frames for quantized 4px/4frame scroll
+static uint8_t scroll_tick;
+static uint8_t room_loaded;  // 0=sparse initial, 1=full room content loaded
 
 // ============================================
 // Item collection tracking
@@ -111,11 +112,12 @@ void level_init(void) {
     uint8_t col;
     uint8_t tiles[LEVEL_HEIGHT];
 
-    scroll_x = 0;  // SCX starts at 0; gamestate sets room SCX after delay
+    scroll_x = 0;
     scroll_y = 0;
     scroll_col = 32;
     scroll_tick = 0;
     collected_count = 0;
+    room_loaded = 0;  // Full room content not yet loaded
 
     // Fill initial visible area + border columns (matches OG layout)
     for (col = 0; col < 32; col++) {
