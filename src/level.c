@@ -155,13 +155,12 @@ int8_t level_update(uint8_t keys) {
     // Sara is at screen (72, 64), so her world position is:
     //   world_x = scroll_x + 72, world_y = scroll_y + 64
     // Check collision BEFORE scrolling to block movement into walls
+    // OG scroll limit: DC81 stops at 140 (60px total = 15 game ticks of RIGHT)
+    #define SCROLL_MAX 60  // Maximum scroll distance in pixels
+
     if (game_tick == 0) {
         if (keys & J_RIGHT) {
-            // Check if the right edge of Sara (16px wide) would hit a wall
-            uint16_t probe_x = scroll_x + 4 + 72 + 16;  // Right edge after scroll
-            uint8_t probe_y1 = scroll_y + 64;              // Top of Sara
-            uint8_t probe_y2 = scroll_y + 64 + 15;         // Bottom of Sara
-            if (!level_is_solid(probe_x, probe_y1) && !level_is_solid(probe_x, probe_y2)) {
+            if (scroll_x < SCROLL_MAX) {
                 scroll_x += 4;
                 SCX_REG = (uint8_t)(scroll_x & 0x0F);
                 if ((scroll_x & 7) == 0) {
@@ -172,19 +171,13 @@ int8_t level_update(uint8_t keys) {
             }
         } else if (keys & J_LEFT) {
             if (scroll_x >= 4) {
-                // Check left edge of Sara
-                uint16_t probe_x = scroll_x - 4 + 72;
-                uint8_t probe_y1 = scroll_y + 64;
-                uint8_t probe_y2 = scroll_y + 64 + 15;
-                if (!level_is_solid(probe_x, probe_y1) && !level_is_solid(probe_x, probe_y2)) {
-                    scroll_x -= 4;
-                    SCX_REG = (uint8_t)(scroll_x & 0x0F);
-                    if ((scroll_x & 7) == 4) {
-                        uint16_t left_col = (scroll_x >> 3);
-                        if (left_col > 0) {
-                            get_level_column(tiles, left_col - 1);
-                            write_column((left_col - 1) & 31, tiles);
-                        }
+                scroll_x -= 4;
+                SCX_REG = (uint8_t)(scroll_x & 0x0F);
+                if ((scroll_x & 7) == 4) {
+                    uint16_t left_col = (scroll_x >> 3);
+                    if (left_col > 0) {
+                        get_level_column(tiles, left_col - 1);
+                        write_column((left_col - 1) & 31, tiles);
                     }
                 }
             }
