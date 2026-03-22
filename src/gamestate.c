@@ -366,22 +366,17 @@ void gamestate_update(uint8_t keys) {
 }
 
 void gamestate_animate_scx(void) {
-    // SCX animation runs every frame (60 Hz), not on game tick
-    // scx_delay also runs every frame (it's a VBlank frame counter)
+    // Only handles initial scx_delay countdown.
+    // Once scx_delay expires, level_update() owns SCX via scroll_x.
     if (scx_delay > 0) {
         scx_delay--;
         if (scx_delay == 0) {
+            // Set initial scroll position from room, then hand off to level_update
             scroll_x = room_scx[game.room];
             SCX_REG = (uint8_t)scroll_x;
             scroll_dist = 0;
         }
-    } else if (scx_anim > 0) {
-        scx_anim--;
-        scroll_x = (((60 - scx_anim) / 5) % 4) * 4;
-        SCX_REG = (uint8_t)scroll_x;
-        if (scx_anim == 0) {
-            scroll_x = scx_target;
-            SCX_REG = (uint8_t)scroll_x;
-        }
     }
+    // Mirror scroll distance to DC81 (OG uses DC81 as scroll counter)
+    *((volatile uint8_t *)0xDC81) = (uint8_t)(200 - (scroll_dist * 4));
 }
