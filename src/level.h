@@ -38,8 +38,9 @@ int8_t level_update(uint8_t keys);
 // Get a tile from the level map at world column, row
 uint8_t level_get_tile(uint16_t col, uint8_t row);
 
-// Check if a world position is solid (for collision)
-// level_is_solid removed — Sara fixed at (80,80)
+// Check if a world position has a solid tile (wall/obstacle)
+// Sara is at fixed SCREEN position but interacts with scrolling world
+uint8_t level_is_solid(uint16_t world_x, uint8_t world_y);
 
 // Spawn enemies based on scroll position
 // level_check_spawns removed — spawning in gamestate.c

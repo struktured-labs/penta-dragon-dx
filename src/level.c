@@ -154,25 +154,40 @@ int8_t level_update(uint8_t keys) {
     // SCX cycles 0→4→8→12→0... (+4 per game tick during RIGHT)
     // New tile columns loaded when SCX wraps (every 16px = 2 tiles)
     // DC81 decrements by 4 per tick, tracking total scroll distance
+    // Sara's world position = scroll offset + screen position
+    // Sara is at screen (72, 64), so her world position is:
+    //   world_x = scroll_x + 72, world_y = scroll_y + 64
+    // Check collision BEFORE scrolling to block movement into walls
     if (game_tick == 0) {
         if (keys & J_RIGHT) {
-            scroll_x += 4;
-            SCX_REG = (uint8_t)(scroll_x & 0x0F);  // Fine scroll: cycles 0-12
-            // Load new tile column at tile boundaries (every 8 pixels)
-            if ((scroll_x & 7) == 0) {
-                get_level_column(tiles, scroll_col);
-                write_column(scroll_col & 31, tiles);
-                scroll_col++;
+            // Check if the right edge of Sara (16px wide) would hit a wall
+            uint16_t probe_x = scroll_x + 4 + 72 + 16;  // Right edge after scroll
+            uint8_t probe_y1 = scroll_y + 64;              // Top of Sara
+            uint8_t probe_y2 = scroll_y + 64 + 15;         // Bottom of Sara
+            if (!level_is_solid(probe_x, probe_y1) && !level_is_solid(probe_x, probe_y2)) {
+                scroll_x += 4;
+                SCX_REG = (uint8_t)(scroll_x & 0x0F);
+                if ((scroll_x & 7) == 0) {
+                    get_level_column(tiles, scroll_col);
+                    write_column(scroll_col & 31, tiles);
+                    scroll_col++;
+                }
             }
         } else if (keys & J_LEFT) {
             if (scroll_x >= 4) {
-                scroll_x -= 4;
-                SCX_REG = (uint8_t)(scroll_x & 0x0F);
-                if ((scroll_x & 7) == 4) {
-                    uint16_t left_col = (scroll_x >> 3);
-                    if (left_col > 0) {
-                        get_level_column(tiles, left_col - 1);
-                        write_column((left_col - 1) & 31, tiles);
+                // Check left edge of Sara
+                uint16_t probe_x = scroll_x - 4 + 72;
+                uint8_t probe_y1 = scroll_y + 64;
+                uint8_t probe_y2 = scroll_y + 64 + 15;
+                if (!level_is_solid(probe_x, probe_y1) && !level_is_solid(probe_x, probe_y2)) {
+                    scroll_x -= 4;
+                    SCX_REG = (uint8_t)(scroll_x & 0x0F);
+                    if ((scroll_x & 7) == 4) {
+                        uint16_t left_col = (scroll_x >> 3);
+                        if (left_col > 0) {
+                            get_level_column(tiles, left_col - 1);
+                            write_column((left_col - 1) & 31, tiles);
+                        }
                     }
                 }
             }
@@ -188,7 +203,21 @@ uint8_t level_get_tile(uint16_t col, uint8_t row) {
     return level1_data[data_col][row];
 }
 
-// level_is_solid removed — Sara doesn't move (verified fixed at 80,80)
+uint8_t level_is_solid(uint16_t world_x, uint8_t world_y) {
+    // Convert world pixel position to tile column/row
+    uint16_t col = world_x >> 3;  // Divide by 8 (tile width)
+    uint8_t row = world_y >> 3;   // Divide by 8 (tile height)
+    uint8_t tile = level_get_tile(col, row);
+
+    // Solid tiles: walls, borders, void
+    // 0xFE = void (solid boundary)
+    // 0x16 = wall fill
+    // 0x17 = wall border
+    // 0x40-0x59 = wall structure blocks
+    if (tile == 0xFE || tile == 0x16 || tile == 0x17) return 1;
+    if (tile >= 0x40 && tile <= 0x59) return 1;
+    return 0;
+}
 
 // level_check_spawns removed — spawning handled by gamestate
 
