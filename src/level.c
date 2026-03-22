@@ -204,18 +204,16 @@ uint8_t level_get_tile(uint16_t col, uint8_t row) {
 }
 
 uint8_t level_is_solid(uint16_t world_x, uint8_t world_y) {
-    // Convert world pixel position to tile column/row
-    uint16_t col = world_x >> 3;  // Divide by 8 (tile width)
-    uint8_t row = world_y >> 3;   // Divide by 8 (tile height)
-    uint8_t tile = level_get_tile(col, row);
-
-    // Solid tiles: walls, borders, void
-    // 0xFE = void (solid boundary)
-    // 0x16 = wall fill
-    // 0x17 = wall border
-    // 0x40-0x59 = wall structure blocks
-    if (tile == 0xFE || tile == 0x16 || tile == 0x17) return 1;
-    if (tile >= 0x40 && tile <= 0x59) return 1;
+    // OG doesn't use tile collision — movement bounded by scroll limits.
+    // DC81 stops at 140 (60px total scroll from start position).
+    // Left boundary: can't scroll left past start.
+    // Right boundary: scroll_x max = 60px (15 tile columns).
+    (void)world_y;  // No vertical collision in OG
+    uint16_t col = world_x >> 3;
+    // Boundary: can't scroll into column 0 (off-screen wall 0x26/0x36)
+    if (col == 0) return 1;
+    // Right boundary: level wraps at LEVEL1_NUM_COLUMNS
+    if (col >= LEVEL1_NUM_COLUMNS) return 1;
     return 0;
 }
 
