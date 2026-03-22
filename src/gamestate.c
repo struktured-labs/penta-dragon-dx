@@ -377,12 +377,11 @@ void gamestate_animate_scx(void) {
             scroll_dist = 0;
         }
     } else if (scx_anim > 0) {
-        // Room transition: cycle SCX through 0→4→8→12 (visual effect)
+        // Room transition animation — but only if not actively scrolling
+        // (level_update owns SCX during scrolling via scroll_x)
         scx_anim--;
-        SCX_REG = (uint8_t)((((60 - scx_anim) / 5) % 4) * 4);
         if (scx_anim == 0) {
-            scroll_x = scx_target;
-            SCX_REG = (uint8_t)scroll_x;
+            scx_target = scx_target;  // animation done
         }
     }
     // Mirror scroll distance to DC81
