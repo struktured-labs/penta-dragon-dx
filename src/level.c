@@ -113,15 +113,12 @@ void level_init(void) {
 
     scroll_x = 0;  // SCX starts at 0; gamestate sets room SCX after delay
     scroll_y = 0;
-    scroll_col = 21;
+    scroll_col = 23;
     scroll_tick = 0;
-    // No auto-scroll, no level-based spawning (both verified)
     collected_count = 0;
 
-    // Don't set SCX/SCY here — handled by stage intro + gamestate
-
-    // Fill initial visible area (21 columns from the level data)
-    for (col = 0; col < 21; col++) {
+    // Fill initial visible area + border columns (matches OG layout)
+    for (col = 0; col < 23; col++) {
         get_level_column(tiles, col);
         write_column(col & 31, tiles);
     }
