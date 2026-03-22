@@ -135,15 +135,10 @@ void level_load_tiles(void) {
 }
 
 int8_t level_update(uint8_t keys) {
-    // OG SCY model (frame-precise analysis via RL pipeline):
-    //   - Runs on a 4-frame game tick (not every VBlank)
-    //   - DOWN: +4 per tick, wraps mod 16 (0→4→8→12→0→...)
-    //   - UP:   -4 per tick, wraps mod 16 (0→12→8→4→0→...)
-    //   - NO DECAY: SCY stays at last value until next input
-    //   - Response delay: 0-3 frames (waits for next tick alignment)
-    // Phase-aligned with OG tick (phase=1, fires at frame offsets 5,9,13...)
-    static uint8_t game_tick = 2;
+    uint8_t tiles[LEVEL_HEIGHT];
 
+    // OG SCY model: 4-frame game tick, no decay
+    static uint8_t game_tick = 2;
     game_tick = (game_tick + 1) & 3;
     if (game_tick == 0) {
         if (keys & J_DOWN) {
@@ -152,9 +147,39 @@ int8_t level_update(uint8_t keys) {
             if (scroll_y == 0) scroll_y = 12;
             else scroll_y = (scroll_y - 4) & 0x0F;
         }
-        // No else: SCY stays at last value (no decay — verified OG)
     }
     SCY_REG = scroll_y;
+
+    // OG horizontal scroll: D-pad RIGHT/LEFT scrolls the world
+    // Sara stays fixed at (72,64), BG scrolls around her.
+    // OG scrolls ~1px per frame when holding RIGHT (DC81 decrements by 4 per 4 frames)
+    // SCX_REG handles sub-tile offset (0-7), new tile columns loaded at boundaries
+    if (game_tick == 0) {
+        if (keys & J_RIGHT) {
+            scroll_x += 4;
+            // When we cross a tile boundary (every 8 pixels), load next column
+            if ((scroll_x & 7) == 0) {
+                get_level_column(tiles, scroll_col);
+                write_column(scroll_col & 31, tiles);
+                scroll_col++;
+            }
+            SCX_REG = (uint8_t)(scroll_x & 0xFF);
+        } else if (keys & J_LEFT) {
+            if (scroll_x >= 4) {
+                scroll_x -= 4;
+                if ((scroll_x & 7) == 4) {
+                    // Load column on left edge
+                    uint16_t left_col = (scroll_x >> 3);
+                    if (left_col > 0) {
+                        get_level_column(tiles, left_col - 1);
+                        write_column((left_col - 1) & 31, tiles);
+                    }
+                }
+                SCX_REG = (uint8_t)(scroll_x & 0xFF);
+            }
+        }
+    }
+
     return 0;
 }
 
