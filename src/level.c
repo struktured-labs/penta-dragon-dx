@@ -8,6 +8,8 @@
 
 // BG tiles + level data in ROM bank 2
 #include "data_bank2.h"
+// level_data_extracted.h has 127 columns but needs tile ID remapping
+// before use (OG metatile IDs ≠ remake tile IDs)
 
 uint16_t scroll_x;
 uint8_t  scroll_y;
@@ -157,9 +159,8 @@ int8_t level_update(uint8_t keys) {
     // Sara is at screen (72, 64), so her world position is:
     //   world_x = scroll_x + 72, world_y = scroll_y + 64
     // Check collision BEFORE scrolling to block movement into walls
-    // 127 columns × 8px = 1016px level. Screen = 160px (20 cols).
-    // Max scroll = (127 - 20) × 8 = 856px
-    #define SCROLL_MAX 856
+    // OG scroll limit: DC81 stops at 140 (60px total = 15 game ticks of RIGHT)
+    #define SCROLL_MAX 60  // OG scroll limit (DC81=140)
 
     if (game_tick == 0) {
         if (keys & J_RIGHT) {

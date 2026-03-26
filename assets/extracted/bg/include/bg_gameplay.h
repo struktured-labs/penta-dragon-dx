@@ -1,8 +1,8 @@
 #ifndef __BG_GAMEPLAY_TILES_H__
 #define __BG_GAMEPLAY_TILES_H__
 
-/* BG_GAMEPLAY_TILES - extracted from OG VRAM at max scroll (DC81=140) */
-/* All 256 tile graphics captured during actual gameplay */
+/* BG_GAMEPLAY_TILES — synced VRAM capture at gameplay start */
+/* Tile IDs match the tilemap captured at the same frame */
 
 #define BG_GAMEPLAY_TILES_TILE_COUNT 256
 #define BG_GAMEPLAY_TILES_TILE_START 0x00
