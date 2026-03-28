@@ -169,13 +169,15 @@ int8_t level_update(uint8_t keys) {
     //   world_x = scroll_x + 72, world_y = scroll_y + 64
     // Check collision BEFORE scrolling to block movement into walls
     // OG scroll limit: DC81 stops at 140 (60px total = 15 game ticks of RIGHT)
-    #define SCROLL_MAX 60  // OG scroll limit (DC81=140)
+    // 32 columns × 8px = 256px hardware wrap. Level has 32 cols currently.
+    // Scroll until we've shown all level content.
+    #define SCROLL_MAX ((LEVEL1_NUM_COLUMNS - 21) * 8)
 
     if (game_tick == 0) {
         if (keys & J_RIGHT) {
             if (scroll_x < SCROLL_MAX) {
                 scroll_x += 4;
-                SCX_REG = (uint8_t)(scroll_x & 0x0F);
+                SCX_REG = (uint8_t)(scroll_x & 0xFF);
                 if ((scroll_x & 7) == 0) {
                     get_level_column(tiles, scroll_col);
                     write_column(scroll_col & 31, tiles);
@@ -185,7 +187,7 @@ int8_t level_update(uint8_t keys) {
         } else if (keys & J_LEFT) {
             if (scroll_x >= 4) {
                 scroll_x -= 4;
-                SCX_REG = (uint8_t)(scroll_x & 0x0F);
+                SCX_REG = (uint8_t)(scroll_x & 0xFF);
                 if ((scroll_x & 7) == 4) {
                     uint16_t left_col = (scroll_x >> 3);
                     if (left_col > 0) {
