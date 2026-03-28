@@ -21,7 +21,7 @@
 // Palette 7 - Mystery/special (deep blue)
 
 static const palette_color_t bg_palettes[8][4] = {
-    { 0x7FFF, 0x7BDE, 0x4E73, 0x0000 },  // 0: Dungeon floor (white, near-white, gray, black)
+    { 0x7FFF, 0x7F5A, 0x7EB5, 0x7E10 },  // 0: Dungeon floor (all near-white, subtle)
     { 0x03FF, 0x02DF, 0x019F, 0x0000 },  // 1: Items (gold)
     { 0x7E1F, 0x5C0F, 0x3807, 0x0000 },  // 2: Decorative (purple)
     { 0x03E0, 0x02A0, 0x0160, 0x0000 },  // 3: Nature (green)
