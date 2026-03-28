@@ -178,7 +178,7 @@ int8_t level_update(uint8_t keys) {
             if (scroll_x < SCROLL_MAX) {
                 scroll_x += 4;
                 SCX_REG = (uint8_t)(scroll_x & 0xFF);
-                if ((scroll_x & 7) == 0) {
+                if ((scroll_x & 7) == 0 && scroll_col < LEVEL1_NUM_COLUMNS) {
                     get_level_column(tiles, scroll_col);
                     write_column(scroll_col & 31, tiles);
                     scroll_col++;
