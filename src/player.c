@@ -54,8 +54,8 @@ void player_update(uint8_t keys, uint8_t prev_keys) {
         player.shoot_cd--;
     }
 
-    // Animation — only animate if Sara actually moved
-    if (keys & (J_LEFT | J_RIGHT | J_UP | J_DOWN)) {
+    // Animation — only on LEFT/RIGHT (side-scroller, UP/DOWN is vertical scroll)
+    if (keys & (J_LEFT | J_RIGHT)) {
         player.anim_tick++;
         if (player.anim_tick >= ANIM_SPEED) {
             player.anim_tick = 0;

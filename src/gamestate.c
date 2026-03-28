@@ -68,7 +68,7 @@ void gamestate_init(void) {
     game.lives = 23; // OG: starts with 23 lives (verified via PyBoy FFDD=0x17)
     game.section_timer = 0;
     game.score = 0;
-    scx_delay = 180; // Runs every frame (60 Hz) via gamestate_animate_scx
+    scx_delay = 30;  // Short delay for SCX init — Sara visible immediately
     scroll_dist = 0;
     room_pending = 0;
     room_delay = 0;

@@ -141,12 +141,21 @@ int8_t level_update(uint8_t keys) {
     // OG SCY model: 4-frame game tick, no decay
     static uint8_t game_tick = 2;
     game_tick = (game_tick + 1) & 3;
-    if (game_tick == 0) {
-        if (keys & J_DOWN) {
-            scroll_y = (scroll_y + 4) & 0x0F;
-        } else if (keys & J_UP) {
-            if (scroll_y == 0) scroll_y = 12;
-            else scroll_y = (scroll_y - 4) & 0x0F;
+    // OG SCY: single impulse per press, no continuous scroll while held
+    {
+        static uint8_t vert_held = 0;
+        if (game_tick == 0) {
+            if ((keys & J_DOWN) && !vert_held) {
+                scroll_y = (scroll_y + 4) & 0x0F;
+                vert_held = 1;
+            } else if ((keys & J_UP) && !vert_held) {
+                if (scroll_y == 0) scroll_y = 12;
+                else scroll_y = (scroll_y - 4) & 0x0F;
+                vert_held = 1;
+            }
+            if (!(keys & (J_UP | J_DOWN))) {
+                vert_held = 0;
+            }
         }
     }
     SCY_REG = scroll_y;
