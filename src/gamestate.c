@@ -252,31 +252,10 @@ static void spawn_section_enemies(void) {
         }
     }
 
-    // Spawn from varied positions matching OG density
+    // OG: enemies spawn from right edge at varied Y positions
     {
-        uint8_t spawn_side = game.progress & 0x07;
-        uint8_t sx, sy;
-        if (spawn_side < 3) {
-            // Right edge (most common)
-            sx = 168;
-            sy = y;
-        } else if (spawn_side == 3) {
-            // Top edge
-            sx = 40 + (game.progress * 13) % 100;
-            sy = 8;
-        } else if (spawn_side == 4) {
-            // Bottom edge
-            sx = 40 + (game.progress * 17) % 100;
-            sy = 120;
-        } else if (spawn_side == 5) {
-            // Right-upper
-            sx = 168;
-            sy = 20 + (game.progress * 11) % 40;
-        } else {
-            // Mid-screen right (closer to Sara)
-            sx = 140;
-            sy = 30 + (game.progress * 9) % 70;
-        }
+        uint8_t sx = 168;  // Always right edge
+        uint8_t sy = 20 + (game.progress * 17) % 100;  // Y: 20-119
         enemy_spawn(type, sx, sy);
     }
     game.progress++;
