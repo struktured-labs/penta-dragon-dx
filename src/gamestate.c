@@ -44,8 +44,8 @@ static const uint8_t sect1_rooms[] = { 5, 1, 5 };
 static const uint8_t room_scx[] = { 0, 8, 8, 8, 8, 12, 8, 8 }; // indexed by room number
 
 // Enemy types per section
-#define SPAWN_CD_NORMAL   60
-#define SPAWN_CD_ADVANCED 40
+#define SPAWN_CD_NORMAL   15  // OG has 14+ enemy sprites — spawns aggressively
+#define SPAWN_CD_ADVANCED 10
 static uint8_t spawn_timer;
 static uint16_t scx_delay;    // Delay before room SCX applies (OG: ~180 frames)
 static uint8_t scx_anim;      // Room transition scroll animation frames remaining
