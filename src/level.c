@@ -173,7 +173,7 @@ int8_t level_update(uint8_t keys) {
     // Scroll until we've shown all level content.
     #define SCROLL_MAX ((LEVEL1_NUM_COLUMNS - 21) * 8)
 
-    if (game_tick == 0) {
+    if (game_tick == 0 && !gamestate_in_transition()) {
         if (keys & J_RIGHT) {
             if (scroll_x < SCROLL_MAX) {
                 scroll_x += 4;

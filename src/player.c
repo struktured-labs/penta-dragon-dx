@@ -114,14 +114,8 @@ void player_draw(void) {
 
     flags_all = palette & 0x07;
 
-    // OG hides Sara for 180 frames after gameplay starts (verified)
-    if (gamestate_in_transition()) {
-        move_sprite(OAM_PLAYER,     0, 0);
-        move_sprite(OAM_PLAYER + 1, 0, 0);
-        move_sprite(OAM_PLAYER + 2, 0, 0);
-        move_sprite(OAM_PLAYER + 3, 0, 0);
-        return;
-    }
+    // OG shows Sara immediately at gameplay start (verified via mGBA MCP).
+    // No sprite hiding during scroll delay.
 
     // Sara's screen position
     sx = player.x + OAM_X_OFS;

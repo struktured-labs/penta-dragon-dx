@@ -271,12 +271,10 @@ static void game_update(void) {
 
 static void game_draw(void) {
     player_draw();
-    // OG: no sprites visible during 180-frame transition (verified)
-    if (!gamestate_in_transition()) {
-        projectile_draw();
-        enemy_draw();
-        boss_draw();
-    }
+    // OG shows all sprites immediately (verified via mGBA MCP)
+    projectile_draw();
+    enemy_draw();
+    boss_draw();
 
     // Screen shake removed — not in OG, causes SCY mismatches (verified)
 }
@@ -370,12 +368,11 @@ void main(void) {
                         enemy_load_tiles();
                         level_init();
                         hud_init();
+                        SCX_REG = 0;  // OG starts at SCX=0, sets to 12 after 132 frames
+                        SCY_REG = 0;
                         SHOW_BKG;
                         SHOW_SPRITES;
                         DISPLAY_ON;
-                        // Reset section_timer so room transitions start from
-                        // gameplay begin, matching OG behavior (verified via
-                        // RL pipeline: OG starts at room=5 with timer=0)
                         game.section_timer = 0;
                         game_state = STATE_PLAYING;
                     } else {

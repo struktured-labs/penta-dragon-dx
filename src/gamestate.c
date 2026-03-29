@@ -68,7 +68,7 @@ void gamestate_init(void) {
     game.lives = 23; // OG: starts with 23 lives (verified via PyBoy FFDD=0x17)
     game.section_timer = 0;
     game.score = 0;
-    scx_delay = 30;  // Short delay for SCX init — Sara visible immediately
+    scx_delay = 132; // OG: 132 frames before scroll starts (verified via mGBA MCP)
     scroll_dist = 0;
     room_pending = 0;
     room_delay = 0;
@@ -170,6 +170,9 @@ void gamestate_next_section(void) {
 // Stage-specific BG palette themes (palette 0 = floor, palette 6 = walls)
 // Each stage shifts the dungeon colors for visual variety
 uint8_t gamestate_in_transition(void) {
+    // Returns true during scroll delay — scroll is blocked but sprites visible.
+    // Used by level_update to block scrolling during the delay.
+    // NOT used for sprite visibility (OG shows Sara immediately).
     return (scx_delay > 0) ? 1 : 0;
 }
 
