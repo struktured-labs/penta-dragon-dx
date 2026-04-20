@@ -1278,6 +1278,80 @@ Sound command pointers reference **null-delimited variable-length command stream
 - No explicit end marker observed — streams appear open-ended, with the handler's own state machine determining termination.
 - Format is similar to Trekkie/GB sound tracker patterns: variable-length commands carrying NR-register arguments.
 
+### 12.16 Combat Damage Write at 0x102F (gap_combat_damage_disasm.md)
+
+Verified disassembly of 0x1024 damage path:
+
+```z80
+1024: FA BB DC      LD A,(DCBB)        ; current HP
+1027: 90            SUB B              ; B = damage value
+1028: C1            POP BC
+1029: DA 44 4A      JP C, $4A44        ; underflow → death cinematic
+102C: CA 44 4A      JP Z, $4A44        ; HP=0 → death cinematic
+102F: EA BB DC      LD (DCBB),A        ; ★ damage write
+1032: FE 20         CP $20
+1034: 30 0C         JR NC,+12          ; if >= 0x20, skip threshold logic
+...
+```
+
+**No FFBF range check anywhere in the damage path.** Damage value comes in B (1-15 typical, never validated). Caller chain: collision detector → 0x1004 → 0x1024. This confirms boss 16 unkillability is upstream — collision never fires because boss 16's hitbox isn't populated in OAM/entity slots.
+
+### 12.17 FFBF Spawn/AI Table at 0x2C8F (gap_ffbf_spawn_table.md)
+
+**16 entries × 16 bytes** — INCLUDES entry 16. Lookup at 0x2A99:
+
+```z80
+2A99: F0 BF 3D 87 87 87   LDH A,(FFBF); DEC A; ADD A,A x3   ; A *= 8
+2A9F: 47 6F 26 00 29       LD B,A; LD L,A; LD H,0; ADD HL,HL ; *= 16 total
+```
+
+**Boss-16 OOB hypothesis REJECTED.** Entry 16 exists at 0x2D7F: `04 00 03 03 00 05 01 00 0A 02 00 08 04 00 03 03`. Suspect now: the embedded `00` bytes in entry 16's 4-tuples encode entity-type=0 (no-op), so the entity AI never spawns a hitbox. All entries 1-15 have non-zero entity-type fields. Boss 16 is finished-but-broken placeholder content.
+
+### 12.18 Scroll Engine State (gap_scroll_state.md)
+
+Verified scroll-state byte semantics:
+
+| Address | Purpose | Notes |
+|---------|---------|-------|
+| DC0B | Tilemap buffer toggle | 0=$9800, 1=$9C00; toggled at 0x4295 (`INC; AND $01`) |
+| DC0C | Fine X (low 4 bits of scroll) | Written 0x437D |
+| DC0D | Fine Y | Written 0x4376 |
+| DC0E/DC0F | VRAM edge pointer (LE) | Computed at 0x48C2 from DC0C/DC0D |
+| FFC2 | Top edge visible | 0/1 flag |
+| FFC3 | Bottom edge visible | 0/1 flag |
+| FFC4 | Left edge visible | 0/1 flag |
+| FFC5 | Right edge visible | 0/1 flag |
+
+Edge flags written by 0x5096 routine; boundary check at 0x50DF. The double-buffer + full-tilemap-rewrite design is what makes scroll modifications expensive (~80K T-cycles per copy).
+
+### 12.19 Powerup State Machine FFC0 (gap_powerup_state_machine.md)
+
+State machine at 0x7AC0-0x7B30 (bank 0). Only 4 live FFC0 writes in code:
+
+| Address | Action | Value |
+|---------|--------|-------|
+| 0x25EC | Game init | FFC0=3 (Turbo default) |
+| 0x7AC9 | Expiration | XOR A → FFC0=0 |
+| 0x7AE6 | Spiral pickup | FFC0=1 |
+| 0x7B16 | Shield pickup | FFC0=2 |
+
+(Other `E0 C0` byte sequences in banks 6-13 are graphics data, not code.)
+
+- Expiration timer at HRAM 0xFC (countdown). Shield: 15 frames (0x0F).
+- **Projectiles use palette indices ONLY** — same sprite tile, different palette. Confirms `palettes/penta_palettes_v097.yaml` powerup_palettes mapping.
+- Per-powerup handlers: 0x174E (generic projectile state), 0x799E (timer/anim), 0x1B3A (shield invincibility flag at HRAM 0xE4)
+- 24 FFC0 reads, all in rendering code (banks 7-14).
+
+### 12.20 Bank 14 Death Cinematic (gap_bank14_death_cinematic.md)
+
+- 16 KB of pure 2bpp tile graphics (~978 non-zero of 1024 tiles)
+- Loaded to VRAM 0x9000 via 0x109E (size 0x0800 = 128 tiles)
+- Triggered when DCBB=0 → 0x4A44 sets D880=0x17, FFE4=1
+- State 0x17 handler at bank3:0x6041; 9-frame animation (~146 frames @ 60 FPS)
+- Frame timing table at 0x60A1: `00 0A 0C 10 16 14 12 0E 08` (accel/decel pattern)
+- A-skip path at 0x4AD4 clears FFE4 + JP 0x016C (clean exit)
+- Normal path leaves FFE4 set + JP 0x015F (known stuck-state bug)
+
 ---
 
 ## Appendix A: ROM Bank Map
