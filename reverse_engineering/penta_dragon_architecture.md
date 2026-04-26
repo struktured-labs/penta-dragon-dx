@@ -1342,6 +1342,25 @@ State machine at 0x7AC0-0x7B30 (bank 0). Only 4 live FFC0 writes in code:
 - Per-powerup handlers: 0x174E (generic projectile state), 0x799E (timer/anim), 0x1B3A (shield invincibility flag at HRAM 0xE4)
 - 24 FFC0 reads, all in rendering code (banks 7-14).
 
+### 12.21 Runtime Probe Findings (runtime_probe_findings.md) — CRITICAL CORRECTIONS
+
+Headless mgba probes overturn several earlier static-only conclusions:
+
+**A. D880 NEVER cycles 0x02-0x09**
+Static search confirmed: no `LD A,n; LD (D880),A` exists for n in 0x02-0x09. D880 only takes values 0x01, 0x0A, 0x0B-0x14, 0x15-0x1C, 0x17 via direct write. No `LD HL,$D880` indirect-mutation paths either. **Observed live values: 0x02 (gameplay) and 0x0A (mini-boss).** The "data-driven 3-substate structure for state 0x08" decoded earlier is likely never reached in shipped gameplay.
+
+**B. FFBF → D880=0x0A confirmed**
+Writing FFBF=1 transitions D880 0x02 → 0x0A within 2 frames. Writing FFBF=16 (boss 16) does the same — state machine accepts boss 16.
+
+**C. FFAC/FFAD = $4000 at game start**
+Constant across FFBA writes. Not per-level as previously hypothesized. Likely a generic data pointer, not a spawn-table base.
+
+**D. Powerup HRAM 0xFC is NOT the timer**
+HRAM diff after writing FFC0=2 shows zero change at FFFC over 30 frames. No clean monotonic countdown found anywhere in HRAM. **Powerups likely don't auto-expire** — they persist until overwritten by next pickup or explicit clear at 0x7AC9.
+
+**E. Sound stream D894 IS the note duration counter**
+After writing D887=5: D894 loaded with 0x0B and decremented by 1 per frame to 0. D896 = stream pointer offset (advanced 0x4A → 0x48). Confirms the agent's stream-format hypothesis.
+
 ### 12.20 Bank 14 Death Cinematic (gap_bank14_death_cinematic.md)
 
 - 16 KB of pure 2bpp tile graphics (~978 non-zero of 1024 tiles)
