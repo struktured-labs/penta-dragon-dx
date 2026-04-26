@@ -1342,6 +1342,50 @@ State machine at 0x7AC0-0x7B30 (bank 0). Only 4 live FFC0 writes in code:
 - Per-powerup handlers: 0x174E (generic projectile state), 0x799E (timer/anim), 0x1B3A (shield invincibility flag at HRAM 0xE4)
 - 24 FFC0 reads, all in rendering code (banks 7-14).
 
+### 12.22 Runtime Probe Round 2 — Boss 16 SOLVED (runtime_probe_round2_findings.md)
+
+**DEFINITIVE: Boss 16 IS killable via direct DCBB writes.**
+
+Probe protocol: patch ROM 0x3402F=0x7B (boss 16 spawn), force section advance, write DCBB -= 0x10 every 5 frames.
+
+| Frame | DCBB | D880 | Event |
+|-------|------|------|-------|
+| 15 | 0xFF | 0x02 | Boss 16 spawned (FFBF=0x10) |
+| 23 | 0xDF | 0x0A | game transitioned to mini-boss state |
+| 91 | 0x00 | 0x0A | DCBB hit 0 (after damage writes) |
+| 535 | 0x00 | **0x17** | death cinematic fired |
+
+**Conclusion**: damage path 0x102F is generic — accepts any FFBF. The "boss 16 unkillable in normal play" observation is specifically a **projectile-collision-detection failure**: boss 16's entity AI entry at 0x2D7F (`04 00 03 03 00...`) likely fails to populate a valid OAM hitbox, so projectiles never collide.
+
+**Boss 16 also renders as a MOVING entity** — slot 1 byte 0 toggles 0→0x10 (active), bytes 2/3 advance frame-by-frame (Y/X position).
+
+### Entity Slot Byte Map (inferred from active boss 16)
+
+| Offset | Inferred | Evidence |
+|--------|----------|----------|
+| 0 | Active flag | 0x00 inactive, 0x10 active |
+| 1 | Animation frame | cycles 0-9 |
+| 2 | Y position | monotonically advances |
+| 3 | X position | jumps after destination reached |
+| 4 | Constant flag | 0x7F stable |
+| 5 | Direction/speed | 0x01/0x02 toggle |
+| 6 | Sub-counter | varies |
+| 7 | Sprite/tile-base | per-entity stable |
+
+### D880 Live Behavior
+
+**Only observed values: 0x00 (uninit), 0x02 (gameplay), 0x0A (mini-boss), 0x17 (death).** D880 writes ARE persisted by the game (NOT continuously reset). Forced D880=0x0E reverted because the dispatch routine's downstream code re-set it — not from a continuous override.
+
+**DDA8 is NOT a substate counter** — stayed 0x00 throughout all probes including state 0x0A.
+
+### Death Cinematic Delay
+
+After DCBB=0:
+- Gargoyle (FFBF=1): 180 frames until D880=0x17
+- Boss 16 (FFBF=16): 444 frames until D880=0x17
+
+Delay scales with boss-specific data — possibly the death animation timer at slot 1 byte 1.
+
 ### 12.21 Runtime Probe Findings (runtime_probe_findings.md) — CRITICAL CORRECTIONS
 
 Headless mgba probes overturn several earlier static-only conclusions:
