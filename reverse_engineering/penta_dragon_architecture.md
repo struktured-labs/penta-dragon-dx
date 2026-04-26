@@ -1396,8 +1396,11 @@ Static search confirmed: no `LD A,n; LD (D880),A` exists for n in 0x02-0x09. D88
 **B. FFBF → D880=0x0A confirmed**
 Writing FFBF=1 transitions D880 0x02 → 0x0A within 2 frames. Writing FFBF=16 (boss 16) does the same — state machine accepts boss 16.
 
-**C. FFAC/FFAD = $4000 at game start**
-Constant across FFBA writes. Not per-level as previously hypothesized. Likely a generic data pointer, not a spawn-table base.
+**C. FFAC/FFAD IS the per-level spawn pointer (CORRECTED)**
+Initial value $4000 at game start (level 1). My round-1 probe failed to detect changes because writing FFBA without triggering level transition doesn't refresh FFAC/FFAD. The existing `tmp/autoplay_full_game.lua` empirically maps the per-level table:
+- L1: $4000 (Gargoyle+Spider) — L2: $43C8 (Crimson+Ice) — L3: $463F (Void+Poison)
+- L4: $4C42 (all 8 bosses) — L5: $4CF2 — L6: $4DFD — L7: $5010 — L8: $50EF (Boss15+16)
+All pointers land in bank 13. See `ffac_ffad_corrected.md` for full table.
 
 **D. Powerup HRAM 0xFC is NOT the timer**
 HRAM diff after writing FFC0=2 shows zero change at FFFC over 30 frames. No clean monotonic countdown found anywhere in HRAM. **Powerups likely don't auto-expire** — they persist until overwritten by next pickup or explicit clear at 0x7AC9.
