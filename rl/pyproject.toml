@@ -1,0 +1,19 @@
+[project]
+name = "penta-rl"
+version = "0.1.0"
+description = "LLM-coached PPO for Penta Dragon DX (Game Boy)"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "pyboy>=2.0",
+    "numpy>=1.26",
+    "torch>=2.2",
+    "anthropic>=0.40",
+    "gymnasium>=0.29",
+    "tqdm>=4.66",
+]
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+[tool.setuptools.packages.find]
+where = ["."]

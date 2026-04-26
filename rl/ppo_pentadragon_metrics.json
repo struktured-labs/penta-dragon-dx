@@ -1,0 +1,38 @@
+[
+  {
+    "epoch": 1,
+    "elapsed_s": 2.6,
+    "n_eps": 1,
+    "mean_return_10": 366.159,
+    "max_return_10": 366.159,
+    "mean_bosses_10": 0.0,
+    "max_bosses_10": 0,
+    "loss_pi": -0.0393,
+    "loss_v": 3.632,
+    "entropy": 2.4724
+  },
+  {
+    "epoch": 2,
+    "elapsed_s": 4.9,
+    "n_eps": 1,
+    "mean_return_10": 392.051,
+    "max_return_10": 417.942,
+    "mean_bosses_10": 0.0,
+    "max_bosses_10": 0,
+    "loss_pi": -0.0376,
+    "loss_v": 2.19,
+    "entropy": 2.4476
+  },
+  {
+    "epoch": 3,
+    "elapsed_s": 7.3,
+    "n_eps": 1,
+    "mean_return_10": 415.927,
+    "max_return_10": 463.679,
+    "mean_bosses_10": 0.0,
+    "max_bosses_10": 0,
+    "loss_pi": -0.0377,
+    "loss_v": 2.4265,
+    "entropy": 2.3978
+  }
+]
