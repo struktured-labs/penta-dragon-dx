@@ -52,6 +52,7 @@ class PentaEnv(gym.Env):
         reward_cfg: RewardConfig | None = None,
         render_mode: str = "null",
         cgb: bool = True,
+        savestate_path: str | None = None,  # if set, reset() loads this state
     ):
         super().__init__()
         self.rom_path = rom_path
@@ -60,6 +61,7 @@ class PentaEnv(gym.Env):
         self.reward_tracker = RewardTracker(reward_cfg or RewardConfig())
         self.render_mode = render_mode
         self.cgb = cgb
+        self.savestate_path = savestate_path
 
         self.observation_space = spaces.Box(0.0, 1.0, (vector_dim(),), dtype=np.float32)
         self.action_space = spaces.Discrete(N_ACTIONS)
@@ -80,8 +82,12 @@ class PentaEnv(gym.Env):
         self.steps = 0
         self._held = []
 
-        # Auto-navigate title menu to gameplay
-        self._run_title_nav()
+        if self.savestate_path:
+            with open(self.savestate_path, "rb") as f:
+                self.pb.load_state(f)
+        else:
+            # Auto-navigate title menu to gameplay
+            self._run_title_nav()
 
         s = read_state(self.pb)
         # Initialize tracker with first state

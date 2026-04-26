@@ -7,19 +7,20 @@ from .env import PentaEnv, N_ACTIONS
 from .reward import RewardConfig
 
 
-def _make_penta_env(rom_path: str, max_steps: int):
+def _make_penta_env(rom_path: str, max_steps: int, savestate_path: str | None = None):
     """Top-level factory (picklable)."""
-    return PentaEnv(rom_path, max_steps=max_steps)
+    return PentaEnv(rom_path, max_steps=max_steps, savestate_path=savestate_path)
 
 
-def _worker(remote, rom_path: str, max_steps: int, worker_idx: int = 0):
+def _worker(remote, rom_path: str, max_steps: int, worker_idx: int = 0,
+            savestate_path: str | None = None):
     import time as _time
     # Stagger startup to avoid PyBoy SDL2 init races
     _time.sleep(0.3 * worker_idx)
     last_err = None
     for attempt in range(3):
         try:
-            env = _make_penta_env(rom_path, max_steps)
+            env = _make_penta_env(rom_path, max_steps, savestate_path=savestate_path)
             obs, info = env.reset()
             break
         except Exception as e:
@@ -60,14 +61,16 @@ def _worker(remote, rom_path: str, max_steps: int, worker_idx: int = 0):
 
 
 class VecPentaEnv:
-    def __init__(self, rom_path: str, n: int = 4, max_steps: int = 2000):
+    def __init__(self, rom_path: str, n: int = 4, max_steps: int = 2000,
+                 savestate_path: str | None = None):
         self.n = n
         self.parents = []
         self.procs = []
         ctx = mp.get_context("spawn")
         for i in range(n):
             parent, child = ctx.Pipe()
-            p = ctx.Process(target=_worker, args=(child, rom_path, max_steps, i), daemon=True)
+            p = ctx.Process(target=_worker, args=(child, rom_path, max_steps, i, savestate_path),
+                            daemon=True)
             p.start()
             child.close()
             self.parents.append(parent)
