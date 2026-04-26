@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pt
+*.pth
+smoke_results.json
+ppo_*_metrics.json
+ppo_*.pt
+runs/
+checkpoints/
+*.egg-info/
