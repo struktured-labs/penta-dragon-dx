@@ -102,7 +102,7 @@ class PentaEnv(gym.Env):
         self.steps += 1
         # Read state + reward
         s = read_state(self.pb)
-        reward, info = self.reward_tracker.step(s)
+        reward, info = self.reward_tracker.step(s, action=action)
         # Termination
         terminated = (s.scene == 0x17)  # death cinematic
         # Truncated by max_steps

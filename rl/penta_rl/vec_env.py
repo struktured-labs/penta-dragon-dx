@@ -12,9 +12,22 @@ def _make_penta_env(rom_path: str, max_steps: int):
     return PentaEnv(rom_path, max_steps=max_steps)
 
 
-def _worker(remote, rom_path: str, max_steps: int):
-    env = _make_penta_env(rom_path, max_steps)
-    obs, info = env.reset()
+def _worker(remote, rom_path: str, max_steps: int, worker_idx: int = 0):
+    import time as _time
+    # Stagger startup to avoid PyBoy SDL2 init races
+    _time.sleep(0.3 * worker_idx)
+    last_err = None
+    for attempt in range(3):
+        try:
+            env = _make_penta_env(rom_path, max_steps)
+            obs, info = env.reset()
+            break
+        except Exception as e:
+            last_err = e
+            _time.sleep(0.5)
+    else:
+        remote.send(("error", f"init failed after 3 tries: {last_err}"))
+        return
     try:
         while True:
             cmd, data = remote.recv()
@@ -52,9 +65,9 @@ class VecPentaEnv:
         self.parents = []
         self.procs = []
         ctx = mp.get_context("spawn")
-        for _ in range(n):
+        for i in range(n):
             parent, child = ctx.Pipe()
-            p = ctx.Process(target=_worker, args=(child, rom_path, max_steps), daemon=True)
+            p = ctx.Process(target=_worker, args=(child, rom_path, max_steps, i), daemon=True)
             p.start()
             child.close()
             self.parents.append(parent)
@@ -64,7 +77,15 @@ class VecPentaEnv:
     def reset(self):
         for parent in self.parents:
             parent.send(("reset", None))
-        return np.stack([parent.recv() for parent in self.parents])
+        results = []
+        for i, parent in enumerate(self.parents):
+            r = parent.recv()
+            if isinstance(r, tuple) and len(r) == 2 and r[0] == "error":
+                raise RuntimeError(f"Env {i} worker error: {r[1]}")
+            if not hasattr(r, "shape"):
+                raise RuntimeError(f"Env {i} returned unexpected reset value: {type(r).__name__}: {r!r}")
+            results.append(r)
+        return np.stack(results)
 
     def step(self, actions: np.ndarray):
         for parent, a in zip(self.parents, actions):

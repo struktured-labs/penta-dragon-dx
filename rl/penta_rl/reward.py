@@ -7,17 +7,20 @@ from .state import GameState
 @dataclass
 class RewardConfig:
     """Per-event reward weights. LLM coach can mutate these."""
-    boss_kill: float = 5.0           # unique boss killed (DCBB → 0 with new FFBF)
-    miniboss_enter: float = 0.5      # entered miniboss state (D880 → 0x0A)
-    section_advance: float = 0.5     # DCB8 incremented
-    room_change: float = 1.0         # FFBD changed
-    level_change: float = 3.0        # FFBA changed
-    boss_damage: float = 0.1         # DCBB decreased
+    boss_kill: float = 5.0           # unique boss killed
+    miniboss_enter: float = 0.5      # D880 → 0x0A
+    section_advance: float = 1.0     # DCB8 incremented (cannot cheese)
+    unique_room: float = 2.0         # FIRST visit to a (level, room) pair
+    room_change: float = 0.05        # any room change (small, anti-cheese)
+    level_change: float = 5.0        # FFBA changed (level up)
+    boss_damage: float = 0.5         # DCBB decreased
     player_damage: float = -0.3      # player_hp decreased
-    death: float = -5.0              # player_hp = 0 OR D880 → 0x17
-    powerup_pickup: float = 0.5      # FFC0 went 0 → non-zero
+    death: float = -5.0              # D880 → 0x17
+    powerup_pickup: float = 1.0
     step_penalty: float = -0.001
-    scroll_progress: float = 0.001   # SCY/SCX moved
+    scroll_progress: float = 0.0005  # tiny anti-cheese
+    fire_projectile: float = 0.05    # action == "A"
+    section_max_reached: float = 1.0 # NEW max DCB8 in episode
 
 
 @dataclass
@@ -25,11 +28,14 @@ class RewardTracker:
     """Tracks unique events to avoid double-counting."""
     cfg: RewardConfig = field(default_factory=RewardConfig)
     unique_bosses_killed: set = field(default_factory=set)
+    visited_rooms: set = field(default_factory=set)  # set of (level, room) pairs
+    max_section: int = 0
     last_state: GameState | None = None
+    last_action: int = -1
     cumulative: float = 0.0
     event_log: list = field(default_factory=list)
 
-    def step(self, state: GameState) -> tuple[float, dict]:
+    def step(self, state: GameState, action: int = -1) -> tuple[float, dict]:
         """Compute reward for transition last_state → state.
 
         Returns (reward, info_dict).
@@ -38,10 +44,15 @@ class RewardTracker:
         prev = self.last_state
         if prev is None:
             self.last_state = state
+            self.visited_rooms.add((state.level, state.room))
             return 0.0, {}
 
         r = 0.0
         events = []
+
+        # Fire projectile bonus (action 0 = A button alone)
+        if action == 0:
+            r += cfg.fire_projectile
 
         # Boss kill: DCBB hit 0 AND we have an active miniboss
         if prev.boss_hp > 0 and state.boss_hp == 0 and prev.miniboss != 0:
@@ -64,11 +75,21 @@ class RewardTracker:
         if state.section != prev.section:
             r += cfg.section_advance
             events.append(("section", state.section))
+        # Section MAX reached (only on new high)
+        if state.section > self.max_section:
+            r += cfg.section_max_reached * (state.section - self.max_section)
+            self.max_section = state.section
 
-        # Room change
+        # Room change (small, anti-cheese)
         if state.room != prev.room and state.room != 0:
             r += cfg.room_change
             events.append(("room", state.room))
+        # Unique-room visit reward
+        rkey = (state.level, state.room)
+        if rkey not in self.visited_rooms:
+            self.visited_rooms.add(rkey)
+            r += cfg.unique_room
+            events.append(("unique_room", rkey))
 
         # Level change
         if state.level != prev.level:
@@ -105,6 +126,9 @@ class RewardTracker:
 
     def reset(self):
         self.unique_bosses_killed.clear()
+        self.visited_rooms.clear()
+        self.max_section = 0
         self.last_state = None
+        self.last_action = -1
         self.cumulative = 0.0
         self.event_log.clear()
