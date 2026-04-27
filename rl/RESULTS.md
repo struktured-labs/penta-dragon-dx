@@ -84,6 +84,41 @@ To get successful kill demos, we'd need either:
 - Use cheats: ROM-patch DCBB to start very low (0x10) so any hit kills
 - Hand-record human demos via mgba
 
+## Day 6: All-Approaches Iteration
+
+User asked to try **all** approaches in parallel: long PPO, DAgger, cheat-ROM, combined datasets.
+
+### Approaches tested
+
+| Approach | Outcome |
+|----------|---------|
+| **Long PPO (3000 epochs)** from BC checkpoint | Best deterministic: 89.63 ret, 1/50 sample kills (2%) |
+| **DAgger** (3 iters, beta 0.5→0.0) | Aggregated 39K pairs, BC acc 72.6%; det worse (21.84) but 1/10 sample kills |
+| **Cheat-ROM v1** (DCBB init=0x10) | Phase resets compensated; only 11 kills in 18 min; transfer failed |
+| **Cheat-ROM v2** (no phase reset + low init) | 12 kills in ~30 min; transfer to real ROM lost (24.75 ret) |
+| **Combined dataset** (v9.6 + cheat2) | val acc 72%, but transfer hurt (20.5 ret) |
+
+### Final eval (50 episodes, gargoyle save state)
+
+```
+Random:     ret=31.02  kills=0/50   dies @ step 1320
+BC+PPO det: ret=89.63  kills=0/50   survives full 1500 steps
+BC+PPO smp: ret=62.39  kills=1/50   (2% kill rate)
+```
+
+### Diagnosis: kill-frame rarity
+
+In 27000-frame v9.6 expert dataset, only **35 kill events** = ~0.13% of training frames are "the moment of kill." BC and PPO learn to imitate the *survival* behavior (95%+ of frames) but the precise kill-trigger sequence is rare enough that the policy can't reliably reproduce it.
+
+Sample policy beats deterministic on kill rate because stochasticity occasionally explores the right action sequence; deterministic locks into a single action chain that approaches but never crosses the kill threshold.
+
+### What would work but wasn't tried
+
+1. **Kill-frame oversampling**: weight BC loss to over-emphasize the 100 frames preceding each kill event. Would need to reprocess JSONL with kill-time annotations.
+2. **Mixed expert+policy at inference time** (DAgger-at-test): use expert action when DCBB hasn't dropped in N frames.
+3. **Bigger network**: current PolicyValueNet is 256-hidden 3-layer; 512×4 might capture finer patterns.
+4. **RNN/LSTM**: the kill is a multi-frame pattern; recurrent state could help.
+
 ## Day 5+ Final: First Mini-Boss Kill
 
 **🎉 BC+PPO with OAM-extended state vector killed a mini-boss.**
