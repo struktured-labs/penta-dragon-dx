@@ -60,7 +60,44 @@ To get successful kill demos, we'd need either:
 - Use cheats: ROM-patch DCBB to start very low (0x10) so any hit kills
 - Hand-record human demos via mgba
 
+## Day 5+ Update: v9.6 expert recording
+
+**v11.0 autoplay (originally used) was a regression — got 0 kills in 30 min.**
+**v9.6 autoplay (`tmp/autoplay_level1.lua`, 1085 lines) kills mini-bosses fluidly:**
+
+In a 30-min recording session with v9.6:
+- **35 mini-boss kills** (Gargoyle + Spider on cycle, ROM-patched entry 2)
+- 26294 state-action pairs recorded
+- BC val accuracy: **64%** (vs 33% on v11.0 demos)
+
+But BC + BC+PPO eval still got **0 mini-boss kills** at inference time. Why?
+
+**Root cause: state vector is incomplete.** The autoplay's expert decisions condition on:
+- `saraX, saraY` — Sara's screen position (averaged from OAM sprite slots 0-3)
+- `bossSprites` centroid — OAM-derived boss position
+- `nearX, nearY, nearDist` — nearest enemy sprite
+
+Our PentaEnv state vector has only WRAM bytes (entity slots DC85+, scene flags). The OAM-derived screen-space positions the expert actually needs aren't in the observation. The BC model is trying to learn "press UP+A in this WRAM state" from a signal that doesn't include the screen position the expert was actually reacting to.
+
+This is also why the v9.6 BC policy got LOWER returns than random (20.51 vs 31.86) — it confidently picks suboptimal actions because its state vector hides the relevant info.
+
+**Confirmation: spinning + spamming A "should" kill Gargoyle.** A trivial bot would work — what's blocking the RL agent is the state representation, not the combat mechanics or the demonstrations.
+
 ## Recommended Next Steps
+
+### IMMEDIATE: Extend state vector with OAM-derived sprite positions
+
+Add to `state.py`:
+- Sara screen position (average of OAM slots 0-3 X/Y, normalized to [0,1])
+- Per-enemy slot screen position (OAM 4-39, take 8 bytes from each, encode tile+Y+X)
+- Distance to nearest enemy
+- Boss centroid (average position of sprites with tile in 0x30-0x7F range)
+
+This brings the state vector from 59 → ~120 dims and gives BC the same info the expert had. Then re-train BC+PPO. Expected: BC alone should approach expert kill rate (~60% of episodes within 1500 steps).
+
+### Other improvements
+
+1. **Cheat-based kill recording**: still useful for accelerated learning
 
 1. **Cheat-based kill recording**: Patch ROM at 0x4101 (DCBB init) to 0x10 instead of 0xFF. Record autoplay against this — every encounter dies in 1 hit, dataset has thousands of "DCBB→0" trajectories. Then train BC on those, fine-tune PPO without the cheat. The policy learns "approach + fire" without needing to learn "fire 16 times."
 
