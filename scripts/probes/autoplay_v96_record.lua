@@ -1074,6 +1074,46 @@ callbacks:add("frame", function()
 
     -- ============== BC RECORDING ==============
     if rec ~= nil and f % 4 == 0 and emu:read8(0xFFC1) == 1 then
+        -- OAM features (Sara avg, boss centroid, nearest enemy, projectile count)
+        local OAM_X_OFF = 8
+        local OAM_Y_OFF = 16
+        local sara_sx, sara_sy, sara_n = 0, 0, 0
+        local boss_sx, boss_sy, boss_n = 0, 0, 0
+        local near_sx, near_sy, near_d = 0, 0, 999
+        local proj_n = 0
+        local sprites_x = {}; local sprites_y = {}; local sprites_t = {}
+        for i = 0, 39 do
+            local sy = emu:read8(0xFE00 + i*4)
+            local sx = emu:read8(0xFE00 + i*4 + 1)
+            local tile = emu:read8(0xFE00 + i*4 + 2)
+            if sy > 0 and sy < 160 then
+                local px = sx - OAM_X_OFF
+                local py = sy - OAM_Y_OFF
+                table.insert(sprites_x, px); table.insert(sprites_y, py); table.insert(sprites_t, tile)
+                if i < 4 then
+                    sara_sx = sara_sx + px; sara_sy = sara_sy + py; sara_n = sara_n + 1
+                elseif tile >= 0x30 and tile <= 0x7F then
+                    boss_sx = boss_sx + px; boss_sy = boss_sy + py; boss_n = boss_n + 1
+                elseif tile == 0x06 or tile == 0x09 or tile == 0x0A or tile == 0x0F or tile == 0x00 or tile == 0x01 then
+                    proj_n = proj_n + 1
+                end
+            end
+        end
+        local sara_x_avg = sara_n > 0 and (sara_sx / sara_n) or -1
+        local sara_y_avg = sara_n > 0 and (sara_sy / sara_n) or -1
+        local boss_x_avg = boss_n > 0 and (boss_sx / boss_n) or -1
+        local boss_y_avg = boss_n > 0 and (boss_sy / boss_n) or -1
+        if sara_n > 0 then
+            for i = 1, #sprites_t do
+                if sprites_t[i] >= 0x30 and sprites_t[i] <= 0x7F then
+                    local dx = sprites_x[i] - sara_x_avg
+                    local dy = sprites_y[i] - sara_y_avg
+                    local d = math.sqrt(dx*dx + dy*dy)
+                    if d < near_d then near_d = d; near_sx = sprites_x[i]; near_sy = sprites_y[i] end
+                end
+            end
+        end
+        if near_d == 999 then near_d = -1 end
         local function k2a(k)
             if k == 0x01 then return 0 end
             if k == 0x02 then return 1 end
@@ -1125,7 +1165,10 @@ callbacks:add("frame", function()
             rec:write("]")
             if si < 5 then rec:write(",") end
         end
-        rec:write("]}\n")
+        rec:write(string.format('],"oam":{"sara_x":%d,"sara_y":%d,"boss_x":%d,"boss_y":%d,"boss_count":%d,"near_x":%d,"near_y":%d,"near_dist":%d,"proj_count":%d}}\n',
+            math.floor(sara_x_avg), math.floor(sara_y_avg),
+            math.floor(boss_x_avg), math.floor(boss_y_avg), boss_n,
+            math.floor(near_sx), math.floor(near_sy), math.floor(near_d), proj_n))
         recCount = recCount + 1
         if recCount % 5000 == 0 then
             rec:flush()

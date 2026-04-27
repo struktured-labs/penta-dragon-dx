@@ -10,7 +10,7 @@ from .state import vector_dim
 
 
 def jsonl_to_state_vec(d: dict) -> np.ndarray:
-    """Build the 59-dim state vector from a recorded JSONL row.
+    """Build the 71-dim state vector from a recorded JSONL row.
 
     Mirrors state.state_to_vector exactly (must stay in sync).
     """
@@ -36,6 +36,24 @@ def jsonl_to_state_vec(d: dict) -> np.ndarray:
     # Slots (5 × 8 = 40)
     slots = np.array(d["slots"], dtype=np.float32) / 255.0
     parts.append(slots.flatten())
+    # OAM features (12 dims) — match state.state_to_vector
+    oam = d.get("oam", {})
+    sara_x = oam.get("sara_x", -1); sara_y = oam.get("sara_y", -1)
+    boss_x = oam.get("boss_x", -1); boss_y = oam.get("boss_y", -1)
+    near_x = oam.get("near_x", -1); near_y = oam.get("near_y", -1)
+    near_d = oam.get("near_dist", -1); proj_n = oam.get("proj_count", 0)
+    boss_count = oam.get("boss_count", 0)
+    if boss_x >= 0 and sara_x >= 0:
+        bsx = (boss_x - sara_x) / 160.0; bsy = (boss_y - sara_y) / 144.0
+    else:
+        bsx = 0.0; bsy = 0.0
+    parts.append(np.array([
+        max(sara_x, 0) / 160.0, max(sara_y, 0) / 144.0,
+        max(boss_x, 0) / 160.0, max(boss_y, 0) / 144.0,
+        max(near_x, 0) / 160.0, max(near_y, 0) / 144.0,
+        max(near_d, 0) / 200.0, proj_n / 10.0, boss_count / 8.0,
+        bsx, bsy, 1.0 if boss_count > 0 else 0.0,
+    ], dtype=np.float32))
     return np.concatenate(parts)
 
 

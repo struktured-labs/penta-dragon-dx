@@ -1,5 +1,29 @@
 # BC + PPO Results — Day 5 Pipeline Validation
 
+## Disclosure: Privileged-State RL (Not Pure RL)
+
+**This is not a fair Game Boy agent.** Our PentaEnv reads WRAM/HRAM/OAM directly,
+giving the policy information the human player doesn't have access to (boss HP, scene
+flags, internal state machine bytes, sprite slot data). This is "asymmetric" or
+"state-aware" RL — useful for:
+
+- Verifying game mechanics hypotheses (e.g., boss 16 collision claim)
+- Prototyping reward functions
+- Finding ROM-patch effects
+- Building intuition about state-machine transitions
+
+It is NOT:
+- A vision-based agent that could play the unmodified game from screen pixels
+- A "fair" RL benchmark
+- Transferable to a real human-input-only setting
+
+A true pixel-based agent would use `pyboy.screen` (160×144 framebuffer) + a CNN
+frontend. That's a different (much harder, much slower) project. For our reverse-
+engineering goals, privileged-state is the right tool — we're using RL to explore
+the state space the architecture doc describes.
+
+
+
 ## Summary
 
 Built and validated a full imitation learning + reinforcement learning pipeline for Penta Dragon DX. **BC+PPO achieves 2.64× random baseline return** in mini-boss combat.
@@ -59,6 +83,31 @@ To get successful kill demos, we'd need either:
 - A better autoplay (with smarter projectile aim)
 - Use cheats: ROM-patch DCBB to start very low (0x10) so any hit kills
 - Hand-record human demos via mgba
+
+## Day 5+ Final: First Mini-Boss Kill
+
+**🎉 BC+PPO with OAM-extended state vector killed a mini-boss.**
+
+| Policy | Mean Return | Mean Mini-boss Kills | Notes |
+|--------|-------------|----------------------|-------|
+| Random | 31.86 | 0 | dies at step 1373 |
+| BC+PPO (no OAM, v11.0 demos) | 84.25 (det) | 0 | survives but doesn't kill |
+| BC+PPO (no OAM, v9.6 demos) | 56.98 (det) | 0 | worse — OOD action chains |
+| BC+PPO (OAM, v9.6 demos) sample | 52.49 | **0.2** | **1 kill in 5 eps** |
+| BC+PPO (OAM, v9.6 demos) det | 38.83 | 0 | deterministic gets stuck |
+
+The kill: episode 2, step 1354, agent killed mini-boss then died (scene=0x17 cinematic).
+
+### What changed
+
+1. State vector: 59 → 71 dims, adding 12 OAM-derived features (Sara position, boss centroid, nearest enemy, projectile count, signed boss-relative offsets, has_boss flag)
+2. Expert demos: 26966 frames from v9.6 autoplay (35 expert kills, Gargoyle + Spider cycle)
+3. BC val accuracy: 33% → 64% → 77% across iterations
+4. Sample policy gets the kill; deterministic doesn't (entropy > 0 needed for exploration)
+
+### Why deterministic still fails
+
+After BC overfitting to specific (state, action) pairs, det policy picks the same action in OOD states from the save state. Only sample policy (with stochasticity) explores enough to reach the kill condition. This is classic BC compounding-error.
 
 ## Day 5+ Update: v9.6 expert recording
 
