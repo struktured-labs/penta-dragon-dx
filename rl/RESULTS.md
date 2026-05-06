@@ -302,6 +302,31 @@ Training trajectory: multi100 metric in last 100 eps climbed 1→2→7→10→11
 - max_steps=8000, entropy_coef=0.005, pi_lr=1e-4 (preserve BC features)
 - 1500 epochs in 21.5 min
 
+## v19 — resume v18, max_steps=15000, pi_lr=5e-5 → COLLAPSE late, but ep200 = 🚨GOLDEN🚨
+
+Training trajectory:
+| ep | cum_kills | multi100 | mean_ret | max_ret | entropy |
+|----|----|----|----|----|----|
+| 149 | 180 | **30** | 204 | 367 | 0.52 |
+| 304 | 363 | 17 | 215 | 360 | 0.85 |
+| 455 | 534 | 4 | 82 | 353 | 0.21 |
+| 600 | 570 | 0 | 58 | 58 | 0.002 |
+
+Late-stage entropy collapsed to 0.002 → policy became mode-only → mode = no-kill action → collapse.
+
+### v19 ep200 eval (30 eps, 15000 max_steps)
+| Mode | single | **multi** | total | mean ret |
+|---|---|---|---|---|
+| **det** | 30/30 | **30/30 (100%)** | 60 | 354.43 |
+| sample | 30/30 | 0/30 | 30 | 159.79 |
+| random | 30/30 | 0/30 | 30 | 153.18 |
+
+**Holy grail.** Det mode at v19 ep200 reliably kills BOTH mini-bosses (gargoyle + spider) in every single episode.
+
+Why does det work here when sample doesn't? At ep200 the policy was crystallizing — mode action is correct multi-kill, but stochastic sampling of other actions throws off the precise sequencing.
+
+This means: best-of-iterations checkpoint is not always final. Need early-stopping on multi-kill metric, OR mid-training eval to find the actual peak.
+
 ## Artifacts
 
 - `rl/bc_data/expert_trajectories.jsonl` — 27000 expert (state, action) pairs (gitignored)
