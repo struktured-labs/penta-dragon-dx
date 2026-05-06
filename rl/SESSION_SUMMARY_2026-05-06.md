@@ -97,6 +97,25 @@ For reproducibility, future work should try:
 - KL constraint to BC reference (prevent catastrophic drift)
 - Population-Based Training (PBT) — automatic seed selection
 
+## v31 — Bigger network (512x4) FRESH init (no BC)
+
+Tested if larger net + fresh init can match BC-pretrained results.
+
+| metric | v18 (BC, 256x3) | v31 (fresh, 512x4) |
+|---|---|---|
+| cum kills (1500 ep) | 806 | 1096 |
+| sample multi-kill (eval 30 ep) | 21/30 (70%) | 11/30 (37%) |
+| det multi-kill | 0/30 (collapse) | 0/30 (collapse) |
+| max ret | 430 | 439 |
+
+v31 trains FAST (no warmup needed) but reaches lower sample-mode multi-kill peak. Both have det collapse. Useful finding: **BC pretrain isn't strictly required; bigger network compensates** — but BC + smaller net is more sample-efficient on multi-kill metric.
+
+## v32 — Resume v31 + v19-style finetune (FAILED)
+
+Tried mirror of v18→v19 path with bigger net. Resumed v31 final, max_steps=15000, 500 epochs.
+
+Result: peaked at multi100=1 at ep 20 (inherited from v31), then drifted down to cum=63 by ep 500. No det multi-kill emerged. Pattern matches all other resume+finetune attempts (v19 was the only outlier).
+
 ## v29 corridor curriculum (FAILED)
 
 Generated `post_gargoyle_corridor.state` from v19 ep200's gameplay_start trajectory at the moment after gargoyle kill (section=3, scene=0x02, room=7, mb=0). Random play from this state reaches spider section 5/5 with spider engaged 5/5.
