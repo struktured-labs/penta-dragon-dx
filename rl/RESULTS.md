@@ -368,6 +368,7 @@ v24 ep1200 = 100% det single-kill (gargoyle only) from gameplay_start.state. Doe
 |---|---|---|---|
 | `ppo_v19_resume18_ep200.pt` | combat | gargoyle.state OR spider.state | 50/50 (100%) |
 | `ppo_v24_nav_ep1200.pt` | nav + combat | gameplay_start.state | 0/10 (only single) |
+| `ppo_v25_combat_nav_ep1000.pt` | nav + combat (resume v19) | gameplay_start.state | 0/10 (only single) |
 
 **Major wins this session**:
 1. Fixed kill detection (FFBF transition, was DCB8 advance — silent bug for 7 iterations)
@@ -383,7 +384,19 @@ v24 ep1200 = 100% det single-kill (gargoyle only) from gameplay_start.state. Doe
 3. **Full level 1 multi-kill** — gameplay_start to spider kill is corridor-traversal bottleneck. v19 ep200 dies post-gargoyle, v24 ep1200 only single-kills
 4. **Final boss / Penta Dragon** — requires solving all of above + 7 more level transitions
 
-**Iteration count post-bug-fix**: v13, v14, v15 (killed early), v17 (killed — reward hack), v18 ✓, v19 ✓, v20, v22, v23, v24 = 10 iterations. Three scored production-quality wins (v18/v19/v24).
+**Iteration count post-bug-fix**: v13, v14, v15 (killed early), v17 (killed — reward hack), v18 ✓, v19 ✓, v20, v22, v23, v24, v25 = 11 iterations. Three scored production-quality wins (v18/v19/v24).
+
+## v25 — RESUME v19 ep200, train on gameplay_start.state (1000 epochs)
+
+Hypothesis: combat policy from v19 ep200 + corridor experience from gameplay_start would teach nav while preserving combat. Goal: multi-kill from level 1 start.
+
+| ckpt | det total kills (10 eps) | det multi-kill | sample multi |
+|---|---|---|---|
+| ep600 | 10 | 0/10 | 0/10 |
+| ep800 | 0 | 0/10 | 0/10 (collapsed) |
+| ep1000 | 10 | 0/10 | 0/10 |
+
+Result: v25 matches v19 ep200's level 1 generalization (single kill only) but did NOT learn multi-kill from corridor save state. Same wall as v24. **Corridor → spider section traversal is the bottleneck.** Mini-bosses both die when engaged but reaching second mini-boss from a corridor requires HP/dodge skills the policy doesn't have.
 
 ## Artifacts
 
