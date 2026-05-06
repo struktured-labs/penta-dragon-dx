@@ -1166,13 +1166,21 @@ callbacks:add("frame", function()
             rec:write("]")
             if si < 5 then rec:write(",") end
         end
+        rec:write("]")  -- close slots
         -- Inventory region D840-D89F
-        rec:write('],"inv":[')
+        rec:write(',"inv":[')
         for ia = 0xD840, 0xD89F do
             rec:write(tostring(emu:read8(ia)))
             if ia < 0xD89F then rec:write(",") end
         end
-        rec:write(string.format('],"oam":{"sara_x":%d,"sara_y":%d,"boss_x":%d,"boss_y":%d,"boss_count":%d,"near_x":%d,"near_y":%d,"near_dist":%d,"proj_count":%d}}\n',
+        -- FULL WRAM + HRAM + OAM hex (future-proofs schema changes)
+        rec:write('],"wram":"')
+        for a = 0xC000, 0xDFFF do rec:write(string.format("%02X", emu:read8(a))) end
+        rec:write('","hram":"')
+        for a = 0xFF80, 0xFFFE do rec:write(string.format("%02X", emu:read8(a))) end
+        rec:write('","oam_raw":"')
+        for a = 0xFE00, 0xFE9F do rec:write(string.format("%02X", emu:read8(a))) end
+        rec:write(string.format('","oam":{"sara_x":%d,"sara_y":%d,"boss_x":%d,"boss_y":%d,"boss_count":%d,"near_x":%d,"near_y":%d,"near_dist":%d,"proj_count":%d}}\n',
             math.floor(sara_x_avg), math.floor(sara_y_avg),
             math.floor(boss_x_avg), math.floor(boss_y_avg), boss_n,
             math.floor(near_sx), math.floor(near_sy), math.floor(near_d), proj_n))
