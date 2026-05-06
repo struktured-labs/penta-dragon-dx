@@ -221,6 +221,25 @@ The "100% kill rate" is CALIBRATED by random — gargoyle.state is easy enough t
 - Policy quality cannot be assessed from training-time kill counts
 - Frontier metric: multi-kill rate (eval pending with longer episodes)
 
+## 2026-05-06 v13 — REGRESSION (resume from v12c, max_steps=12000)
+
+| ckpt | mode | single-kill | multi-kill | mean ret |
+|---|---|---|---|---|
+| v13 | sample | 20/20 | **0/20** ↓ from v12c 2/20 | 82.08 |
+| v13 | det | **0/20** ↓ from v12c 30/30 | 0/20 | 1.43 |
+| random | — | 20/20 | 0/20 | 81.73 |
+
+**Diagnosis**: v13 entropy stayed at 2.3 (near-uniform random). The deterministic policy collapsed because logits were too flat — argmax picks an arbitrary single action. Sample policy's multi-kill regressed because the longer episodes (12000 vs 3000) flooded gradient with post-kill exploration noise, diluting combat signal.
+
+**Second bug found**: `vec_env.py` worker overwrote `info` after `env.reset()` on episode end, losing the kill count from the killed-boss episode. Training metrics showed `cum_kills=0` even when reward correctly fired. Fixed (commit pending).
+
+## v14 (running) — fresh start, short eps, low entropy
+
+- Fresh init (no v12c bias), real ROM, gargoyle.state
+- max_steps=3000 (back to dense kill signal)
+- entropy_coef=0.02 (was 0.05; force tighter behavior)
+- 2000 epochs
+
 ## Artifacts
 
 - `rl/bc_data/expert_trajectories.jsonl` — 27000 expert (state, action) pairs (gitignored)

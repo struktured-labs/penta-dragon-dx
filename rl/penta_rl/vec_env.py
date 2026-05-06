@@ -35,15 +35,15 @@ def _worker(remote, rom_path: str, max_steps: int, worker_idx: int = 0,
             if cmd == "step":
                 obs, r, term, trunc, info = env.step(data)
                 done = term or trunc
-                if done:
-                    obs, info = env.reset()
-                # Strip non-pickleable bits from info
+                # Capture metrics BEFORE reset overwrites info on episode end
                 info_min = {
                     "n_unique_bosses": info.get("n_unique_bosses", 0),
                     "events": info.get("events", []),
                     "success": info.get("success", False),
                     "steps": info.get("steps", 0),
                 }
+                if done:
+                    obs, _ = env.reset()
                 remote.send((obs, r, done, info_min))
             elif cmd == "reset":
                 obs, info = env.reset()
