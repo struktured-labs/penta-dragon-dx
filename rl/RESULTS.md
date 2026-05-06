@@ -347,15 +347,43 @@ The policy is robust at FIGHTING — works from any save state where Sara is alr
 
 This is more useful than expected — v19 ep200 is a deployable "combat policy" that can be combined with a navigation policy or save-state curriculum.
 
-## Final Status (2026-05-06 ~12:30)
+## v24 — BC + PPO trained from gameplay_start.state (level 1 start)
 
-**Production policy**: `rl/ppo_v19_resume18_ep200.pt` — 100% det multi-kill from any boss-engaged save state.
+Goal: train a nav+combat policy that handles full level 1 from start. 1500 epochs, max_steps=18000, entropy_coef=0.01.
 
-**Open frontiers**:
-1. Navigation policy (separate training from corridor save states)
-2. Stage boss arena entry (game-RE blocker — scene 0xb stuck state)
-3. Reproducible multi-kill training (lucky single-shot, not reliable recipe)
-4. Final boss / Penta Dragon (requires solving 1 + 2 + 3)
+Checkpoint sweep (ep200/400/600/800/1000/1200/final):
+| ckpt | det total kills (10 eps) | det multi |
+|---|---|---|
+| 200-1000 | 0 | 0 |
+| **1200** | **10** | **0** |
+| final | 0 | 0 |
+
+v24 ep1200 = 100% det single-kill (gargoyle only) from gameplay_start.state. Doesn't reach spider. Same fundamental wall as v19 ep200 generalization test — corridor traversal between mini-bosses is the bottleneck.
+
+## Final Status (2026-05-06 ~12:50)
+
+**Two complementary deployable policies**:
+
+| Checkpoint | Strength | From save state | det multi-kill |
+|---|---|---|---|
+| `ppo_v19_resume18_ep200.pt` | combat | gargoyle.state OR spider.state | 50/50 (100%) |
+| `ppo_v24_nav_ep1200.pt` | nav + combat | gameplay_start.state | 0/10 (only single) |
+
+**Major wins this session**:
+1. Fixed kill detection (FFBF transition, was DCB8 advance — silent bug for 7 iterations)
+2. Fixed vec_env info-loss bug (overwrote n_unique_bosses on episode reset)
+3. Closed reward exploit (fire_in_combat farmed +400/ep)
+4. Reward v4 — event-based dominates per-frame
+5. Discovered eval-intermediate-ckpts is critical (v19 ep200 was 1-of-1500 lucky alignment)
+6. v19 ep200 generalizes across boss-engaged save states (gargoyle + spider both 100% multi-kill det)
+
+**Open frontiers** (not addressed this session):
+1. **Reproducible multi-kill training** — v19 ep200 not replicable across seeds (v22, v23 attempts failed)
+2. **Stage boss arena entry** — blocked at scene 0xb after 2nd kill from gargoyle.state. Requires game RE work (FFBA advance trigger) not RL hyperparameter tuning
+3. **Full level 1 multi-kill** — gameplay_start to spider kill is corridor-traversal bottleneck. v19 ep200 dies post-gargoyle, v24 ep1200 only single-kills
+4. **Final boss / Penta Dragon** — requires solving all of above + 7 more level transitions
+
+**Iteration count post-bug-fix**: v13, v14, v15 (killed early), v17 (killed — reward hack), v18 ✓, v19 ✓, v20, v22, v23, v24 = 10 iterations. Three scored production-quality wins (v18/v19/v24).
 
 ## Artifacts
 
