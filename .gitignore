@@ -24,3 +24,5 @@ debug_*.png
 *.log
 tests/results/
 DONE
+rl/saves/curriculum/
+rl/bc_data/expert_human_curriculum.jsonl
