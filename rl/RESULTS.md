@@ -282,11 +282,25 @@ Random baseline with reward v4: 30/30 single kills, mean_ret=150 (was 80).
 Expected max ret for multi-kill: 100 (kill1) + 200 (chain) + 70 (phases) + ... ≈ 400+.
 Stage boss kill: +200. Stage boss splash: +5. Final boss: +1000.
 
-## v18 (running) — BC + PPO with reward v4
+## v18 — BC + PPO with reward v4 → BREAKTHROUGH
 
-- BC pretrained init (kept from v17 attempt)
-- Real ROM, gargoyle.state, max_steps=8000, entropy=0.005, pi_lr=1e-4
-- 1500 epochs
+| ckpt | mode | single-kill | **multi-kill** | total kills | mean ret |
+|---|---|---|---|---|---|
+| v18 | sample | 30/30 | **21/30 (70%)** | 51 | 304.32 |
+| v18 | det | 0/30 | 0/30 | 0 | 57.48 |
+| random | — | 30/30 | 0/30 | 30 | 152.26 |
+
+**7x improvement over v12c** (2/20 = 10% multi-kill). Crosses /loop breakthrough threshold (>5/50 = >10%).
+
+Training trajectory: multi100 metric in last 100 eps climbed 1→2→7→10→11→12→13 over 1500 epochs. Smooth convergence — no instability or collapse. Mean ret 220, max 430 (4-kill territory? or kill+stage_arena).
+
+**Det mode collapse persists** — argmax picks an arbitrary action with the highest logit, even though sample-mode is 70% successful. Suggests the policy mode is some "common but harmless" action (NOOP-like) and the sampled rare-but-effective actions (A, U+A, etc) are what actually kill. Solving det collapse is separate from solving multi-kill.
+
+**Setup**:
+- BC pretrained init (model trained on autoplay v96 expert data, all 16 mini-bosses)
+- Real ROM, gargoyle.state save state
+- max_steps=8000, entropy_coef=0.005, pi_lr=1e-4 (preserve BC features)
+- 1500 epochs in 21.5 min
 
 ## Artifacts
 
