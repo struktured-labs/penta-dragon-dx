@@ -193,6 +193,34 @@ This brings the state vector from 59 → ~120 dims and gives BC the same info th
 
 5. **Imitation learning with successful kills**: Use the v9.5 autoplay (which memory says killed all 16 bosses) or hand-craft kill demos with state writes.
 
+## 2026-05-06 — CRITICAL BUG: kill detection broken since v3 reward redesign
+
+**Symptom**: 7 consecutive iterations (v6-v12c) reported 0 kills despite varied configs and even cheat-ROM training.
+
+**Root cause** (found via diagnostic in `rl/diagnose_kill.py`, `rl/diagnose_ffbf.py`):
+
+1. `reward.py` kill detection condition was:
+   ```python
+   if prev.section in (2, 5) and state.section != prev.section and prev.miniboss != 0:
+   ```
+   But the game flow is: **FFBF clears ~6 frames BEFORE DCB8 advances**. So at the section-advance frame, `prev.miniboss == 0` already, and the condition never fires.
+
+2. The "cheat ROM" (`A-fix-cheat-noPhase.gb`) didn't make bosses die in 1 hit — DCBB is *primarily* a level/corridor death timer, only secondarily boss-HP-during-fight. Init=0x10 caused Sara to die from level-timeout cinematic in ~150 frames every episode. Cheat ROM was actively HARMFUL.
+
+**Fix**: Use the canonical signal from `scripts/probes/autoplay_record.lua` — `prev.miniboss != 0 and state.miniboss == 0` (FFBF transition non-zero → zero). One-line change in `reward.py`.
+
+**Re-eval of v12c policy with fixed reward** (real ROM, gargoyle.state, max 10000 steps, 30 eps):
+- sample mode: **30/30 kill_eps (100%), mean_ret=96.67**
+- det mode: **30/30 kill_eps (100%), ret=51.70 (deterministic, 746 steps to kill)**
+- random baseline (seed 42): **30/30 kill_eps (100%), mean_ret=80.02**
+
+The "100% kill rate" is CALIBRATED by random — gargoyle.state is easy enough that any policy with reasonable entropy kills the first boss. The honest signal is **multi-kill** (gargoyle THEN spider in same episode), which prior work never tracked.
+
+**Implications**:
+- v6-v12c training metrics are unreliable (kill detection broken throughout)
+- Policy quality cannot be assessed from training-time kill counts
+- Frontier metric: multi-kill rate (eval pending with longer episodes)
+
 ## Artifacts
 
 - `rl/bc_data/expert_trajectories.jsonl` — 27000 expert (state, action) pairs (gitignored)

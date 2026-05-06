@@ -87,20 +87,19 @@ class RewardTracker:
         r = 0.0
         events = []
 
-        # ── Combat: kill detection via DCB8 advance past boss section ──
-        # DCB8 transitions 2→3 = Gargoyle killed; 5→0 = Spider killed (level 1)
-        if prev.section in (2, 5) and state.section != prev.section and prev.miniboss != 0:
+        # ── Combat: kill detection via FFBF transition non-zero → zero ──
+        # This is the canonical signal used by autoplay scripts that killed all 16 mini-bosses.
+        # FFBF clears ~6 frames BEFORE DCB8 advances, so DCB8-based detection misses entirely.
+        if prev.miniboss != 0 and state.miniboss == 0:
             key = (prev.level, prev.miniboss)
             if key not in self.unique_bosses_killed:
-                # First kill of this (level, boss) — base reward + chain bonus if not first kill in episode
                 if len(self.unique_bosses_killed) > 0:
                     r += cfg.boss_kill_chain
                     events.append(("BOSS_KILL_CHAIN", key, len(self.unique_bosses_killed)+1))
                 else:
                     r += cfg.boss_kill
-                    events.append(("BOSS_KILL", key, "via DCB8 advance"))
+                    events.append(("BOSS_KILL", key, "via FFBF→0"))
                 self.unique_bosses_killed.add(key)
-            # End of fight: reset per-fight tracking
             self.cur_boss_min_hp = 0xFF
             self.cur_boss_phase = 1
 
