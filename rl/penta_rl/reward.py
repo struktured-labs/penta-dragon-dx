@@ -30,7 +30,7 @@ class RewardConfig:
     miniboss_enter: float = 1.0
     fire_in_combat: float = 0.0      # was 0.05 — REMOVED, was exploited
 
-    # Survival / death
+    # Survival / death (REVERTED to v4 baseline; v6 bump didn't help breakthrough)
     death: float = -20.0             # D880 → 0x17
     player_damage: float = -0.5      # per 256-unit HP loss
     step_penalty: float = -0.005     # 5x prior; dawdling is bad
