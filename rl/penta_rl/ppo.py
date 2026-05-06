@@ -20,17 +20,17 @@ class PPOConfig:
     steps_per_epoch: int = 4096
     entropy_coef: float = 0.01
     hidden: int = 256
+    n_layers: int = 3
 
 
 class PolicyValueNet(nn.Module):
     """Shared-trunk MLP with policy + value heads."""
-    def __init__(self, obs_dim: int, n_actions: int, hidden: int = 256):
+    def __init__(self, obs_dim: int, n_actions: int, hidden: int = 256, n_layers: int = 3):
         super().__init__()
-        self.trunk = nn.Sequential(
-            nn.Linear(obs_dim, hidden), nn.ReLU(),
-            nn.Linear(hidden, hidden), nn.ReLU(),
-            nn.Linear(hidden, hidden), nn.ReLU(),
-        )
+        layers = [nn.Linear(obs_dim, hidden), nn.ReLU()]
+        for _ in range(n_layers - 1):
+            layers += [nn.Linear(hidden, hidden), nn.ReLU()]
+        self.trunk = nn.Sequential(*layers)
         self.pi_head = nn.Linear(hidden, n_actions)
         self.v_head = nn.Linear(hidden, 1)
 
@@ -42,7 +42,7 @@ class PolicyValueNet(nn.Module):
 class PPOAgent:
     def __init__(self, obs_dim: int, n_actions: int, cfg: PPOConfig | None = None, device: str = "cpu"):
         self.cfg = cfg or PPOConfig()
-        self.net = PolicyValueNet(obs_dim, n_actions, self.cfg.hidden).to(device)
+        self.net = PolicyValueNet(obs_dim, n_actions, self.cfg.hidden, self.cfg.n_layers).to(device)
         self.optim = optim.Adam(self.net.parameters(), lr=self.cfg.pi_lr)
         self.device = device
         self.obs_dim = obs_dim
