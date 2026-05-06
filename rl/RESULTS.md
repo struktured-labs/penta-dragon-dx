@@ -233,12 +233,25 @@ The "100% kill rate" is CALIBRATED by random — gargoyle.state is easy enough t
 
 **Second bug found**: `vec_env.py` worker overwrote `info` after `env.reset()` on episode end, losing the kill count from the killed-boss episode. Training metrics showed `cum_kills=0` even when reward correctly fired. Fixed (commit pending).
 
-## v14 (running) — fresh start, short eps, low entropy
+## v14 — fresh + short eps + entropy=0.02 → REGRESSION
 
-- Fresh init (no v12c bias), real ROM, gargoyle.state
-- max_steps=3000 (back to dense kill signal)
-- entropy_coef=0.02 (was 0.05; force tighter behavior)
-- 2000 epochs
+| ckpt | mode | single-kill | multi-kill | mean ret |
+|---|---|---|---|---|
+| v14 | sample | 20/20 | 0/20 | 70.09 (worse than random!) |
+| v14 | det | **0/20** | 0/20 | 37.08 |
+| random | — | 20/20 | 0/20 | 81.34 |
+
+Training trajectory: peaked at ep 212 (mean_ret=102.7, max_ret=176, entropy=2.4). Then drifted DOWN to mean_ret=67 at ep 500 (entropy=1.9). Recovered to 88 by ep 2000. **Pure PPO with random init oscillates and never crystallizes a multi-kill strategy.**
+
+Det collapse same as v13: high entropy (2.0-2.4) → flat logits → argmax picks arbitrary action. Sample mode now WORSE than random — policy is biased away from kill.
+
+## v15 (running) — RESUME v14, max_steps=8000, entropy=0.005
+
+Hypothesis: v14 has gargoyle expertise; longer eps + much lower entropy_coef will preserve gargoyle policy AND let multi-kill emerge.
+
+## v17 (running, parallel) — BC pretrain + PPO, max_steps=8000, entropy=0.005
+
+Hypothesis: BC was trained on autoplay v96 expert data (killed all 16 mini-bosses). Init from BC should give a meaningful prior (vs PPO's random init). Then PPO finetune with very low entropy/lr (1e-4) preserves BC features.
 
 ## Artifacts
 

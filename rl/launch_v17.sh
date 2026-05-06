@@ -1,6 +1,6 @@
 #!/bin/bash
-# v15: RESUME from v14 best, extend max_steps=8000, low entropy, gargoyle.state
-# Curriculum: keep v14's tight gargoyle-killing policy, extend to give spider window
+# v17: BC pretrain → PPO finetune. Real ROM, gargoyle.state, max_steps=8000, low entropy.
+# BC was trained on autoplay v96 expert data (killed all 16 mini-bosses).
 cd /home/struktured/projects/penta-dragon-dx-claude
 source rl/.venv/bin/activate
 python -c "
@@ -14,7 +14,7 @@ import numpy as np, time, json, os
 ROM = '/home/struktured/projects/penta-dragon-dx-claude/rom/Penta Dragon (J) [A-fix].gb'
 SAVE = '/home/struktured/projects/penta-dragon-dx-claude/rl/saves/gargoyle.state'
 SAVE_DIR = '/home/struktured/projects/penta-dragon-dx-claude/rl'
-RESUME = '/home/struktured/projects/penta-dragon-dx-claude/rl/ppo_v14_fresh_final.pt'
+BC = '/home/struktured/projects/penta-dragon-dx-claude/rl/bc_pretrained.pt'
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 n_envs, epochs, steps_per_epoch, max_steps = 2, 1500, 512, 8000
@@ -22,14 +22,14 @@ print(f'Device: {device}, n_envs={n_envs}, epochs={epochs}, max_steps={max_steps
 venv = VecPentaEnv(ROM, n=n_envs, max_steps=max_steps, savestate_path=SAVE)
 obs_dim = vector_dim()
 cfg = PPOConfig(epochs=epochs, steps_per_epoch=steps_per_epoch * n_envs,
-                train_iters=10, entropy_coef=0.005,  # MUCH lower — fight argmax collapse
-                hidden=256, n_layers=3, gamma=0.99, pi_lr=1e-4)
+                train_iters=10, entropy_coef=0.005,
+                hidden=256, n_layers=3, gamma=0.99, pi_lr=1e-4)  # very low LR to preserve BC
 agent = PPOAgent(obs_dim, N_ACTIONS, cfg, device=device)
-state = torch.load(RESUME, map_location=device, weights_only=False)
-agent.net.load_state_dict(state['model'])
-print(f'Resumed from {RESUME} with entropy=0.005')
+state = torch.load(BC, map_location=device, weights_only=False)
+agent.net.load_state_dict(state['model'], strict=False)
+print(f'Loaded BC weights from {BC} (entropy=0.005, pi_lr=1e-4)')
 
-metrics, completed_returns, completed_bosses, boss_kill_episodes = [], [], [], []
+metrics, completed_returns, completed_bosses, multi_kill_eps = [], [], [], []
 obs = venv.reset()
 ep_rewards = np.zeros(n_envs, dtype=np.float32)
 last_print = time.time()
@@ -53,7 +53,7 @@ for ep in range(epochs):
                 nb = int(infos[i].get('n_unique_bosses', 0))
                 completed_bosses.append(nb)
                 if nb >= 2:
-                    boss_kill_episodes.append({'ep_global': len(completed_returns),
+                    multi_kill_eps.append({'ep_global': len(completed_returns),
                         'epoch': ep+1, 'n_bosses': nb, 'reward': float(ep_rewards[i])})
                     print(f'  *** MULTI KILL *** ep_global={len(completed_returns)} '
                           f'n_bosses={nb} reward={ep_rewards[i]:.2f}')
@@ -86,17 +86,17 @@ for ep in range(epochs):
               f\"ent={m['entropy']:.3f}  t={elapsed:.0f}s\")
         last_print = time.time()
     if (ep + 1) % 100 == 0:
-        ckpt = f'{SAVE_DIR}/ppo_v15_resume_ep{ep+1}.pt'
+        ckpt = f'{SAVE_DIR}/ppo_v17_bc_ep{ep+1}.pt'
         torch.save({'model': agent.net.state_dict(), 'metrics': metrics,
-                    'multi_kill_episodes': boss_kill_episodes}, ckpt)
+                    'multi_kill_episodes': multi_kill_eps}, ckpt)
 
-final = f'{SAVE_DIR}/ppo_v15_resume_final.pt'
+final = f'{SAVE_DIR}/ppo_v17_bc_final.pt'
 torch.save({'model': agent.net.state_dict(), 'metrics': metrics,
-            'multi_kill_episodes': boss_kill_episodes}, final)
+            'multi_kill_episodes': multi_kill_eps}, final)
 with open(final.replace('.pt', '_metrics.json'), 'w') as f:
     json.dump(metrics, f, indent=2)
 print(f'\\nFinal: {final}')
 print(f'Total: {len(completed_returns)} eps, {sum(completed_bosses)} cum kills, '
-      f'{len(boss_kill_episodes)} multi-kill eps')
+      f'{len(multi_kill_eps)} multi-kill eps')
 venv.close()
 " 2>&1
