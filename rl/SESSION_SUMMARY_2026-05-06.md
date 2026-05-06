@@ -65,6 +65,20 @@ Stop condition (a) of /loop spec MET (60+ kills/30 = 100/50 vs threshold 5/50).
 
 12 iterations: v13, v14, v15 (killed early), v17 (killed — reward hack), v18 ✓, v19 ✓, v20, v22, v23, v24, v25, v26 (killed — reward exploit), v26b. Three production-quality wins (v18 sample 70% multi, v19 ep200 100% det multi, v24 ep1200 100% det single nav).
 
+## v19 checkpoint landscape (15 eps each, gargoyle.state, max_steps=15000)
+
+| ckpt | det kills | det multi | sample kills | sample multi |
+|---|---|---|---|---|
+| 100 | 0 | 0 | 21 | **6 (40%)** |
+| **200** | **30** | **15 (100%)** | 15 | 0 |
+| 300 | 15 | 0 | 21 | **6 (40%)** |
+| 400 | 0 | 0 | 17 | 2 (13%) |
+| 500-900 | 0 | 0 | 0-6 | 0 |
+
+ep200 is uniquely the golden checkpoint. ep100 and ep300 have decent sample-mode multi-kill rates (~40%) but no det multi-kill. Beyond ep400, policy collapses entirely.
+
+The training trajectory hit a narrow window where the deterministic policy aligned with multi-kill behavior. PPO's gradient pushed past it after ~1 epoch (from peak at ep200).
+
 ## Tags
 
 - `rl-v13-kill-detection-fix` — bug diagnostic
