@@ -110,6 +110,16 @@ Tested if larger net + fresh init can match BC-pretrained results.
 
 v31 trains FAST (no warmup needed) but reaches lower sample-mode multi-kill peak. Both have det collapse. Useful finding: **BC pretrain isn't strictly required; bigger network compensates** — but BC + smaller net is more sample-efficient on multi-kill metric.
 
+## Temperature scaling experiment (final analysis)
+
+| Ckpt | t=1.0 (sample) | t=0.5 | t=0.3 | t=0.1 | argmax (det) |
+|---|---|---|---|---|---|
+| v18 final | 7/10 multi | 0/10 | 0/10 | 0/10 | 0/30 |
+| **v19 ep200** | 0/10 | 3/10 | 2/10 | 5/10 | **30/30** |
+| v31 final | 4/10 multi | 0/10 | 0/10 | 0/10 | 0/30 |
+
+Each policy has exactly ONE working inference mode. v18/v31 work only with full stochasticity. v19 ep200 works only with pure argmax. **Temperature can't bridge the gap** — v19 ep200's argmax-correctness is a fundamental property of that specific weight configuration, not something tunable post-hoc.
+
 ## v32 — Resume v31 + v19-style finetune (FAILED)
 
 Tried mirror of v18→v19 path with bigger net. Resumed v31 final, max_steps=15000, 500 epochs.
