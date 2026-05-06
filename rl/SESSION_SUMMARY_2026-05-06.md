@@ -97,6 +97,14 @@ For reproducibility, future work should try:
 - KL constraint to BC reference (prevent catastrophic drift)
 - Population-Based Training (PBT) — automatic seed selection
 
+## v29 corridor curriculum (FAILED)
+
+Generated `post_gargoyle_corridor.state` from v19 ep200's gameplay_start trajectory at the moment after gargoyle kill (section=3, scene=0x02, room=7, mb=0). Random play from this state reaches spider section 5/5 with spider engaged 5/5.
+
+v29 = BC + PPO from `post_gargoyle_corridor.state` (1500 epochs, max_steps=8000). Result: only 7 cum kills total (0.85% rate), peaked at mean_ret=56. Sanity eval on gargoyle.state shows v29 at 7/10 single (worse than random's 10/10). **Curriculum training regressed the gargoyle skill while failing to learn spider.**
+
+The corridor → spider gap is harder than expected — likely Sara's HP from prior gargoyle fight is too low to survive corridor damage en route to spider engagement. Random can navigate but not fight; PPO can fight but takes too much corridor damage.
+
 ## v28 multi-seed sweep (post-/loop-resume)
 
 Tested explicit reproducibility with seeds 0/1/2:
