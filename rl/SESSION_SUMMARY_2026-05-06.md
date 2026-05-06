@@ -97,6 +97,18 @@ For reproducibility, future work should try:
 - KL constraint to BC reference (prevent catastrophic drift)
 - Population-Based Training (PBT) — automatic seed selection
 
+## v28 multi-seed sweep (post-/loop-resume)
+
+Tested explicit reproducibility with seeds 0/1/2:
+
+| Seed | Cum kills (1500 ep) | sample 20-ep multi (best ckpt) | Outcome |
+|---|---|---|---|
+| 0 | 571 | 2/20 (10%) at ep700 | partial success — like v12c baseline |
+| 1 | 53 | not evaluated (cum stuck) | collapsed mid-training |
+| 2 | 0 (cum stuck at 0) | n/a | full stuck-zero ent=0 from start |
+
+**Confirmed**: BC + PPO from gargoyle.state is highly seed-sensitive. Roughly 1/3 of seeds make any meaningful progress. v18 original unseeded run was upper-end of distribution. v19 ep200's 100% det multi-kill was an even rarer alignment downstream of v18.
+
 ## Tags
 
 - `rl-v13-kill-detection-fix` — bug diagnostic
