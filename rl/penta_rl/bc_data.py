@@ -54,6 +54,10 @@ def jsonl_to_state_vec(d: dict) -> np.ndarray:
         max(near_d, 0) / 200.0, proj_n / 10.0, boss_count / 8.0,
         bsx, bsy, 1.0 if boss_count > 0 else 0.0,
     ], dtype=np.float32))
+    # Inventory (96 bytes from D840-D89F). If missing in older recordings, zero.
+    inv_list = d.get("inv", [0] * 96)
+    if len(inv_list) < 96: inv_list = inv_list + [0] * (96 - len(inv_list))
+    parts.append(np.array(inv_list[:96], dtype=np.float32) / 255.0)
     return np.concatenate(parts)
 
 

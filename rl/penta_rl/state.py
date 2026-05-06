@@ -126,6 +126,8 @@ def read_state(pb) -> GameState:
             slots[i, j] = mem[base + j]
     raw = {k: mem[a] for k, a in ADDR.items() if k != "SLOT_BASES" and isinstance(a, int)}
     raw["oam"] = _oam_features(pb)
+    # Inventory region (probed candidates: D840-D85F + D880-D89F)
+    raw["inv"] = bytes(mem[a] for a in range(0xD840, 0xD8A0))
     return GameState(
         scene=mem[0xD880], level=mem[0xFFBA], room=mem[0xFFBD],
         form=mem[0xFFBE], miniboss=mem[0xFFBF], powerup=mem[0xFFC0],
@@ -141,7 +143,7 @@ def read_state(pb) -> GameState:
 def state_to_vector(s: GameState) -> np.ndarray:
     """Flatten state to a fixed-size float32 vector for the policy.
 
-    Returns 71-dim vector. All bytes normalized to [0, 1].
+    Returns 167-dim vector. All bytes normalized to [0, 1].
     """
     oam = s.raw_addrs.get("oam", {}) if s.raw_addrs else {}
     sara_x = oam.get("sara_x", -1); sara_y = oam.get("sara_y", -1)
@@ -180,11 +182,13 @@ def state_to_vector(s: GameState) -> np.ndarray:
             bsx, bsy,  # signed in [-1, 1]
             1.0 if boss_count > 0 else 0.0,  # has_boss flag
         ], dtype=np.float32),
+        # Inventory region (96 bytes from D840-D89F, /255 normalized)
+        np.frombuffer(s.raw_addrs.get("inv", bytes(96)), dtype=np.uint8).astype(np.float32) / 255.0,
     ]
     return np.concatenate(parts)
 
 
 def vector_dim() -> int:
     """Return the dimension of state_to_vector output."""
-    # 4 + 6 + 3 + 6 + 40 + 12 = 71
-    return 71
+    # 4 + 6 + 3 + 6 + 40 + 12 + 96 = 167
+    return 167

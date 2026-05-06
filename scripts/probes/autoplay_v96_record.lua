@@ -138,11 +138,12 @@ local prev = {
 local log = io.open(LOG_PATH, "w")
 if not log then console:log("ERROR: cannot open log"); return end
 
--- BC trajectory recorder
-local REC_PATH = "/home/struktured/projects/penta-dragon-dx-claude/rl/bc_data/expert_v96.jsonl"
+-- BC trajectory recorder (env var REC_PATH overrides default)
+local REC_PATH = os.getenv("REC_PATH") or "/home/struktured/projects/penta-dragon-dx-claude/rl/bc_data/expert_v96.jsonl"
 os.execute("mkdir -p /home/struktured/projects/penta-dragon-dx-claude/rl/bc_data")
 local rec = io.open(REC_PATH, "w")
 local recCount = 0
+console:log("[REC] writing to " .. REC_PATH)
 
 local function logMsg(msg)
     local s = string.format("f%05d: %s", f, msg)
@@ -1164,6 +1165,12 @@ callbacks:add("frame", function()
             end
             rec:write("]")
             if si < 5 then rec:write(",") end
+        end
+        -- Inventory region D840-D89F
+        rec:write('],"inv":[')
+        for ia = 0xD840, 0xD89F do
+            rec:write(tostring(emu:read8(ia)))
+            if ia < 0xD89F then rec:write(",") end
         end
         rec:write(string.format('],"oam":{"sara_x":%d,"sara_y":%d,"boss_x":%d,"boss_y":%d,"boss_count":%d,"near_x":%d,"near_y":%d,"near_dist":%d,"proj_count":%d}}\n',
             math.floor(sara_x_avg), math.floor(sara_y_avg),

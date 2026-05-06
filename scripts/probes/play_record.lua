@@ -160,6 +160,12 @@ callbacks:add("frame", function()
         rec:write("]")
         if si < 5 then rec:write(",") end
     end
+    -- Inventory region D840-D89F (96 bytes) for item state
+    rec:write('],"inv":[')
+    for ia = 0xD840, 0xD89F do
+        rec:write(tostring(emu:read8(ia)))
+        if ia < 0xD89F then rec:write(",") end
+    end
     rec:write(string.format('],"oam":{"sara_x":%d,"sara_y":%d,"boss_x":%d,"boss_y":%d,"boss_count":%d,"near_x":%d,"near_y":%d,"near_dist":%d,"proj_count":%d}}\n',
         math.floor(sara_x_avg), math.floor(sara_y_avg),
         math.floor(boss_x_avg), math.floor(boss_y_avg), boss_n,
