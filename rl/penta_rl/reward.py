@@ -21,9 +21,9 @@ class RewardConfig:
     boss_kill: float = 50.0          # DCB8 advances PAST boss section (2 or 5)
     boss_kill_chain: float = 75.0    # 2nd+ kill: smaller multiplier (was 150, destabilized det policy)
     boss_damage: float = 2.0         # per 16 HP chunk of TRUE downward DCBB delta
-    boss_phase_2: float = 5.0        # DCBB first crosses below 0xC0 in this fight
-    boss_phase_3: float = 10.0       # DCBB first crosses below 0x80
-    boss_phase_4: float = 15.0       # DCBB first crosses below 0x40
+    boss_phase_2: float = 5.0
+    boss_phase_3: float = 10.0
+    boss_phase_4: float = 15.0
     miniboss_enter: float = 1.0      # D880 → 0x0A (engaged)
     fire_in_combat: float = 0.05     # action == A while FFBF != 0
 
