@@ -8,8 +8,8 @@
 #
 # Controls (mgba default):
 #   Arrow keys = D-pad
-#   Z = A button (fire projectile)
-#   X = B button
+#   X = A button (fire projectile)
+#   Z = B button
 #   Enter = Start
 #   Backspace = Select
 #
@@ -47,7 +47,7 @@ mkdir -p "$(dirname "$OUT")"
 echo "Recording to: $OUT"
 echo "ROM: $ROM"
 echo ""
-echo "Controls: arrows=D-pad, Z=A (fire), X=B, Enter=Start, Backspace=Select"
+echo "Controls: arrows=D-pad, X=A (fire), Z=B, Enter=Start, Backspace=Select"
 echo "Title auto-navs ~8s, then YOUR TURN. Close mgba window to stop recording."
 echo ""
 

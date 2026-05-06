@@ -4,7 +4,7 @@
 -- seconds, then YOU control the game from your keyboard. Recording starts
 -- automatically once gameplay state (FFC1=1) is reached.
 --
--- mgba default keymap: arrows = D-pad, Z = A, X = B, Enter = Start, Backspace = Select
+-- mgba default keymap: arrows = D-pad, X = A (fire), Z = B, Enter = Start, Backspace = Select
 --
 -- Records JSONL to rl/bc_data/expert_human.jsonl in PentaEnv schema with OAM.
 
@@ -43,10 +43,11 @@ callbacks:add("frame", function()
         return
     end
 
-    -- Hand control to player (only release once)
+    -- Hand control to player. Do NOT call setKeys(0) — that can persistently
+    -- override keyboard input in some mgba builds. Just stop calling setKeys.
     if f == TITLE_END + 1 then
-        emu:setKeys(0)
         console:log("[REC] *** YOUR TURN — play now! Recording starts when in gameplay ***")
+        console:log("[REC] If keys feel wonky: check mgba Settings → Tools → Input")
     end
 
     -- Wait for gameplay state
