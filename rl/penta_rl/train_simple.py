@@ -14,12 +14,12 @@ SAVE_DIR = "/home/struktured/projects/penta-dragon-dx-claude/rl"
 
 
 def main(epochs: int = 100, steps_per_epoch: int = 1024, n_envs: int = 4,
-         max_steps: int = 4000, save_dir: str = SAVE_DIR, resume: str = None,
-         label: str = "simple"):
+         max_steps: int = 3000, save_dir: str = SAVE_DIR, resume: str = None,
+         label: str = "simple", savestate: str = None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device: {device}, n_envs={n_envs}, epochs={epochs}, steps/epoch={steps_per_epoch}")
 
-    venv = VecPentaEnv(ROM, n=n_envs, max_steps=max_steps)
+    venv = VecPentaEnv(ROM, n=n_envs, max_steps=max_steps, savestate_path=savestate)
     obs_dim = vector_dim()
     cfg = PPOConfig(epochs=epochs, steps_per_epoch=steps_per_epoch * n_envs,
                     train_iters=10, entropy_coef=0.03)  # higher entropy to keep exploring

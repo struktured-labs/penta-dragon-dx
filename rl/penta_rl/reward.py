@@ -1,4 +1,14 @@
-"""Reward function for Penta Dragon RL."""
+"""Reward function for Penta Dragon RL.
+
+v2 redesign (post-eval-regression):
+- Boss damage and kill dominate vs survival rewards
+- Phase-milestone bonuses (DCBB drops below 0xC0, 0x80) to ladder partial progress
+- True damage tracking (ignore phase reset upward jumps)
+- DCB8-advance kill detection (more accurate than DCBB→0)
+- Form transform bonus (Dragon = big deal per walkthrough)
+- Less generous survival incentive (penalize dawdling more)
+- B-button (Mega-Flash) usage bonus
+"""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from .state import GameState
@@ -6,21 +16,46 @@ from .state import GameState
 
 @dataclass
 class RewardConfig:
-    """Per-event reward weights. LLM coach can mutate these."""
-    boss_kill: float = 5.0           # unique boss killed
-    miniboss_enter: float = 0.5      # D880 → 0x0A
-    section_advance: float = 1.0     # DCB8 incremented (cannot cheese)
-    unique_room: float = 2.0         # FIRST visit to a (level, room) pair
-    room_change: float = 0.05        # any room change (small, anti-cheese)
-    level_change: float = 5.0        # FFBA changed (level up)
-    boss_damage: float = 0.5         # DCBB decreased
-    player_damage: float = -0.3      # player_hp decreased
-    death: float = -5.0              # D880 → 0x17
-    powerup_pickup: float = 1.0
-    step_penalty: float = -0.001
-    scroll_progress: float = 0.0005  # tiny anti-cheese
-    fire_projectile: float = 0.05    # action == "A"
-    section_max_reached: float = 1.0 # NEW max DCB8 in episode
+    """Per-event reward weights (v2)."""
+    # Combat — primary signal
+    boss_kill: float = 50.0          # DCB8 advances PAST boss section (2 or 5)
+    boss_kill_chain: float = 75.0    # 2nd+ kill: smaller multiplier (was 150, destabilized det policy)
+    boss_damage: float = 2.0         # per 16 HP chunk of TRUE downward DCBB delta
+    boss_phase_2: float = 5.0        # DCBB first crosses below 0xC0 in this fight
+    boss_phase_3: float = 10.0       # DCBB first crosses below 0x80
+    boss_phase_4: float = 15.0       # DCBB first crosses below 0x40
+    miniboss_enter: float = 1.0      # D880 → 0x0A (engaged)
+    fire_in_combat: float = 0.05     # action == A while FFBF != 0
+
+    # Survival / death
+    death: float = -20.0             # D880 → 0x17
+    player_damage: float = -0.5      # per 256-unit HP loss
+    step_penalty: float = -0.005     # 5x prior; dawdling is bad
+
+    # Progression — kept positive but smaller
+    section_advance: float = 0.3
+    section_max_reached: float = 0.5
+    unique_room: float = 0.5
+    room_change: float = 0.01
+    level_change: float = 10.0       # rare event, big reward
+
+    # Powerup
+    powerup_pickup_from_zero: float = 1.5  # FFC0 was 0 → got anything (always upgrade)
+    powerup_pickup_swap: float = 0.0       # FFC0 swap (unknown quality, neutral)
+    form_transform_dragon: float = 8.0     # FFBE 0 → 1 (big walkthrough deal)
+    dragon_active_step: float = 0.005      # small per-step bonus while dragon
+
+    # B button (Mega-Flash candidate)
+    b_button: float = 0.02           # any B press; tiny so it's exploration-friendly
+
+    # Anti-cheese
+    scroll_progress: float = 0.0
+
+    # Stage boss progression (long-horizon — D880 0x0C-0x14 = stage boss arenas per arch doc)
+    stage_boss_arena_enter: float = 30.0   # first time D880 enters any 0x0C..0x14
+    stage_boss_kill: float = 200.0         # D880 transitions from arena to 0x16 (post-boss reload)
+    final_boss_penta_dragon: float = 1000.0 # FFBA=8 arena complete (Penta Dragon defeated)
+    stage_boss_splash: float = 5.0          # D880 → 0x18 (cinematic splash)
 
 
 @dataclass
@@ -28,18 +63,20 @@ class RewardTracker:
     """Tracks unique events to avoid double-counting."""
     cfg: RewardConfig = field(default_factory=RewardConfig)
     unique_bosses_killed: set = field(default_factory=set)
-    visited_rooms: set = field(default_factory=set)  # set of (level, room) pairs
+    visited_rooms: set = field(default_factory=set)
     max_section: int = 0
     last_state: GameState | None = None
-    last_action: int = -1
     cumulative: float = 0.0
     event_log: list = field(default_factory=list)
+    # Per-fight tracking
+    cur_boss_section: int = -1   # which DCB8 (2 or 5) was last seen with FFBF active
+    cur_boss_min_hp: int = 0xFF  # lowest DCBB seen in current fight (for true damage)
+    cur_boss_phase: int = 1      # phase milestones already triggered
+    # Stage boss tracking
+    stage_arenas_entered: set = field(default_factory=set)  # set of D880 values 0x0C..0x14
+    stage_bosses_killed: set = field(default_factory=set)  # FFBA values where we transitioned arena → 0x16
 
     def step(self, state: GameState, action: int = -1) -> tuple[float, dict]:
-        """Compute reward for transition last_state → state.
-
-        Returns (reward, info_dict).
-        """
         cfg = self.cfg
         prev = self.last_state
         if prev is None:
@@ -50,72 +87,129 @@ class RewardTracker:
         r = 0.0
         events = []
 
-        # Fire projectile bonus (action 0 = A button alone)
-        if action == 0:
-            r += cfg.fire_projectile
-
-        # Boss kill: DCBB hit 0 AND we have an active miniboss
-        if prev.boss_hp > 0 and state.boss_hp == 0 and prev.miniboss != 0:
+        # ── Combat: kill detection via DCB8 advance past boss section ──
+        # DCB8 transitions 2→3 = Gargoyle killed; 5→0 = Spider killed (level 1)
+        if prev.section in (2, 5) and state.section != prev.section and prev.miniboss != 0:
             key = (prev.level, prev.miniboss)
             if key not in self.unique_bosses_killed:
+                # First kill of this (level, boss) — base reward + chain bonus if not first kill in episode
+                if len(self.unique_bosses_killed) > 0:
+                    r += cfg.boss_kill_chain
+                    events.append(("BOSS_KILL_CHAIN", key, len(self.unique_bosses_killed)+1))
+                else:
+                    r += cfg.boss_kill
+                    events.append(("BOSS_KILL", key, "via DCB8 advance"))
                 self.unique_bosses_killed.add(key)
-                r += cfg.boss_kill
-                events.append(("boss_kill", key))
-            # Boss damage taken into kill bonus too
-        elif state.boss_hp < prev.boss_hp:
-            delta = prev.boss_hp - state.boss_hp
-            r += cfg.boss_damage * (delta / 16.0)
+            # End of fight: reset per-fight tracking
+            self.cur_boss_min_hp = 0xFF
+            self.cur_boss_phase = 1
 
-        # Miniboss enter
+        # ── Boss damage: TRUE downward DCBB delta (ignore phase reset jumps) ──
+        if prev.miniboss != 0 and state.miniboss != 0:
+            # Track new minimum
+            if state.boss_hp < self.cur_boss_min_hp:
+                # Genuine progress: count chunks below previous min
+                progress = self.cur_boss_min_hp - state.boss_hp
+                r += cfg.boss_damage * (progress / 16.0)
+                self.cur_boss_min_hp = state.boss_hp
+                # Phase milestones
+                if state.boss_hp < 0xC0 and self.cur_boss_phase < 2:
+                    r += cfg.boss_phase_2; self.cur_boss_phase = 2
+                    events.append(("phase_2", state.boss_hp))
+                if state.boss_hp < 0x80 and self.cur_boss_phase < 3:
+                    r += cfg.boss_phase_3; self.cur_boss_phase = 3
+                    events.append(("phase_3", state.boss_hp))
+                if state.boss_hp < 0x40 and self.cur_boss_phase < 4:
+                    r += cfg.boss_phase_4; self.cur_boss_phase = 4
+                    events.append(("phase_4", state.boss_hp))
+
+        # ── Miniboss enter ──
         if prev.miniboss == 0 and state.miniboss != 0:
             r += cfg.miniboss_enter
+            self.cur_boss_min_hp = state.boss_hp
+            self.cur_boss_phase = 1
             events.append(("miniboss_enter", state.miniboss))
 
-        # Section advance
-        if state.section != prev.section:
+        # ── Fire bonus only in combat ──
+        if action == 0 and state.miniboss != 0:
+            r += cfg.fire_in_combat
+
+        # ── B button (Mega-Flash candidate) ──
+        if action == 1:
+            r += cfg.b_button
+
+        # ── Section advance (excluding boss-kill case which gave kill bonus) ──
+        if state.section != prev.section and prev.section not in (2, 5):
             r += cfg.section_advance
             events.append(("section", state.section))
-        # Section MAX reached (only on new high)
         if state.section > self.max_section:
             r += cfg.section_max_reached * (state.section - self.max_section)
             self.max_section = state.section
 
-        # Room change (small, anti-cheese)
+        # ── Room ──
         if state.room != prev.room and state.room != 0:
             r += cfg.room_change
-            events.append(("room", state.room))
-        # Unique-room visit reward
         rkey = (state.level, state.room)
         if rkey not in self.visited_rooms:
             self.visited_rooms.add(rkey)
             r += cfg.unique_room
             events.append(("unique_room", rkey))
 
-        # Level change
+        # ── Level change (rare, big) ──
         if state.level != prev.level:
             r += cfg.level_change
             events.append(("level", state.level))
 
-        # Player damage
+        # ── Player damage ──
         if state.player_hp < prev.player_hp:
             r += cfg.player_damage * ((prev.player_hp - state.player_hp) / 256.0)
 
-        # Death
+        # ── Death ──
         if state.scene == 0x17 and prev.scene != 0x17:
             r += cfg.death
             events.append(("death", None))
 
-        # Powerup pickup
-        if prev.powerup == 0 and state.powerup != 0:
-            r += cfg.powerup_pickup
-            events.append(("powerup", state.powerup))
+        # ── Stage boss arena entry (D880 → 0x0C..0x14) ──
+        if 0x0C <= state.scene <= 0x14 and state.scene != prev.scene:
+            if state.scene not in self.stage_arenas_entered:
+                self.stage_arenas_entered.add(state.scene)
+                r += cfg.stage_boss_arena_enter
+                events.append(("STAGE_ARENA_ENTER", hex(state.scene), state.level))
+        # ── Stage boss splash (D880 → 0x18) ──
+        if state.scene == 0x18 and prev.scene != 0x18:
+            r += cfg.stage_boss_splash
+            events.append(("stage_boss_splash",))
+        # ── Stage boss kill: D880 transitions FROM arena TO 0x16 (post-boss reload) ──
+        if 0x0C <= prev.scene <= 0x14 and state.scene == 0x16:
+            if prev.level not in self.stage_bosses_killed:
+                self.stage_bosses_killed.add(prev.level)
+                r += cfg.stage_boss_kill
+                events.append(("STAGE_BOSS_KILL", prev.level, hex(prev.scene)))
+                # Final boss = FFBA=8 (Penta Dragon, D880=0x14)
+                if prev.level == 8:
+                    r += cfg.final_boss_penta_dragon
+                    events.append(("FINAL_BOSS_PENTA_DRAGON_DEFEATED",))
 
-        # Scroll progress
+        # ── Powerup pickup (tiered: from-zero vs swap) ──
+        if prev.powerup == 0 and state.powerup != 0:
+            r += cfg.powerup_pickup_from_zero
+            events.append(("powerup_from_zero", state.powerup))
+        elif prev.powerup != 0 and state.powerup != prev.powerup and state.powerup != 0:
+            r += cfg.powerup_pickup_swap
+
+        # ── Form transform to Dragon ──
+        if prev.form == 0 and state.form == 1:
+            r += cfg.form_transform_dragon
+            events.append(("dragon_transform",))
+        if state.form == 1:
+            r += cfg.dragon_active_step
+
+        # ── Step penalty ──
+        r += cfg.step_penalty
+
+        # ── Scroll (zero by default in v2) ──
         if state.scy != prev.scy or state.scx != prev.scx:
             r += cfg.scroll_progress
-
-        # Step penalty
-        r += cfg.step_penalty
 
         self.cumulative += r
         self.last_state = state
@@ -129,6 +223,10 @@ class RewardTracker:
         self.visited_rooms.clear()
         self.max_section = 0
         self.last_state = None
-        self.last_action = -1
         self.cumulative = 0.0
         self.event_log.clear()
+        self.cur_boss_section = -1
+        self.cur_boss_min_hp = 0xFF
+        self.cur_boss_phase = 1
+        self.stage_arenas_entered.clear()
+        self.stage_bosses_killed.clear()

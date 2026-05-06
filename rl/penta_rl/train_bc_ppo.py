@@ -18,7 +18,7 @@ SAVE_DIR = "/home/struktured/projects/penta-dragon-dx-claude/rl"
 
 
 def main(bc_ckpt: str, epochs: int = 100, steps_per_epoch: int = 512, n_envs: int = 4,
-         max_steps: int = 1500, label: str = "bc_ppo",
+         max_steps: int = 3000, label: str = "bc_ppo",
          savestate: str = "/home/struktured/projects/penta-dragon-dx-claude/rl/saves/gargoyle.state",
          pi_lr: float = 1e-4):  # lower lr to preserve BC features
     device = "cuda" if torch.cuda.is_available() else "cpu"
