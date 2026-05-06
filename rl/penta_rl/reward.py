@@ -35,7 +35,9 @@ class RewardConfig:
     player_damage: float = -0.5      # per 256-unit HP loss
     step_penalty: float = -0.005     # 5x prior; dawdling is bad
 
-    # Progression — kept positive but smaller
+    # Progression — kept positive but smaller (REVERTED to v4)
+    # v5/v5b experiments (section_advance=25) caused oscillation exploit OR over-bias
+    # away from kills. v4 reward is the proven baseline.
     section_advance: float = 0.3
     section_max_reached: float = 0.5
     unique_room: float = 0.5

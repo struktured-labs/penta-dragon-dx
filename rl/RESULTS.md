@@ -386,6 +386,18 @@ v24 ep1200 = 100% det single-kill (gargoyle only) from gameplay_start.state. Doe
 
 **Iteration count post-bug-fix**: v13, v14, v15 (killed early), v17 (killed — reward hack), v18 ✓, v19 ✓, v20, v22, v23, v24, v25 = 11 iterations. Three scored production-quality wins (v18/v19/v24).
 
+## v26 / v26b — Reward shaping for corridor navigation (FAILED)
+
+Hypothesis: bump section_advance from 0.3 to 25.0 to give corridor navigation a strong reward signal.
+
+**v26 (section_advance=25)**: 0 kills in 649 epochs! Policy found a reward exploit — oscillate between sections to farm +25 per change. mean_ret=195 from oscillation alone, no kills, ent=0.001. Killed run.
+
+**v26b (section_advance=0, section_max_reached=50, room_change=0)**: only forward section reach counted. 1500 epochs, 125 cum kills. Best ckpt ep950 sample 7/10 single (gameplay_start), 0 multi. Worse than v24 ep1200's 10/10 single.
+
+Reverted reward to v4 — v5/v5b experiments hurt the policy. Even bounded section bonuses bias too strongly away from boss kills.
+
+**Lesson saved**: any bidirectional state-change reward is exploitable in long episodes. Use unique-state-bounded signals only.
+
 ## v25 — RESUME v19 ep200, train on gameplay_start.state (1000 epochs)
 
 Hypothesis: combat policy from v19 ep200 + corridor experience from gameplay_start would teach nav while preserving combat. Goal: multi-kill from level 1 start.
