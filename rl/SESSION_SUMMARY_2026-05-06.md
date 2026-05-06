@@ -79,6 +79,24 @@ ep200 is uniquely the golden checkpoint. ep100 and ep300 have decent sample-mode
 
 The training trajectory hit a narrow window where the deterministic policy aligned with multi-kill behavior. PPO's gradient pushed past it after ~1 epoch (from peak at ep200).
 
+## Reproducibility experiments (post-headline)
+
+After v19 ep200 was confirmed, I tested whether the BC+PPO recipe replicates with different seeds:
+
+| Run | Seed/Init | Outcome |
+|---|---|---|
+| v18 (original) | unseeded | sample 70% multi → resume to v19 ep200 (100% det multi) |
+| v22 | seed=42 | stuck — only 154 cum kills in 1500 epochs, 5x worse than v18 |
+| v23 | resume v22 ep1300 | sustained training peak multi100=12 but eval shows 0/20 det multi at any ckpt |
+| v27 | unseeded, granular ckpts | TOTALLY STUCK at ep 0 with entropy=0.000, cum=0 in 640 epochs |
+
+Conclusion: **v19 ep200 was a 1/3 lucky run, not a reliable recipe.** v18 succeeded → v19 followed up successfully → v22/v23/v27 failed. PPO from BC init has high variance.
+
+For reproducibility, future work should try:
+- Multi-seed ensemble (run 5+ seeds, take best peak ckpt)
+- KL constraint to BC reference (prevent catastrophic drift)
+- Population-Based Training (PBT) — automatic seed selection
+
 ## Tags
 
 - `rl-v13-kill-detection-fix` — bug diagnostic
