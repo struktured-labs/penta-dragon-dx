@@ -249,9 +249,44 @@ Det collapse same as v13: high entropy (2.0-2.4) → flat logits → argmax pick
 
 Hypothesis: v14 has gargoyle expertise; longer eps + much lower entropy_coef will preserve gargoyle policy AND let multi-kill emerge.
 
-## v17 (running, parallel) — BC pretrain + PPO, max_steps=8000, entropy=0.005
+## v17 → KILLED (reward hack discovered)
 
-Hypothesis: BC was trained on autoplay v96 expert data (killed all 16 mini-bosses). Init from BC should give a meaningful prior (vs PPO's random init). Then PPO finetune with very low entropy/lr (1e-4) preserves BC features.
+v17 (BC + PPO with low entropy) found a reward exploit:
+- Stay in mini-boss fight forever (FFBF != 0)
+- Spam fire button (action 0)
+- Get +0.05 per A-press × 8000 steps = **+400** vs +50 for actual kill
+- v17 mean_ret climbed to 228, max 422, with cum_kills only 10 in 528 eps
+
+Confirmed via `peek_v17.py`: episodes lasted 8000 steps without dying, with no kills,
+just `phase_2/3/4` damage milestones + room exploration. The fire_in_combat reward
+turned PPO into a reward hacker.
+
+v15 (running parallel, fresh PPO from v14) didn't find this exploit because it
+inherited gargoyle-killer behavior from v14 — but v15 was also stuck at 87% kill rate
+single-only (no multi-kill emerging).
+
+## Reward v4 — fix exploits
+
+Removed per-frame rewards that PPO can farm:
+- `fire_in_combat`: 0.05 → **0** (the exploit signal)
+- `b_button`: 0.02 → **0**
+- `dragon_active_step`: 0.005 → **0**
+
+Increased event-based kill rewards to dominate:
+- `boss_kill`: 50 → **100**
+- `boss_kill_chain`: 75 → **200** (multi-kill should be the biggest reward!)
+- `boss_phase_2/3/4`: 5/10/15 → **10/20/40**
+- `boss_damage`: 2.0 → **0.5** (DCBB delta is noisy from level timer dual purpose)
+
+Random baseline with reward v4: 30/30 single kills, mean_ret=150 (was 80).
+Expected max ret for multi-kill: 100 (kill1) + 200 (chain) + 70 (phases) + ... ≈ 400+.
+Stage boss kill: +200. Stage boss splash: +5. Final boss: +1000.
+
+## v18 (running) — BC + PPO with reward v4
+
+- BC pretrained init (kept from v17 attempt)
+- Real ROM, gargoyle.state, max_steps=8000, entropy=0.005, pi_lr=1e-4
+- 1500 epochs
 
 ## Artifacts
 

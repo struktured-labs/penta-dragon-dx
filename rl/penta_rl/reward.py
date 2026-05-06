@@ -18,14 +18,17 @@ from .state import GameState
 class RewardConfig:
     """Per-event reward weights (v2)."""
     # Combat — primary signal
-    boss_kill: float = 50.0          # DCB8 advances PAST boss section (2 or 5)
-    boss_kill_chain: float = 75.0    # 2nd+ kill: smaller multiplier (was 150, destabilized det policy)
-    boss_damage: float = 2.0         # per 16 HP chunk of TRUE downward DCBB delta
-    boss_phase_2: float = 5.0
-    boss_phase_3: float = 10.0
-    boss_phase_4: float = 15.0
-    miniboss_enter: float = 1.0      # D880 → 0x0A (engaged)
-    fire_in_combat: float = 0.05     # action == A while FFBF != 0
+    # v4: kill bonus dominates; per-frame "fire" / "b_button" / "dragon_active" rewards
+    # ZEROED because v17 found a reward hack — stay in fight forever, spam fire,
+    # accumulate +400/8000 frames vs +50 for actual kill. Now killing is the only big payoff.
+    boss_kill: float = 100.0         # was 50
+    boss_kill_chain: float = 200.0   # was 75 — multi-kill should DOMINATE
+    boss_damage: float = 0.5         # was 2.0 — DCBB delta is noisy (level timer dual purpose)
+    boss_phase_2: float = 10.0       # was 5
+    boss_phase_3: float = 20.0       # was 10
+    boss_phase_4: float = 40.0       # was 15 — phase 4 is "almost dead"
+    miniboss_enter: float = 1.0
+    fire_in_combat: float = 0.0      # was 0.05 — REMOVED, was exploited
 
     # Survival / death
     death: float = -20.0             # D880 → 0x17
@@ -40,13 +43,13 @@ class RewardConfig:
     level_change: float = 10.0       # rare event, big reward
 
     # Powerup
-    powerup_pickup_from_zero: float = 1.5  # FFC0 was 0 → got anything (always upgrade)
-    powerup_pickup_swap: float = 0.0       # FFC0 swap (unknown quality, neutral)
-    form_transform_dragon: float = 8.0     # FFBE 0 → 1 (big walkthrough deal)
-    dragon_active_step: float = 0.005      # small per-step bonus while dragon
+    powerup_pickup_from_zero: float = 1.5
+    powerup_pickup_swap: float = 0.0
+    form_transform_dragon: float = 8.0
+    dragon_active_step: float = 0.0   # was 0.005 — REMOVED, per-frame exploit
 
     # B button (Mega-Flash candidate)
-    b_button: float = 0.02           # any B press; tiny so it's exploration-friendly
+    b_button: float = 0.0            # was 0.02 — REMOVED, per-frame exploit
 
     # Anti-cheese
     scroll_progress: float = 0.0
