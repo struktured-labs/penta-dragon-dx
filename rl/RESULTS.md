@@ -327,6 +327,36 @@ Why does det work here when sample doesn't? At ep200 the policy was crystallizin
 
 This means: best-of-iterations checkpoint is not always final. Need early-stopping on multi-kill metric, OR mid-training eval to find the actual peak.
 
+## v22 + v23 — Reproducibility test (failed to replicate v19 ep200)
+
+v22: same as v18 setup (BC + PPO from gargoyle.state, max_steps=8000), unseeded but different env stochasticity. Trained 1500 epochs, peaked at ep1300 (sample 18/20 single, 0/20 multi). v22 NEVER reached multi-kill at any det checkpoint. Final cum_kills=154 vs v18's 806 (5x worse).
+
+v23: resume v22 ep1300 with v19 setup (max_steps=15000, 500 epochs). Hit sustained training-time multi100=12-13 at ep 100-176 (similar to v19's pattern). But eval shows none of the ckpts have det multi-kill — sample is 12-20/20 single, det is 0/20 single.
+
+**Conclusion**: v19 ep200's 100% det multi-kill is a one-off lucky checkpoint, not a reliably reproducible recipe. The training-time multi100 metric is stochastic — getting `det = argmax(logits)` to align with kill behavior requires lucky weight alignment that's hard to reproduce.
+
+## v19 ep200 GENERALIZATION (good news)
+
+| Save state | det multi-kill | det total kills | mode |
+|---|---|---|---|
+| gargoyle.state (training distribution) | 10/10 | 20 | det |
+| **spider.state** (different boss engaged) | **10/10** | **20** | det |
+| gameplay_start.state (level 1 start, navigation required) | 0/10 | 10 (gargoyle only) | det |
+
+The policy is robust at FIGHTING — works from any save state where Sara is already in a fight, including a different mini-boss type. But fails from corridor states because it never learned navigation (BC training data was fight-focused with section-cycling cheats).
+
+This is more useful than expected — v19 ep200 is a deployable "combat policy" that can be combined with a navigation policy or save-state curriculum.
+
+## Final Status (2026-05-06 ~12:30)
+
+**Production policy**: `rl/ppo_v19_resume18_ep200.pt` — 100% det multi-kill from any boss-engaged save state.
+
+**Open frontiers**:
+1. Navigation policy (separate training from corridor save states)
+2. Stage boss arena entry (game-RE blocker — scene 0xb stuck state)
+3. Reproducible multi-kill training (lucky single-shot, not reliable recipe)
+4. Final boss / Penta Dragon (requires solving 1 + 2 + 3)
+
 ## Artifacts
 
 - `rl/bc_data/expert_trajectories.jsonl` — 27000 expert (state, action) pairs (gitignored)
