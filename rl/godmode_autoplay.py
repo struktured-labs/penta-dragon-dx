@@ -53,6 +53,9 @@ def godmode_step(pb):
     # - Boss alive (FFBF!=0): let it drop, auto-finish below 0x10
     if pb.memory[0xFFBF] == 0:
         pb.memory[0xDCBB] = 0xFF
+        # Suppress mini-boss respawn: clamp DCB8 to 0 so the boss-section trigger
+        # doesn't fire. Sara has unlimited exploration time post-kill.
+        pb.memory[0xDCB8] = 0
     elif pb.memory[0xDCBB] < 0x20 and pb.memory[0xD880] in (0x0A, 0x0B):
         pb.memory[0xFFBF] = 0
         pb.memory[0xDCBB] = 0xFF
