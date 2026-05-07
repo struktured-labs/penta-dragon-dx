@@ -137,11 +137,15 @@ def main():
             if pb.memory[0xFFBF] != 0:
                 a = int(logits.argmax(-1).item())
             else:
-                # Systematic: cycle D-pad directions in 60-frame chunks (1 sec each)
-                # This forces Sara to traverse rooms in all directions
-                # 4=R, 5=L, 6=U, 7=D, 0=A (fire while moving — for projectile interactions)
-                phase = (t // 60) % 5
-                a = [4, 6, 5, 7, 0][phase]
+                # Bias UP heavily — even rooms (2/4/6) might be above odd rooms
+                # 70% UP, 10% each of L/R/D, 0% other (to force vertical transitions)
+                r = np.random.random()
+                if r < 0.5: a = 6   # UP
+                elif r < 0.6: a = 4 # R
+                elif r < 0.7: a = 5 # L
+                elif r < 0.8: a = 7 # D
+                elif r < 0.9: a = 8 # UP+A
+                else: a = 0         # A (fire)
 
         obs, r, term, trunc, info = godmode_action(a)
         s = info["state"]
