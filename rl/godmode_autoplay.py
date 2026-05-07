@@ -127,17 +127,18 @@ def main():
         return godmode_step_env(action)
 
     for t in range(600000):
-        # Hybrid action: det v19 ep200 during boss fight, UNIFORM RANDOM when exploring
+        # Hybrid action: det v19 ep200 during boss fight, SYSTEMATIC EXPLORATION when no boss
         with torch.no_grad():
             o = torch.as_tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
             logits, _ = net(o)
             if pb.memory[0xFFBF] != 0:
                 a = int(logits.argmax(-1).item())
             else:
-                # Bias toward movement actions (4-11), away from select/start (2,3)
-                # 0=A, 1=B, 4=R, 5=L, 6=U, 7=D, 8-11=move+attack combos
-                move_actions = [0, 1, 4, 5, 6, 7, 8, 9, 10, 11]
-                a = int(np.random.choice(move_actions))
+                # Systematic: cycle D-pad directions in 60-frame chunks (1 sec each)
+                # This forces Sara to traverse rooms in all directions
+                # 4=R, 5=L, 6=U, 7=D, 0=A (fire while moving — for projectile interactions)
+                phase = (t // 60) % 5
+                a = [4, 6, 5, 7, 0][phase]
 
         obs, r, term, trunc, info = godmode_action(a)
         s = info["state"]
