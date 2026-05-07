@@ -46,9 +46,20 @@ def godmode_step(pb):
     # Freeze DCDF/DCDE timer cascade
     pb.memory[0xDCDF] = 0xFF
     pb.memory[0xDCDE] = 0xFF
-    # DD06 = entity/scroll lock flag. When non-zero, scene becomes 0x0B (death lock).
-    # Clamp to 0 always — Sara is never "locked" by enemy attacks.
+    # DD06 = entity/scroll lock flag. Clamp to 0 always.
     pb.memory[0xDD06] = 0
+    # DCBB clamp:
+    # - No boss (FFBF=0): unconditional 0xFF (corridor timer can't expire)
+    # - Boss alive (FFBF!=0): let it drop, auto-finish below 0x10
+    if pb.memory[0xFFBF] == 0:
+        pb.memory[0xDCBB] = 0xFF
+    elif pb.memory[0xDCBB] < 0x20 and pb.memory[0xD880] in (0x0A, 0x0B):
+        pb.memory[0xFFBF] = 0
+        pb.memory[0xDCBB] = 0xFF
+    # Death cinematic prevention: revert scene 0x17 → 0x02
+    if pb.memory[0xD880] == 0x17:
+        pb.memory[0xD880] = 0x02
+        pb.memory[0xDCBB] = 0xFF
 
 
 def main():
@@ -116,11 +127,17 @@ def main():
         return godmode_step_env(action)
 
     for t in range(600000):
-        # Get policy action
+        # Hybrid action: det v19 ep200 during boss fight, UNIFORM RANDOM when exploring
         with torch.no_grad():
             o = torch.as_tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
             logits, _ = net(o)
-            a = int(logits.argmax(-1).item())  # det mode (v19 ep200 best)
+            if pb.memory[0xFFBF] != 0:
+                a = int(logits.argmax(-1).item())
+            else:
+                # Bias toward movement actions (4-11), away from select/start (2,3)
+                # 0=A, 1=B, 4=R, 5=L, 6=U, 7=D, 8-11=move+attack combos
+                move_actions = [0, 1, 4, 5, 6, 7, 8, 9, 10, 11]
+                a = int(np.random.choice(move_actions))
 
         obs, r, term, trunc, info = godmode_action(a)
         s = info["state"]
