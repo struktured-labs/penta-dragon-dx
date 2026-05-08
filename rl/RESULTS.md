@@ -410,6 +410,42 @@ Hypothesis: combat policy from v19 ep200 + corridor experience from gameplay_sta
 
 Result: v25 matches v19 ep200's level 1 generalization (single kill only) but did NOT learn multi-kill from corridor save state. Same wall as v24. **Corridor → spider section traversal is the bottleneck.** Mini-bosses both die when engaged but reaching second mini-boss from a corridor requires HP/dodge skills the policy doesn't have.
 
+## v40 — Stage Boss Arena Captures + Shalamar Trainer (2026-05-07)
+
+### Arena Entry Mechanism (SOLVED)
+- Stage boss arenas correspond to D880 = 0x0C-0x14, one per FFBA value 0-8.
+- ROM disassembly: 9 arena setup routines at 0x886E, 0x88F8, 0x8999, 0x8A0D, 0x8A76, 0x8AED, 0x8B61, 0x8BD5, 0x8C46.
+- Each routine writes: D880=arena_value, FFB7=arena_value, DD85/86=boss_x, DD87/88=boss_y, then CALL 0x063E (common init → JP 0x02CF).
+- Boss positions per arena (extracted from ROM):
+  - FFBA=0/0xC: x=0xA0 y=0xF0
+  - FFBA=1/0xD (Shalamar): x=0x80 y=0xC0
+  - FFBA=2/0xE (Riff): x=0x60 y=0x60
+  - FFBA=3/0xF (Crystal): x=0x88 y=0xE0
+  - FFBA=4/0x10 (Cameo): x=0xA0 y=0xA0
+  - FFBA=5/0x11 (Ted): x=0xA0 y=0xC0
+  - FFBA=6/0x12 (Troop): x=0x90 y=0xC0
+  - FFBA=7/0x13 (Faze): x=0xA8 y=0x90
+  - FFBA=8/0x14 (Penta): x=0xA0 y=0xE0
+
+### Captured Arena Save States (rl/saves/curriculum/)
+| FFBA | Boss | D880 | OAM | Source | Verdict |
+|------|------|------|-----|--------|---------|
+| 1 | Shalamar | 0xD | 40 | FFD3=4 trigger | ✓ stable, used for training |
+| 2 | Riff | 0xE | 40 | full_init | ✓ stable in arena |
+| 3 | Crystal | 0xF | 20 | FFD3=1 trigger | drops to 0x17 in random play |
+| 4 | Cameo | 0x10 | 12 | FFD3=6 trigger | drops to 0x17 |
+| 5 | Ted | 0x11 | 38 | full_init | ✓ stable |
+| 6 | Troop | 0x12 | 40 | full_init | drops to 0xA (mini-boss scene) |
+| 7 | Faze | 0x13 | 12 | FFD3=7 trigger | drops to 0x17 |
+| 8 | Penta | 0x14 | 28 | FFD3=7 trigger | drops to 0x17 |
+
+### Shalamar Trainer (v1, in progress)
+- `train_shalamar.py`: PPO + ShalamarArenaEnv (godmode HP, terminate on FFBA advance)
+- Fast reset: load_state without PyBoy restart (0.5ms/step measured)
+- Hyperparams: gamma=0.995, lam=0.97, entropy_coef=0.03, max_steps=600/episode
+- Reward: step_penalty=-0.005, boss_damage=0.5, boss_kill=200, ffba_advance=+500
+- Goal: kill Shalamar from arena state (FFBA 1→2 advance) consistently
+
 ## Artifacts
 
 - `rl/bc_data/expert_trajectories.jsonl` — 27000 expert (state, action) pairs (gitignored)
@@ -417,4 +453,6 @@ Result: v25 matches v19 ep200's level 1 generalization (single kill only) but di
 - `rl/ppo_bc_ppo_final.pt` — BC+PPO checkpoint (gitignored)
 - `scripts/probes/autoplay_record.lua` — Recording script (committed)
 - `rl/penta_rl/bc_data.py`, `bc_train.py`, `bc_eval.py`, `train_bc_ppo.py` — pipeline (committed)
+- `rl/saves/curriculum/arena_*.state` — 8 stage boss arena save states (gitignored)
+- `rl/capture_arenas_full_init.py`, `verify_arenas_v2.py`, `train_shalamar.py` — arena pipeline (committed)
 - `rl/RESULTS.md` — this document
