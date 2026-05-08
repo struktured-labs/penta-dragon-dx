@@ -57,6 +57,8 @@ class NaturalExploreEnv(PentaEnv):
     def reset(self, seed=None, options=None):
         self._visited = set()
         self._arenas_seen = set()
+        self._stale_count = 0
+        self._last_pos = None
         if self.pb is None:
             obs, info = super().reset(seed=seed, options=options)
             self._init_ffba = info["state"].level
@@ -88,6 +90,21 @@ class NaturalExploreEnv(PentaEnv):
         if key not in self._visited:
             self._visited.add(key)
             reward += 10.0
+        # Stagnation penalty: track player pixel position; penalize if stuck
+        py = self.pb.memory[0xFE05]
+        px = self.pb.memory[0xFE04]
+        cur_pos = (s.room, py // 8, px // 8)  # 8x8 tile grid
+        if cur_pos == self._last_pos:
+            self._stale_count += 1
+            if self._stale_count > 30:
+                reward -= 0.5  # stagnation penalty
+        else:
+            self._stale_count = 0
+            reward += 0.05  # tiny reward for movement
+            self._last_pos = cur_pos
+        # Reward room CHANGES (regardless of unique) — encourages navigation
+        if s.room != self.reward_tracker.last_state.room:
+            reward += 20.0
         # Arena entry bonus
         if 0x0C <= s.scene <= 0x14 and s.scene not in self._arenas_seen:
             self._arenas_seen.add(s.scene)
@@ -108,7 +125,7 @@ class NaturalExploreEnv(PentaEnv):
 
 def run_chunk(epochs, steps_per_epoch, label, resume_path=None):
     device = "cpu"
-    env = NaturalExploreEnv(ROM, max_steps=4500, savestate_path=GAMEPLAY,
+    env = NaturalExploreEnv(ROM, max_steps=1024, savestate_path=GAMEPLAY,
                             reward_cfg=explore_reward_cfg())
     obs_dim = vector_dim()
     cfg = PPOConfig(epochs=epochs, steps_per_epoch=steps_per_epoch,
