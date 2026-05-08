@@ -4,10 +4,18 @@ which works reliably.
 Single-env training. Goal: kill Shalamar consistently (FFBA advance to 2).
 """
 from __future__ import annotations
-import json, time, sys, os
+import os
+# Force single-thread for ALL libraries before any imports — PyBoy + multi-thread torch deadlocks
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+import json, time, sys
 import numpy as np
 import torch
-torch.set_num_threads(1)  # critical: avoid deadlock with PyBoy multi-threading
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
 
 sys.path.insert(0, "/home/struktured/projects/penta-dragon-dx-claude/rl")
 from penta_rl.env import N_ACTIONS, PentaEnv, ACTION_BUTTONS
@@ -73,7 +81,8 @@ class ShalamarArenaEnv(PentaEnv):
 
 
 def main(epochs=50, steps_per_epoch=1024, max_steps_episode=600, label="shalamar"):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Force CPU — CUDA + PyBoy combination triggers a deadlock even with num_threads=1
+    device = "cpu"
     print(f"Device: {device}, epochs={epochs}, steps/epoch={steps_per_epoch}", flush=True)
     print(f"Save state: {SHALAMAR}", flush=True)
 
@@ -92,22 +101,27 @@ def main(epochs=50, steps_per_epoch=1024, max_steps_episode=600, label="shalamar
     ffba_advances = 0
     metrics = []
     t_start = time.time()
+    rng = np.random.default_rng(0)
 
     for ep in range(epochs):
         t_ep = time.time()
+        print(f"  [START ep {ep+1}, t={time.time()-t_start:.1f}s]", flush=True)
         buf = TrajectoryBuffer(obs_dim, steps_per_epoch)
         n_done = 0
         ep_reward = 0.0
         for t in range(steps_per_epoch):
+            if t == 0 and ep == 0:
+                print(f"  [first step]", flush=True)
+            if t % 200 == 0 and ep == 0:
+                print(f"    [t={t}, {time.time()-t_ep:.2f}s]", flush=True)
             with torch.no_grad():
-                o = torch.as_tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
+                o = torch.from_numpy(obs).float().unsqueeze(0)
                 logits, vals = agent.net(o)
-                dist = torch.distributions.Categorical(logits=logits)
-                act = dist.sample()
-                logp = dist.log_prob(act)
-            a = int(act.item())
+                # Numpy sampling — torch.distributions.Categorical deadlocks with PyBoy
+                probs = torch.softmax(logits, dim=-1).numpy().squeeze()
+                a = int(rng.choice(N_ACTIONS, p=probs))
+                lp = float(np.log(probs[a] + 1e-10))
             v = float(vals.item())
-            lp = float(logp.item())
             obs2, rew, term, trunc, info2 = env.step(a)
             done = term or trunc
             buf.store(obs, a, float(rew), v, lp, done)
