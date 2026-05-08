@@ -22,7 +22,8 @@ from .reward import RewardConfig, RewardTracker
 
 
 def godmode_step(pb):
-    """Inject god-mode: infinite HP + corridor timer never expires.
+    """Inject god-mode: infinite player HP + corridor timer never expires.
+    BUT in stage boss arena (D880=0x0C-0x14), DCBB is the BOSS HP — never pump it there.
     Policy must learn items/Dragon naturally.
     """
     pb.memory[0xDCDD] = 0x17
@@ -31,12 +32,17 @@ def godmode_step(pb):
     pb.memory[0xDCDF] = 0xFF
     pb.memory[0xDCDE] = 0xFF
     pb.memory[0xDD06] = 0
-    if pb.memory[0xFFBF] == 0:
-        pb.memory[0xDCBB] = 0xFF
-    elif pb.memory[0xDCBB] < 0x20 and pb.memory[0xD880] in (0x0A, 0x0B):
-        pb.memory[0xFFBF] = 0
-        pb.memory[0xDCBB] = 0xFF
-    if pb.memory[0xD880] == 0x17:
+    d880 = pb.memory[0xD880]
+    in_stage_arena = 0x0C <= d880 <= 0x14
+    if not in_stage_arena:
+        # Mini-boss / corridor / gameplay — DCBB is corridor timer or mini-boss HP
+        if pb.memory[0xFFBF] == 0:
+            pb.memory[0xDCBB] = 0xFF
+        elif pb.memory[0xDCBB] < 0x20 and d880 in (0x0A, 0x0B):
+            pb.memory[0xFFBF] = 0
+            pb.memory[0xDCBB] = 0xFF
+    # In stage arena: DON'T touch DCBB (it's boss HP — let agent kill the boss)
+    if d880 == 0x17:
         pb.memory[0xD880] = 0x02
         pb.memory[0xDCBB] = 0xFF
 
