@@ -62,5 +62,5 @@ def probe(strategy):
     pb.stop()
 
 
-for strat in ["force_dcbb_0", "force_scene_18", "force_dcbb_then_18", "play_then_force_18"]:
+for strat in ["force_dcbb_0", "force_scene_18", "force_dcbb_then_18", "play_then_force_18", "force_scene_16", "force_scene_16_after_play"]:
     probe(strat)
