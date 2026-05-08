@@ -38,16 +38,19 @@ class ShalamarArenaEnv(PentaEnv):
     def __init__(self, *args, init_level=1, **kwargs):
         super().__init__(*args, **kwargs)
         self.init_level = init_level
+        self._min_boss_hp = 0xFF  # min DCBB seen this episode (for stage boss damage)
 
     def reset(self, seed=None, options=None):
         if self.pb is None:
             obs, info = super().reset(seed=seed, options=options)
+            self._min_boss_hp = 0xFF
             return obs, info
         with open(self.savestate_path, "rb") as fh:
             self.pb.load_state(fh)
         self.reward_tracker.reset()
         self.steps = 0
         self._held = []
+        self._min_boss_hp = 0xFF
         s = read_state(self.pb)
         self.reward_tracker.last_state = s
         return state_to_vector(s), {"state": s}
@@ -64,6 +67,12 @@ class ShalamarArenaEnv(PentaEnv):
         self.steps += 1
         s = read_state(self.pb)
         reward, info = self.reward_tracker.step(s, action=action)
+        # Custom stage-boss damage reward: track DCBB drops in arena scene
+        if 0x0C <= s.scene <= 0x14:
+            if s.boss_hp < self._min_boss_hp:
+                progress = self._min_boss_hp - s.boss_hp
+                reward += progress * 0.2  # +0.2 per DCBB unit dropped (max ~50 for full kill)
+                self._min_boss_hp = s.boss_hp
         success = s.level > self.init_level
         terminated = success
         truncated = self.steps >= self.max_steps
