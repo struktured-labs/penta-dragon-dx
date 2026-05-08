@@ -109,12 +109,17 @@ class NaturalExploreEnv(PentaEnv):
             self._arenas_seen.add(s.scene)
             reward += 200.0
         # FFBA advance = HUGE reward + terminate
-        success = s.level > self._init_ffba
+        # Only valid advances 1-8 (avoid corruption like 0xF5=245)
+        success = self._init_ffba < s.level <= 8
         terminated = success
         truncated = self.steps >= self.max_steps
         if success:
             info["success"] = True
             reward += 1000.0
+        # Penalty for FFBA corruption (out of valid range)
+        elif s.level > 8:
+            reward -= 100.0
+            terminated = True  # episode invalid, abort
         info["state"] = s
         info["steps"] = self.steps
         info["n_visited"] = len(self._visited)
