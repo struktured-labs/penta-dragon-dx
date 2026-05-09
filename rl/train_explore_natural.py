@@ -53,12 +53,14 @@ class NaturalExploreEnv(PentaEnv):
         self._visited = set()
         self._init_ffba = 0
         self._arenas_seen = set()
+        self._max_dcb8 = 0
 
     def reset(self, seed=None, options=None):
         self._visited = set()
         self._arenas_seen = set()
         self._stale_count = 0
         self._last_pos = None
+        self._max_dcb8 = 0
         if self.pb is None:
             obs, info = super().reset(seed=seed, options=options)
             self._init_ffba = info["state"].level
@@ -86,18 +88,26 @@ class NaturalExploreEnv(PentaEnv):
         s = read_state(self.pb)
         reward, info = self.reward_tracker.step(s, action=action)
         # Exploration bonus: new (FFBA, FFBD, DCB8) tuple
-        key = (s.level, s.room, self.pb.memory[0xDCB8])
+        cur_dcb8 = self.pb.memory[0xDCB8]
+        key = (s.level, s.room, cur_dcb8)
         if key not in self._visited:
             self._visited.add(key)
             reward += 10.0
-        # Stagnation penalty: track player pixel position; penalize if stuck
+        # SECTION ADVANCE bonus: DCB8 monotonic increase = real progress
+        # (kills entities → cycle counter increments). Diagnostic showed agent
+        # reaches DCB8=3 deterministically but reward signal underwhelmed.
+        if cur_dcb8 > self._max_dcb8 and cur_dcb8 < 0x80:  # ignore corruption
+            advance = cur_dcb8 - self._max_dcb8
+            reward += 50.0 * advance
+            self._max_dcb8 = cur_dcb8
+        # Stagnation penalty: gentler so it doesn't drown out kill reward
         py = self.pb.memory[0xFE05]
         px = self.pb.memory[0xFE04]
         cur_pos = (s.room, py // 8, px // 8)  # 8x8 tile grid
         if cur_pos == self._last_pos:
             self._stale_count += 1
-            if self._stale_count > 30:
-                reward -= 0.5  # stagnation penalty
+            if self._stale_count > 60:  # was 30, now 60: more lenient
+                reward -= 0.1  # was -0.5; reduces ~5x to keep kill bonus dominant
         else:
             self._stale_count = 0
             reward += 0.05  # tiny reward for movement
