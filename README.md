@@ -2,173 +2,187 @@
 
 **Game Boy Color colorization of Penta Dragon (ペンタドラゴン)**
 
-This project successfully converts the original DMG (Game Boy) ROM to a fully playable CGB (Game Boy Color) version with vibrant colors while preserving all original gameplay mechanics.
+Converts the original DMG ROM into a CGB build with semantically-aware
+palettes for floors, walls, items, hazards, and sprites — without the
+phantom-sound and white-title regressions that plagued earlier attempts.
 
-## Status: ✅ WORKING
+---
 
-The colorized ROM is complete and playable. All features implemented:
-- ✅ Full CGB compatibility (works on GBC/GBA)
-- ✅ 8 background palettes with saturated colors
-- ✅ 8 sprite palettes for colorful characters
-- ✅ Preserved input handling (all controls work)
-- ✅ Display compatibility (fixed white screen freeze)
-- ✅ Minimal ROM modifications (18-byte trampoline only)
+## Status: ✅ v3.00 — phantom-safe inline tile-write hook
 
-## Quick Start
+All five visible-regression categories verified passing on
+`rom/working/penta_dragon_dx_FIXED.gb`:
 
-### Build the Colorized ROM
+| Bug                       | Probe                                        | v3.00 result        |
+|---------------------------|----------------------------------------------|---------------------|
+| Title screen white        | `scripts/probes/verify_title_color.py`       | PASS (3 colors)     |
+| Phantom sound on items    | `scripts/probes/verify_phantom_d887.py`      | 2 D887 transitions vs vanilla 12 |
+| BG colorization missing   | `scripts/probes/verify_gameplay_palette.py`  | PASS                |
+| Mini-boss colors wrong    | `scripts/probes/verify_miniboss_color.py`    | PASS                |
+| Scroll tearing            | `scripts/probes/verify_scroll_tearing.py`    | PASS                |
 
-**Option 1: Use YAML configuration (recommended)**
-```bash
-# Edit palettes to your liking
-nano palettes/penta_palettes.yaml
+Tagged `colorize-v3.00-inline-hook`.
 
-# Build ROM with custom palettes
-uv run python scripts/create_dx_rom_from_yaml.py
-```
+---
 
-**Option 2: Use hardcoded palettes**
-```bash
-python3 scripts/create_dx_rom.py
-```
+## Quick start
 
-Output: `rom/working/penta_dragon_dx_FIXED.gb`
+### Build
 
-### Customize Palettes
+The current production build script is `scripts/build_v300_inline_hook.py`:
 
 ```bash
-# Interactive palette color converter
-python3 scripts/palette_tool.py
-
-# Quick conversions
-python3 scripts/palette_tool.py --hex #FF8800  # Orange to BGR555
-python3 scripts/palette_tool.py --rgb 255 128 0  # RGB to BGR555
-python3 scripts/palette_tool.py --examples  # Show common colors
+python3 scripts/build_v300_inline_hook.py
+# → rom/working/penta_dragon_dx_v300.gb
 ```
 
-### Test
+The current `rom/working/penta_dragon_dx_FIXED.gb` is the v3.00 output.
+Eight prior milestones are kept as `rom/working/penta_dragon_dx_FIXED.v2*.backup.gb`
+for one-command rollback if a hardware target regresses.
+
+### Test in mgba (the self-verifier loop)
 
 ```bash
-mgba-qt rom/working/penta_dragon_dx_FIXED.gb
-# Or with savestate:
-mgba-qt -t rom/working/lvl1.ss0 rom/working/penta_dragon_dx_FIXED.gb
+# Visual + audio human test on desktop
+/launch-mgba                                # invokes scripts/launch_mgba.sh
+
+# Self-verifying smoke test (all five probes)
+python3 scripts/probes/verify_title_color.py    rom/working/penta_dragon_dx_FIXED.gb
+python3 scripts/probes/verify_phantom_d887.py   rom/working/penta_dragon_dx_FIXED.gb
+python3 scripts/probes/verify_gameplay_palette.py rom/working/penta_dragon_dx_FIXED.gb
+python3 scripts/probes/verify_miniboss_color.py rom/working/penta_dragon_dx_FIXED.gb
+python3 scripts/probes/verify_scroll_tearing.py rom/working/penta_dragon_dx_FIXED.gb
 ```
 
-## Technical Overview
+Exit code 0 = bug fixed. Exit code 1 = bug present.
 
-### Architecture
+### Deploy to MiSTer FPGA
 
-The solution uses a minimal trampoline approach that preserves the original input handler while adding CGB palette loading:
-
-```
-VBlank Handler (0x06DD)
-  └─> CALL 0x0824 (18-byte trampoline)
-        ├─> Switch to Bank 13
-        ├─> CALL 0x6D00 (Combined function in bank 13)
-        │     ├─> Execute original input handler inline
-        │     └─> Load CGB palettes (128 bytes)
-        └─> Restore Bank 1
+```bash
+/mister-deploy   # invokes scripts/deploy_mister.sh
+/mister-status
 ```
 
-### ROM Modifications
+On MiSTer, set Gameboy core's **Audio mode = "No Pops"** in the OSD.
 
-1. **Display Patch (0x0067)**: CGB detection to prevent LCD freeze
-2. **Trampoline (0x0824)**: 18-byte bank-switching stub
-3. **Palette Data (Bank 13:0x6C80)**: 128 bytes (8 BG + 8 OBJ palettes)
-4. **Combined Function (Bank 13:0x6D00)**: 74 bytes (input + palette loader)
+---
 
-### Key Insight
+## Architecture (v3.00)
 
-The ROM has **zero free space** in bank 0 and bank 1. The only safe approach is:
-- Use the existing 46-byte slot at 0x0824 (original input handler)
-- Place all new code in bank 13 (unused bank)
-- Execute input handler code **inline** (not relocated) to avoid state corruption
+The decisive structural fix in v3.00: **write BG palette attributes
+inline with the game's own tile-copy routine** (bank 1, address 0x42A7),
+instead of via a separate VBlank sweep that races the game.
 
-
-### Color Palettes
-
-The game uses 16 total palettes (8 background + 8 sprite), fully customizable via `palettes/penta_palettes.yaml`:
-
-**Background Palettes:**
-- 0: Dungeon Floors (default green theme)
-- 1: Lava & Danger Areas (red/fire theme)
-- 2: Water & Ice Areas (blue/ice theme)
-- 3: Desert & Sand Areas (yellow/sand theme)
-- 4: Forest & Nature Areas (cyan/nature theme)
-- 5: Castle & Stone Areas (magenta/purple theme)
-- 6: Sky & Clouds (light blue/sky theme)
-- 7: Boss & Special Areas (pink/special theme)
-
-**Sprite/Object Palettes:**
-- 0: Main Character (Penta Dragon) - orange/brown
-- 1: Basic Enemies - green
-- 2: Fire Enemies - red
-- 3: Ice/Water Enemies - blue
-- 4: Flying Enemies - yellow/gold
-- 5: Poison/Toxic Enemies - cyan
-- 6: Mini-Bosses - magenta/purple
-- 7: Main Bosses - bright yellow/orange
-
-Each palette has 4 colors in BGR555 format. Edit `palettes/penta_palettes.yaml` to customize:
-
-```yaml
-obj_palettes:
-  MainCharacter:
-    name: "Penta Dragon (Player)"
-    colors: ["0000", "7FFF", "7E00", "4800"]  # Trans→White→Orange→Brown
-    notes: "Warm colors for hero"
+```
+Game's bank-1 tile copy (0x42A7-0x436D)
+  ├─ DI window (vanilla unchanged): STAT-wait + 4 tile writes to VRAM
+  ├─ EI gap (sound engine catches up)
+  └─ NEW: short DI window — VBK=1 + 4 attr writes via [BC]=WRAM_BG_TABLE
 ```
 
-**Color Format:** BGR555 (15-bit)
-- 4-digit hex: BBBBBGGGGGRRRRR (5 bits each)
-- Example: `7FFF` = white, `001F` = red, `03E0` = green, `7C00` = blue
+- **bg_table[256]** copied from bank13:0x7000 → WRAM[0xDA00-0xDAFF] at
+  cold boot via the DF02 magic-byte init path. WRAM 0xDA00-0xDAFF
+  verified unused by 5000-frame multi-direction + forced-miniboss probe.
+- **No FF99 writes outside the original game's own.** This is the
+  phantom-sound source we fought in v2.85-v2.89 — the bank-restore
+  byte that Timer ISR uses.
+- **No bank-switching** in the hook. The 117-byte hook patches in place
+  inside the original 199-byte routine; bg_table is bank-1-readable
+  via WRAM, no banked CALL needed.
+- **DI windows stay ~250-280T**, well below the threshold where Timer
+  ISR backlog corrupts the bank-3 sound engine's `D887` consume loop.
+- **bg_sweep retained as backup safety net** — removing it broke
+  mini-boss state-machine timing (kept as a leash).
 
-Use `scripts/palette_tool.py` for easy color conversion!
+Disassembly + design writeup: `docs/inline_hook_analysis_v300.md`
 
-## Project Structure
+---
+
+## Project structure
 
 ```
 .
 ├── rom/
-│   ├── Penta Dragon (J).gb          # Original ROM (gitignored)
+│   ├── Penta Dragon (J).gb              # Vanilla (gitignored)
 │   └── working/
-│       └── penta_dragon_dx_FIXED.gb # Generated CGB ROM
+│       ├── penta_dragon_dx_FIXED.gb     # Current production (= v300)
+│       ├── penta_dragon_dx_v300.gb      # Latest milestone
+│       └── penta_dragon_dx_FIXED.v*.backup.gb  # Per-milestone rollbacks
 ├── scripts/
-│   └── create_dx_rom.py             # ROM generation script
-├── src/
-│   └── penta_dragon_dx/
-│       ├── __init__.py
-│       ├── cli.py                   # CLI commands
-│       └── display_patcher.py       # Display compatibility patches
-└── palettes/
-    └── penta_palettes.yaml          # Palette definitions (reference)
+│   ├── build_v300_inline_hook.py        # Current production builder
+│   ├── build_v29*.py                    # Milestone builders (v294-v299)
+│   ├── create_vblank_colorizer_v*.py    # Historical builders (v280-v289)
+│   ├── probes/                          # 5 self-verifying harnesses
+│   │   ├── verify_title_color.py
+│   │   ├── verify_phantom_d887.py
+│   │   ├── verify_gameplay_palette.py
+│   │   ├── verify_miniboss_color.py
+│   │   ├── verify_scroll_tearing.py
+│   │   ├── gameplay_palette.lua         # Lua: BG palette + attr dump
+│   │   ├── phantom_d887.lua             # Lua: D887 watchpoint
+│   │   ├── phantom_d887_v2.lua          # Lua: aggressive gameplay test
+│   │   ├── title_screenshot.lua
+│   │   ├── dump_bg_palette.lua
+│   │   └── README.md                    # Harness usage notes
+│   ├── launch_mgba.sh                   # /launch-mgba implementation
+│   └── deploy_mister.sh                 # /mister-deploy implementation
+├── palettes/
+│   ├── penta_palettes_v097.yaml         # 8 BG + 8 OBJ + boss palettes
+│   └── bg_tile_categories.yaml          # Manual tile-ID → category map
+├── docs/
+│   └── inline_hook_analysis_v300.md     # v3.00 disassembly + design
+├── reverse_engineering/                 # Notes on game internals
+├── rl/                                  # RL experimentation (see below)
+├── tmp/                                 # Scratch (gitignored)
+└── save_states_for_claude/              # Captured test states
 ```
 
-## Development History
+---
 
-This project went through multiple iterations to solve ROM integration challenges:
+## RL experimentation (parallel track)
 
-1. **v1 (colorful)**: Proved palette loading works, but broke input handling
-2. **v2-v3**: Attempted VBlank hooks at 0x07A0, but overwrote active game code
-3. **v4**: Tried relocating input handler to bank 13, caused immediate crashes
-4. **boot_final**: Boot-time palette injection failed due to lack of free space
-5. **FIXED**: ✅ Final solution using inline execution in bank 13 with minimal trampoline
+A reinforcement-learning subsystem in `rl/` plays Penta Dragon to
+generate data and stress-test the colorization in varied scenes.
 
-### Lessons Learned
+- `rl/ppo_v19_resume18_ep200.pt` — golden mini-boss kill policy
+- `rl/bc_kill_oversampled.pt` — behavior-cloned with kill-frame
+  oversampling, 67% mini-boss kill rate
+- `rl/train_demo_curriculum.py` — curriculum trainer mixing user-demo
+  save states + gameplay_start
+- `rl/saves/user_demo/converted/` — 20 PyBoy-loadable states converted
+  from mgba `.ss` files via the WRAM+HRAM+OAM injection pipeline
+  (`rl/saves/user_demo/inject_to_pyboy.py`)
 
-- ROM has absolutely **zero free space** in bank 0 and bank 1
-- Cannot relocate and call input handler - must execute inline
-- 0x07A0-0x07E0 contains active game code (not free space)
-- Bank 13 is the only safe location for new code
-- Minimal trampoline (18 bytes) is the key to success
+The RL bot is incidental to colorization but useful for autonomous
+exploration when generating wide screenshot coverage for harness
+calibration.
 
+---
 
-## Legal Notice
+## Version history (recent — full chain via `git tag`)
 
-You must supply your own legally obtained ROM. This repository does not include copyrighted ROM data. Only the patching tools and generated colorized ROM (for personal use) are included.
+| Tag | What changed | Status |
+|-----|--------------|--------|
+| `colorize-v3.00-inline-hook` | Inline BG-attr write at game tile-copy time | Current production |
+| `colorize-v2.99-minimal`     | Minimal bg_table — only items + hazards colored | Backup |
+| `colorize-v2.98-refined`     | Floor-edge tiles back to pal0 | Backup |
+| `colorize-v2.97-fully-fixed` | Path A calibrated table + Path B viewport sweep | Backup |
+| `colorize-v2.95-no-artifacts`| DMG-style title, no green-ball | Backup |
+| `colorize-v2.94-three-bugs-fixed` | First merged title+phantom+BG fix | Superseded |
+| `rl-v4.21-demo-curriculum`   | mgba .ss → PyBoy state injection | — |
+| `rl-v4.20-reward-section-bonus` | Section-advance reward in RL trainer | — |
+
+---
+
+## Legal
+
+Bring your own legally-obtained Penta Dragon (J) ROM. This repo
+contains the patching tools and harnesses, not the original ROM data.
+
+---
 
 ## Credits
 
-- Original Game: Penta Dragon (J) - Game Boy
+- Original game: **Penta Dragon (J)** — Japan Art Media (JAM) / Yanoman, 1992
 - Colorization: penta-dragon-dx project
-- Tools: Python, UV, mGBA
+- Tools: Python · uv · mGBA · PyBoy · MiSTer · Claude

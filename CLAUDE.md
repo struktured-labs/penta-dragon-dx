@@ -1,377 +1,199 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 
-## Project Overview
+## Project
 
-Penta Dragon DX is a Game Boy Color colorization project that converts the original DMG (Game Boy) ROM of Penta Dragon (ペンタドラゴン) into a CGB version with full color support.
+Penta Dragon DX is a Game Boy Color colorization of the DMG game
+**Penta Dragon (J)** by Japan Art Media (1992). The patched ROM adds
+8 BG + 8 OBJ palettes plus per-scene boss palettes, while preserving
+the original gameplay, sound, and timing.
 
-**Current Status**: v2.41 STABLE - STAT-safe BG colorizer (root cause fix)
+**Current production**: `rom/working/penta_dragon_dx_FIXED.gb` is
+v3.00 (tag `colorize-v3.00-inline-hook`).
 
-**What Works in v2.41** (root cause fix over v2.36-v2.40):
-- **ROOT CAUSE FIXED**: Game services VBlank interrupts LATE (LY=2-6, already rendering)
-  - VRAM writes during LCD mode 3 are silently dropped
-  - This caused ALL BG colorization failures in v2.34-v2.40
-- **STAT mode check**: Waits for HBlank/VBlank (STAT bit 1 = 0) before VRAM access
-  - Mode 0 (HBlank) provides 42-71M per scanline, our ops need ~32M
-  - 96 tiles per frame via HBlank slots, full sweep in ~11 frames (~0.18s)
-- **100% BG accuracy**: Verified on ALL 15 gameplay save states at frames 30/120/300
-- **Dual-read dual-write**: Independent tile reads from 0x9800 and 0x9C00 tilemaps
-- **ROM lookup table**: 256-byte table at 0x6B00 (ROM always accessible, no STAT wait needed)
-- **Conservative tile categorization**:
-  - Palette 0: Floor/edges/platforms (0x00-0x3F), arches/doorways (0x60-0x87)
-  - Palette 1: Items (0x88-0xDF, bright gold)
-  - Palette 6: Wall fill blocks (0x40-0x5F), decorative (0xE0-0xFD)
-- **Game mode detection**: Skips BG coloring on menus/title (0xFFC1 check)
-- **Multi-boss palette system** (table-based lookup for 8 distinct bosses)
-- Per-entity projectile colors based on verified tile mapping
-- Powerup-based Palette 0 colors (0xFFC0 flag)
+## Critical instructions
 
-### What Works
-- CGB mode detection and compatibility
-- Background palette loading (colorful Level 1 theme)
-- Sprite palette loading (8 distinct palettes for different entity types)
-- **Flicker-free** sprite colorization via pre-DMA shadow buffer modification
-- **Tile-based monster coloring**: Hornets, Orcs, Humanoids, Crows, etc. each have distinct palettes
-- **Sara W/D distinction**: Sara Witch (tiles 0x20-0x27) and Sara Dragon (tiles 0x28-0x2F) have different palettes
-- **Stage detection** (v2.28): Reads 0xFFD0 to determine current level
-  - Level 1 (0x00): Normal dungeon palettes
-  - Bonus stage (0x01): Jet form palettes for Sara
-- **Jet form colors** (v2.28): Sara W jet = magenta/purple, Sara D jet = cyan/blue
-- **Boss detection** via 0xFFBF flag with table-based palette loading (v2.33):
-  - 8 bosses supported via palette table + slot table lookup
-  - Gargoyle (flag=1), Spider (flag=2), Crimson (flag=3), Ice (flag=4),
-    Void (flag=5), Poison (flag=6), Knight (flag=7), Angela (flag=8)
-  - Each boss loads custom colors into its assigned palette slot (6 or 7)
-  - **Bug fix (v2.28)**: Boss flag now read once per VBlank to prevent flickering
-- **BG Item colorization**: Items (tiles 0x88-0xDF) get gold/yellow BG palette
-  - Potions, health, extra lives, powerups all stand out from blue floor
-  - Runs after DMA to win race condition against game's attribute reset
-- YAML-based palette configuration (`palettes/penta_palettes_v097.yaml`)
-- BG tile category mapping (`palettes/bg_tile_categories.yaml`)
-- MiSTer FPGA compatibility (use .gbc extension)
+- **NEVER bank-switch by writing FF99 outside of the original game's
+  own writes.** FF99 is the sound engine's bank-restore byte. Custom
+  writes to it caused the v2.85-v2.89 phantom-sound regression.
+  See `docs/inline_hook_analysis_v300.md` for the diagnosis chain.
+- **NEVER hold DI for more than ~1 Timer period (~7000 T-cycles).**
+  Long DI windows let Timer interrupts pile up, and on `EI` the
+  backlog collapses through the sound engine's D887 consume loop
+  in inconsistent state → phantom sounds.
+- **Always verify against the five probes in `scripts/probes/`
+  before declaring a build good.** The user's eyes are the final
+  judge, but no-probe regressions waste their time.
+- **Promote to FIXED.gb only via the backup pattern**
+  `cp FIXED.gb FIXED.vNN.backup.gb && cp candidate.gb FIXED.gb`.
+  Keeps rollback one command away.
+- **Use `/launch-mgba` skill, never raw `mgba-qt`.** It handles the
+  KDE-Wayland-NVIDIA quirks correctly.
+- **MiSTer deploy via `/mister-deploy` skill.** Audio mode = "No Pops"
+  is required on the Gameboy core.
 
-### Version History
+## Where things live
 
-| Version | Tag | Status | Description |
-|---------|-----|--------|-------------|
-| v2.41 | `v2.41` | **STABLE (BEST)** | STAT-safe BG colorizer, 100% accuracy on all save states |
-| v2.38 | `v2.38` | Obsolete | Active-tilemap-only BG (wrong root cause assumption) |
-| v2.36 | `v2.36` | Stable | Input fix + 48-tile BG + both-buffer OBJ |
-| v2.35 | `v2.35` | Broken | Bad input debounce + inverted FFCB buffer selection |
-| v2.34 | `v2.34` | Stable | Full BG colorization + STAT-safe VRAM access |
-| v2.33 | `v2.33` | Stable | Multi-boss table (8 bosses) + turbo powerup |
-| v2.32 | `v2.32` | Stable | Per-entity projectile colors + powerup support |
-| v2.31 | `v2.31` | Stable | Dynamic projectile colors (Sara W=pink, Sara D=green) |
-| v2.30 | `v2.30` | Broken | Wrong jump offsets caused flickering |
-| v2.29 | `v2.29` | Broken | Direction-dependent colors, BG flashing |
-| v2.28 | `v2.28` | Stable | Stage detection + jet form colors + BG items + bosses |
-| v2.26 | - | Stable | BG items + OBJ tile-based + boss detection |
-| v1.12 | `v1.12` | Stable | BG items gold + OBJ tile-based + boss detection |
-| v1.09 | `best-colorization-jan2026` | Stable | Tile-based + dynamic boss palettes |
-| v1.07 | `v1.07` | Stable | Tile-based + boss flag detection |
-| v1.05 | `v1.05` | Stable | Tile-based coloring only (no boss detection) |
-| v0.99 | - | Legacy | Dynamic palettes but entity-based (unstable) |
-| v0.96 | - | Legacy | Slot-based: Sara=1, Enemies=4/7 |
+### Build pipeline
+- `scripts/build_v300_inline_hook.py` — current production builder
+- `scripts/build_v29*_*.py` — milestone builders (v294 title-fix,
+  v295 minimal-title, v296 phantom-safe sweep, v297 calibrated table
+  + viewport sweep, v298 refined table, v299 minimal table)
+- `scripts/create_vblank_colorizer_v*.py` — historical builders.
+  v288 introduced RST $38 RETI→RET patch at 0x003B. v289 added
+  enhanced_tilemap_copy via trampoline (BG fix but phantom regress).
+  v290 was the no-trampoline base we built on.
+- `scripts/bg_experiment.py` — shared palette loader, OBJ colorizer,
+  tile-to-palette subroutine, original `create_bg_tile_table()`.
+  The calibrated/minimal tables live inline in the v296/v299 builders.
 
-### Key Technical Architecture
+### Verification (the trust-me-not-the-user loop)
+- `scripts/probes/verify_title_color.py` — 0=PASS 1=FAIL
+- `scripts/probes/verify_phantom_d887.py` — vanilla-baselined
+- `scripts/probes/verify_gameplay_palette.py` — auto-presses start,
+  dumps BG palette RAM + attr histogram
+- `scripts/probes/verify_miniboss_color.py` — force DCB8=2 (Gargoyle)
+- `scripts/probes/verify_scroll_tearing.py` — palette stability under scroll
+- `scripts/probes/*.lua` — mgba-Lua probes (screenshot, palette dump,
+  D887 watchpoint, tile-table dump)
 
-**Pre-DMA Shadow Colorization** - We modify sprite palettes in shadow OAM BEFORE DMA copies to hardware:
-- `0xC000` - Shadow buffer 1 (modified pre-DMA)
-- `0xC100` - Shadow buffer 2 (modified pre-DMA)
-- `0xFE00` - Hardware OAM (receives colored data via DMA)
+### Reverse-engineering reference
+- `docs/inline_hook_analysis_v300.md` — bank-1 tile-copy disassembly
+- `palettes/bg_tile_categories.yaml` — manual tile-ID → category map
+- `palettes/penta_palettes_v097.yaml` — 8 BG + 8 OBJ + boss palettes
+- `reverse_engineering/notes/game_memory_map.md` — HRAM + WRAM addresses
+- User's project memory at
+  `~/.claude/projects/-home-struktured-projects-penta-dragon-dx-remote/memory/`
+  has every non-obvious fact: phantom-sound root cause, FF99 race,
+  RST $38 quirk, sweep timing, bg_table calibration, mini-boss
+  spawn mechanism, stage-boss arenas, RL kill signals, more.
+  **Read those memory files before re-deriving anything.**
 
-**Tile-based palette assignment** (v2.32+):
-```
-Projectiles (per-entity detection):
-  Tile 0x0F:           Palette 2 (Sara W - pink)
-  Tiles 0x06,0x09,0x0A: Palette 1 (Sara D - green)
-  Tiles 0x00-0x01:     Palette 3 (Enemy - dark blue)
-  Tiles 0x02-0x05,etc: Palette 0 (Dynamic - powerup colors)
-Effects (tiles 0x10-0x1F):     Palette 4 (yellow/white)
-Sara W (tiles 0x20-0x27):      Palette 2 (skin/pink)
-Sara D (tiles 0x28-0x2F):      Palette 1 (green/dragon)
-Crows (tiles 0x30-0x3F):       Palette 3 (dark blue)
-Hornets (tiles 0x40-0x4F):     Palette 4 (yellow/orange)
-Orcs (tiles 0x50-0x5F):        Palette 5 (green/brown)
-Humanoids (tiles 0x60-0x6F):   Palette 6 (purple) or 7 (boss)
-Special (tiles 0x70-0x7F):     Palette 7 (catfish)
-```
+### Tooling skills
+- `/launch-mgba` → `scripts/launch_mgba.sh` (KDE-Wayland-NVIDIA aware)
+- `/mister-deploy` → `scripts/deploy_mister.sh`
+- `/mister-status` → status via MiSTerClaw MCP (port 9900)
+- `/mister-screenshot`
+- `/mister-shell`
 
-**Boss/mini-boss detection** (v2.33 table-based):
-```
-0xFFBF = 0:   Normal mode (tile-based palettes)
-0xFFBF = 1-2: Mini-boss mode (mid-level encounters: 1=Gargoyle, 2=Spider)
-0xFFBF = 3-8: Boss mode (major encounters: 3=Crimson, 4=Ice, 5=Void, 6=Poison, 7=Knight, 8=Angela)
-  - Boss slot table (8 bytes at 0x68C0): maps boss_flag → palette slot (6 or 7)
-  - Boss palette table (64 bytes at 0x6880): maps boss_flag → 8-byte palette data
-  - Loader: reads slot from table, computes OCPS target, loads 8 bytes from palette table
-  - All enemy sprites forced to boss's palette slot via E register override
-```
+## Key memory addresses (Penta Dragon)
 
-**Dynamic palette loading** (v2.33):
-```
-When boss_flag != 0:
-  - Index into boss_slot_table[flag-1] to get target slot (6 or 7)
-  - Index into boss_palette_table[flag-1] to get 8 color bytes
-  - Write to OCPS/OCPD to load boss colors into target slot
-  - Shadow colorizer sets E = slot for all non-Sara sprites
-```
-
-**BG Tile Colorization** (v2.41):
-```
-STAT-safe dual-read/dual-write colorizer with ROM lookup table:
-- ROOT CAUSE: Game's VBlank handler runs during rendering (LY=2-6), not VBlank
-- STAT mode check: waits for HBlank (STAT bit 1 = 0) before each VRAM access
-- ROM lookup table at 0x6B00 (256-byte tile→palette, always accessible)
-- Dual-read: reads tile IDs from BOTH 0x9800 and 0x9C00 tilemaps
-- Dual-write: writes palette attributes to BOTH tilemaps via VBK bank switching
-- 96 tiles/frame via HBlank slots (~6720M), full sweep in ~11 frames (~0.18s)
-- 100% accuracy verified on all 15 gameplay save states
-- Uses HRAM FFEE as temp for tilemap B palette
-- Skips menus via 0xFFC1 gameplay flag check
-- Tile categories (via lookup table at 0x6B00):
-    Floor/edges (0x00-0x3F):   Palette 0 (blue-white)
-    Wall fill (0x40-0x5F):     Palette 6 (blue-gray stone)
-    Arches/doors (0x60-0x87):  Palette 0 (blend with floor)
-    Items (0x88-0xDF):         Palette 1 (gold/yellow)
-    Decorative (0xE0-0xFD):    Palette 6 (structural)
-    Void (0xFE-0xFF):          Palette 0
-```
-
-**Dynamic Palette 0** (v2.29+):
-```
-Projectile colorization via dynamic palette loading:
-- Read powerup flag (0xFFC0) first - powerup overrides Sara form
-  - 0x01: Spiral (cyan), 0x02: Shield (gold), 0x03: Turbo (orange)
-- If no powerup, read Sara form flag (0xFFBE)
-  - Sara W (0xFFBE=0): Pink/red projectile colors
-  - Sara D (0xFFBE≠0): Green projectile colors
-- Tile colorizer assigns Palette 0 to tiles 0x00-0x07 (Sara projectiles)
-- Enemy projectiles (0x08-0x0F) use Palette 3 (blue/dark)
-```
-
-## Common Commands
-
-### Build the Colorized ROM
-
-```bash
-# Build v2.41 (BEST - STAT-safe BG colorizer, 100% accuracy)
-uv run python scripts/create_vblank_colorizer_v241.py
-
-# Build v2.36 (fallback - fixed input + 48-tile BG + both-buffer OBJ)
-uv run python scripts/create_vblank_colorizer_v236.py
-
-# Build older versions
-uv run python scripts/create_vblank_colorizer_v233.py  # v2.33 (multi-boss, no BG)
-uv run python scripts/create_vblank_colorizer_v232.py  # v2.32 (per-entity projectiles)
-```
-
-Output: `rom/working/penta_dragon_dx_FIXED.gb`
-
-### Testing & Verification
-
-```bash
-# Run with emulator (use project launcher script)
-./mgba-qt.sh rom/working/penta_dragon_dx_FIXED.gb
-
-# Run with savestate (many available in save_states_for_claude/)
-./mgba-qt.sh rom/working/penta_dragon_dx_FIXED.gb -t save_states_for_claude/level1_sara_w_4_hornets.ss0
-
-# Launch in background (when testing multiple builds)
-./mgba-qt.sh rom/working/penta_dragon_dx_FIXED.gb &
-
-# Headless automated testing (for Claude's verification tools)
-timeout 20 xvfb-run mgba-qt rom/working/penta_dragon_dx_FIXED.gb \
-  -t save_states_for_claude/level1_sara_w_gargoyle_mini_boss.ss0 \
-  --script tmp/quick_test.lua -l 0
-```
-
-### Available Save States
-
-Located in `save_states_for_claude/`, covering:
-- **Sara forms**: `level1_sara_w_alone.ss0`, `level1_sara_d_alone.ss0`
-- **Enemies**: `level1_sara_w_4_hornets.ss0`, `level1_sara_w_orc.ss0`, `level1_sara_w_soldier.ss0`, `level1_sara_w_moth.ss0`, `level1_sara_w_crow.ss0`
-- **Minibosses**: `level1_sara_w_gargoyle_mini_boss.ss0`, `level1_sara_w_spier_miniboss.ss0`, `level1_sara_d_spider_miniboss.ss0`
-- **Items/Effects**: `level1_sara_w_flash_item.ss0`, `level1_sara_w_dragon_powerup_item.ss0`
-- **Special**: `level1_cat_fish_moth_spike_hazard_orb_item.ss0`, `level1_sara_w_in_jet_form_secret_stage.ss0`
-
-### MCP Tools (mgba-mcp)
-
-The project includes an MCP server for programmatic mGBA control.
-
-**CRITICAL: NEVER show the emulator GUI unless the user explicitly asks to see/play it.**
-All automated testing and verification MUST be headless. Use bash with proper headless settings for ALL emulator operations:
-
-```bash
-# Standard headless pattern - use this for ALL automated emulator runs
-rm -f DONE && unset DISPLAY && unset WAYLAND_DISPLAY && \
-  QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy \
-  timeout 30 xvfb-run -a mgba-qt rom.gb -t state.ss0 --script script.lua -l 0
-```
-
-MCP tools (mgba_run, mgba_read_range, etc.) may be used for non-GUI operations like ROM analysis (mgba_xxd, mgba_search_bytes). For emulator execution that involves rendering frames, prefer bash with the headless pattern above to guarantee no GUI window appears on the user's desktop (especially on KDE Wayland where Qt may try to connect to the compositor).
-
-| Tool | Description | Safe for headless? |
-|------|-------------|-------------------|
-| `mgba_xxd` | Hex dump ROM bytes | Yes (no emulator) |
-| `mgba_search_bytes` | Search ROM for patterns | Yes (no emulator) |
-| `mgba_run` | Run ROM, capture screenshot | Use bash instead |
-| `mgba_read_memory` | Read memory addresses | Use bash instead |
-| `mgba_read_range` | Read memory range | Use bash instead |
-| `mgba_dump_oam` | Dump OAM sprite data | Use bash instead |
-| `mgba_run_lua` | Execute Lua script | Use bash instead |
-| `mgba_run_sequence` | Run with inputs | Use bash instead |
-
-**To launch for user testing (GUI)**: Only when explicitly asked:
-```bash
-./mgba-qt.sh rom/working/penta_dragon_dx_FIXED.gb -t save_states_for_claude/some_state.ss0
-```
-
-## Architecture
-
-### ROM Layout (Bank 13)
-
-```
-0x6800-0x683F: BG palettes (64 bytes, 8 palettes x 8 bytes)
-0x6840-0x687F: OBJ palettes (64 bytes, 8 palettes x 8 bytes)
-0x6880-0x68BF: Boss palette table (64 bytes, 8 bosses x 8 bytes)
-0x68C0-0x68C7: Boss slot table (8 bytes, maps boss_flag → palette slot 6/7)
-0x68D0-0x68D7: Sara Witch Jet palette (8 bytes)
-0x68D8-0x68DF: Sara Dragon Jet palette (8 bytes)
-0x68E0-0x68E7: Spiral projectile palette (8 bytes)
-0x68E8-0x68EF: Shield projectile palette (8 bytes)
-0x68F0-0x68F7: Turbo projectile palette (8 bytes)
-0x6900:        Palette loader (~194 bytes, boss table + powerup chain)
-0x69D0:        Shadow colorizer main (~50 bytes, boss flag + loop setup)
-0x6A10:        Tile-based colorizer (~134 bytes)
-0x6B00-0x6BFF: BG tile lookup table (256 bytes, tile_id → palette)
-0x6C00-0x6C85: BG colorizer (~134 bytes, inline palette logic, VBlank-first)
-0x6D00:        Combined function (~13 bytes, BG first + palette + OBJ + DMA)
-```
-
-### Memory Map (Game Boy)
-
-| Address | Purpose |
+| Address | Meaning |
 |---------|---------|
-| `0xC000-0xC09F` | Shadow OAM 1 (40 sprites x 4 bytes) |
-| `0xC100-0xC19F` | Shadow OAM 2 (alternate buffer) |
-| `0xC200-0xC2FF` | Level/tilemap buffer data (NOT entities) |
-| `0xFE00-0xFE9F` | Hardware OAM |
-| `0xFFBE` | Sara form: 0=Witch, non-zero=Dragon |
-| `0xFFBF` | Boss/mini-boss flag: 0=normal, 1-2=mini-boss, 3-8=boss |
-| `0xFFC0` | Powerup state: 0=none, 1=spiral, 2=shield, 3=turbo |
-| `0xFFCB` | DMA buffer toggle: alternates 0/1 each frame |
-| `0xFFD0` | **Stage flag: 0=Level 1, 1=Bonus stage** (v2.28+) |
-| `0xFFEA` | BG colorizer position counter low byte (v2.35+) |
-| `0xFFEB` | BG colorizer position counter high byte (0-3) (v2.35+) |
-| `0xFFEC` | Saved LCDC bit 3 for flip detection (0x00 or 0x08) (v2.38+) |
-| `0xFFED` | Previous SCX/8 for scroll-edge detection (0-31) (v2.37+) |
-| `0xFFEE` | BG colorizer temp palette storage (v2.38+) |
-| `0xFFC1` | Gameplay active flag: 0=menu, non-zero=gameplay (v2.34+) |
-| `0xFF6A` | OCPS - Object Color Palette Specification |
-| `0xFF6B` | OCPD - Object Color Palette Data |
+| **FFBA** | Level / boss counter (0=Shalamar, 1=Riff, …, 8=Penta Dragon) |
+| **FFBD** | Room within level (1-7) |
+| **FFBF** | Mini-boss flag (1=Gargoyle, 2=Spider/Arachnid, 3+=spawn table) |
+| **FFC0** | Powerup state |
+| **FFC1** | Game state (0=menu/title, 1=gameplay) |
+| **D880** | Master scene (0x02 dungeon, 0x0A mini-boss arena, 0x0C-0x14 stage-boss arenas, 0x17 death, 0x18 boss splash) |
+| **DCB8** | Section cycle counter (mini-boss spawn at DCB8=2 and DCB8=5 in L1) |
+| **DCBB** | Corridor death timer / boss HP (dual purpose) |
+| **DCDC/DCDD** | Player HP sub-counter / main |
+| **D887** | Sound queue byte — write coalesced by sound engine. PHANTOM-SOUND CANARY |
+| **FF99** | Bank restore byte used by Timer ISR. **DO NOT WRITE FROM HOOKS** |
+| **FF68/FF69** | CGB BG palette index/data |
+| **FF6A/FF6B** | CGB OBJ palette index/data |
+| **FF4F** | VRAM bank (0=tiles+IDs, 1=BG attrs) |
+| **WRAM 0xDA00-0xDAFF** | bg_table copy (v3.00 only) — verified unused otherwise |
 
-### Tile ID Ranges (Sprites)
+## Game architecture
 
-| Range | Entity Type | Default Palette |
-|-------|-------------|-----------------|
-| 0x00-0x1F | Effects/projectiles | 0 (white/gray) |
-| 0x20-0x27 | Sara W (Witch) | 2 (skin/pink) |
-| 0x28-0x2F | Sara D (Dragon) | 1 (green) |
-| 0x30-0x3F | Crow/flying | 3 (dark blue) |
-| 0x40-0x4F | Hornets | 4 (yellow/orange) |
-| 0x50-0x5F | Orcs/ground | 5 (green/brown) |
-| 0x60-0x6F | Humanoid (soldier/moth/mage) | 6 (purple) |
-| 0x70-0x7F | Special (catfish) | 3 (cyan) |
+- **7 stages**, each with 7 interconnected rooms (FFBD=1-7).
+- **8 named stage bosses** (Shalamar, Riff, Crystal Dragon, Cameo, Ted,
+  Troop, Faze, Penta Dragon) + **Angela** in a hidden SHMUP stage = 9.
+- **2-3 hidden SHMUP stages** where Sara becomes a top-down spaceship.
+  FFBA=7 inside the SHMUP.
+- **Mini-boss spawn mechanism**: at section index `DCB8`, the table
+  in bank 13:0x4024 specifies which entity slot loads. In L1, DCB8=2
+  spawns Gargoyle (FFBF=1) and DCB8=5 spawns Spider (FFBF=2).
+- **Stage boss arenas**: D880 transitions to 0x0C+FFBA. Boss kill = D880
+  goes to 0x16 (post-boss reload).
+- **A-fix ROM** (`rom/Penta Dragon (J) [A-fix].gb`) patches the vanilla
+  bug where the A button fires every frame. Used for RL fairness.
 
-### OAM Sprite Entry (4 bytes)
+## RL experimentation (parallel track in `rl/`)
 
-| Offset | Field | Notes |
-|--------|-------|-------|
-| 0 | Y position | 0 or >160 = hidden |
-| 1 | X position | |
-| 2 | Tile ID | Used for palette lookup |
-| 3 | Flags | Bits 0-2 = palette (modified by colorizer) |
+The `rl/` subsystem stress-tests colorization by playing many varied
+scenes and is also a longer-term project for shipping an autonomous
+playtester. Highlights:
 
-## Known Issues & Constraints
+- `rl/ppo_v19_resume18_ep200.pt` — 100% mini-boss kill from arena state
+- `rl/bc_kill_oversampled.pt` — BC trained on synth v19 demos with
+  kill-frame oversampling, 20/30 mini-boss kills
+- `rl/train_demo_curriculum.py` — curriculum trainer mixing user-demo
+  save states (FFBA=1 L2 entries) + arena synth states + gameplay_start
+- `rl/saves/user_demo/converted/` — 20 mgba → PyBoy converted demo
+  states via the WRAM/HRAM/OAM injection pipeline
+- `rl/saves/curriculum/arena_*.state` — synthesized stage-boss arenas
+  for direct curriculum starts
 
-### ROM Constraints
-- Zero free space in banks 0 and 1
-- Bank 13 is the only safe location for new code
-- VBlank handler is timing-critical
-- Input handler cannot be relocated (trampoline only)
+## Common pitfalls (from prior agent sessions)
 
-### Miniboss Tiles
-Minibosses use tiles from multiple ranges (e.g., both 0x60-0x6F and 0x70-0x7F), which caused color alternation in tile-only detection. Solved via 0xFFBF boss flag.
+1. **CGB header flag 0x143=0x80 vs 0x00.** Vanilla is 0 (DMG-only).
+   We set 0x80 (CGB-aware) which makes the boot ROM initialize BG
+   palette RAM to all-white instead of running the grayscale
+   compatibility mapping. Title screens look pure white until our
+   cond_pal loads palettes.
 
-### First Frame Colors
-Save states may show incorrect colors on the very first frame before the colorizer runs. This is expected behavior.
+2. **The "100% white title" bug** (v290-v294 family): the cond_pal
+   call was gated by FFC1=1, so palette load never fired on title.
+   Fix: move cond_pal **before** the FFC1 check.
 
-## Project Structure
+3. **The "green ball / weird rectangle on title" bug** (v294 attempt):
+   running `bg_sweep` on title (FFC1=0) writes BG attrs for title
+   tiles whose IDs happen to fall in colored-palette ranges, producing
+   visible artifacts. Fix: keep bg_sweep gated by FFC1=1, accept
+   DMG-style 2-color title.
 
-```
-penta-dragon-dx-claude/
-├── mgba-mcp/                    # MCP server for mGBA (git submodule)
-├── palettes/                    # YAML palette definitions
-│   └── penta_palettes_v097.yaml # Current palette config
-├── rom/
-│   ├── versions/                # Tagged ROM releases (.gbc)
-│   └── working/                 # Build output
-├── save_states_for_claude/      # Test save states (55+ scenarios)
-├── scripts/
-│   ├── create_vblank_colorizer_v233.py  # Current best (v2.33)
-│   ├── create_vblank_colorizer_v232.py  # v2.32 fallback
-│   ├── create_vblank_colorizer_v225.py  # v2.25 reference
-│   └── ...
-├── src/penta_dragon_dx/         # Python package
-├── docs/                        # Strategy documents
-├── reverse_engineering/         # Disassembly and analysis
-└── tmp/                         # Temporary test files
-```
+4. **The "purple specks on floor" bug** (v297 calibrated-table attempt):
+   tile IDs 0x13-0x23 are FLOOR-EDGE TRANSITION tiles, not walls.
+   Routing them to pal6 (slate) created visible seams on the floor.
+   Fix: route 0x13-0x23 to pal0; OR (v299 minimal) only colorize
+   items + hazards, everything else stays pal0.
 
-## Development Workflow
+5. **The "stale pal7 attrs" bug** (v297-v299 sweep race):
+   the CGB boot ROM init writes pal7 to all BG attrs. Our bg_sweep
+   visits one row per frame, so when the game writes new tiles
+   between sweep visits, those attrs stay at pal7. Visible as
+   flickering specks at scroll edges. v3.00 fix: write attrs inline
+   at the game's tile-copy time, eliminating the race.
 
-### Quick Iteration
-```bash
-# Build and test with specific savestate
-uv run python scripts/create_vblank_colorizer_v233.py && \
-mgba-qt rom/working/penta_dragon_dx_FIXED.gb \
-  -t save_states_for_claude/level1_sara_w_gargoyle_mini_boss.ss0
-```
+6. **The "phantom sound on item use" bug** (v287-v289 trampoline):
+   the bank-1 trampoline at 0x42A7 wrote FF99=0x0D and held DI for
+   ~10,000 T-cycles during enhanced_tilemap_copy. Timer ISRs piled
+   up, and the sound engine's `consume-D887` loop in bank 3 saw
+   inconsistent state on `EI`, producing extra D887 transitions.
+   Fix: v3.00 inline hook avoids both FF99 writes and long DI
+   windows; per-mini-group DI stays ~250-280T.
 
-### Debugging with Lua
-```lua
-local frame = 0
-callbacks:add("frame", function()
-    frame = frame + 1
-    if frame == 60 then
-        emu:screenshot("tmp/test.png")
-        -- Check OAM palettes
-        for i = 0, 39 do
-            local flags = emu:read8(0xFE00 + i*4 + 3)
-            local pal = flags & 0x07
-            console:log(string.format("Sprite %d: palette %d", i, pal))
-        end
-        emu:quit()
-    end
-end)
-```
+7. **MiSTer requires "Audio mode = No Pops"** in the Gameboy core OSD
+   menu. Without it, the inline-hook's DI windows are audible as pops
+   even though they don't corrupt D887.
 
-## Dependencies
+8. **mgba Lua palette reads need explicit BCPS index.** Writes to
+   FF69/FF6B auto-increment, reads do NOT. The early dump scripts
+   read the same byte 64 times because of this.
 
-Managed via `pyproject.toml` with uv:
-- Python >=3.11
-- click, pillow, numpy, pyyaml
-- mcp (for mgba-mcp server)
+## Workflow rules
 
-## Legal Notice
+1. **Branch on `main`**, commit often, tag every visible milestone.
+2. **All changes verified through the five probes** before promotion.
+3. **Backups in `rom/working/penta_dragon_dx_FIXED.vNN.backup.gb`** before
+   overwriting FIXED.gb.
+4. **Hardware test via `/launch-mgba` then `/mister-deploy`.**
+5. **Don't push `setenv.sh`** (per user's global rule).
+6. **Use `uv` or `pixi`, never `pip`** (per user's global rule).
 
-The repository does NOT include the original ROM. Users must supply their own legally obtained copy of "Penta Dragon (J).gb" in the `rom/` directory.
+## When stuck
 
-## Next Steps
-
-1. **Per-level BG palettes** - Different BG themes for Levels 1-5 (needs level address research; requires save states from levels 2+)
-2. **Game code patching** - Patch ROM projectile rendering to set CGB palette bits at source, enabling true per-entity projectile colors without tile heuristics
-3. **Regression test suite** - Automated color verification using save states
-4. **More enemy variety** - Fine-tune palettes for specific enemy subtypes
+- Check `~/.claude/projects/-home-struktured-projects-penta-dragon-dx-remote/memory/MEMORY.md`
+  — it lists the topic-specific memory files (boss mechanics, sound
+  engine analysis, palette pipeline, RL findings, etc.).
+- Run all 5 probes to localize which dimension regressed.
+- Compare against the nearest passing backup ROM via `md5sum` + the
+  per-version build scripts to bisect.
+- Per the user: "I really want you to work on this autonomously. I've
+  tried hard to give you tooling to do so." — use the agent system
+  for parallel investigations; use the probes to self-verify; ship
+  candidates with backups; iterate.
