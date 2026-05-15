@@ -47,14 +47,12 @@ Per-group DI window estimate:
   - v3.00 attr DI:  ~280T (STAT wait + 4 lookup-and-write attr ops)
   - Two DI windows per group, separated by EI gap (~50T)
 
-Verified probes (all PASS):
-  - title color:      3 distinct colors, 9.9% non-white
-  - phantom D887:     4 transitions (vs vanilla 18; v2.99 = 0)
-  - gameplay palette: 24 distinct words, 4 distinct attr-pal indices
-                      attr histogram: pal0=903, pal1=38, pal5=2, pal7=81
-                      (vs v2.99: pal0=918, pal1=17, pal5=1, pal7=88)
-  - mini-boss color:  reached, OBJ palette colorized
-  - scroll tearing:   0/s pal changes within room
+Palette mapping (bg_table):
+  - pal0 (floor/default):  floor, void, structure/transitions
+  - pal1 (items):          0x88-0xDF (pickups, powerups)
+  - pal5 (hazards):        spike cylinders + thrusting spikes
+  - pal6 (walls):          0x40-0x4B, 0x50-0x5B (slate blue-gray)
+  - pal7 overridden to pal0 colors (hides stale CGB boot-ROM attrs)
 """
 import sys
 from pathlib import Path
@@ -70,9 +68,38 @@ from create_vblank_colorizer_v288 import create_conditional_palette_cached
 from build_v296_phantomsafe import create_bg_sweep_viewport_gated
 
 
-def _minimal_bg_table() -> bytes:
-    """Default everything to pal0 except items and hazards (same as v2.99)."""
+def _bg_table() -> bytes:
+    """Tile-to-palette lookup table (256 bytes, one per tile ID).
+
+    Palette assignments (derived from multi-room tilemap context analysis):
+      pal0 — floor (0x01-0x06), void (0x00/0xFE), floor-wall transitions
+             (0x21-0x24, 0x27-0x28, 0x30, 0x33, 0x40, 0x43, 0x50-0x53, 0x58)
+      pal1 — items (0x88-0xDF)
+      pal5 — hazards: spike cylinders (0x2A-0x2E, 0x3A-0x3D),
+              thrusting spikes (0x47, 0x57)
+      pal6 — wall edges (0x14, 0x16-0x1A, 0x1C, 0x1E),
+             wall interior (0x25-0x26, 0x34-0x38),
+             corner interior (0x41-0x42, 0x44-0x46, 0x48-0x49,
+                              0x54-0x56, 0x59)
+
+    Wall structure is layered: void → edge → interior → transition → floor.
+    Only edge + interior tiles get pal6.  Transition tiles stay pal0 to
+    avoid the v2.97 "purple specks on floor" regression (those tiles sit
+    directly adjacent to floor tiles).
+    """
     table = bytearray(256)  # init to pal0 everywhere
+    # Wall edge tiles — confirmed WALL-only context (adjacent to void,
+    # never adjacent to floor) across 5 room dumps
+    for i in [0x14, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1C, 0x1E]:
+        table[i] = 6
+    # Wall interior tiles — confirmed INTERIOR-only context (between
+    # edge and transition tiles, never adjacent to floor)
+    for i in [0x25, 0x26, 0x34, 0x35, 0x36, 0x37, 0x38]:
+        table[i] = 6
+    # Corner/doorway interior tiles — confirmed INTERIOR/WALL context
+    for i in [0x41, 0x42, 0x44, 0x45, 0x46, 0x48, 0x49,
+              0x54, 0x55, 0x56, 0x59]:
+        table[i] = 6
     # Spike cylinder hazards
     for i in [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]:
         table[i] = 5
@@ -87,7 +114,7 @@ def _minimal_bg_table() -> bytes:
     return bytes(table)
 
 
-BG_TABLE_BYTES = _minimal_bg_table()
+BG_TABLE_BYTES = _bg_table()
 assert len(BG_TABLE_BYTES) == 256
 
 # WRAM location for runtime bg_table.
@@ -275,6 +302,15 @@ def build_v300():
 
     rom = bytearray(input_rom.read_bytes())
     palettes = load_palettes_from_yaml(palette_yaml)
+
+    # Hide stale CGB boot-ROM attrs: the boot ROM initialises all BG attrs
+    # to pal7.  By making pal7 colors identical to pal0, any tile that the
+    # inline hook / bg_sweep hasn't yet reached renders as floor instead of
+    # as an inconsistent purple tint.
+    bg_data = bytearray(palettes['bg_data'])
+    bg_data[56:64] = bg_data[0:8]  # pal7 ← pal0
+    palettes = {**palettes, 'bg_data': bytes(bg_data)}
+
     rom[0x143] = 0x80  # CGB flag
 
     # ============================================================
@@ -455,7 +491,9 @@ def build_v300():
     n_pal0 = sum(1 for b in BG_TABLE_BYTES if b == 0)
     n_pal1 = sum(1 for b in BG_TABLE_BYTES if b == 1)
     n_pal5 = sum(1 for b in BG_TABLE_BYTES if b == 5)
-    print(f"  bg_table: pal0={n_pal0}  pal1={n_pal1}  pal5={n_pal5}")
+    n_pal6 = sum(1 for b in BG_TABLE_BYTES if b == 6)
+    print(f"  bg_table: pal0={n_pal0}  pal1={n_pal1}  pal5={n_pal5}  pal6={n_pal6}")
+    print(f"  pal7 overridden to match pal0 (hides stale CGB boot attrs)")
     return output_path
 
 
