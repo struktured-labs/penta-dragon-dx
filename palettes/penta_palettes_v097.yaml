@@ -66,9 +66,9 @@ bg_palettes:
   Dungeon:
     colors: ["7FFF", "7E94", "3D4A", "0000"]  # White, Light blue, Deep teal, Black
 
-  # Palette 1 - Items/pickups (silver/cyan - clean and visible)
+  # Palette 1 - Items/pickups (gold/yellow - makes them pop!)
   BG1:
-    colors: ["7FFF", "7F5A", "3D08", "0000"]  # White, Light silver-blue, Deep steel, Black
+    colors: ["03FF", "02DF", "019F", "0000"]  # Bright yellow, Gold, Dark gold, Black
 
   # Palette 2 - Decorative elements (purple/magenta)
   BG2:
