@@ -61,10 +61,10 @@ bg_table storage (DUAL — keep in sync):
   because the WRAM copy is rebuilt from ROM every cold boot.
 
 Palette mapping (bg_table):
-  - pal0 (floor/default):  floor, void, structure/transitions
+  - pal0 (floor/default):  floor, void, structure/transitions, hazards
   - pal1 (items):          0x88-0xDF (pickups, powerups)
-  - pal5 (hazards):        spike cylinders + thrusting spikes
-  - pal6 (walls):          0x40-0x4B, 0x50-0x5B (slate blue-gray)
+  - pal6 (walls):          0x14-0x1E, 0x25-0x26, 0x34-0x38, 0x41-0x49,
+                           0x54-0x57, 0x59 (slate blue-gray)
   - pal7 overridden to pal0 colors (hides stale CGB boot-ROM attrs)
 """
 import sys
@@ -86,19 +86,22 @@ def _bg_table() -> bytes:
 
     Palette assignments (derived from multi-room tilemap context analysis):
       pal0 — floor (0x01-0x06), void (0x00/0xFE), floor-wall transitions
-             (0x21-0x24, 0x27-0x28, 0x30, 0x33, 0x40, 0x43, 0x50-0x53, 0x58)
+             (0x21-0x24, 0x27-0x28, 0x30, 0x33, 0x40, 0x43, 0x50-0x53, 0x58),
+             spike cylinders (0x2A-0x2E, 0x3A-0x3D — context-dependent,
+             overlap with platforms)
       pal1 — items (0x88-0xDF)
-      pal5 — hazards: spike cylinders (0x2A-0x2E, 0x3A-0x3D),
-              thrusting spikes (0x47, 0x57)
       pal6 — wall edges (0x14, 0x16-0x1A, 0x1C, 0x1E),
              wall interior (0x25-0x26, 0x34-0x38),
-             corner interior (0x41-0x42, 0x44-0x46, 0x48-0x49,
-                              0x54-0x56, 0x59)
+             corner interior (0x41-0x42, 0x44-0x49, 0x54-0x57, 0x59)
 
     Wall structure is layered: void → edge → interior → transition → floor.
     Only edge + interior tiles get pal6.  Transition tiles stay pal0 to
     avoid the v2.97 "purple specks on floor" regression (those tiles sit
     directly adjacent to floor tiles).
+
+    Hazard tiles (spike cylinders, thrusting spikes) are kept at pal0
+    because they share tile IDs with platform edges and wall corners —
+    the static tile-ID table can't distinguish context.
     """
     table = bytearray(256)  # init to pal0 everywhere
     # Wall edge tiles — confirmed WALL-only context (adjacent to void,
@@ -110,15 +113,11 @@ def _bg_table() -> bytes:
     for i in [0x25, 0x26, 0x34, 0x35, 0x36, 0x37, 0x38]:
         table[i] = 6
     # Corner/doorway interior tiles — confirmed INTERIOR/WALL context
-    for i in [0x41, 0x42, 0x44, 0x45, 0x46, 0x48, 0x49,
-              0x54, 0x55, 0x56, 0x59]:
+    # (0x47/0x57 were previously hazard pal5 but also serve as wall
+    # corners — orange artifacts on corners)
+    for i in [0x41, 0x42, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+              0x54, 0x55, 0x56, 0x57, 0x59]:
         table[i] = 6
-    # Spike cylinder hazards
-    for i in [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]:
-        table[i] = 5
-    # Thrusting wall spikes
-    table[0x47] = 5
-    table[0x57] = 5
     # Items (0x88-0xDF)
     for i in range(0x88, 0xE0):
         table[i] = 1
@@ -142,7 +141,7 @@ WRAM_BG_TABLE_HI = (WRAM_BG_TABLE >> 8) & 0xFF
 def create_inline_tile_copy() -> bytes:
     """Build the enhanced tile copy routine.
 
-    Layout (bank 1, replaces 0x42A0-0x436D, 206 bytes available):
+    Layout (bank 1, replaces 0x42A0-0x436D, 199 bytes available):
 
       0x42A0: 26 9C C3 A7 42 26 98   ; UNCHANGED entry points
       0x42A7: <enhanced code below>
@@ -207,36 +206,31 @@ def create_inline_tile_copy() -> bytes:
 
     # -------- TILE PHASE: VBK=0 (default), 4 tile writes --------
     emit([0xF3])                     # DI
-    # Wait for mode 3 (begin scanline)
     mark('stat3a')
     emit([0xF0, 0x41])               # LDH A,[FF41]
     emit([0xE6, 0x03])               # AND 3
     emit([0xFE, 0x03])               # CP 3
     emit_jr_back(0x20, 'stat3a')     # JR NZ, stat3a    ; wait until mode 3
-    # Wait for mode 0 (HBlank — VRAM accessible)
     mark('stat0a')
     emit([0xF0, 0x41])               # LDH A,[FF41]
     emit([0xE6, 0x03])               # AND 3
     emit_jr_back(0x20, 'stat0a')     # JR NZ, stat0a    ; wait until mode 0
-    # 4 tile writes: LD A,[DE]; INC DE; LD [HL+],A
     for _ in range(4):
-        emit([0x1A, 0x13, 0x22])
+        emit([0x1A, 0x13, 0x22])     # LD A,[DE]; INC DE; LD [HL+],A
     emit([0xFB])                     # EI
 
     # -------- TRANSITION: rewind L,E by 4; VBK=1 --------
-    # (interrupts CAN fire here — DI is off briefly)
-    # SAVE C (group counter) — attr write loop clobbers C via "LD C,A; LD A,[BC]"
     emit([0xC5])                     # PUSH BC          ; save group counter (C)
     emit([0x7D])                     # LD A, L
     emit([0xD6, 0x04])               # SUB 4
     emit([0x6F])                     # LD L, A
     emit([0x30, 0x01])               # JR NC, +1
-    emit([0x25])                     # DEC H            ; carry: H -= 1
+    emit([0x25])                     # DEC H
     emit([0x7B])                     # LD A, E
     emit([0xD6, 0x04])               # SUB 4
     emit([0x5F])                     # LD E, A
     emit([0x30, 0x01])               # JR NC, +1
-    emit([0x15])                     # DEC D            ; carry: D -= 1
+    emit([0x15])                     # DEC D
     emit([0x06, WRAM_BG_TABLE_HI])   # LD B, 0xDA       ; bg_table_hi
     emit([0x3E, 0x01])               # LD A, 1
     emit([0xE0, 0x4F])               # LDH [FF4F], A    ; VBK = 1 (attr bank)
@@ -260,7 +254,7 @@ def create_inline_tile_copy() -> bytes:
     #   LD A, [BC]      ; load palette index from bg_table[tile_id]
     #   LD [HL+], A     ; write attr
     for _ in range(4):
-        emit([0x1A, 0x13, 0x4F, 0x0A, 0x22])
+        emit([0x1A, 0x13, 0x4F, 0x0A, 0x22])  # lookup + write attr
     emit([0xFB])                     # EI
 
     # -------- POST-ATTR: VBK=0 --------
@@ -288,16 +282,12 @@ def create_inline_tile_copy() -> bytes:
     # ============================================================
     emit([0xF1])                     # POP AF           ; row count
     emit([0x3D])                     # DEC A
-    # if zero -> done
     j_done = emit_jr_fwd(0x28)       # JR Z, done
     emit([0xF5])                     # PUSH AF          ; row count back on stack
-    # Jump back to row_loop
-    # We need JR back to 'row_loop' — but it may be too far. Compute offset.
     offset = targets['row_loop'] - (len(code) + 2)
     if -128 <= offset <= 127:
         emit([0x18, offset & 0xFF])  # JR row_loop
     else:
-        # use JP (3 bytes)
         target_addr = 0x42A7 + targets['row_loop']
         emit([0xC3, target_addr & 0xFF, (target_addr >> 8) & 0xFF])
 
@@ -502,9 +492,8 @@ def build_v300():
     print(f"Wrote {output_path} ({len(rom)} bytes)")
     n_pal0 = sum(1 for b in BG_TABLE_BYTES if b == 0)
     n_pal1 = sum(1 for b in BG_TABLE_BYTES if b == 1)
-    n_pal5 = sum(1 for b in BG_TABLE_BYTES if b == 5)
     n_pal6 = sum(1 for b in BG_TABLE_BYTES if b == 6)
-    print(f"  bg_table: pal0={n_pal0}  pal1={n_pal1}  pal5={n_pal5}  pal6={n_pal6}")
+    print(f"  bg_table: pal0={n_pal0}  pal1={n_pal1}  pal6={n_pal6}")
     print(f"  pal7 overridden to match pal0 (hides stale CGB boot attrs)")
     return output_path
 
