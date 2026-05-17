@@ -5,6 +5,12 @@ RAM + the OBJ attribute bytes of sprites currently displayed. Compare to
 the expected per-boss palette from the YAML (boss_palette_table at
 bank13 0x6880 / boss_slot_table at 0x68C0).
 
+By default, DCB8 is force-written to 2 at gameplay+300 frames to
+deterministically reach the mini-boss within the probe budget. Pass
+--natural to let the game's section-counter advance naturally; this is
+slower but catches regressions in the spawn state machine that the
+forced-spawn path would mask.
+
 PASS criteria:
   - Mini-boss sprite OAM entries have non-default OBJ palette indices
     (= the boss colorizer ran)
@@ -19,6 +25,7 @@ import os, sys, subprocess, tempfile, argparse
 
 PROBE = r"""
 local OUT = os.getenv("STATE_PATH")
+local FORCE_SPAWN = (os.getenv("FORCE_SPAWN") or "1") == "1"
 local KEY_A     = 0x01
 local KEY_DOWN  = 0x80
 local KEY_RIGHT = 0x10
@@ -57,8 +64,10 @@ callbacks:add("frame", function()
 
     -- Force DCB8 to advance into mini-boss section by writing it directly.
     -- DCB8=2 spawns the gargoyle, DCB8=5 spawns the spider.
+    -- If FORCE_SPAWN is disabled, let the game's section counter advance
+    -- naturally — this exercises the spawn state machine end-to-end.
     local elapsed = f - gameplay_at
-    if elapsed == 300 then emu:write8(0xDCB8, 2) end
+    if FORCE_SPAWN and elapsed == 300 then emu:write8(0xDCB8, 2) end
 
     -- Detect mini-boss active: FFBF != 0
     if miniboss_at < 0 and emu:read8(0xFFBF) ~= 0 then
@@ -104,7 +113,10 @@ callbacks:add("frame", function()
         os.exit(0)
     end
 
-    if elapsed > 1800 and miniboss_at < 0 then
+    -- Give natural-spawn mode much more budget (state machine takes
+    -- several minutes of in-game time to reach DCB8=2).
+    local budget = FORCE_SPAWN and 1800 or 12000
+    if elapsed > budget and miniboss_at < 0 then
         fired = true
         local fh = io.open(OUT, "w")
         fh:write("FFBF=-1\n# never reached mini-boss\n")
@@ -115,16 +127,20 @@ end)
 """
 
 
-def run_probe(rom_path: str) -> dict:
+def run_probe(rom_path: str, force_spawn: bool = True) -> dict:
     out = tempfile.NamedTemporaryFile(suffix=".txt", delete=False).name
     lua = tempfile.NamedTemporaryFile(suffix=".lua", delete=False, mode="w")
     lua.write(PROBE); lua.close()
     env = os.environ.copy()
     env["STATE_PATH"] = out
+    env["FORCE_SPAWN"] = "1" if force_spawn else "0"
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["SDL_AUDIODRIVER"] = "dummy"
     cmd = ["xvfb-run", "-a", "mgba-qt", rom_path, "--script", lua.name, "-l", "0"]
-    subprocess.run(cmd, env=env, capture_output=True, timeout=180)
+    # Natural-spawn mode runs the in-game state machine for thousands of
+    # frames; bump the wall-clock budget proportionally.
+    timeout = 600 if not force_spawn else 180
+    subprocess.run(cmd, env=env, capture_output=True, timeout=timeout)
     if not os.path.exists(out) or os.path.getsize(out) < 10:
         raise RuntimeError(f"miniboss harness produced no output")
     with open(out) as fh: text = fh.read()
@@ -148,9 +164,13 @@ def run_probe(rom_path: str) -> dict:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rom")
+    ap.add_argument("--natural", action="store_true",
+                    help="Let DCB8 advance via the game's spawn state machine "
+                         "instead of force-writing DCB8=2. Slower but catches "
+                         "spawn-mechanism regressions.")
     args = ap.parse_args()
 
-    r = run_probe(args.rom)
+    r = run_probe(args.rom, force_spawn=not args.natural)
     print(f"ROM: {args.rom}")
     print(f"State: {r['state']}")
     print(f"OBJ palette usage: {r['obj_pal_usage']}")

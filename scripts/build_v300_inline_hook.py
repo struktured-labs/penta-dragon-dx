@@ -41,11 +41,24 @@ Key design choices for phantom-sound safety:
    colorize handler copies bg_table (256 bytes) from bank 13's ROM to
    WRAM[0xCF00..0xCFFF] once at startup, gated by DF02 magic byte.
 
-Per-group DI window estimate:
-  - vanilla:        DI + STAT wait (~250T) + 4 writes (24T) + EI = ~280T
-  - v3.00 tile DI:  same as vanilla, ~280T
-  - v3.00 attr DI:  ~280T (STAT wait + 4 lookup-and-write attr ops)
-  - Two DI windows per group, separated by EI gap (~50T)
+Per-group DI window bound:
+  Each DI window is `DI` + STAT spin to mode 3 + STAT spin to mode 0 +
+  4 writes + `EI`. STAT polling is ~12T per iteration (LDH+AND+CP+JR);
+  mode 0 (HBlank) is ~50T per scanline, so the spin catches it within
+  ~4 polls in the common case. If the DI lands just after mode 0 ends,
+  the spin waits ~250T (modes 2+3) before reaching mode 0 again — so
+  per-DI worst case is ~600T, not ~280T. Both DI windows per group plus
+  the EI gap keep total interrupt-disabled time well under the 7000T
+  Timer-ISR ceiling documented in CLAUDE.md.
+
+bg_table storage (DUAL — keep in sync):
+  - ROM bank 13 @ 0x7000: source of truth, written by build_v300()
+    from BG_TABLE_BYTES. Consumed by `bg_sweep` (it reads ROM).
+  - WRAM @ 0xDA00: runtime copy used by the inline hook. Populated
+    at cold boot by the bank-13 VBlank handler. Verified-safe range
+    (see comment at WRAM_BG_TABLE).
+  When editing _bg_table(), both consumers see the new mapping
+  because the WRAM copy is rebuilt from ROM every cold boot.
 
 Palette mapping (bg_table):
   - pal0 (floor/default):  floor, void, structure/transitions
@@ -124,7 +137,6 @@ assert len(BG_TABLE_BYTES) == 256
 #  0xDE00 has 29 static writes in bank 2 to 0xDE48-0xDE51 — too risky.)
 WRAM_BG_TABLE = 0xDA00  # 256 bytes
 WRAM_BG_TABLE_HI = (WRAM_BG_TABLE >> 8) & 0xFF
-WRAM_BG_TABLE_LO = WRAM_BG_TABLE & 0xFF
 
 
 def create_inline_tile_copy() -> bytes:
@@ -244,7 +256,7 @@ def create_inline_tile_copy() -> bytes:
     # Per tile:
     #   LD A,[DE]       ; load tile_id from buffer
     #   INC DE
-    #   LD C, A         ; B already = 0xDE (bg_table_hi); C = tile_id
+    #   LD C, A         ; B already = WRAM_BG_TABLE_HI (0xDA); C = tile_id
     #   LD A, [BC]      ; load palette index from bg_table[tile_id]
     #   LD [HL+], A     ; write attr
     for _ in range(4):
@@ -463,12 +475,12 @@ def build_v300():
     assert len(inline_code) <= available, \
         f"inline tile copy too big: {len(inline_code)} > {available}"
 
-    # Patch 0x42A7..0x42A7+len-1 with our code, fill rest with NOPs to be safe
+    # Patch 0x42A7..0x42A7+len-1 with our code. The routine ends in RET,
+    # so the trailing bytes up to 0x436D are unreachable — fill with NOP
+    # (0x00) as a hygienic default so a stray JP/CALL into the gap can't
+    # trip on leftover vanilla opcodes.
     rom[0x42A7:0x42A7 + len(inline_code)] = inline_code
-    # Fill remaining bytes up to 0x436D with NOPs (just in case any code falls through)
     if len(inline_code) < available:
-        # Place a RET at end of our code, then NOP-fill to 0x436E
-        # Actually our code already has a RET. Fill the rest with NOPs.
         rom[0x42A7 + len(inline_code):0x436E] = bytearray(0x00 for _ in range(available - len(inline_code)))
 
     # Verify entry points unchanged

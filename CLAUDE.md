@@ -116,7 +116,9 @@ v3.00 (tag `colorize-v3.00-inline-hook`).
 
 The `rl/` subsystem stress-tests colorization by playing many varied
 scenes and is also a longer-term project for shipping an autonomous
-playtester. Highlights:
+playtester. Model checkpoints (`*.pt`) are user-local — not committed,
+not present in fresh clones. Train (or copy from the user's machine)
+before any RL eval. Highlights:
 
 - `rl/ppo_v19_resume18_ep200.pt` — 100% mini-boss kill from arena state
 - `rl/bc_kill_oversampled.pt` — BC trained on synth v19 demos with

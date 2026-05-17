@@ -1,15 +1,16 @@
 """Title-screen color verification.
 
 Boots a ROM in headless mgba, captures title-screen screenshot via Lua,
-analyzes pixel colors. Fails if >70% of pixels are near-white (the v2.90
+analyzes pixel colors. Fails if the captured frame has fewer distinct
+colors than --min-colors (default 2) or is 100% white (the v2.90
 regression where CGB BG palette RAM stays at boot-ROM defaults).
 
 Usage:
-    python verify_title_color.py <rom_path> [--frame N] [--threshold P]
+    python verify_title_color.py <rom_path> [--frame N] [--min-colors N]
 
 Exit codes:
-    0 — title has reasonable color (PASS)
-    1 — title is mostly white (FAIL — bug present)
+    0 — title has at least --min-colors distinct colors AND non-white pixels
+    1 — title is mostly white or below --min-colors threshold (FAIL)
     2 — harness error (couldn't capture)
 """
 from __future__ import annotations
@@ -66,7 +67,7 @@ def main():
     ap.add_argument("rom", help="Path to ROM file")
     ap.add_argument("--frame", type=int, default=600,
                     help="Frame at which to capture title screen "
-                         "(default 600 — by then v289 has the colored title loaded)")
+                         "(default 600 — well past cond_pal load on any v294+ build)")
     ap.add_argument("--min-colors", type=int, default=2,
                     help="PASS if image has at least this many distinct colors "
                          "(default 2 — v290 white bug shows 1, readable title 2+). "
@@ -86,7 +87,13 @@ def main():
         sys.stderr.write(f"capture failed: {e}\n")
         sys.exit(2)
 
-    stats = analyze_white_ratio(png)
+    try:
+        stats = analyze_white_ratio(png)
+    except Exception:
+        if not args.keep_png:
+            try: os.unlink(png)
+            except OSError: pass
+        raise
     print(f"ROM:              {args.rom}")
     print(f"Captured frame:   {args.frame}")
     print(f"Total pixels:     {stats['total_pixels']}")

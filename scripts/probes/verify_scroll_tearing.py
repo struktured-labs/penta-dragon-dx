@@ -6,18 +6,15 @@ bottom half with another. The signature: identical scroll positions
 producing visually different rasters between consecutive frames during
 sustained scroll motion.
 
-Strategy:
-  1. Auto-start to gameplay
-  2. Walk right (continuous scroll)
-  3. Capture N consecutive frames at a known scroll moment
-  4. Compare pixel-row palette use across frames
-  5. Tearing = a row's pixel histogram changes between frames in a way
-     that exceeds normal sprite-motion variance.
+We sample two things per frame during sustained right-scroll:
+  1. BG palette RAM bytes (FF68/FF69) — detects palette writes during scroll
+  2. BG attr histogram from VBK=1 — detects attr-write races (the v3.00
+     inline-hook regression class: stale pal7 in a viewport row)
 
-A simpler approximation that catches the same root cause: check whether
-BG palette RAM is STABLE between two consecutive frame-end snapshots
-during scroll. If pal-RAM bytes change mid-scroll without an obvious
-trigger (room transition), the renderer was racing the writer.
+PASS = both metrics churn at baseline-equivalent rates within a single
+room. A wrong-tile_id offset in the inline hook would leave pal7 attrs
+in the visible viewport with palette RAM intact; checking VBK=1 directly
+catches that, while the original pal-RAM-only check would miss it.
 """
 from __future__ import annotations
 import os, sys, subprocess, tempfile, argparse
@@ -51,6 +48,27 @@ local function read_pal()
     return hex
 end
 
+-- Sample BG attr histogram for the visible-viewport region in VBK=1.
+-- Returns a string like "pal7=180,pal0=200,pal6=40" — comparing this
+-- across consecutive frames detects attr writes (or stale-pal7 lag).
+-- Viewport is at 0x9800..0x9BFF (tilemap 0). We sample a fixed slice of
+-- the first 360 tiles (covers the visible 20x18 = 360 tile region).
+local function read_attr_histogram()
+    emu:write8(0xFF4F, 1)
+    local counts = {[0]=0,[1]=0,[2]=0,[3]=0,[4]=0,[5]=0,[6]=0,[7]=0}
+    for addr = 0x9800, 0x9967 do  -- 360 tiles
+        local a = emu:read8(addr)
+        local idx = a & 0x07
+        counts[idx] = counts[idx] + 1
+    end
+    emu:write8(0xFF4F, 0)
+    local parts = {}
+    for p = 0, 7 do
+        table.insert(parts, string.format("p%d=%d", p, counts[p]))
+    end
+    return table.concat(parts, ",")
+end
+
 callbacks:add("frame", function()
     if fired then return end
     f = f + 1
@@ -70,35 +88,41 @@ callbacks:add("frame", function()
     emu:write8(0xDCDD, 0x17); emu:write8(0xDCDC, 0xFF); emu:write8(0xDCBB, 0xFF)
 
     local elapsed = f - gameplay_at
-    -- Capture pal RAM every frame for the measurement window
+    -- Capture pal RAM + attr histogram every frame for the measurement window
     if elapsed >= 60 and elapsed < 60 + 240 then  -- 4 seconds of scroll
         local p = read_pal()
+        local a = read_attr_histogram()
         local scx = emu:read8(0xFF43)
         local scy = emu:read8(0xFF42)
         local room = emu:read8(0xFFBD)
-        table.insert(samples, {f=elapsed, pal=p, scx=scx, scy=scy, room=room})
+        table.insert(samples, {f=elapsed, pal=p, attr=a, scx=scx, scy=scy, room=room})
     end
 
     if elapsed >= 60 + 240 then
         fired = true
-        -- Count how many distinct pal RAM states occurred and how often
-        -- they changed during otherwise-steady scroll within a single room.
         local fh = io.open(OUT, "w")
-        local changes = 0
+        local pal_changes = 0
+        local attr_changes = 0
         local room_transitions = 0
         for i = 2, #samples do
             if samples[i].room ~= samples[i-1].room then
                 room_transitions = room_transitions + 1
-            end
-            if samples[i].pal ~= samples[i-1].pal and samples[i].room == samples[i-1].room then
-                changes = changes + 1
+            elseif samples[i].room == samples[i-1].room then
+                if samples[i].pal ~= samples[i-1].pal then
+                    pal_changes = pal_changes + 1
+                end
+                if samples[i].attr ~= samples[i-1].attr then
+                    attr_changes = attr_changes + 1
+                end
             end
         end
-        fh:write("# Scroll-tearing harness — palette stability across scroll frames\n")
+        fh:write("# Scroll-tearing harness — palette + attr stability across scroll frames\n")
         fh:write(string.format("samples=%d\n", #samples))
         fh:write(string.format("room_transitions=%d\n", room_transitions))
-        fh:write(string.format("pal_changes_within_room=%d\n", changes))
-        fh:write(string.format("pal_changes_per_second=%.2f\n", changes * 60 / 240))
+        fh:write(string.format("pal_changes_within_room=%d\n", pal_changes))
+        fh:write(string.format("pal_changes_per_second=%.2f\n", pal_changes * 60 / 240))
+        fh:write(string.format("attr_changes_within_room=%d\n", attr_changes))
+        fh:write(string.format("attr_changes_per_second=%.2f\n", attr_changes * 60 / 240))
         fh:close()
         os.exit(0)
     end
@@ -138,11 +162,19 @@ def main():
     args = ap.parse_args()
 
     b = run_probe(args.baseline_rom)
-    print(f"vanilla: pal_changes_within_room={b.get('pal_changes_within_room')} "
-          f"({b.get('pal_changes_per_second')}/s)")
+    print(f"vanilla:   pal_changes_within_room={b.get('pal_changes_within_room')} "
+          f"({b.get('pal_changes_per_second')}/s) "
+          f"attr_changes={b.get('attr_changes_within_room', 'n/a')} "
+          f"({b.get('attr_changes_per_second', 'n/a')}/s)")
     c = run_probe(args.rom)
     print(f"candidate: pal_changes_within_room={c.get('pal_changes_within_room')} "
-          f"({c.get('pal_changes_per_second')}/s)")
+          f"({c.get('pal_changes_per_second')}/s) "
+          f"attr_changes={c.get('attr_changes_within_room', 'n/a')} "
+          f"({c.get('attr_changes_per_second', 'n/a')}/s)")
+    # NOTE: attr_changes_per_second is currently informational only — the
+    # right threshold depends on expected baseline behavior of v3.00's
+    # inline hook (which writes VBK=1 attrs during scroll, by design).
+    # The PASS/FAIL gate stays on pal_changes_per_second.
     b_pps = float(b.get('pal_changes_per_second', 0))
     c_pps = float(c.get('pal_changes_per_second', 0))
     threshold = max(b_pps * args.tolerance, 0.5)

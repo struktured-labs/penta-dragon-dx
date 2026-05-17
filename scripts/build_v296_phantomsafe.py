@@ -58,7 +58,6 @@ from bg_experiment import (
     create_tile_to_palette_subroutine, create_bg_tile_table,
 )
 from create_vblank_colorizer_v288 import create_conditional_palette_cached
-from build_v294_titlefix import create_bg_sweep_v8_no_menu_skip
 
 
 def create_bg_sweep_viewport_gated(bg_table_addr: int, base_addr: int) -> bytes:

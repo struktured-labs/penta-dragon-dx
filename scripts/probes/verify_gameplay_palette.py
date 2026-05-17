@@ -5,9 +5,12 @@ palette RAM + tile-attribute histogram. PASS if:
   - BG palette RAM has ≥3 distinct words (i.e. not all FF7F=white)
   - BG attr histogram uses ≥2 different palette indices (tiles routed to
     non-default palettes)
+  - Per-palette attr counts fall within --pal-N-min/max envelopes (when set)
 
-A FAIL means either CGB BG palette never got loaded (v290 white bug) or BG
-tile attributes never got written (no colorization for tiles).
+A FAIL means either CGB BG palette never got loaded (v290 white bug), BG
+tile attributes never got written (no colorization), or a palette routing
+edit fell outside its expected envelope (e.g. pal6 wall count collapsed
+to zero after a bg_table refactor).
 """
 from __future__ import annotations
 import os, sys, subprocess, tempfile, argparse
@@ -58,6 +61,19 @@ def main():
                     help="PASS if BG palette RAM has at least this many distinct words")
     ap.add_argument("--min-attr-pal-indices", type=int, default=2,
                     help="PASS if BG attrs use at least this many distinct palette indices")
+    # Per-palette envelopes for v3.00 (level 1 entry, post-settle). Set to
+    # None to skip a given palette's envelope check. Default envelopes
+    # were derived from a v3.00 run: pal0~903, pal1~38, pal5~2, pal6~10-50,
+    # pal7~81. Widen if a regression is intentional.
+    ap.add_argument("--pal6-min", type=int, default=None,
+                    help="FAIL if pal6 (wall) attr count below this. "
+                         "Set to ~10 to catch bg_table refactors that drop wall tiles.")
+    ap.add_argument("--pal6-max", type=int, default=None,
+                    help="FAIL if pal6 (wall) attr count above this.")
+    ap.add_argument("--pal1-min", type=int, default=None,
+                    help="FAIL if pal1 (items) attr count below this.")
+    ap.add_argument("--pal1-max", type=int, default=None,
+                    help="FAIL if pal1 (items) attr count above this.")
     args = ap.parse_args()
 
     r = run_probe(args.rom, args.max_frames)
@@ -80,10 +96,21 @@ def main():
         fail_reasons.append(f"BG attrs use only {len(nonzero_attr_indices)} "
                             f"palette indices (need {args.min_attr_pal_indices}+) "
                             f"→ BG attribute write broken")
+    # Per-palette envelope checks (only enforced when CLI flag is set).
+    envelopes = [
+        (1, args.pal1_min, args.pal1_max),
+        (6, args.pal6_min, args.pal6_max),
+    ]
+    for idx, lo, hi in envelopes:
+        cnt = r['attr_counts'].get(idx, 0)
+        if lo is not None and cnt < lo:
+            fail_reasons.append(f"pal{idx} attr count {cnt} below envelope min {lo}")
+        if hi is not None and cnt > hi:
+            fail_reasons.append(f"pal{idx} attr count {cnt} above envelope max {hi}")
 
     if fail_reasons:
         print("\nFAIL:")
-        for r in fail_reasons: print(f"  - {r}")
+        for reason in fail_reasons: print(f"  - {reason}")
         sys.exit(1)
     else:
         print("\nPASS: BG colorization is active.")
