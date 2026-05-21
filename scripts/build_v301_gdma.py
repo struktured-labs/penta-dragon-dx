@@ -221,7 +221,7 @@ def create_attr_computation(bg_table_addr: int) -> bytes:
     code.extend([0xC5, 0xD5, 0xE5, 0xF5])  # PUSH BC, DE, HL, AF
     code.extend([0x21, 0xA0, 0xC1])         # LD HL, 0xC1A0
     code.extend([0x11, 0x00, 0xD0])         # LD DE, 0xD000
-    code.extend([0x3E, 0x10])               # LD A, 16 (rows; under cliff with GDMA budget)
+    code.extend([0x3E, 0x08])               # LD A, 8 (rows; conservative with GDMA)
     code.extend([0xE0, 0xE0])               # LDH [FFE0], A (row counter in HRAM)
 
     row_loop = len(code)
@@ -408,12 +408,14 @@ def build_v301():
     code[gdma_skip] = (len(code) - gdma_skip - 1) & 0xFF
 
     # 4. FFC1 gate: game-only work (DMA + OBJ colorizer ONLY).
-    # attr_computation + GDMA are SKIPPED — enabling them breaks the
-    # STAGE LOAD → dungeon transition. Tested at 24, 20, 18, 16 rows;
-    # all fail in production (GDMA's ~2048T halt + attr_comp's per-row
-    # cost together exceed the game's main-loop CPU budget per frame).
+    # attr_computation + GDMA are SKIPPED — the GDMA appears to be the
+    # disruptor regardless of attr_comp row count. Tested 8, 16, 20, 24
+    # rows with GDMA — all break the STAGE LOAD → dungeon transition.
+    # Without GDMA, attr_comp at ≤22 rows is fine. Root cause likely
+    # mGBA-specific GDMA + VBlank interaction or a state-byte corruption
+    # we haven't traced. See `docs/v301_regression_stage_load_stuck.md`.
     # bg_sweep alone provides ~18-frame attr coverage (slow but
-    # functional). See `docs/v301_regression_stage_load_stuck.md`.
+    # functional). Same effective shipped behavior as v3.00.
     code.extend([0xF0, 0xC1, 0xB7])
     ffc1_skip = len(code) + 1
     code.extend([0x28, 0x00])
