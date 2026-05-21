@@ -1,21 +1,42 @@
-# 8 Boss Arena Setup Routines
+# 9 Boss Arena Setup Routines
 
-Each named stage boss has a self-publishing arena setup routine in bank 2.
-There is no central dispatcher — each arena writes its own state value to
-D880 at entry.
+Each boss has a self-publishing arena setup routine in bank 2.
+Dispatched by FFBA (level counter, 0-8) via a jump table at
+bank 2:0x6EA6, called from bank 2:0x658F.
+
+## Dispatcher
+
+```
+;; Entry: A = FFBA (level counter, 0-8)
+;; bank 2:0x658F:
+  87        ADD A, A         ; A *= 2 (each entry is 2 bytes)
+  D7        RST 0x10         ; HL += A (pointer math)
+  2A        LD A, [HL+]      ; A = lo byte
+  66        LD H, [HL]       ; H = hi byte
+  6F        LD L, A          ; HL = arena addr
+  E9        JP [HL]          ; jump to arena
+```
+
+Jump table at bank 2:0x6EA6 (ROM file 0xAEA6):
+```
+6E 48 F8 48 99 49 0D 4A 76 4A ED 4A 61 4B D5 4B 46 4C ...
+↓     ↓     ↓     ↓     ↓     ↓     ↓     ↓     ↓
+0x486E 0x48F8 0x4999 0x4A0D 0x4A76 0x4AED 0x4B61 0x4BD5 0x4C46
+```
 
 ## Location
 
-| # | ROM offset | CPU addr (bank 2) | D880 value | Size | Likely boss |
-|---|---|---|---|---|---|
-| 1 | 0x886E | 0x486E | 0x0C | 138 bytes | Shalamar (stage 1) |
-| 2 | 0x88F8 | 0x48F8 | 0x0D | 161 bytes | Riff (stage 2) |
-| 3 | 0x8999 | 0x4999 | 0x0E | 116 bytes | Crystal Dragon (stage 3) |
-| 4 | 0x8A0D | 0x4A0D | 0x0F | 105 bytes | Cameo (stage 4) |
-| 5 | 0x8A76 | 0x4A76 | 0x10 | 119 bytes | Ted (stage 5) |
-| 6 | 0x8AED | 0x4AED | 0x11 | 116 bytes | Troop (stage 6) |
-| 7 | 0x8B61 | 0x4B61 | 0x12 | 116 bytes | Faze (stage 7) |
-| 8 | 0x8BD5 | 0x4BD5 | 0x13 | 113 bytes | Penta Dragon (final) |
+| # | FFBA | ROM offset | CPU addr (bank 2) | D880 value | Size | Boss |
+|---|---|---|---|---|---|---|
+| 1 | 0 | 0x886E | 0x486E | 0x0C | 138 bytes | Shalamar (stage 1) |
+| 2 | 1 | 0x88F8 | 0x48F8 | 0x0D | 161 bytes | Riff (stage 2) |
+| 3 | 2 | 0x8999 | 0x4999 | 0x0E | 116 bytes | Crystal Dragon (stage 3) |
+| 4 | 3 | 0x8A0D | 0x4A0D | 0x0F | 105 bytes | Cameo (stage 4) |
+| 5 | 4 | 0x8A76 | 0x4A76 | 0x10 | 119 bytes | Ted (stage 5) |
+| 6 | 5 | 0x8AED | 0x4AED | 0x11 | 116 bytes | Troop (stage 6) |
+| 7 | 6 | 0x8B61 | 0x4B61 | 0x12 | 116 bytes | Faze (stage 7) |
+| 8 | 7 | 0x8BD5 | 0x4BD5 | 0x13 | 113 bytes | Penta Dragon (final main) |
+| 9 | 8 | 0x8C46 | 0x4C46 | 0x14 | ? bytes | **Hidden boss (Angela?)** |
 
 ## Common prologue
 
@@ -50,24 +71,28 @@ Combined with documented states:
 | **0x10** | **Boss arena: Ted** |
 | **0x11** | **Boss arena: Troop** |
 | **0x12** | **Boss arena: Faze** |
-| **0x13** | **Boss arena: Penta Dragon (final)** |
+| **0x13** | **Boss arena: Penta Dragon (final main)** |
+| **0x14** | **Boss arena: Hidden boss (Angela?)** |
 | 0x17 | Death / timeout cinematic |
 | 0x18 | Boss splash (stage transition) |
 
 ## Caller of arena routines
 
-Static analysis found only one direct caller: `bank10:0x7DA9 → 0x88DB`.
-Other entries must be reached via computed JP (e.g., JP HL) or jump
-tables that don't statically resolve. The 2-byte word `BD 16`
-(absolute pointer to 0x16BD) appears 50× in 0x88FF-0x8BD5 — likely
-jump table entries within each arena routine.
+Static analysis: arena routines are NOT called directly. They're
+reached through the FFBA-indexed jump table at bank 2:0x6EA6,
+dispatched from the `JP [HL]` at bank 2:0x658F.
 
-## Earlier inventory was wrong
+The `JP 0x658F` happens at multiple sites in bank 2 (e.g. one
+just before 0x886E at ROM 0x886B). Each call site loads HL with
+the appropriate table pointer first.
 
-Memory entry `project_hidden_stages.md` previously claimed
-"9 arena routines at ROM 0x886E-0x8C46". The actual count is 8.
-Mapping to 8 named bosses is exact.
+## 9 arenas total
 
-The hidden SHMUP stages probably use a different mechanism since
-top-down spaceship gameplay is structurally different from boss arena
-combat (no fixed arena, scrolling background, sprite-based enemies).
+Memory entry `project_hidden_stages.md`'s "9 arena routines" claim
+was right after all. The initial static-scan inventory missed the
+9th routine at 0x8C46 because it sat just past the range I scanned.
+
+The hidden SHMUP stages (top-down spaceship) likely use a different
+mechanism since the structure is different from boss arena combat.
+Arena #9 (FFBA=8, D880=0x14) might be the Penta Dragon's "true final"
+form, or Angela (the documented hidden boss).
