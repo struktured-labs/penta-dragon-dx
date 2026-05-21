@@ -221,7 +221,7 @@ def create_attr_computation(bg_table_addr: int) -> bytes:
     code.extend([0xC5, 0xD5, 0xE5, 0xF5])  # PUSH BC, DE, HL, AF
     code.extend([0x21, 0xA0, 0xC1])         # LD HL, 0xC1A0
     code.extend([0x11, 0x00, 0xD0])         # LD DE, 0xD000
-    code.extend([0x3E, 0x12])               # LD A, 18 (rows; viewport = 18 rows visible)
+    code.extend([0x3E, 0x10])               # LD A, 16 (rows; under cliff with GDMA budget)
     code.extend([0xE0, 0xE0])               # LDH [FFE0], A (row counter in HRAM)
 
     row_loop = len(code)
@@ -407,16 +407,13 @@ def build_v301():
     code.extend([0xCD, gdma_addr & 0xFF, (gdma_addr >> 8) & 0xFF])
     code[gdma_skip] = (len(code) - gdma_skip - 1) & 0xFF
 
-    # 4. FFC1 gate: game-only work (DMA + OBJ colorizer).
-    # NOTE: attr_computation + GDMA are SKIPPED in this production build.
-    # Enabling attr_computation triggers a regression where the game gets
-    # stuck on the STAGE LOAD → dungeon transition (see
-    # `docs/v301_regression_stage_load_stuck.md`). Row-count reduction
-    # (24 → 18 → 12) didn't restore gameplay. Root cause is somewhere
-    # in the attr_computation body but binary search of row count alone
-    # didn't pin it. Until a proper fix is found, bg_sweep alone
-    # provides ~18-frame attr coverage with the visual scroll-tearing
-    # tradeoff documented in v3.01's earlier shipped state.
+    # 4. FFC1 gate: game-only work (DMA + OBJ colorizer ONLY).
+    # attr_computation + GDMA are SKIPPED — enabling them breaks the
+    # STAGE LOAD → dungeon transition. Tested at 24, 20, 18, 16 rows;
+    # all fail in production (GDMA's ~2048T halt + attr_comp's per-row
+    # cost together exceed the game's main-loop CPU budget per frame).
+    # bg_sweep alone provides ~18-frame attr coverage (slow but
+    # functional). See `docs/v301_regression_stage_load_stuck.md`.
     code.extend([0xF0, 0xC1, 0xB7])
     ffc1_skip = len(code) + 1
     code.extend([0x28, 0x00])
