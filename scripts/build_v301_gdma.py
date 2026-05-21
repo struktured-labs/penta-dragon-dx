@@ -334,11 +334,21 @@ def build_v301():
     # ============================================================
     # COLORIZE HANDLER
     #
-    # Order: VBK save → cold-boot init → cond_pal → GDMA (if ready)
+    # Order: FF99 save+set → VBK save → cold-boot init → cond_pal → GDMA
     #        → FFC1 gate { DMA, bg_sweep, OBJ colorizer, attr computation }
-    #        → VBK restore
+    #        → VBK restore → FF99 restore
+    #
+    # FF99 fix (essential): the game's STAT handler at 0x0853 and Timer ISR
+    # at 0x06B3 both restore the ROM bank from FF99 at exit. The hook at
+    # 0x0824 writes 0x0D to 0x2100 but DOES NOT update FF99 (47-byte budget).
+    # If an ISR fires during our colorize handler (after any EI), it would
+    # restore bank from FF99 (stale game value, e.g. bank 1) and our
+    # subsequent PC fetches would come from the wrong bank — garbage exec,
+    # game freeze. Updating FF99 here makes ISRs restore bank 13 correctly.
     # ============================================================
     code = bytearray()
+    code.extend([0xF0, 0x99, 0xF5])           # LDH A,[FF99]; PUSH AF (save FF99)
+    code.extend([0x3E, 0x0D, 0xE0, 0x99])     # LD A,0x0D; LDH [FF99],A (FF99=bank13)
     code.extend([0xF0, 0x4F, 0xF5])           # save VBK
     code.extend([0xAF, 0xE0, 0x4F])           # VBK = 0
 
@@ -401,8 +411,9 @@ def build_v301():
     code.extend([0x3E, 0x01, 0xEA, 0x03, 0xDF])  # DF03 = 1 (GDMA ready)
     code[ffc1_skip] = (len(code) - ffc1_skip - 1) & 0xFF
 
-    # Restore VBK and return
-    code.extend([0xF1, 0xE0, 0x4F])
+    # Restore VBK, restore FF99, return
+    code.extend([0xF1, 0xE0, 0x4F])           # POP AF; LDH [VBK], A
+    code.extend([0xF1, 0xE0, 0x99])           # POP AF; LDH [FF99], A (restore FF99)
     code.extend([0xC9])
 
     assert colorize_addr + len(code) <= bg_table_addr, \

@@ -1,16 +1,39 @@
 # v3.01 GDMA Freeze — RESOLVED (2026-05-20)
 
-## Status: FIXED. DI window length was the real limit.
+## Status: FIXED. The real root cause is ISR-restored stale ROM bank.
 
-## Root cause
+## TL;DR — actual root cause
 
-The diagnosis assumed the per-DI safe budget was 7000T (Timer ISR ceiling).
-That was wrong. Empirically, on this ROM the safe DI budget per window is
-~2000-3000T. Doing a single DI window longer than that — even well under
-7000T — freezes the game at the FFC1=0→1 transition (or earlier if outside
-the FFC1 gate). The freeze isn't from FF70 itself, bank-2 writes, or
-attr_computation's logic — it's from one DI window holding interrupts off
-for too long.
+The hook at 0x0824 switches ROM bank to 13 via `LD [0x2100], A` but DOES
+NOT update **FF99**. The game's STAT handler at 0x0853 and Timer ISR at
+0x06B3 both restore the ROM bank from FF99 at their exits:
+
+  STAT (0x0853):  LDH A, [FF99]; LD [0x2100], A; ... RETI
+  Timer (0x06B3): (same pattern)
+
+If either ISR fires during our colorize handler (after any EI), it restores
+ROM bank to the game's stale FF99 value (typically bank 1, not bank 13).
+Our handler's PC is in bank-13 ROM space (0x4000-0x7FFF); the next CPU
+instruction fetch comes from BANK 1 at that PC, executing garbage. Game
+freezes.
+
+The longer the DI window, the more likely a STAT/Timer IRQ becomes pending
+and fires immediately on EI. That's why the "DI length" framing looked
+plausible — but the actual trigger is ISR firing, not DI duration.
+
+## Fix
+
+In the colorize handler (bank-13 entry), save FF99, set FF99 = 0x0D,
+do the work, restore FF99 at exit:
+
+  F0 99 F5           LDH A, [FF99]; PUSH AF       (save FF99)
+  3E 0D E0 99        LD A, 0x0D; LDH [FF99], A    (FF99 = bank 13)
+  ... handler body ...
+  F1 E0 99           POP AF; LDH [FF99], A        (restore FF99)
+  C9                 RET
+
+Now any ISR that fires during our handler restores bank 13 correctly. The
+hook itself doesn't need to change (budget-constrained at 47 bytes).
 
 ## How we found it
 
@@ -53,7 +76,16 @@ All probes pass on `rom/working/penta_dragon_dx_v301.gb`:
 - scroll tearing: 0.00/s pal changes, 0/s attr changes (vs vanilla 1.50/s)
 - phantom D887: 0 transitions (vs vanilla 18; matches v2.99/v3.00)
 
-## Follow-up dig (2026-05-20): the cap is NOT pure DI duration
+## Historical: the binary-search trail before the FF99 fix
+
+Before identifying the FF99 root cause, the per-row workaround (24 single-
+row DI windows instead of 8 three-row chunks) shipped as a partial fix.
+It worked because shorter DI windows meant ISRs less often had time to
+queue and fire during our handler. With the FF99 fix, this is no longer
+necessary — the original 8-chunk attr_comp also passes — but per-row is
+kept for now because it has lower per-DI interrupt latency.
+
+## Follow-up dig: the cap is NOT pure DI duration
 
 Subsequent probes ruled out "DI length" as the actual freeze trigger:
 
@@ -86,13 +118,24 @@ the cliff cleanly.
 
 ## What we still don't know
 
-- Exact mechanism behind the 3920T→3928T cliff. STAT mode-counter is the
-  best guess but unconfirmed. Instrumenting mGBA or checking the game's
-  STAT handler at 0x0853 would clarify.
-- Why the cliff materializes only with non-contiguous bank-2 writes (the
-  contiguous-write 2-loops-no-gap PASSES at ~3870T which is BELOW gap-3's
-  3920T — so the cliff isn't pure-time either; some interaction).
+- Why the cliff materialized at 8T precision in the no-FF99-fix runs:
+  with FF99 stale, an ISR firing at a specific cycle offset corrupts.
+  The cycle-precise threshold likely matches when STAT IRQ first becomes
+  pending (LCD mode-0 entry on a specific scanline), but the FF99 fix
+  makes this question academic — ISRs now restore bank correctly.
 - Hardware verification on MiSTer — emulator-only proof so far.
+
+## How we proved the root cause
+
+- `build_v301_iemask.py` — masks `FFFF=0` (disable all IRQs) over the
+  entire colorize handler. With this, the freezing 2-rows-unroll
+  variant PASSES. Confirms: ISR firing during handler is the trigger.
+- `build_v301_ff99_fix.py` — keeps IRQs enabled, but updates FF99=0x0D
+  at colorize handler entry and restores at exit. With this, BOTH the
+  freezing 2-rows-unroll AND the per-row PASS, and all probes pass
+  (title color, gameplay palette, scroll tearing, phantom D887).
+- Production `build_v301_gdma.py` now includes the FF99 fix in
+  `colorize_handler` and is ready to ship.
 
 ## Side experiments left behind
 
