@@ -55,7 +55,7 @@ these regions.
 | DCDE/DF| ~        | Timer cascade (godmode pumps these)                      |
 | DCF0   | 6/4      | TBD                                                      |
 | DCF2   | 12/6     | TBD (high read rate; possibly current spawn index?)      |
-| DCF8   | 13/3     | TBD; cleared with FFC0/DC1B on state reset               |
+| DCF8   | 13/3     | **Multi-subsystem game-mode byte**. Consumed by Sara state dispatcher at 0x55BB (selects one of 6 Sara handlers) AND by 12 other reads across bank 1/2 subsystems. Cleared in mass-init at bank1:0x40D7 (along with DCF1/F2/F4/F5). One known write: bank1:0x7B54 sets it to 5 (selecting handler index 5). |
 
 ### DDxx — enemy/projectile/anim state
 
