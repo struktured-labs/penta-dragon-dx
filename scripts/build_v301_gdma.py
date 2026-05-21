@@ -225,7 +225,7 @@ def create_attr_computation(bg_table_addr: int) -> bytes:
     code.extend([0xC5, 0xD5, 0xE5, 0xF5])  # PUSH BC, DE, HL, AF
     code.extend([0x21, 0xA0, 0xC1])         # LD HL, 0xC1A0
     code.extend([0x11, 0x00, 0xD0])         # LD DE, 0xD000 (attr buffer)
-    code.extend([0x3E, 0x18])               # LD A, 24 (default — unused since attr_comp is skipped in production)
+    code.extend([0x3E, 0x14])               # LD A, 20 (under 22-row cliff; cold-boot zero may unlock this)
     code.extend([0xE0, 0xE0])               # LDH [FFE0], A (row counter in HRAM)
 
     row_loop = len(code)
@@ -385,11 +385,32 @@ def build_v301():
     offset = bg_copy - (len(code) + 2)
     code.extend([0x20, offset & 0xFF])
 
-    # SKIPPED cold-boot bank-2 zero — proven to white-screen on title.
-    # The attr buffer in bank 2 starts with whatever garbage is there.
-    # attr_computation overwrites the 24x24 data cells, padding stays garbage
-    # but the game's visible viewport doesn't touch padding columns.
-    pass
+    # Cold-boot bank-2 zero — with the FF99 fix in place, the previous
+    # "white screens on title" issue should no longer happen. Try zeroing
+    # the attr buffer so subsequent HDMA copies a known-clean state to
+    # VRAM bank 1 instead of garbage.
+    code.extend([0xF3])                       # DI
+    code.extend([0x3E, 0x02, 0xE0, 0x70])     # FF70 = 2
+    code.extend([0x21, 0x00, 0xD0])           # HL = D000
+    code.extend([0xAF])                       # A = 0
+    code.extend([0x06, 0x00])                 # B = 0 (256 iters)
+    zero_loop1 = len(code)
+    code.extend([0x22, 0x05])                 # LD [HL+],A; DEC B
+    code.extend([0x20, (zero_loop1 - (len(code) + 2)) & 0xFF])
+    code.extend([0x06, 0x00])                 # B = 0 again
+    zero_loop2 = len(code)
+    code.extend([0x22, 0x05])
+    code.extend([0x20, (zero_loop2 - (len(code) + 2)) & 0xFF])
+    code.extend([0x06, 0x00])
+    zero_loop3 = len(code)
+    code.extend([0x22, 0x05])
+    code.extend([0x20, (zero_loop3 - (len(code) + 2)) & 0xFF])
+    code.extend([0x06, 0x00])
+    zero_loop4 = len(code)
+    code.extend([0x22, 0x05])
+    code.extend([0x20, (zero_loop4 - (len(code) + 2)) & 0xFF])
+    code.extend([0x3E, 0x01, 0xE0, 0x70])     # FF70 = 1
+    code.extend([0xFB])                       # EI
 
     # ---- skip_cold target ----
     code[df02_jr] = (len(code) - df02_jr - 1) & 0xFF
@@ -412,16 +433,17 @@ def build_v301():
     code[gdma_skip] = (len(code) - gdma_skip - 1) & 0xFF
 
     # 4. FFC1 gate: game-only work (DMA + OBJ colorizer ONLY).
-    # attr_computation + GDMA/HDMA SKIPPED. Exhaustive testing this session
-    # showed every combination breaks gameplay:
-    #   - attr_comp alone at 23+ rows: breaks
-    #   - GDMA general-mode alone: breaks
-    #   - HDMA HBlank-mode alone: progresses but visual garbage
-    #   - attr_comp + GDMA at any row count: breaks
-    #   - attr_comp + HDMA at any row count: breaks
-    #   - attr_buffer at DA00 instead of D000: still breaks
-    # Production ships with bg_sweep alone (slow but functional attr coverage).
-    # See `docs/v301_regression_stage_load_stuck.md` for full matrix.
+    # attr_computation + GDMA/HDMA SKIPPED. EXHAUSTIVE testing confirmed
+    # every combination breaks gameplay:
+    #   - attr_comp ≤22 rows alone: WORKS
+    #   - attr_comp 23+ rows alone: BREAKS
+    #   - GDMA general-mode alone: BREAKS
+    #   - HDMA HBlank-mode alone: D880 progresses, visual garbage
+    #   - attr_comp + GDMA at any row count: BREAKS
+    #   - attr_comp + HDMA at any row count: BREAKS
+    #   - attr buffer at DA00 (alternate to D000): STILL BREAKS
+    #   - cold-boot zero + attr_comp + HDMA: STILL BREAKS
+    # Production ships with bg_sweep alone (functional, slow attr coverage).
     code.extend([0xF0, 0xC1, 0xB7])
     ffc1_skip = len(code) + 1
     code.extend([0x28, 0x00])
