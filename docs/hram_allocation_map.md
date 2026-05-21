@@ -34,26 +34,29 @@ are the hottest game-state bytes the engine touches.
 | FFBF   | 19R/2W  | Mini-boss flag (1=Gargoyle, 2=Spider, 3+=spawn-table)    |
 | FF94   | 16R/2W  | Joypad EDGE-detected input (from 0x00A8)                 |
 | FFBA   | 14R/4W  | Level/boss counter (0-8) — indexes stage boss tables     |
-| FFCA   | 12R/3W  | TBD (high read rate)                                     |
-| FFE4   | 1R/12W  | TBD (write-heavy; set on death cinematic per memory)     |
-| FFC4   | 0R/12W  | TBD (write-only — likely an output/control register)     |
+| FFCA   | 12R/3W  | Flag byte — high bit checked via `BIT 7, A` after read  |
+| FFE4   | 1R/12W  | **Death cinematic flag** — set to 1 with `RST 28; CALL 0x4944` (per memory + context). Cleared after cleanup. |
+| FFC4   | 0R/12W  | **Start of text/HUD output buffer** — addressed via `LD HL, FFC4; RST 10` calls (~32 bytes through to FFE3). |
 | FFCE   | 3R/9W   | Next-room value (set from 0x0BBF table, consumed at 0x0B78) |
-| FFDC   | 9R/2W   | TBD                                                      |
+| FFDC   | 9R/2W   | Counter compared against memory (`INC A; CP (HL)` after read) |
 | FFEB   | 8R/3W   | Scroll phase toggle (0=normal, 1=alternate/bonus)        |
-| FF9E   | 4R/6W   | TBD                                                      |
+| FF9E   | 4R/6W   | Game state byte — written from DDAC source              |
 | FFC1   | 4R/6W   | **Gameplay active flag** (0=menu/title, 1=gameplay)      |
 | FFE9   | 1R/9W   | STAT-handler scroll sub-cycle counter (0..3)             |
 | FFBE   | 7R/2W   | TBD (game state)                                         |
 | FFF0   | 3R/6W   | TBD                                                      |
 | FFCD   | 5R/3W   | TBD                                                      |
 | FFD3   | 6R/1W   | Event sequence index within current FFBA level           |
-| FFD9   | 4R/3W   | TBD                                                      |
+| FFD9   | 4R/3W   | Counter at 0x2ACD-0x2AD6 — incremented sequentially      |
 | FFB8   | 3R/3W   | 4-frame cycle counter (0x086C dispatcher)                |
 | FFB2   | ~       | Mode flag for 0x086C dispatcher (0=skip, 1=branch A, 2=branch B) |
-| FFE2/3 | ~       | BGP palette-animation timing                             |
-| FFD4   | ~       | Frame counter (incremented in VBlank handler)            |
-| FFD5   | ~       | Some 60-cycle counter (cycles 0..0x3C in VBlank)         |
+| FFE2/3 | ~       | BGP palette-animation timing (countdown FFE3, flag FFE2) |
+| FFD4   | ~       | Frame counter (incremented in VBlank handler `INC (FFD4)`) |
+| FFD5   | ~       | **1-second counter** (cycles 0..0x3C = 60 frames @ VBlank) |
 | FFD1   | ~       | Centisecond counter (0..99) — wraps per second           |
+| FFC0   | 22R/41W | State index — read via `LDH A,(FFC0); ADD A,A; ADD A,A; LD B,A` (×4 shift = table offset). Cleared together with DC1B and DCF8. |
+| FFCD   | 5R/3W   | 4-state cycle counter — pattern `INC A; AND 3; LDH (FFCD), A` |
+| FFD8   | 4R+/3W+ | Status flag read after RST 10 calls                      |
 | FFE8   | ~       | Scroll-active flag (gates 0x08F8)                        |
 | FFF5   | ~       | Stopwatch seconds (BCD, counts UP from 0)                |
 | FFF6   | ~       | Stopwatch minutes (BCD)                                  |
