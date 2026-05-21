@@ -116,6 +116,68 @@ says, NOT necessarily the bank that was mapped when Timer fired.
 STAT only switches to bank 1 (no bank 3 detour), but the same restore-from-
 FF99 pattern at exit.
 
+### 0x086C — VBlank's post-hook dispatcher
+
+```asm
+0x086C: F0 B2; B7; C8       LDH A,(FFB2); OR A; RET Z   ; FFB2==0 → skip
+0x0870: 3D; CA 08 3D        DEC A; JP Z, 0x3D08         ; FFB2==1 branch
+0x0875: CA 94 08            JP Z, 0x0894                ; FFB2==2 branch
+0x0878: F0 B8; 3C; E6 03; E0 B8  ; FFB8 = (FFB8+1) & 3   ; 4-frame cycle
+0x087F: C0                  RET NZ                      ; only every 4th frame
+0x0880: CD E0 08            CALL 0x08E0
+0x0883: B5; C8              OR L; RET Z
+0x0885: 06 08               LD B, 8                     ; 8 iterations
+0x0887: loop:
+        CD 99 00            CALL 0x0099                 ; bank-0 sub
+        CB 0E; 23           RRC (HL); INC HL            ; rotate-right (HL)
+        CB 0E; 23           RRC (HL); INC HL
+        05; 20 F4           DEC B; JR NZ loop
+0x0893: C9                  RET
+```
+
+Purpose: FFB2-gated dispatcher with a 4-frame cycle counter (FFB8).
+Every 4th VBlank, if FFB2 is in a non-trivial mode, this runs an 8-step
+RRC-and-advance loop. Likely animates 16 bytes of state (perhaps tile
+animation, effect cycling, or palette rotation). Not yet fully traced.
+
+### Bank-3 sound engine main loop (0x416D)
+
+```asm
+bank3:0x416D: CD 05 45      CALL 0x4505               ; init/sample stage A
+              CD B1 45      CALL 0x45B1               ; init/sample stage B
+              FA 85 D8      LD A, (D885); OR A
+              JR NZ 0x4154                            ; if D885 != 0, jump
+              FA 80 D8      LD A, (D880); LD C, A     ; load D880 (master scene)
+              FA 81 D8      LD A, (D881)
+              CP C; JP NZ, 0x4003                     ; if D881 != D880, branch
+              OR A; RET Z                             ; if both zero, return
+              ; D882 += D883 (delta accumulator)
+              FA 82 D8; 47; FA 83 D8; 80; EA 82 D8
+              RET NC                                   ; return if no carry
+              ; If D88A != 0, call 0x422D
+              FA 8A D8; B7; CALL NZ 0x422D
+              XOR A; LD (D884), A
+              ; Process 3 channels at D800, D820, D840 (32 bytes each)
+              LD DE, 0xD800; CALL 0x4326
+              LD DE, 0xD820; CALL 0x4326
+              LD DE, 0xD840; CALL 0x4326
+              ...
+```
+
+State at D800-D85F: three 32-byte channel blocks (D800-D81F, D820-D83F,
+D840-D85F). Each channel processed by 0x4326 (bank 3). Engine state at
+D880-D88A:
+- D880: master scene/song
+- D881: previous master scene (compared to detect transitions)
+- D882: delta accumulator
+- D883: delta increment
+- D884: per-frame channel-processing flag
+- D885: status (jump target if non-zero)
+- D88A: special flag (triggers 0x422D)
+
+The Timer ISR fires this main loop at ~89 Hz, giving the engine a
+~5500T budget per tick (well under Timer-ISR ceiling).
+
 ### VBlank handler full structure (0x06D1)
 
 ```asm
