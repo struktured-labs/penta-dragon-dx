@@ -19,6 +19,10 @@ then dive into the specific subsystem you care about.
 - [`main_loop_and_entry.md`](main_loop_and_entry.md) — Power-on → 0x0150
   setup → main loop at **0x016C-0x018A** (6 subsystem CALLs + JP back).
   Game-start entry at 0x3B37 confirmed.
+- [`d880_state_machine.md`](d880_state_machine.md) — Consolidated state
+  machine map: dispatch at bank3:0x4029 + jump table at bank3:0x4A5A,
+  all known D880 values (0x00-0x1C), state-flow diagram, integration
+  with v3.01 colorization handler.
 - [`hram_allocation_map.md`](hram_allocation_map.md) — HRAM byte-by-byte
   purpose. Cross-bank access census + identified roles for ~80% of bytes.
 - [`wram_allocation_map.md`](wram_allocation_map.md) — WRAM page heatmap
