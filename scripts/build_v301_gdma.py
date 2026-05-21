@@ -425,8 +425,11 @@ def build_v301():
     code.extend([0xCD, cond_pal_addr & 0xFF, (cond_pal_addr >> 8) & 0xFF])
 
     # 2. bg_sweep — runs ALWAYS (title too). The simplified inline hook
-    # no longer writes attrs, so bg_sweep is the only mechanism that colors
-    # title-screen tiles. Full coverage in ~18 frames.
+    # no longer writes attrs, so bg_sweep is the only mechanism that
+    # colors title-screen tiles AND VRAM rows 8-17 during gameplay
+    # (attr_comp/GDMA cover rows 0-7). Full coverage in ~18 frames.
+    # Tried bg_sweep × 3 — gameplay progression slowed (autoplay never
+    # reached mini-boss). Single call is the sweet spot.
     code.extend([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
 
     # 3. GDMA (if buffer ready). Skipped on title since attr_computation
