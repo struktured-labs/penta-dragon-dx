@@ -28,6 +28,10 @@ then dive into the specific subsystem you care about.
   Full diagnosis of the v3.01 freeze: root cause was **stale FF99**;
   ISRs restored bank from FF99 → wrong bank → garbage exec.
   **Status: RESOLVED.**
+- [`v301_performance.md`](v301_performance.md) — Per-VBlank cycle
+  estimate (~53K T = ~76% of frame budget). Comparison to vanilla and
+  v3.00. Empirical efficiency evidence from probes (scroll tearing
+  0/s vs vanilla 1.50/s, phantom D887 ≤ threshold).
 - [`inline_hook_analysis_v300.md`](inline_hook_analysis_v300.md) — v3.00's
   inline-hook tile+attr copy design (the predecessor; v3.01 only does
   tile inline, attrs go through VBlank attr_computation + GDMA).
