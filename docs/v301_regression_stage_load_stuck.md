@@ -53,7 +53,45 @@ transition routine likely sets LCDC bit 3 to switch tilemap region. If our GDMA
 runs during that transition and writes to the wrong tilemap, the new dungeon
 tilemap is overwritten by stale bank-2 data.
 
-## Regression isolation progress (binary search)
+## Cliff is between 22 and 23 rows of attr_comp per frame
+
+Further binary search by row count (each test: 4000-frame stress with autoplay):
+
+| Rows per frame | FFBD distribution | Verdict |
+|---|---|---|
+| 1   | full cycle 1/3/5/7 | OK |
+| 2   | full cycle 1/3/5/7 (earlier "broken" was autoplay-timing noise) | OK |
+| 4   | mostly stuck at 5, some 1/3/7 visible | partial / unreliable |
+| 8   | full cycle | OK |
+| 12  | full cycle | OK |
+| 16  | full cycle + mini-boss spawning | OK |
+| 20  | full cycle + boss splash | OK |
+| 21  | mostly cycle, ~57% FFBD=0 (game intermittently glitching) | partial |
+| 22  | similar to 21, ~62% FFBD=0 | partial |
+| 23  | stuck at 5 (350/350) | **BROKEN** |
+| 24 (production) | FFBD=0 (348/350), D880=0x00 | **BROKEN** |
+
+**The cliff is between 22 and 23 rows.** Each row adds ~2050T (DI window
++ EI gap). At 22 rows the handler uses ~45K T of the 70K T frame budget,
+leaving ~25K T for the game's main loop — barely enough. At 23+ rows,
+main loop is too starved to progress past the STAGE LOAD splash.
+
+This explains the dependency on row count: the game's STAGE LOAD →
+dungeon transition routine requires a minimum amount of main-loop CPU
+per frame. Below ~25K T it can't make progress within a reasonable
+number of frames.
+
+## Fix candidates (in order of preference)
+
+1. **Reduce to 18 rows** (matches visible viewport height; 6 rows
+   off-screen never visible) — saves ~12K T/frame; well within safe
+   budget; full visible colorization.
+2. **Stagger: 12 rows per frame, alternating odd/even rows** —
+   full 24-row coverage in 2 frames; 24K T/frame budget; smooth.
+3. **Dirty-rect**: only write attrs for tiles that CHANGED since last
+   frame — typically ~0-10 rows in steady state.
+
+Going with #1 as the simplest fix.
 
 | Variant | attr_comp call | attr_comp body | GDMA | Gameplay (FFBD cycle) | Result |
 |---|---|---|---|---|---|
