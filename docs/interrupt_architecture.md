@@ -66,6 +66,66 @@ If FF99 is stale at the moment an ISR exits, the wrong bank is restored
 and the interrupted code resumes with wrong bank mapped — **this is the
 exact failure mode that produced the v3.01 freeze.**
 
+### Timer ISR full disassembly (0x06B3)
+
+```asm
+0x06B3: F5             PUSH AF
+0x06B4: C5             PUSH BC
+0x06B5: D5             PUSH DE
+0x06B6: E5             PUSH HL
+0x06B7: 3E 03          LD A, 0x03
+0x06B9: EA 00 21       LD (0x2100), A      ; bank → 3 (sound engine)
+0x06BC: CD 00 40       CALL 0x4000         ; bank 3 sound engine main
+0x06BF: 3E 01          LD A, 0x01
+0x06C1: EA 00 21       LD (0x2100), A      ; bank → 1
+0x06C4: CD 79 0D       CALL 0x0D79         ; bank-0 code (0x0D79 is always mapped)
+0x06C7: F0 99          LDH A, (FF99)       ; read shadow
+0x06C9: EA 00 21       LD (0x2100), A      ; restore bank from FF99
+0x06CC: E1             POP HL
+0x06CD: D1             POP DE
+0x06CE: C1             POP BC
+0x06CF: F1             POP AF
+0x06D0: D9             RETI
+```
+
+Note that Timer does **two** bank switches during its work: first to bank 3
+for the sound engine, then to bank 1 for a follow-up call to 0x0D79. The
+final restore reads FF99 — so the bank Timer restores is whatever FF99
+says, NOT necessarily the bank that was mapped when Timer fired.
+
+### STAT ISR full disassembly (0x0853)
+
+```asm
+0x0853: F5             PUSH AF
+0x0854: C5             PUSH BC
+0x0855: D5             PUSH DE
+0x0856: E5             PUSH HL
+0x0857: 3E 01          LD A, 0x01
+0x0859: EA 00 21       LD (0x2100), A      ; bank → 1
+0x085C: CD F8 08       CALL 0x08F8         ; bank-0 code
+0x085F: CD 29 09       CALL 0x0929         ; bank-1 code
+0x0862: F0 99          LDH A, (FF99)
+0x0864: EA 00 21       LD (0x2100), A      ; restore bank from FF99
+0x0867: E1             POP HL
+0x0868: D1             POP DE
+0x0869: C1             POP BC
+0x086A: F1             POP AF
+0x086B: D9             RETI
+```
+
+STAT only switches to bank 1 (no bank 3 detour), but the same restore-from-
+FF99 pattern at exit.
+
+### Bank 3:0x4000 (sound engine entry)
+
+```asm
+0xC000: C3 6D 41       JP 0x416D           ; -> sound main loop entry
+0xC003: ... subroutine that operates on D881-D88A state vars
+```
+
+The sound state lives at D881-D88A (WRAM bank 0, always mapped). The Timer
+ISR fires at ~89 Hz, giving the engine a fixed processing budget per tick.
+
 ## VBlank handler chain
 
 ```
