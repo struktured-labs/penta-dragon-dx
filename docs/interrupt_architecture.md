@@ -242,6 +242,65 @@ seconds are incremented elsewhere when FFD1 wraps). Timer fires at
 The sound state lives at D881-D88A (WRAM bank 0, always mapped). The Timer
 ISR fires at ~89 Hz, giving the engine a fixed processing budget per tick.
 
+### Sound engine end-to-end (event-driven music driver)
+
+**Command pipeline:**
+1. Game code issues a sound effect / music change via `LD A, <id>; RST 38`.
+   `RST 38` is patched in v2.88+ to `LD (D887), A; RET` (no IME re-enable
+   to avoid phantom-sound race).
+2. Next Timer ISR tick (~89 Hz), the engine main at `bank3:0x416D` runs
+   and calls `0x45B1` (command dispatcher).
+3. `0x45B1` reads D887, checks against D888 (previous command) to skip
+   duplicates, sets up channel state, and clears D887.
+
+**Per-tick channel processing:**
+1. `0x4505` (sequence reader): if D894 (note delay) is non-zero, decrement
+   and continue. If zero, read next byte from `(D895:D896)`, advance the
+   pointer, store new delay in D894, dispatch the event via `0x4586`.
+2. For each of 3 channels (D800/D820/D840), `0x4326` processes that
+   channel: read event-type byte at DE+1, decrement sub-counter at DE,
+   when sub-counter hits zero call `0x43D4` to advance to the next
+   channel event.
+
+**Sound state map (D880-D89F):**
+| Addr   | Purpose                                                        |
+|--------|----------------------------------------------------------------|
+| D880   | Master scene state (game-visible) — drives sound mode          |
+| D881   | Previous master scene (transition detector)                    |
+| D882   | Delta accumulator (incremented each tick by D883)              |
+| D883   | Delta increment (effectively the tempo)                        |
+| D884   | Per-frame channel-processed flag (counts 0-3)                  |
+| D885   | Engine status (non-zero = jump to song-init handler)           |
+| D886   | TBD                                                            |
+| D887   | **Sound command byte** — written via RST 38 from game code     |
+| D888   | Previous sound command (for de-dup in 0x45B1)                  |
+| D889   | Engine ready flag (set to 1 in boot init at bank1:0x402A)      |
+| D88A   | Special flag — triggers 0x422D when non-zero                   |
+| D894   | Current note delay countdown                                   |
+| D895   | Song-data pointer low                                          |
+| D896   | Song-data pointer high                                         |
+| D897   | TBD (read in 0x4505 alongside D894 for skip-init test)         |
+
+**Channel block layout (D800-D85F, 32 bytes each):**
+- `DE+0`: per-channel event sub-counter (decremented each tick by 0x4326)
+- `DE+1`: event flag/type (BIT 1 tested in 0x4326)
+- `DE+2..31`: channel-specific state (frequency, envelope, pattern data;
+  exact layout TBD — would need deeper trace of 0x43D4 to fully map)
+
+**Timer ISR's bank-switching sequence (now complete end-to-end):**
+
+```
+Timer fires → 0x06B3 → switch to bank 3 → CALL 0x4000 → JP 0x416D
+  → CALL 0x4505 (sequence reader; may emit new note + advance pointer)
+  → CALL 0x45B1 (command dispatcher; consumes D887 if non-zero)
+  → check D885 / D880 vs D881 for state transition
+  → D882 += D883 (tempo accumulator)
+  → if carry (timing slot reached): process 3 channels via 0x4326
+  → return → back in 0x06B3 → switch to bank 1 → CALL 0x0D79
+                              (FFD1 centisecond counter tick)
+  → restore bank from FF99 → RETI
+```
+
 ## VBlank handler chain
 
 ```
