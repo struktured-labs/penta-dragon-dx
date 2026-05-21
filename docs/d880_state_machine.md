@@ -3,22 +3,71 @@
 Consolidates the per-state notes from `reverse_engineering/notes/gap_d880_*`
 into a single unified state diagram.
 
-## Dispatch
+## Dispatch (revised — verified by full disasm)
 
-The D880 state machine is dispatched by code at **bank3:0x4029**, using
-a jump table at **bank3:0x4A5A**:
+The D880 dispatcher at **bank3:0x4029** reads D880, indexes table at
+**bank3:0x4A5A**, loads a pointer, and uses the pointed-to **data** to
+initialize the **3 sound channels** at D802-D85F + engine state at
+D882-D886. Full disasm:
 
 ```asm
 bank3:0x4029:
     LD A, (D880)
-    DEC A
-    ADD A             ; ×2 for word table
-    ; ... index into bank3:0x4A5A ...
-    JP (HL)           ; jump to handler
+    LD (D881), A          ; D881 = D880 (transition snapshot)
+    OR A; JP Z, 0x41F4    ; if state 0, skip
+    DEC A; ADD A          ; A = (D880-1) × 2  (16-bit index)
+    ADD 0x5A              ; + jump table offset (0x4A5A low byte)
+    LD L, A
+    LD A, 0x4A; ADC 0     ; high byte 0x4A + carry
+    LD H, A               ; HL = 0x4A5A + 2×(D880-1)
+    LD A, (HL+); LD H,(HL); LD L,A   ; load 16-bit pointer to scene data
+
+    ; Now HL points to scene data table for this D880 value.
+    ; Initialize 3 sound channels at D802/D822/D842
+    LD DE, 0xD802; LD B, 3
+loop:
+    LD A, (HL+); AND 0x07; SWAP A; LD C, A
+    RRCA; ADD C; ADD 0x14
+    LD (DE), A            ; channel +2 init
+    LD A, 0x46; ADC 0
+    INC E; LD (DE), A     ; channel +3 init
+    LD A, E; ADD 0x1F; LD E, A   ; advance to next channel block (32 bytes)
+    DEC B; JR NZ, loop
+
+    LD A, (HL+); LD (D883), A   ; tempo
+    XOR A; LD (D882), A         ; clear accumulator
+    LD (D885), A; LD (D886), A  ; clear engine status
+    ; ... continues with more channel-state init from HL data ...
 ```
 
-States 1-9 use **data-driven dispatch**: each handler points to a struct
-with substate counts + handler pointers. States 0x0A+ use direct code.
+So the **"handlers" in the bank3:0x4A5A jump table are data pointers**,
+not code. The dispatcher consumes the data to set up sound channel
+state — `marker`, `substate count`, `config`, and the "handler pointers"
+in the data table are actually **sound-pattern offsets and tempo
+configuration for the scene**.
+
+This **revises the interpretation in `gap_d880_state_08_third.md`** — what
+that doc described as "Handler A / Handler B" for combat substates are
+actually **pointers to per-channel sound-pattern data**, not code. The
+labeling "arena setup / active combat / post-combat" may still be a
+useful chronological grouping (substate 0/1/2 representing different
+music sections), but the per-handler descriptions are music-driver data,
+not direct game logic.
+
+### What the game state machine looks like THEN
+
+The D880 dispatcher's primary job is **scene-specific music init**.
+Each scene change (via RST 20 or direct write) triggers a new sound
+configuration. The game-state logic (rendering, input, AI) lives
+elsewhere — possibly in the bank-3 sound engine's "music has progressed
+to new section" callbacks, or in the main loop's other subsystems
+(0x0DE9, 0x0E7C, etc.) keyed off D880.
+
+The 4-byte "signature" `05 07 09 89` likely represents the **channel
+offset positions** — bytes that determine where in the channel state
+block to write specific fields. The constant pattern across states
+0x02-0x09 makes sense: all gameplay scenes use the same sound channel
+layout; only state 0x01 (title?) differs slightly (`08 07 09 89`).
 
 ## All known D880 values
 
