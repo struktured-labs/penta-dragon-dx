@@ -375,14 +375,21 @@ def build_v301():
     w(cond_pal_addr, create_conditional_palette_cached(pal_loader_addr))
 
     # bg_sweep safety net. Strip the internal FFC1 gate (first 4 bytes
-    # `F0 C1 B7 C8` = LDH A,[FFC1]; OR A; RET Z. Keep this prefix —
-    # bg_sweep should only run during gameplay (FFC1=1), matching v3.00.
-    # Stripping it caused title flicker because the title relies on
-    # inline tile+attr copy alone; running bg_sweep during title's
-    # rapid VRAM churn introduced timing conflicts.
+    # Strip FFC1 prefix (`F0 C1 B7 C8` = LDH A,[FFC1]; OR A; RET Z).
+    # Without this, bg_sweep skips title/menu (FFC1=0). Hardware
+    # testing on MiSTer showed white splotches on title screen and
+    # inventory menu — the inline tile+attr copy doesn't catch all
+    # tile-write paths (e.g., title animation, menu rendering go
+    # through other routines that don't update attrs).
+    # The previous time I stripped this the issue was COMPOUND with
+    # attr_comp + GDMA being called too; with those disabled, bg_sweep
+    # ×1 outside the FFC1 gate is the same cycle cost as v3.00's
+    # bg_sweep ×1 inside the gate during gameplay, and adds title
+    # coverage as a free bonus.
     sweep = bytearray(create_bg_sweep_viewport_gated(bg_table_addr, bg_sweep_addr))
     assert sweep[:4] == bytearray([0xF0, 0xC1, 0xB7, 0xC8]), \
         f"bg_sweep prefix changed: {sweep[:4].hex()}"
+    sweep[0:4] = bytearray([0x00, 0x00, 0x00, 0x00])  # NOPs — run on title too
     w(bg_sweep_addr, bytes(sweep))
 
     # GDMA transfer routine
@@ -470,21 +477,21 @@ def build_v301():
     code[df02_jr] = (len(code) - df02_jr - 1) & 0xFF
 
     # ---- WARM PATH ----
-    # Structure matches v3.00 EXACTLY (per regression analysis):
-    #   1. cond_pal
-    #   2. FFC1 gate: bg_sweep × 1, OAM DMA, shadow_main
-    # The only v3.01 additions are the FF99 protocol fix (in the
-    # prologue/epilogue) and the cold-boot zero of bank 2 (one-shot,
-    # behind the DF02 sentinel). attr_comp + GDMA are STILL not built
-    # into the handler — keeping them in the source tree for future
-    # work but explicitly NOT calling them here. This matches the
-    # v3.00 cycle budget, which fits cleanly in VBlank on real hardware.
+    # Structure: cond_pal → bg_sweep (always) → FFC1 gate (gameplay).
+    # bg_sweep runs OUTSIDE the FFC1 gate so title/menu also get
+    # attr coverage; matches the v3.00 cycle cost during gameplay
+    # because v3.00 called bg_sweep × 1 inside its FFC1 gate. The
+    # only delta on title is the ~3K T bg_sweep call (cold path the
+    # game otherwise spends idle on cursor blink etc.).
+    # attr_comp + GDMA still NOT called — keeping the source code
+    # in tree but the warm path skips them. They proved unreliable
+    # on real hardware in the prior iteration.
     code.extend([0xCD, cond_pal_addr & 0xFF, (cond_pal_addr >> 8) & 0xFF])
+    code.extend([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
 
     code.extend([0xF0, 0xC1, 0xB7])
     ffc1_skip = len(code) + 1
     code.extend([0x28, 0x00])
-    code.extend([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
     code.extend([0xCD, shadow_main_addr & 0xFF, (shadow_main_addr >> 8) & 0xFF])
     code.extend([0xCD, 0x80, 0xFF])           # OAM DMA
     code[ffc1_skip] = (len(code) - ffc1_skip - 1) & 0xFF
