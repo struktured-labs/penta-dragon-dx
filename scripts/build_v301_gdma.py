@@ -460,21 +460,20 @@ def build_v301():
     code[df02_jr] = (len(code) - df02_jr - 1) & 0xFF
 
     # ---- WARM PATH ----
-    # Structure: cond_pal → bg_sweep (always) → FFC1 gate (gameplay).
-    # bg_sweep runs OUTSIDE the FFC1 gate so title/menu also get
-    # attr coverage; matches the v3.00 cycle cost during gameplay
-    # because v3.00 called bg_sweep × 1 inside its FFC1 gate. The
-    # only delta on title is the ~3K T bg_sweep call (cold path the
-    # game otherwise spends idle on cursor blink etc.).
-    # attr_comp + GDMA still NOT called — keeping the source code
-    # in tree but the warm path skips them. They proved unreliable
-    # on real hardware in the prior iteration.
+    # Structure matches v3.00 exactly: cond_pal → FFC1 gate {bg_sweep, OAM,
+    # shadow_main}. Running bg_sweep on title added ~3K T per title frame
+    # which slowed the title's tile-draw animation visibly: the YANOMAN
+    # logo took longer to draw, producing "splotch" artifacts when the
+    # user pressed START before the draw completed.
+    # Since the inline tile+attr copy at 0x42A7 already handles title
+    # tiles when the game's tilemap copy runs, bg_sweep on title was
+    # redundant for correctness and harmful for timing.
     code.extend([0xCD, cond_pal_addr & 0xFF, (cond_pal_addr >> 8) & 0xFF])
-    code.extend([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
 
     code.extend([0xF0, 0xC1, 0xB7])
     ffc1_skip = len(code) + 1
     code.extend([0x28, 0x00])
+    code.extend([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
     code.extend([0xCD, shadow_main_addr & 0xFF, (shadow_main_addr >> 8) & 0xFF])
     code.extend([0xCD, 0x80, 0xFF])           # OAM DMA
     code[ffc1_skip] = (len(code) - ffc1_skip - 1) & 0xFF
