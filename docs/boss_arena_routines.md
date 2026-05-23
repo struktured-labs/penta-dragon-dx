@@ -26,17 +26,64 @@ Jump table at bank 2:0x6EA6 (ROM file 0xAEA6):
 
 ## Location
 
-| # | FFBA | ROM offset | CPU addr (bank 2) | D880 value | Size | Boss |
-|---|---|---|---|---|---|---|
-| 1 | 0 | 0x886E | 0x486E | 0x0C | 138 bytes | Shalamar (stage 1) |
-| 2 | 1 | 0x88F8 | 0x48F8 | 0x0D | 161 bytes | Riff (stage 2) |
-| 3 | 2 | 0x8999 | 0x4999 | 0x0E | 116 bytes | Crystal Dragon (stage 3) |
-| 4 | 3 | 0x8A0D | 0x4A0D | 0x0F | 105 bytes | Cameo (stage 4) |
-| 5 | 4 | 0x8A76 | 0x4A76 | 0x10 | 119 bytes | Ted (stage 5) |
-| 6 | 5 | 0x8AED | 0x4AED | 0x11 | 116 bytes | Troop (stage 6) |
-| 7 | 6 | 0x8B61 | 0x4B61 | 0x12 | 116 bytes | Faze (stage 7) |
-| 8 | 7 | 0x8BD5 | 0x4BD5 | 0x13 | 113 bytes | Penta Dragon (final main) |
-| 9 | 8 | 0x8C46 | 0x4C46 | 0x14 | ? bytes | **Hidden boss (Angela?)** |
+| # | FFBA | ROM offset | CPU addr (bank 2) | D880 value | Size | Boss | Init X | Init Y | First data ptr |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0 | 0x886E | 0x486E | 0x0C | 138 bytes | Shalamar (stage 1) | 0xA0 | 0xF0 | 0x74F1 |
+| 2 | 1 | 0x88F8 | 0x48F8 | 0x0D | 161 bytes | Riff (stage 2) | 0x80 | 0xC0 | 0x7536 |
+| 3 | 2 | 0x8999 | 0x4999 | 0x0E | 116 bytes | Crystal Dragon (stage 3) | 0x60 | 0x60 | 0x7543 |
+| 4 | 3 | 0x8A0D | 0x4A0D | 0x0F | 105 bytes | Cameo (stage 4) | 0x88 | 0xE0 | 0x75A6 |
+| 5 | 4 | 0x8A76 | 0x4A76 | 0x10 | 119 bytes | Ted (stage 5) | 0xA0 | 0xA0 | 0x7623 |
+| 6 | 5 | 0x8AED | 0x4AED | 0x11 | 116 bytes | Troop (stage 6) | 0xA0 | 0xC0 | 0x762D |
+| 7 | 6 | 0x8B61 | 0x4B61 | 0x12 | 116 bytes | Faze (stage 7) | 0x90 | 0xC0 | 0x766B |
+| 8 | 7 | 0x8BD5 | 0x4BD5 | 0x13 | 113 bytes | Penta Dragon (final main) | 0xA8 | 0x90 | 0x76A6 |
+| 9 | 8 | 0x8C46 | 0x4C46 | 0x14 | ? bytes | **Hidden boss (Angela?)** | 0xA0 | 0xE0 | 0x76A8 |
+
+## Common setup calls
+
+All arenas (1-9) call `0x063E` and `0x06A7` as common setup helpers
+between init-position writes and arena-specific data loading.
+
+- `0x063E`: probably clears arena state (DDxx WRAM region)
+- `0x06A7`: probably initial arena tile setup / load
+
+## Init position interpretation
+
+Init X / Init Y values are likely sub-tile (256-step) coordinates
+relative to the arena origin. Many are above the 144-pixel visible
+height (e.g. Shalamar Y=0xF0=240), suggesting these are either:
+- Boss spawn position (not Sara's)
+- Arena bounding-box dimensions
+- Sub-pixel positioning with a base offset
+
+WRAM destinations:
+- DD85/DD86: 16-bit value 1 (likely X)
+- DD87/DD88: 16-bit value 2 (likely Y)
+- DD91, DD8F/DD90: from first data pointer
+- DDA1: from second data pointer (varies by arena)
+
+## Arena 1 (Shalamar) disassembly
+
+```
+bank 2:0x486E  3E 0C            LD A, 0x0C            ; arena state ID
+bank 2:0x4870  EA 80 D8         LD [D880], A           ; publish scene state
+bank 2:0x4873  E0 B7            LDH [FFB7], A          ; mirror to HRAM
+bank 2:0x4875  21 A0 00         LD HL, 0x00A0          ; init X
+bank 2:0x4878  7D / EA 85 DD    LD [DD85], L
+bank 2:0x487C  7C / EA 86 DD    LD [DD86], H
+bank 2:0x4880  21 F0 00         LD HL, 0x00F0          ; init Y
+bank 2:0x4883  ... EA 87 DD
+bank 2:0x4887  ... EA 88 DD
+bank 2:0x488B  CD 3E 06         CALL 0x063E            ; common setup #1
+bank 2:0x488E  CD A7 06         CALL 0x06A7            ; common setup #2
+bank 2:0x4891  AF / E0 43 / E0 42  SCX = SCY = 0       ; reset scroll
+bank 2:0x4896  21 F1 74         LD HL, 0x74F1          ; arena data 1
+bank 2:0x4899  2A / EA 91 DD    LD [DD91], A           ; first byte → DD91
+bank 2:0x489D  ... EA 8F DD
+bank 2:0x48A1  ... EA 90 DD    ; store HL position to DD8F/DD90
+bank 2:0x48A5  21 D6 76         LD HL, 0x76D6          ; arena data 2
+bank 2:0x48A8  2A / EA A1 DD    LD [DDA1], A           ; first byte → DDA1
+... (rest of routine continues)
+```
 
 ## Common prologue
 
