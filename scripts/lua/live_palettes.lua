@@ -1,10 +1,23 @@
--- Test if we can poll a file and inject CRAM in real time
+-- Live palette editor — polls /tmp/live_palettes.txt and writes CGB CRAM
 local f = 0
-local last_mtime = 0
-local PAL_FILE = os.getenv("PAL_FILE") or "/tmp/live_palettes.txt"
+local last_hash = 0
+local PAL_FILE = "/tmp/live_palettes.txt"
+local SENTINEL = "/tmp/live_palettes_lua.log"
+
+-- Log to sentinel file (since mGBA print may not go to stdout)
+local function log(msg)
+    local fh = io.open(SENTINEL, "a")
+    if fh then
+        fh:write(msg .. "\n")
+        fh:close()
+    end
+end
+
+-- Reset log on startup
+local fh = io.open(SENTINEL, "w")
+if fh then fh:write("live_palettes.lua loaded at start\n"); fh:close() end
 
 local function parse_color(s)
-    -- Parse "RRGGBB" hex (6 chars) or 4-digit BGR555 hex
     if #s == 6 then
         local r = tonumber(s:sub(1,2), 16) or 0
         local g = tonumber(s:sub(3,4), 16) or 0
@@ -24,31 +37,24 @@ local function load_palettes(path)
     if not fh then return nil end
     local txt = fh:read("*all")
     fh:close()
-
     local writes = {}
-    -- Lines format: "BG0:0=7FFF,1=7E94,2=3D4A,3=0000"
-    --               "OBJ1:0=0000,1=03E0,2=01C0,3=0000"
     for line in txt:gmatch("[^\r\n]+") do
-        local kind, pal_idx, colors = line:match("^(BG?O?B?J?)(%d):(.+)$")
+        local kind, pal_idx, colors = line:match("^(OBJ)(%d):(.+)$")
         if not kind then
-            kind, pal_idx, colors = line:match("^([BO][GJ]B?)(%d):(.+)$")
+            kind, pal_idx, colors = line:match("^(BG)(%d):(.+)$")
         end
         if kind and pal_idx then
-            local is_obj = kind:sub(1,1) == "O"
+            local is_obj = kind == "OBJ"
             pal_idx = tonumber(pal_idx)
-            local color_idx_max = -1
             for entry in colors:gmatch("[^,]+") do
                 local ci, cv = entry:match("^%s*(%d+)=(%w+)%s*$")
                 if ci and cv then
                     ci = tonumber(ci)
                     local val15 = parse_color(cv)
-                    -- CRAM byte index: pal*8 + color*2 (lo), +1 (hi)
                     local base = pal_idx * 8 + ci * 2
                     table.insert(writes, {
-                        is_obj = is_obj,
-                        idx = base,
-                        lo = val15 & 0xFF,
-                        hi = (val15 >> 8) & 0xFF,
+                        is_obj = is_obj, idx = base,
+                        lo = val15 & 0xFF, hi = (val15 >> 8) & 0xFF,
                     })
                 end
             end
@@ -74,27 +80,36 @@ local function apply_writes(writes)
     end
 end
 
+-- Cached parsed writes — applied EVERY frame so the game's cond_pal
+-- can't override our changes when it triggers a palette reload on
+-- state change (room transition, miniboss spawn, etc.)
+local cached_writes = nil
+
 callbacks:add("frame", function()
     f = f + 1
-    -- Poll file mtime every 30 frames (~0.5 sec)
+    if f == 30 then log("Lua frame=30, polling /tmp/live_palettes.txt") end
+
+    -- Check for file changes every 30 frames (~0.5s).
     if f % 30 == 0 then
         local fh = io.open(PAL_FILE, "r")
         if fh then
-            -- io.open doesn't give us mtime, but we can read+hash content
             local content = fh:read("*all")
             fh:close()
             local hash = 0
             for i = 1, #content do
                 hash = (hash * 31 + content:byte(i)) & 0xFFFFFFFF
             end
-            if hash ~= last_mtime then
-                last_mtime = hash
-                local writes = load_palettes(PAL_FILE)
-                if writes then
-                    apply_writes(writes)
-                    print(string.format("Applied %d palette writes from %s", #writes, PAL_FILE))
-                end
+            if hash ~= last_hash then
+                last_hash = hash
+                cached_writes = load_palettes(PAL_FILE)
+                log(string.format("f%d: Loaded %d palette writes from file", f, cached_writes and #cached_writes or 0))
             end
         end
     end
+
+    -- Apply cached writes EVERY frame — this is the override mechanism.
+    -- The game's cond_pal calls palette_loader on state changes (room
+    -- transition, miniboss spawn, etc.), which would otherwise restore
+    -- ROM palettes. Re-applying every frame keeps our edits visible.
+    apply_writes(cached_writes)
 end)
