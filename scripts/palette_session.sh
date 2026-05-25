@@ -101,14 +101,33 @@ case "$cmd" in
             sed -i 's/^displayDriver=.*/displayDriver=1/' "$qtini"
         fi
 
-        # 3. mGBA with the live Lua script in foreground-ish background
-        QT_QPA_PLATFORM=xcb \
-        __GLX_VENDOR_LIBRARY_NAME=nvidia \
-        VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json \
-            nohup mgba-qt "$rom" --script "$LUA_SCRIPT" \
-            > "$MGBA_LOG" 2>&1 &
-        mgba_pid=$!
-        echo "  mgba:    PID $mgba_pid → log $MGBA_LOG (ROM: $(basename "$rom"))"
+        # 3. mGBA with the live Lua script.
+        # Pick platform: xcb if DISPLAY is set (XWayland or X11 session,
+        # works with NVIDIA via __GLX_VENDOR_LIBRARY_NAME), else wayland.
+        # The Claude Code shell typically has only WAYLAND_DISPLAY, so
+        # default to wayland mode for compatibility with that path.
+        if [ -n "$DISPLAY" ]; then
+            QT_QPA_PLATFORM=xcb \
+            __GLX_VENDOR_LIBRARY_NAME=nvidia \
+            VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json \
+                nohup mgba-qt "$rom" --script "$LUA_SCRIPT" \
+                > "$MGBA_LOG" 2>&1 &
+            mgba_platform="xcb"
+        elif [ -n "$WAYLAND_DISPLAY" ]; then
+            QT_QPA_PLATFORM=wayland \
+            XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+            WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+                nohup mgba-qt "$rom" --script "$LUA_SCRIPT" \
+                > "$MGBA_LOG" 2>&1 &
+            mgba_platform="wayland"
+        else
+            echo "  mgba:    no DISPLAY or WAYLAND_DISPLAY — cannot launch GUI"
+            mgba_pid=""
+        fi
+        if [ -n "${mgba_platform:-}" ]; then
+            mgba_pid=$!
+            echo "  mgba:    PID $mgba_pid platform=$mgba_platform → log $MGBA_LOG (ROM: $(basename "$rom"))"
+        fi
 
         # 4. Best-effort browser open
         sleep 1
