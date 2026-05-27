@@ -34,23 +34,21 @@ end
 
 -- Parsed file contains:
 --   writes:    list of palette overrides applied every frame
---   force:     {addr=value, ...} - HRAM/WRAM bytes to set every frame (e.g. FFBF)
---   teleport:  {addr=value, ...} - one-shot writes (applied once then cleared)
+--   force:     {addr=value, ...} - HRAM/WRAM bytes to set every frame
+--   dx_teleport: integer DF0A value (one-shot DX boss teleport request)
 local function load_palettes(path)
     local fh = io.open(path, "r")
     if not fh then return nil end
     local txt = fh:read("*all")
     fh:close()
-    local result = {writes = {}, force = {}, teleport = nil}
+    local result = {writes = {}, force = {}, dx_teleport = nil}
     for line in txt:gmatch("[^\r\n]+") do
         if line:sub(1,1) == "#" then
             -- comment, skip
-        elseif line:match("^TELEPORT:1") then
-            -- one-shot teleport sentinel (other lines on same write supply
-            -- the FFBA/D880/FFB7/FFBF values via force, but we copy them
-            -- into the teleport one-shot slot and clear force for next frame)
-            result.teleport = result.force
-            result.force = {}  -- teleport is one-shot, don't keep forcing
+        elseif line:match("^DX:") then
+            -- DX teleport one-shot directive: "DX:N" sets DF0A=N once
+            local n = line:match("^DX:(%d+)")
+            if n then result.dx_teleport = tonumber(n) end
         else
             local kind, pal_idx, colors = line:match("^(OBJ)(%d):(.+)$")
             if not kind then
@@ -92,6 +90,7 @@ local function load_palettes(path)
                         elseif reg == "FFC1" then addr = 0xFFC1
                         elseif reg == "FFBD" then addr = 0xFFBD
                         elseif reg == "FFD0" then addr = 0xFFD0
+                        elseif reg == "DF0A" then addr = 0xDF0A  -- DX teleport request
                         end
                         if addr then
                             result.force[addr] = v & 0xFF
@@ -125,7 +124,7 @@ end
 -- can't override our changes when it triggers a palette reload on
 -- state change (room transition, miniboss spawn, etc.)
 local cached = nil
-local pending_teleport = nil
+local pending_dx = nil  -- one-shot DX teleport request (writes DF0A)
 
 callbacks:add("frame", function()
     f = f + 1
@@ -149,12 +148,12 @@ callbacks:add("frame", function()
                 if cached and cached.force then
                     for _ in pairs(cached.force) do nf = nf + 1 end
                 end
-                local nt = cached and cached.teleport and 1 or 0
-                log(string.format("f%d: Loaded %d writes, %d forces, %d teleport", f, nw, nf, nt))
-                -- If teleport, queue it for one-shot application this frame
-                if cached and cached.teleport then
-                    pending_teleport = cached.teleport
-                    cached.teleport = nil  -- consume so we don't repeat
+                local nt = cached and cached.dx_teleport or 0
+                log(string.format("f%d: Loaded %d writes, %d forces, dx_teleport=%d", f, nw, nf, nt))
+                -- Capture DX teleport as one-shot
+                if cached and cached.dx_teleport then
+                    pending_dx = cached.dx_teleport
+                    cached.dx_teleport = nil  -- consume
                 end
             end
         end
@@ -170,15 +169,12 @@ callbacks:add("frame", function()
         end
     end
 
-    -- Apply teleport once (write state bytes, then clear).
-    -- Note: this may not give a fully-functional arena since boss tile
-    -- data isn't loaded — but it's enough to preview palettes in
-    -- something resembling the arena state.
-    if pending_teleport then
-        for addr, val in pairs(pending_teleport) do
-            emu:write8(addr, val)
-        end
-        log(string.format("f%d: Teleport applied", f))
-        pending_teleport = nil
+    -- DX teleport (one-shot): write DF0A. ROM-side hook in
+    -- v3.01 colorize handler reads DF0A, if non-zero treats DF0A-1
+    -- as boss FFBA, JPs to bank2:0x4000 boss arena entry.
+    if pending_dx then
+        emu:write8(0xDF0A, pending_dx)
+        log(string.format("f%d: DX teleport requested DF0A=%d", f, pending_dx))
+        pending_dx = nil
     end
 end)

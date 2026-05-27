@@ -467,6 +467,7 @@ def build_v301():
     # ---- COLD-BOOT PATH ----
     code.extend([0x3E, 0x5A, 0xEA, 0x02, 0xDF])  # DF02 = 0x5A
     code.extend([0xAF, 0xEA, 0x00, 0xDF])         # DF00 = 0 (hash)
+    code.extend([0xEA, 0x0A, 0xDF])               # DF0A = 0 (teleport req — A still 0)
     # DF03 init REMOVED. Was unused (only meaningful for attr_comp+GDMA
     # path which isn't called). Saving 4 bytes / ~25T from cold-boot.
     # Brings v3.01 cold-boot bytes to match v3.00 baseline exactly.
@@ -495,6 +496,44 @@ def build_v301():
 
     # ---- skip_cold target ----
     code[df02_jr] = (len(code) - df02_jr - 1) & 0xFF
+
+    # ============================================================
+    # DX TELEPORT HOOK (v3.01 feature)
+    # ============================================================
+    # If WRAM[DF0A] != 0, treat (DF0A - 1) as a boss FFBA index (0-8)
+    # and JP to bank 2:0x4000 (boss arena entry). The arena routine
+    # itself handles all proper setup (boss tile load, palette, init
+    # positions) — we just need to set FFBA + bank + transition cleanly.
+    #
+    # State byte: DF0A
+    #   0       = no teleport
+    #   1..9    = teleport to FFBA = DF0A-1 (so 1 = Shalamar, 9 = Penta Dragon)
+    #
+    # Caveat: this hook fires from inside VBlank IRQ context. We
+    # reset SP to the top of WRAM (0xDFFE) so the arena routine
+    # has a clean stack. Original game state is discarded — caller
+    # should not rely on this resuming previous state. This is
+    # explicitly a DX debug/cheat feature, not a game-flow path.
+    # ============================================================
+    code.extend([0xFA, 0x0A, 0xDF])           # LD A, [DF0A]
+    code.extend([0xB7])                       # OR A
+    teleport_skip_jr = len(code) + 1
+    code.extend([0x28, 0x00])                 # JR Z, skip_teleport
+    # Teleport requested — A holds DF0A value
+    code.extend([0x3D])                       # DEC A (DF0A-1 = target FFBA)
+    code.extend([0xE0, 0xBA])                 # LDH [FFBA], A
+    code.extend([0xAF])                       # XOR A
+    code.extend([0xEA, 0x0A, 0xDF])           # LD [DF0A], A (clear request)
+    # Reset stack to clean position
+    code.extend([0x31, 0xFE, 0xDF])           # LD SP, 0xDFFE
+    # Switch MBC ROM bank to 2 (where boss arena code lives)
+    code.extend([0x3E, 0x02])                 # LD A, 2
+    code.extend([0xEA, 0x00, 0x20])           # LD [0x2000], A (MBC1 bank reg)
+    code.extend([0xE0, 0x99])                 # LDH [FF99], A (game's bank cache)
+    code.extend([0xFB])                       # EI (re-enable IRQs)
+    code.extend([0xC3, 0x00, 0x40])           # JP 0x4000 (bank 2 boss arena entry)
+    # skip_teleport target
+    code[teleport_skip_jr] = (len(code) - teleport_skip_jr - 1) & 0xFF
 
     # ---- WARM PATH ----
     # Structure matches v3.00 exactly: cond_pal → FFC1 gate {bg_sweep, OAM,
