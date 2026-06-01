@@ -46,7 +46,10 @@ TP_OUT = Path("rom/working/penta_dragon_dx_teleport.gb")
 BANK13 = 13 * 0x4000
 COLORIZE_ADDR = 0x6E00
 TELEPORT_ADDR = 0x6E80     # teleport check + state setup + stack redirect
-LANDING_PAD_ROM_ADDR = 0x6F00  # landing pad source (gets copied to WRAM DB00)
+LANDING_PAD_ROM_ADDR = 0x6F80  # landing pad source (gets copied to WRAM DB00)
+                              # — moved from 0x6F00 because the teleport
+                              # routine grew past 128 bytes and was
+                              # overwriting the landing pad source.
 LANDING_PAD_WRAM = 0xDB00      # runtime landing pad location
 
 
@@ -104,7 +107,7 @@ def build_teleport_routine() -> bytes:
 
     # ---- One-shot: ensure landing pad is copied to WRAM 0xDB00 ----
     # Check sentinel DF1E
-    c.extend([0xFA, 0x1E, 0xDF])          # LD A, [DF1E]
+    c.extend([0xFA, 0x0E, 0xDF])          # LD A, [DF1E]
     c.extend([0xFE, 0x5A])                # CP 0x5A
     j_copy_done = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z, copy_done
@@ -119,8 +122,11 @@ def build_teleport_routine() -> bytes:
     c.extend([0x05])                      # DEC B
     offset = copy_loop - (len(c) + 2)
     c.extend([0x20, offset & 0xFF])       # JR NZ, copy_loop
-    # Set sentinel
-    c.extend([0x3E, 0x5A, 0xEA, 0x1E, 0xDF])  # LD A,0x5A; LD [DF1E],A
+    # Set sentinel only. Do NOT touch FFBA in cold-boot — writing 0xFF
+    # there causes the game's dispatch tables (FFBA-indexed) to read
+    # garbage and crash. First user press goes to Riff (FFBA 0→1);
+    # to reach Shalamar, cycle 9 times around to wrap.
+    c.extend([0x3E, 0x5A, 0xEA, 0x0E, 0xDF])  # LD A,0x5A; LD [DF0E],A
     # copy_done:
     copy_done_pos = len(c)
 
@@ -146,10 +152,9 @@ def build_teleport_routine() -> bytes:
     j_end_debounced = len(c) + 1
     c.extend([0x20, 0x00])                # JR NZ, end
 
-    # Sit-out gate: DF1F > 0 means previous arena init still settling —
-    # don't fire again, even if combo is pressed and debounce is clear.
-    # This prevents overlapping teleports that corrupt arena state.
-    c.extend([0xFA, 0x1F, 0xDF])          # LD A, [DF1F]
+    # Re-fire sit-out: DF1D >0 means previous arena init still settling
+    # (separate from DF1F which is the colorize-skip counter).
+    c.extend([0xFA, 0x1D, 0xDF])          # LD A, [DF1D]
     c.extend([0xB7])                      # OR A
     j_end_sitout = len(c) + 1
     c.extend([0x20, 0x00])                # JR NZ, end
@@ -160,13 +165,17 @@ def build_teleport_routine() -> bytes:
     # Set colorize-skip frame counter DF1F = 60 (≈ 1 sec; arena init takes
     # ~10 frames in PyBoy, 60 is a safe margin before colorize re-engages)
     c.extend([0x3E, 0x3C, 0xEA, 0x1F, 0xDF])  # LD A, 60; LD [DF1F], A
-    # Cycle: read CURRENT FFBA, INC, wrap if >= 9, write back.
+    # Cycle: read FFBA, INC, wrap, write back. v11-style. With FFBA
+    # initialized to 0xFF in cold-boot, first INC wraps to 0 = Shalamar.
     c.extend([0xF0, 0xBA])                # LDH A, [FFBA]
     c.extend([0x3C])                      # INC A
     c.extend([0xFE, 0x09])                # CP 9
     c.extend([0x38, 0x01])                # JR C, no_wrap
     c.extend([0xAF])                      # XOR A
-    c.extend([0xE0, 0xBA])                # LDH [FFBA], A   (new boss)
+    c.extend([0xE0, 0xBA])                # LDH [FFBA], A
+    # Set re-fire sit-out (DF1D = 30 frames). Use DF1D so it can't be
+    # accidentally re-set by the colorize-skip DF1F path.
+    c.extend([0x3E, 0x1E, 0xEA, 0x1D, 0xDF])  # LD A, 30; LD [DF1D], A
 
     # Give the boss HP so it doesn't instantly die (which would trigger
     # the post-arena FFBA++ flow and make the cycle order weird).
@@ -201,18 +210,24 @@ def build_teleport_routine() -> bytes:
     not_combo_pos = len(c)
     c.extend([0xAF, 0xEA, 0x0C, 0xDF])    # XOR A; LD [DF0C], A
 
-    # ---- end / skip-colorize check ----
-    # If DF1F (skip counter) > 0, decrement and RET (skip colorize).
-    # Otherwise fall through (the post-patch JP routes to colorize handler).
+    # ---- end ----
+    # Decrement DF1D (re-fire sit-out) if > 0.
+    # Decrement DF1F (colorize-skip) if > 0 — if so, RET (skip colorize).
     end_pos = len(c)
+    # DF1D decrement
+    c.extend([0xFA, 0x1D, 0xDF])          # LD A, [DF1D]
+    c.extend([0xB7])                      # OR A
+    c.extend([0x28, 0x05])                # JR Z, +5 skip dec
+    c.extend([0x3D])                      # DEC A
+    c.extend([0xEA, 0x1D, 0xDF])          # LD [DF1D], A
+    # DF1F gate (skip colorize while > 0)
     c.extend([0xFA, 0x1F, 0xDF])          # LD A, [DF1F]
     c.extend([0xB7])                      # OR A
-    c.extend([0x28, 0x05])                # JR Z, +5 (no skip needed)
+    c.extend([0x28, 0x05])                # JR Z, +5 → JP COLORIZE patch
     c.extend([0x3D])                      # DEC A
     c.extend([0xEA, 0x1F, 0xDF])          # LD [DF1F], A
-    c.extend([0xC9])                      # RET  (skip colorize)
-    # JR Z lands here, normal path: this RET gets patched to JP COLORIZE
-    c.extend([0xC9])                      # RET  (will be patched to JP)
+    c.extend([0xC9])                      # RET (skip colorize)
+    c.extend([0xC9])                      # RET (will be patched to JP)
 
     # Patch JR offsets
     def patch(pos, target):
@@ -224,7 +239,8 @@ def build_teleport_routine() -> bytes:
     patch(j_not_combo_1, not_combo_pos)
     patch(j_not_combo_2, not_combo_pos)
     patch(j_end_debounced, end_pos)
-    patch(j_end_sitout, end_pos)
+    if j_end_sitout is not None:
+        patch(j_end_sitout, end_pos)
 
     return bytes(c)
 
