@@ -125,23 +125,33 @@ def build_teleport_routine() -> bytes:
     copy_done_pos = len(c)
 
     # ---- Combo + guard + debounce checks ----
-    # FF93 & 0x0C == 0x0C ?
+    # SELECT+START (bits 2,3 = 0x0C). mgba defaults: Backspace + Enter.
     c.extend([0xF0, 0x93])                # LDH A, [FF93]
     c.extend([0xE6, 0x0C])                # AND 0x0C
     c.extend([0xFE, 0x0C])                # CP 0x0C
     j_not_combo_1 = len(c) + 1
     c.extend([0x20, 0x00])                # JR NZ, not_combo
 
-    # D880 == 0x02 (dungeon only)
+    # D880 guard: accept dungeon (0x02), splash (0x18), and any arena
+    # (0x0C..0x14) so cycling between bosses works. Reject only the very
+    # early uninitialized / title states (0x00, 0x01).
     c.extend([0xFA, 0x80, 0xD8])          # LD A, [D880]
     c.extend([0xFE, 0x02])                # CP 0x02
     j_not_combo_2 = len(c) + 1
-    c.extend([0x20, 0x00])                # JR NZ, not_combo
+    c.extend([0x38, 0x00])                # JR C, not_combo  (D880 < 2: too early)
 
     # Debounce: DF0C
     c.extend([0xFA, 0x0C, 0xDF])          # LD A, [DF0C]
     c.extend([0xB7])                      # OR A
     j_end_debounced = len(c) + 1
+    c.extend([0x20, 0x00])                # JR NZ, end
+
+    # Sit-out gate: DF1F > 0 means previous arena init still settling —
+    # don't fire again, even if combo is pressed and debounce is clear.
+    # This prevents overlapping teleports that corrupt arena state.
+    c.extend([0xFA, 0x1F, 0xDF])          # LD A, [DF1F]
+    c.extend([0xB7])                      # OR A
+    j_end_sitout = len(c) + 1
     c.extend([0x20, 0x00])                # JR NZ, end
 
     # ---- FIRE ----
@@ -150,14 +160,23 @@ def build_teleport_routine() -> bytes:
     # Set colorize-skip frame counter DF1F = 60 (≈ 1 sec; arena init takes
     # ~10 frames in PyBoy, 60 is a safe margin before colorize re-engages)
     c.extend([0x3E, 0x3C, 0xEA, 0x1F, 0xDF])  # LD A, 60; LD [DF1F], A
-    # Cycle boss counter DF0B (0..8 wrap)
-    c.extend([0xFA, 0x0B, 0xDF])          # LD A, [DF0B]
+    # Cycle: read CURRENT FFBA, INC, wrap if >= 9, write back.
+    c.extend([0xF0, 0xBA])                # LDH A, [FFBA]
     c.extend([0x3C])                      # INC A
     c.extend([0xFE, 0x09])                # CP 9
     c.extend([0x38, 0x01])                # JR C, no_wrap
     c.extend([0xAF])                      # XOR A
-    c.extend([0xEA, 0x0B, 0xDF])          # LD [DF0B], A
-    c.extend([0xE0, 0xBA])                # LDH [FFBA], A (boss index)
+    c.extend([0xE0, 0xBA])                # LDH [FFBA], A   (new boss)
+
+    # Give the boss HP so it doesn't instantly die (which would trigger
+    # the post-arena FFBA++ flow and make the cycle order weird).
+    # DCBB = boss HP per CLAUDE.md.
+    c.extend([0x3E, 0x80])                # LD A, 0x80
+    c.extend([0xEA, 0xBB, 0xDC])          # LD [DCBB], A
+    # Sara HP (DCDC = sub, DCDD = main) — give max so she doesn't die.
+    c.extend([0x3E, 0xFF])                # LD A, 0xFF
+    c.extend([0xEA, 0xDC, 0xDC])          # LD [DCDC], A
+    c.extend([0xEA, 0xDD, 0xDC])          # LD [DCDD], A
     # FFBF = 0
     c.extend([0xAF])                      # XOR A
     c.extend([0xE0, 0xBF])                # LDH [FFBF], A
@@ -205,6 +224,7 @@ def build_teleport_routine() -> bytes:
     patch(j_not_combo_1, not_combo_pos)
     patch(j_not_combo_2, not_combo_pos)
     patch(j_end_debounced, end_pos)
+    patch(j_end_sitout, end_pos)
 
     return bytes(c)
 
