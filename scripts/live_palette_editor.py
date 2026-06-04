@@ -215,10 +215,23 @@ Make sure mGBA was launched with <code>--script scripts/lua/live_palettes.lua</c
 <button onclick="copyState()">Copy current as JSON</button>
 """]
 
-    # DX Teleport section removed — the JP-from-VBlank approach
-    # freezes because arena entry calls a STAT-mode busy-wait that
-    # never resolves inside VBlank. Re-add when we have a clean
-    # main-loop hook or per-boss save states.
+    # DX Teleport section. Writes DX:N to /tmp/live_palettes.txt → Lua
+    # writes DF0A = N → ROM-side teleport hook consumes it (when wired).
+    # Currently the consumer in penta_dragon_dx_teleport.gb (v16) is NOT
+    # present — these buttons will be no-ops until the v17 freeze in
+    # mgba is resolved (see docs/dx_teleport_browser_integration_findings.md).
+    html_parts.append('<div class="section"><h2>DX Teleport</h2>')
+    html_parts.append('<p style="font-size:0.85em;color:#888;">'
+                      'One-shot teleport to boss arena via the natural game state '
+                      'machine. Writes DF0A = boss+1 for the ROM hook to consume. '
+                      'Status: <em>browser → DF0A wiring works, ROM consumer pending</em>.</p>')
+    html_parts.append('<div style="display:flex;flex-wrap:wrap;gap:0.3em;">')
+    for ffba, name, _d880, _hint in STAGE_BOSSES:
+        html_parts.append(
+            f'<button onclick="dxTeleport({ffba + 1})">'
+            f'{name}<br><span style="font-size:0.7em;color:#aaa;">DF0A={ffba + 1}</span></button>'
+        )
+    html_parts.append("</div></div>")
 
     # ─── Soft state-byte hold (legacy fallback if DX hook not present) ───
     html_parts.append('<div class="section"><h2>State-byte Hold (legacy)</h2>')
