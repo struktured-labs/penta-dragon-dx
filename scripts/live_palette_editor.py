@@ -217,14 +217,18 @@ Make sure mGBA was launched with <code>--script scripts/lua/live_palettes.lua</c
 
     # DX Teleport section. Writes DX:N to /tmp/live_palettes.txt → Lua
     # writes DF0A = N → ROM-side teleport hook consumes it (when wired).
-    # Currently the consumer in penta_dragon_dx_teleport.gb (v16) is NOT
-    # present — these buttons will be no-ops until the v17 freeze in
-    # mgba is resolved (see docs/dx_teleport_browser_integration_findings.md).
+    # Lua workaround (2026-06-03): instead of writing DF0A for a ROM
+    # consumer, Lua simulates the SELECT+START combo: pre-write FFBA so
+    # the ROM's INC lands on the target, then pulse FF93=0x0C for ~6 frames
+    # via emu:setKeys. Bypasses the v17 freeze entirely.
+    # Requires: rom/working/penta_dragon_dx_teleport.gb (v16, tag
+    # v3.01-teleport-all-bosses). Tested working in mgba 0.10.5.
     html_parts.append('<div class="section"><h2>DX Teleport</h2>')
     html_parts.append('<p style="font-size:0.85em;color:#888;">'
-                      'One-shot teleport to boss arena via the natural game state '
-                      'machine. Writes DF0A = boss+1 for the ROM hook to consume. '
-                      'Status: <em>browser → DF0A wiring works, ROM consumer pending</em>.</p>')
+                      'Click any boss → Lua pre-writes FFBA and pulses SELECT+START '
+                      '→ ROM combo handler does INC + arena init. Requires the v16 '
+                      '<code>penta_dragon_dx_teleport.gb</code> ROM and dungeon state '
+                      '(D880=0x02). Cycles cleanly through all 9 bosses.</p>')
     html_parts.append('<div style="display:flex;flex-wrap:wrap;gap:0.3em;">')
     for ffba, name, _d880, _hint in STAGE_BOSSES:
         html_parts.append(

@@ -124,7 +124,13 @@ end
 -- can't override our changes when it triggers a palette reload on
 -- state change (room transition, miniboss spawn, etc.)
 local cached = nil
-local pending_dx = nil  -- one-shot DX teleport request (writes DF0A)
+
+-- DX combo simulation (workaround for v17 freeze, see docs/HANDOFF_2026_06_01.md).
+-- Strategy: pre-write FFBA so the ROM's INC lands on the target boss,
+-- then pulse FF93=0x0C (SELECT+START) for several frames via emu:setKeys.
+-- The ROM's existing combo handler at 0x6E80 reads FF93 and dispatches.
+-- combo_state = {target = 0..8, phase = "pre"|"press"|"release", frames = N}
+local combo_state = nil
 
 callbacks:add("frame", function()
     f = f + 1
@@ -150,9 +156,10 @@ callbacks:add("frame", function()
                 end
                 local nt = cached and cached.dx_teleport or 0
                 log(string.format("f%d: Loaded %d writes, %d forces, dx_teleport=%d", f, nw, nf, nt))
-                -- Capture DX teleport as one-shot
+                -- Queue combo simulation for DX teleport request
                 if cached and cached.dx_teleport then
-                    pending_dx = cached.dx_teleport
+                    local target = cached.dx_teleport - 1   -- DF0A 1..9 → FFBA 0..8
+                    combo_state = {target = target, phase = "pre", frames = 0}
                     cached.dx_teleport = nil  -- consume
                 end
             end
@@ -169,31 +176,39 @@ callbacks:add("frame", function()
         end
     end
 
-    -- DX teleport (one-shot): write DF0A. ROM-side hook in
-    -- v3.01 colorize handler reads DF0A, if non-zero treats DF0A-1
-    -- as boss FFBA, JPs to bank2:0x4000 boss arena entry.
-    if pending_dx then
-        log(string.format("f%d: PRE-DX  D880=0x%02X FFBA=%d FFC1=%d FFBD=%d DF0A_before=%d",
-            f, emu:read8(0xD880), emu:read8(0xFFBA), emu:read8(0xFFC1),
-            emu:read8(0xFFBD), emu:read8(0xDF0A)))
-        emu:write8(0xDF0A, pending_dx)
-        log(string.format("f%d: WROTE DF0A=%d", f, pending_dx))
-        pending_dx = nil
-        -- Schedule post-teleport diagnostic
-        post_dx_check_frames = 60
-    end
-
-    -- After a DX request, log state every few frames to see what happened
-    if post_dx_check_frames and post_dx_check_frames > 0 then
-        if post_dx_check_frames % 10 == 0 then
-            log(string.format("f%d: POST-DX (%d remaining) D880=0x%02X FFBA=%d FFC1=%d FFBD=%d DF0A=%d DF0B=0x%02X",
-                f, post_dx_check_frames, emu:read8(0xD880), emu:read8(0xFFBA),
-                emu:read8(0xFFC1), emu:read8(0xFFBD), emu:read8(0xDF0A),
-                emu:read8(0xDF0B)))
+    -- DX combo simulator state machine.
+    -- The v16 teleport ROM (`penta_dragon_dx_teleport.gb`) checks FF93 for
+    -- 0x0C (SELECT+START) in its 0x6E80 routine and cycles FFBA via INC,
+    -- wrap-at-9. To land on target boss N: pre-set FFBA = (N - 1) mod 9
+    -- so the ROM's INC arrives at N. Wraps cleanly for N=0 → pre=8 → INC=9
+    -- → "CP 9; XOR A" → 0.
+    -- Note: this overrides player joypad input for ~10 frames. Acceptable
+    -- for a "click teleport in browser" feature; player likely isn't also
+    -- mashing buttons.
+    if combo_state then
+        if combo_state.phase == "pre" then
+            -- Pre-write FFBA so ROM's INC lands on target
+            local pre = combo_state.target - 1
+            if pre < 0 then pre = 8 end
+            emu:write8(0xFFBA, pre)
+            log(string.format("f%d: combo PRE target=%d, FFBA=%d", f, combo_state.target, pre))
+            combo_state.phase = "press"
+            combo_state.frames = 6  -- hold SELECT+START for 6 frames
+        elseif combo_state.phase == "press" then
+            emu:setKeys(0x0C)  -- SELECT + START
+            combo_state.frames = combo_state.frames - 1
+            if combo_state.frames <= 0 then
+                combo_state.phase = "release"
+                combo_state.frames = 6
+            end
+        elseif combo_state.phase == "release" then
+            emu:setKeys(0)
+            combo_state.frames = combo_state.frames - 1
+            if combo_state.frames <= 0 then
+                log(string.format("f%d: combo DONE D880=0x%02X FFBA=%d",
+                    f, emu:read8(0xD880), emu:read8(0xFFBA)))
+                combo_state = nil
+            end
         end
-        post_dx_check_frames = post_dx_check_frames - 1
     end
 end)
-
--- Module-level state for post-teleport diagnostic
-post_dx_check_frames = 0

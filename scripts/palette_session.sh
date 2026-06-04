@@ -6,8 +6,11 @@
 #   ./palette_session.sh status
 #
 # Starts:
-#   1. mGBA-qt loading the ROM (default: penta_dragon_dx_v301.gb) with the
-#      live_palettes.lua script attached so it reacts to colour changes.
+#   1. mGBA-qt loading the ROM (default: penta_dragon_dx_teleport.gb, which
+#      includes the SELECT+START combo handler used by the live editor's
+#      DX Teleport buttons via Lua-side combo simulation) with the
+#      live_palettes.lua script attached so it reacts to colour changes
+#      and DX teleport requests.
 #   2. Python HTTP server at localhost:8077 serving the colour-picker UI.
 #   3. Browser pointed at the UI (best-effort: tries xdg-open / open).
 #
@@ -17,7 +20,7 @@
 set -e
 
 PROJECT_DIR="/home/struktured/projects/penta-dragon-dx-claude"
-ROM_DEFAULT="rom/working/penta_dragon_dx_v301.gb"
+ROM_DEFAULT="rom/working/penta_dragon_dx_teleport.gb"
 LUA_SCRIPT="scripts/lua/live_palettes.lua"
 EDITOR_SCRIPT="scripts/live_palette_editor.py"
 PORT=8077
