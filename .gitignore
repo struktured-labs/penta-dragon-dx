@@ -44,3 +44,8 @@ scripts/probes/.phantom_d887_baseline.json
 rl/saves/user_demo/*.ss
 rl/saves/user_demo/*.sav
 !rl/saves/user_demo/MANIFEST.md
+
+# mGBA-emitted ROM-side screenshots and save files (transient)
+rom/working/*.png
+rom/working/*.sav
+rom/working/*.ss*

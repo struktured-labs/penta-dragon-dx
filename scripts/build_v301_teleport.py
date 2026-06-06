@@ -52,13 +52,35 @@ LANDING_PAD_ROM_ADDR = 0x6F80  # landing pad source (gets copied to WRAM DB00)
                               # overwriting the landing pad source.
 LANDING_PAD_WRAM = 0xDB00      # runtime landing pad location
 
-# ---- scene-aware bg_table (Phase 1a: Shalamar only) ----
+# ---- scene-aware bg_table (Phase 1b: all 9 boss arenas) ----
 # Scene-detect routine sits in the gap between landing pad and bg_table.
 # bg_table variants live after attr_comp (which ends ~0x713A).
-SCENE_DETECT_ADDR = 0x6FB0     # ~33 bytes; landing pad source ends ~0x6FA8
-DUNGEON_TABLE_ADDR = 0x7000    # existing bg_table (unchanged)
-SHALAMAR_TABLE_ADDR = 0x7200   # Shalamar arena bg_table (D880=0x0C)
-# Reserve 0x7300, 0x7400, ... for additional arena tables when designed.
+#
+# Layout in bank 13 (arenas are exactly 256 bytes apart so the dispatcher
+# can compute the address with one ADD to the high byte):
+#   0x6FB0  scene_detect routine  (≤ 80 bytes)
+#   0x7000  DUNGEON bg_table       (existing — unchanged)
+#   0x7200  SHALAMAR    (D880=0x0C, FFBA=0)
+#   0x7300  RIFF        (D880=0x0D, FFBA=1)
+#   0x7400  CRYSTAL_DRAGON (D880=0x0E, FFBA=2)
+#   0x7500  CAMEO       (D880=0x0F, FFBA=3)
+#   0x7600  TED         (D880=0x10, FFBA=4)
+#   0x7700  TROOP       (D880=0x11, FFBA=5)
+#   0x7800  FAZE        (D880=0x12, FFBA=6)
+#   0x7900  ANGELA      (D880=0x13, FFBA=7)
+#   0x7A00  PENTA_DRAGON (D880=0x14, FFBA=8)
+SCENE_DETECT_ADDR = 0x6FB0
+DUNGEON_TABLE_ADDR = 0x7000
+ARENA_BASE_ADDR = 0x7200       # arena_idx 0..8 → 0x7200 + idx*0x100
+SHALAMAR_TABLE_ADDR = 0x7200
+RIFF_TABLE_ADDR = 0x7300
+CRYSTAL_DRAGON_TABLE_ADDR = 0x7400
+CAMEO_TABLE_ADDR = 0x7500
+TED_TABLE_ADDR = 0x7600
+TROOP_TABLE_ADDR = 0x7700
+FAZE_TABLE_ADDR = 0x7800
+ANGELA_TABLE_ADDR = 0x7900
+PENTA_DRAGON_TABLE_ADDR = 0x7A00
 DF23_PREV_SCENE = 0xDF23       # WRAM byte: previous D880 value
                               # (uninitialized → first frame triggers copy
                               # to whatever the current D880 maps to)
@@ -107,37 +129,211 @@ def _bg_table_shalamar() -> bytes:
     return bytes(t)
 
 
-def build_scene_detect(dungeon_addr: int, shalamar_addr: int) -> bytes:
+# ----------------------------------------------------------------------
+# Per-boss bg_tables — lore-themed defaults.
+#
+# All 8 BG palettes (0..7) share CRAM with the existing v3.01 dungeon
+# colorization. Reassigning tile IDs to a new palette index swaps THAT
+# palette's existing colors onto the boss body — so the lore theme is
+# encoded by *which palette indices* a boss reuses, not by new CRAM.
+# Per-arena CRAM overrides are a future phase; for now the user can tune
+# each boss's chosen palette via the live editor.
+#
+# Tile-ID ranges below derive from the all-bosses probe captured to
+# /tmp/all_bosses/*.png + summary.log. They are approximate — many
+# bosses have stable body bands (rows 0-12) but the exact range varies
+# between splash (D880=0x0B) and arena (0x0C..0x14) states. Defaults
+# below cover the union so the colorization "sticks" across both.
+#
+# Palette index meanings (from v3.01 dungeon colorizer):
+#   pal 0  background / floor
+#   pal 1  walls (variant A)
+#   pal 2  walls (variant B)
+#   pal 3  free — was hazards (warm yellow/red)
+#   pal 4  free — was decorations (cool blue/teal)
+#   pal 5  free — was warm accents (gold/orange)
+#   pal 6  free — was cool walls (silver/teal)
+#   pal 7  free — was deep accents (purple/dark)
+# Body tiles get assigned to pals 3-7 mostly so we don't clobber floors.
+# ----------------------------------------------------------------------
+
+
+def _fill(t: bytearray, lo: int, hi: int, pal: int) -> None:
+    """Inclusive tile-ID range → palette index."""
+    for i in range(lo, hi + 1):
+        t[i] = pal & 7
+
+
+def _bg_table_riff() -> bytes:
+    """Riff (Stage 2): orange/yellow demonic skull with arms.
+
+    Body tile range: 0x10..0xFF spans the whole boss across rows 0-13.
+    Theme: hot/fiery — yellow head, orange body, dark accents.
+    """
+    t = bytearray(256)
+    _fill(t, 0x10, 0x4F, 5)   # upper head/skull → warm gold (pal 5)
+    _fill(t, 0x50, 0x9F, 3)   # mid arms/body   → red/orange (pal 3)
+    _fill(t, 0xA0, 0xFE, 7)   # lower limbs    → dark accents (pal 7)
+    t[0xFF] = 0
+    return bytes(t)
+
+
+def _bg_table_crystal_dragon() -> bytes:
+    """Crystal Dragon (Stage 3): icy blue crystal/UFO.
+
+    Body tile range observed: 0x80..0xFB across rows 0-10.
+    Theme: cold/crystalline — pale blue dome, deeper blue body, white shine.
+    """
+    t = bytearray(256)
+    _fill(t, 0x80, 0xAF, 4)   # upper dome  → pale blue (pal 4)
+    _fill(t, 0xB0, 0xDF, 6)   # lower body → silver/teal (pal 6)
+    _fill(t, 0xE0, 0xFE, 5)   # core sparkle → bright (pal 5)
+    t[0xFF] = 0
+    return bytes(t)
+
+
+def _bg_table_cameo() -> bytes:
+    """Cameo (Stage 4): silver skull-faced ornament with ribbon.
+
+    Tile range observed (splash state): 0x06..0x7F centered, 0x08-0x0F
+    in side rails.
+    Theme: cool elegance — pale face, silver body, pink ribbon.
+    """
+    t = bytearray(256)
+    _fill(t, 0x06, 0x1F, 4)   # crown / upper border → pale blue (pal 4)
+    _fill(t, 0x20, 0x4F, 6)   # face                  → silver (pal 6)
+    _fill(t, 0x50, 0x7F, 3)   # ribbon / lower body  → pink (pal 3)
+    t[0xFF] = 0
+    return bytes(t)
+
+
+def _bg_table_ted() -> bytes:
+    """Ted (Stage 5): stone-armored creature with glowing red eyes.
+
+    Tile range observed: 0x01..0x76 (body) interleaved with 0x77..0x85
+    (background decoration).
+    Theme: stone gray with red glowing eyes.
+    """
+    t = bytearray(256)
+    _fill(t, 0x05, 0x1F, 3)   # red glowing core (eyes)  → red (pal 3)
+    _fill(t, 0x20, 0x4F, 6)   # stone body              → gray (pal 6)
+    _fill(t, 0x50, 0x76, 7)   # dark tendrils           → dark (pal 7)
+    # 0x77..0x85 is the floor-pattern dungeon background; leave as pal 0
+    t[0xFF] = 0
+    return bytes(t)
+
+
+def _bg_table_troop() -> bytes:
+    """Troop (Stage 6): dark multi-headed skull/dragon with yellow glow.
+
+    Tile range observed (splash state): 0x05..0xA4 spans the boss.
+    Theme: dark militia — black body, yellow glow accents, blood reds.
+    """
+    t = bytearray(256)
+    _fill(t, 0x05, 0x3F, 7)   # head structure → dark (pal 7)
+    _fill(t, 0x40, 0x7F, 6)   # body          → gray (pal 6)
+    _fill(t, 0x80, 0xA4, 5)   # glow accents → gold (pal 5)
+    t[0xFF] = 0
+    return bytes(t)
+
+
+def _bg_table_faze() -> bytes:
+    """Faze (Stage 7): yellow/orange demonic with horned crystal head.
+
+    Body tile range estimate: 0x10..0xC0 (centered body).
+    Theme: phase/ethereal gold with cool crystal head.
+    """
+    t = bytearray(256)
+    _fill(t, 0x10, 0x3F, 4)   # crystal head/horns → cool blue (pal 4)
+    _fill(t, 0x40, 0x7F, 5)   # main body         → gold (pal 5)
+    _fill(t, 0x80, 0xBF, 3)   # lower torso       → orange (pal 3)
+    _fill(t, 0xC0, 0xFE, 7)   # accents           → dark (pal 7)
+    t[0xFF] = 0
+    return bytes(t)
+
+
+def _bg_table_angela() -> bytes:
+    """Angela (hidden boss): octopus/spider with tentacles.
+
+    Body tile range estimate: 0x10..0xE0 (centered, with tentacles wide).
+    Theme: silvery hidden boss — deep purple body, silver tentacles.
+    """
+    t = bytearray(256)
+    _fill(t, 0x10, 0x3F, 6)   # central head → silver (pal 6)
+    _fill(t, 0x40, 0x9F, 7)   # body         → deep purple (pal 7)
+    _fill(t, 0xA0, 0xE0, 4)   # tentacles    → cool accent (pal 4)
+    t[0xFF] = 0
+    return bytes(t)
+
+
+def _bg_table_penta_dragon() -> bytes:
+    """Penta Dragon (Final boss): 5-headed dragon with red banner.
+
+    Body tile range estimate: 0x05..0xFB — large dramatic boss.
+    Theme: regal final boss — multi-color: gold body, red banner, white wings.
+    """
+    t = bytearray(256)
+    _fill(t, 0x05, 0x2F, 4)   # upper heads     → cool/silver (pal 4)
+    _fill(t, 0x30, 0x6F, 5)   # body / wings    → gold (pal 5)
+    _fill(t, 0x70, 0xAF, 3)   # red banner      → red (pal 3)
+    _fill(t, 0xB0, 0xFE, 7)   # lower body     → dark regal (pal 7)
+    t[0xFF] = 0
+    return bytes(t)
+
+
+def build_scene_detect(dungeon_addr: int, arena_base_addr: int) -> bytes:
     """Detect D880 scene change, swap WRAM 0xDA00 with the right bg_table.
 
     Reads D880 (WRAM scene state). Compares to DF23 (previous). If same,
     early RET. If different, dispatches:
-      D880 == 0x0C → Shalamar table
-      else         → dungeon table (default)
+      D880 == 0x0C..0x14 (arena) → arena_base + (D880-0x0C)*0x100
+      else                       → dungeon table (default)
     Copies 256 bytes from ROM table → WRAM 0xDA00. Updates DF23.
 
     Called from the teleport routine (which runs every VBlank with bank
     13 mapped). Cost when scene unchanged: ~16T (read+compare+RET).
     Cost on scene change: ~16T + 256 bytes copy ≈ 4100T (well under VBlank).
 
-    Layout: ~33 bytes.
+    Math trick: arena tables sit 256 bytes apart so the dispatcher only
+    needs to compute `H = arena_base_high + (D880 - 0x0C)` and clear L.
     """
+    arena_base_high = (arena_base_addr >> 8) & 0xFF
+    assert (arena_base_addr & 0xFF) == 0, "arena_base must be page-aligned"
+
     c = bytearray()
     c.extend([0xFA, 0x80, 0xD8])          # LD A, [D880]
     c.extend([0x21, DF23_PREV_SCENE & 0xFF, (DF23_PREV_SCENE >> 8) & 0xFF])
     c.extend([0xBE])                      # CP [HL]
     c.extend([0xC8])                      # RET Z (no change — fast path)
 
-    # Scene changed: save new value, dispatch
+    # Scene changed: save new value
     c.extend([0x77])                      # LD [HL], A   (DF23 = new D880)
-    c.extend([0xFE, 0x0C])                # CP 0x0C   (Shalamar?)
-    j_not_shalamar = len(c) + 1
-    c.extend([0x20, 0x00])                # JR NZ, not_shalamar
-    c.extend([0x21, shalamar_addr & 0xFF, (shalamar_addr >> 8) & 0xFF])
-    c.extend([0x18, 0x03])                # JR +3   (skip the dungeon LD HL)
-    # not_shalamar target
-    c[j_not_shalamar] = (len(c) - j_not_shalamar - 1) & 0xFF
-    c.extend([0x21, dungeon_addr & 0xFF, (dungeon_addr >> 8) & 0xFF])
+
+    # Compute arena_idx = D880 - 0x0C. If carry → too low → dungeon.
+    # If result >= 9 → too high → dungeon. Else load arena table.
+    c.extend([0xD6, 0x0C])                # SUB 0x0C
+    j_dungeon_lo = len(c) + 1
+    c.extend([0x38, 0x00])                # JR C, dungeon  (was < 0x0C)
+    c.extend([0xFE, 0x09])                # CP 9
+    j_dungeon_hi = len(c) + 1
+    c.extend([0x30, 0x00])                # JR NC, dungeon (was >= 0x15)
+
+    # Arena: H = arena_base_high + A, L = 0
+    c.extend([0xC6, arena_base_high])     # ADD A, arena_base_high
+    c.extend([0x67])                      # LD H, A
+    c.extend([0x2E, 0x00])                # LD L, 0
+    j_copy = len(c) + 1
+    c.extend([0x18, 0x00])                # JR copy
+
+    # dungeon target
+    dungeon_pos = len(c)
+    c[j_dungeon_lo] = (dungeon_pos - j_dungeon_lo - 1) & 0xFF
+    c[j_dungeon_hi] = (dungeon_pos - j_dungeon_hi - 1) & 0xFF
+    c.extend([0x21, dungeon_addr & 0xFF, (dungeon_addr >> 8) & 0xFF])  # LD HL, dungeon
+
+    # copy target
+    copy_pos = len(c)
+    c[j_copy] = (copy_pos - j_copy - 1) & 0xFF
 
     # Copy 256 bytes: HL → DE = 0xDA00
     c.extend([0x11, 0x00, 0xDA])          # LD DE, 0xDA00
@@ -360,16 +556,32 @@ def main():
     off = BANK13 + (LANDING_PAD_ROM_ADDR - 0x4000)
     rom[off:off + len(lp)] = lp
 
-    # 2a. Scene-aware bg_table system (Phase 1a: Shalamar)
-    # Write Shalamar's bg_table at the reserved ROM address.
-    shalamar_table = _bg_table_shalamar()
-    assert len(shalamar_table) == 256
-    off = BANK13 + (SHALAMAR_TABLE_ADDR - 0x4000)
-    rom[off:off + 256] = shalamar_table
-    print(f"  Shalamar bg_table: 256 bytes at bank13:0x{SHALAMAR_TABLE_ADDR:04X}")
+    # 2a. Scene-aware bg_table system (Phase 1b: all 9 boss arenas)
+    arena_tables = [
+        ("Shalamar",      SHALAMAR_TABLE_ADDR,        _bg_table_shalamar),
+        ("Riff",          RIFF_TABLE_ADDR,            _bg_table_riff),
+        ("Crystal Dragon", CRYSTAL_DRAGON_TABLE_ADDR,  _bg_table_crystal_dragon),
+        ("Cameo",         CAMEO_TABLE_ADDR,           _bg_table_cameo),
+        ("Ted",           TED_TABLE_ADDR,             _bg_table_ted),
+        ("Troop",         TROOP_TABLE_ADDR,           _bg_table_troop),
+        ("Faze",          FAZE_TABLE_ADDR,            _bg_table_faze),
+        ("Angela",        ANGELA_TABLE_ADDR,          _bg_table_angela),
+        ("Penta Dragon",  PENTA_DRAGON_TABLE_ADDR,    _bg_table_penta_dragon),
+    ]
+    # Sanity: all arena slots are 256 apart from ARENA_BASE so the
+    # SUB-then-ADD dispatch is correct.
+    for i, (name, addr, _) in enumerate(arena_tables):
+        expected = ARENA_BASE_ADDR + i * 0x100
+        assert addr == expected, f"{name} slot 0x{addr:04X} != expected 0x{expected:04X}"
+    for name, addr, build_fn in arena_tables:
+        table = build_fn()
+        assert len(table) == 256, f"{name} table size {len(table)} != 256"
+        off = BANK13 + (addr - 0x4000)
+        rom[off:off + 256] = table
+        print(f"  {name:14s} bg_table: 256 bytes at bank13:0x{addr:04X}")
 
     # Write scene-detect routine. Verify we don't overrun the landing pad.
-    sd = build_scene_detect(DUNGEON_TABLE_ADDR, SHALAMAR_TABLE_ADDR)
+    sd = build_scene_detect(DUNGEON_TABLE_ADDR, ARENA_BASE_ADDR)
     assert SCENE_DETECT_ADDR + len(sd) <= DUNGEON_TABLE_ADDR, \
         f"scene-detect overruns dungeon table: 0x{SCENE_DETECT_ADDR + len(sd):04X} > 0x{DUNGEON_TABLE_ADDR:04X}"
     off = BANK13 + (SCENE_DETECT_ADDR - 0x4000)
