@@ -297,9 +297,14 @@ def create_inline_tile_copy() -> bytes:
     return bytes(code)
 
 
-def build_v300():
+def build_v300(output_path=None, sweep_fn=None):
     input_rom = Path("rom/Penta Dragon (J).gb")
-    output_path = Path("rom/working/penta_dragon_dx_v300.gb")
+    if output_path is None:
+        output_path = Path("rom/working/penta_dragon_dx_v300.gb")
+    else:
+        output_path = Path(output_path)
+    if sweep_fn is None:
+        sweep_fn = create_bg_sweep_viewport_gated
     palette_yaml = Path("palettes/penta_palettes_v097.yaml")
 
     rom = bytearray(input_rom.read_bytes())
@@ -369,7 +374,7 @@ def build_v300():
     # handles edge cases (boot-up frames, tilemap regions not touched by the
     # tile copy). Keeping bg_sweep also preserves the frame timing that the
     # game state machine implicitly depends on.
-    sweep = create_bg_sweep_viewport_gated(bg_table_addr, bg_sweep_addr)
+    sweep = sweep_fn(bg_table_addr, bg_sweep_addr)
     w(bg_sweep_addr, sweep)
 
     # ============================================================
