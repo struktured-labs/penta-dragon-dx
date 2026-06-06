@@ -145,16 +145,17 @@ def _bg_table_shalamar() -> bytes:
 # between splash (D880=0x0B) and arena (0x0C..0x14) states. Defaults
 # below cover the union so the colorization "sticks" across both.
 #
-# Palette index meanings (from v3.01 dungeon colorizer):
-#   pal 0  background / floor
-#   pal 1  walls (variant A)
-#   pal 2  walls (variant B)
-#   pal 3  free — was hazards (warm yellow/red)
-#   pal 4  free — was decorations (cool blue/teal)
-#   pal 5  free — was warm accents (gold/orange)
-#   pal 6  free — was cool walls (silver/teal)
-#   pal 7  free — was deep accents (purple/dark)
-# Body tiles get assigned to pals 3-7 mostly so we don't clobber floors.
+# ACTUAL palette CRAM contents (from palettes/penta_palettes_v097.yaml):
+#   BG0  Dungeon       : white / light blue / teal  (floor)
+#   BG1  Items         : yellow / gold / dark gold
+#   BG2  Decorative    : light magenta / purple / dark purple
+#   BG3  Nature        : bright green / forest green / dark green
+#   BG4  Water/Ice     : cyan / teal / dark teal
+#   BG5  Fire/Lava     : yellow / orange / red
+#   BG6  Stone/Castle  : light slate / blue-gray / dark slate
+#   BG7  Mystery       : sky blue / royal blue / navy
+# Body tiles get assigned to pals 1..7 (never 0 — that's floor) and
+# the chosen index is the one whose existing CRAM matches the lore.
 # ----------------------------------------------------------------------
 
 
@@ -165,15 +166,18 @@ def _fill(t: bytearray, lo: int, hi: int, pal: int) -> None:
 
 
 def _bg_table_riff() -> bytes:
-    """Riff (Stage 2): orange/yellow demonic skull with arms.
+    """Riff (Stage 2): fiery demonic skull with arms.
 
-    Body tile range: 0x10..0xFF spans the whole boss across rows 0-13.
-    Theme: hot/fiery — yellow head, orange body, dark accents.
+    Theme: fire demon — flame head, gold body, stone limbs.
+    Picks:
+      BG5 (fire: yellow/orange/red)  — skull
+      BG1 (gold)                      — body
+      BG6 (stone slate)               — limbs
     """
     t = bytearray(256)
-    _fill(t, 0x10, 0x4F, 5)   # upper head/skull → warm gold (pal 5)
-    _fill(t, 0x50, 0x9F, 3)   # mid arms/body   → red/orange (pal 3)
-    _fill(t, 0xA0, 0xFE, 7)   # lower limbs    → dark accents (pal 7)
+    _fill(t, 0x10, 0x4F, 5)   # head/skull → fire
+    _fill(t, 0x50, 0x9F, 1)   # body       → gold
+    _fill(t, 0xA0, 0xFE, 6)   # limbs      → stone gray
     t[0xFF] = 0
     return bytes(t)
 
@@ -181,28 +185,33 @@ def _bg_table_riff() -> bytes:
 def _bg_table_crystal_dragon() -> bytes:
     """Crystal Dragon (Stage 3): icy blue crystal/UFO.
 
-    Body tile range observed: 0x80..0xFB across rows 0-10.
-    Theme: cold/crystalline — pale blue dome, deeper blue body, white shine.
+    Theme: ice/crystal — cyan dome, navy depths, gold sparkle.
+    Picks:
+      BG4 (ice cyan/teal)  — dome
+      BG7 (navy mystery)   — body
+      BG1 (gold)           — sparkle core
     """
     t = bytearray(256)
-    _fill(t, 0x80, 0xAF, 4)   # upper dome  → pale blue (pal 4)
-    _fill(t, 0xB0, 0xDF, 6)   # lower body → silver/teal (pal 6)
-    _fill(t, 0xE0, 0xFE, 5)   # core sparkle → bright (pal 5)
+    _fill(t, 0x80, 0xAF, 4)   # upper dome   → ice
+    _fill(t, 0xB0, 0xDF, 7)   # lower body  → navy
+    _fill(t, 0xE0, 0xFE, 1)   # core sparkle → gold
     t[0xFF] = 0
     return bytes(t)
 
 
 def _bg_table_cameo() -> bytes:
-    """Cameo (Stage 4): silver skull-faced ornament with ribbon.
+    """Cameo (Stage 4): skull-faced ornament with ribbon.
 
-    Tile range observed (splash state): 0x06..0x7F centered, 0x08-0x0F
-    in side rails.
-    Theme: cool elegance — pale face, silver body, pink ribbon.
+    Theme: regal portrait — purple crown, stone face, gold ribbon.
+    Picks:
+      BG2 (purple/magenta)  — crown
+      BG6 (stone slate)     — face
+      BG1 (gold)            — ribbon / lower body
     """
     t = bytearray(256)
-    _fill(t, 0x06, 0x1F, 4)   # crown / upper border → pale blue (pal 4)
-    _fill(t, 0x20, 0x4F, 6)   # face                  → silver (pal 6)
-    _fill(t, 0x50, 0x7F, 3)   # ribbon / lower body  → pink (pal 3)
+    _fill(t, 0x06, 0x1F, 2)   # crown / upper border → purple
+    _fill(t, 0x20, 0x4F, 6)   # face                 → stone
+    _fill(t, 0x50, 0x7F, 1)   # ribbon / lower body → gold
     t[0xFF] = 0
     return bytes(t)
 
@@ -210,15 +219,16 @@ def _bg_table_cameo() -> bytes:
 def _bg_table_ted() -> bytes:
     """Ted (Stage 5): stone-armored creature with glowing red eyes.
 
-    Tile range observed: 0x01..0x76 (body) interleaved with 0x77..0x85
-    (background decoration).
-    Theme: stone gray with red glowing eyes.
+    Theme: stone golem — fire eyes, stone body, navy tendrils.
+    Picks:
+      BG5 (fire/red)   — eyes/core
+      BG6 (stone)      — body
+      BG7 (navy)       — tendrils
     """
     t = bytearray(256)
-    _fill(t, 0x05, 0x1F, 3)   # red glowing core (eyes)  → red (pal 3)
-    _fill(t, 0x20, 0x4F, 6)   # stone body              → gray (pal 6)
-    _fill(t, 0x50, 0x76, 7)   # dark tendrils           → dark (pal 7)
-    # 0x77..0x85 is the floor-pattern dungeon background; leave as pal 0
+    _fill(t, 0x05, 0x1F, 5)   # red glowing eyes  → fire
+    _fill(t, 0x20, 0x4F, 6)   # stone body        → stone
+    _fill(t, 0x50, 0x76, 7)   # dark tendrils    → navy
     t[0xFF] = 0
     return bytes(t)
 
@@ -226,28 +236,35 @@ def _bg_table_ted() -> bytes:
 def _bg_table_troop() -> bytes:
     """Troop (Stage 6): dark multi-headed skull/dragon with yellow glow.
 
-    Tile range observed (splash state): 0x05..0xA4 spans the boss.
-    Theme: dark militia — black body, yellow glow accents, blood reds.
+    Theme: war dragon — purple heads, stone body, gold accents.
+    Picks:
+      BG2 (purple)  — dark heads
+      BG6 (stone)   — body
+      BG1 (gold)    — glow accents
     """
     t = bytearray(256)
-    _fill(t, 0x05, 0x3F, 7)   # head structure → dark (pal 7)
-    _fill(t, 0x40, 0x7F, 6)   # body          → gray (pal 6)
-    _fill(t, 0x80, 0xA4, 5)   # glow accents → gold (pal 5)
+    _fill(t, 0x05, 0x3F, 2)   # head structure → purple
+    _fill(t, 0x40, 0x7F, 6)   # body          → stone
+    _fill(t, 0x80, 0xA4, 1)   # glow accents → gold
     t[0xFF] = 0
     return bytes(t)
 
 
 def _bg_table_faze() -> bytes:
-    """Faze (Stage 7): yellow/orange demonic with horned crystal head.
+    """Faze (Stage 7): demon with horned crystal head.
 
-    Body tile range estimate: 0x10..0xC0 (centered body).
-    Theme: phase/ethereal gold with cool crystal head.
+    Theme: phase/ethereal — ice horns, fire body, purple torso, navy accents.
+    Picks:
+      BG4 (ice cyan)   — head/horns
+      BG5 (fire)       — main body
+      BG2 (purple)     — lower torso
+      BG7 (navy)       — accents
     """
     t = bytearray(256)
-    _fill(t, 0x10, 0x3F, 4)   # crystal head/horns → cool blue (pal 4)
-    _fill(t, 0x40, 0x7F, 5)   # main body         → gold (pal 5)
-    _fill(t, 0x80, 0xBF, 3)   # lower torso       → orange (pal 3)
-    _fill(t, 0xC0, 0xFE, 7)   # accents           → dark (pal 7)
+    _fill(t, 0x10, 0x3F, 4)   # crystal head/horns → ice
+    _fill(t, 0x40, 0x7F, 5)   # main body          → fire
+    _fill(t, 0x80, 0xBF, 2)   # lower torso        → purple
+    _fill(t, 0xC0, 0xFE, 7)   # accents            → navy
     t[0xFF] = 0
     return bytes(t)
 
@@ -255,13 +272,16 @@ def _bg_table_faze() -> bytes:
 def _bg_table_angela() -> bytes:
     """Angela (hidden boss): octopus/spider with tentacles.
 
-    Body tile range estimate: 0x10..0xE0 (centered, with tentacles wide).
-    Theme: silvery hidden boss — deep purple body, silver tentacles.
+    Theme: hidden mystic — stone head, purple body, ice tentacles.
+    Picks:
+      BG6 (stone gray)  — central head
+      BG2 (purple)      — body
+      BG4 (ice cyan)    — tentacles
     """
     t = bytearray(256)
-    _fill(t, 0x10, 0x3F, 6)   # central head → silver (pal 6)
-    _fill(t, 0x40, 0x9F, 7)   # body         → deep purple (pal 7)
-    _fill(t, 0xA0, 0xE0, 4)   # tentacles    → cool accent (pal 4)
+    _fill(t, 0x10, 0x3F, 6)   # head      → stone
+    _fill(t, 0x40, 0x9F, 2)   # body      → purple
+    _fill(t, 0xA0, 0xE0, 4)   # tentacles → ice
     t[0xFF] = 0
     return bytes(t)
 
@@ -269,14 +289,18 @@ def _bg_table_angela() -> bytes:
 def _bg_table_penta_dragon() -> bytes:
     """Penta Dragon (Final boss): 5-headed dragon with red banner.
 
-    Body tile range estimate: 0x05..0xFB — large dramatic boss.
-    Theme: regal final boss — multi-color: gold body, red banner, white wings.
+    Theme: regal final boss — ice heads, gold body, fire banner, navy base.
+    Picks:
+      BG4 (ice cyan)  — upper heads
+      BG1 (gold)      — body / wings
+      BG5 (fire red)  — banner
+      BG7 (navy)      — lower base
     """
     t = bytearray(256)
-    _fill(t, 0x05, 0x2F, 4)   # upper heads     → cool/silver (pal 4)
-    _fill(t, 0x30, 0x6F, 5)   # body / wings    → gold (pal 5)
-    _fill(t, 0x70, 0xAF, 3)   # red banner      → red (pal 3)
-    _fill(t, 0xB0, 0xFE, 7)   # lower body     → dark regal (pal 7)
+    _fill(t, 0x05, 0x2F, 4)   # upper heads    → ice
+    _fill(t, 0x30, 0x6F, 1)   # body / wings  → gold
+    _fill(t, 0x70, 0xAF, 5)   # red banner    → fire
+    _fill(t, 0xB0, 0xFE, 7)   # lower body    → navy
     t[0xFF] = 0
     return bytes(t)
 

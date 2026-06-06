@@ -92,32 +92,38 @@ STAGE_BOSSES = [
 # phase). The "body part" labels below are guidance for tuning intent.
 STAGE_BOSS_BODY_PALETTES = [
     # (FFBA, name, [(BG pal idx, body part label), ...])
+    # Labels reflect ACTUAL CRAM colors per BG palette index:
+    #   BG1 gold, BG2 purple, BG3 green, BG4 ice cyan,
+    #   BG5 fire (yellow/orange/red), BG6 stone gray, BG7 navy blue.
     (0, "Shalamar (Stage 1)", [
-        (4, "head crest"), (6, "shell"), (5, "upper claws"), (3, "lower claws"),
+        (4, "head crest (ice)"), (6, "shell (stone)"),
+        (5, "upper claws (fire)"), (3, "lower claws (green)"),
     ]),
     (1, "Riff (Stage 2)", [
-        (5, "gold skull"), (3, "red body"), (7, "dark limbs"),
+        (5, "skull (fire)"), (1, "body (gold)"), (6, "limbs (stone)"),
     ]),
     (2, "Crystal Dragon (Stage 3)", [
-        (4, "pale dome"), (6, "silver body"), (5, "sparkle core"),
+        (4, "dome (ice)"), (7, "body (navy)"), (1, "sparkle core (gold)"),
     ]),
     (3, "Cameo (Stage 4)", [
-        (4, "pale crown"), (6, "silver face"), (3, "pink ribbon"),
+        (2, "crown (purple)"), (6, "face (stone)"), (1, "ribbon (gold)"),
     ]),
     (4, "Ted (Stage 5)", [
-        (3, "red eyes"), (6, "stone body"), (7, "dark tendrils"),
+        (5, "eyes (fire)"), (6, "body (stone)"), (7, "tendrils (navy)"),
     ]),
     (5, "Troop (Stage 6)", [
-        (7, "dark head"), (6, "gray body"), (5, "gold accents"),
+        (2, "heads (purple)"), (6, "body (stone)"), (1, "glow (gold)"),
     ]),
     (6, "Faze (Stage 7)", [
-        (4, "cool head"), (5, "gold body"), (3, "orange torso"), (7, "dark accents"),
+        (4, "horns (ice)"), (5, "body (fire)"),
+        (2, "torso (purple)"), (7, "accents (navy)"),
     ]),
     (7, "Angela", [
-        (6, "silver head"), (7, "purple body"), (4, "cool tentacles"),
+        (6, "head (stone)"), (2, "body (purple)"), (4, "tentacles (ice)"),
     ]),
     (8, "Penta Dragon (Final)", [
-        (4, "cool heads"), (5, "gold body"), (3, "red banner"), (7, "dark base"),
+        (4, "heads (ice)"), (1, "body/wings (gold)"),
+        (5, "banner (fire)"), (7, "base (navy)"),
     ]),
 ]
 
