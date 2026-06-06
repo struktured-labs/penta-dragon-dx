@@ -67,28 +67,41 @@ DF23_PREV_SCENE = 0xDF23       # WRAM byte: previous D880 value
 def _bg_table_shalamar() -> bytes:
     """Scene-specific bg_table for Shalamar arena (D880=0x0C).
 
-    Phase 1a: every body tile gets pal 6. User tunes pal 6 colors via
-    the live editor while in Shalamar arena → Shalamar's body recolors
-    coherently without affecting dungeon (different bg_table swaps in).
+    Phase 1b: split body into 4 distinct palettes per part so the user
+    can tune each independently (head crest, shell, upper claws, lower
+    claws) in the live editor.
 
-    Probe data (docs/shalamar_bg.log): Shalamar's body is composed of
-    tile IDs 0x11-0xA4 (~165 unique tiles, drawn once each). Rows 9-12
-    use tiles 0x88-0xA4 which I initially mislabeled as 'HUD items' —
-    they're actually Shalamar's claws (rows 9-12 are mid-screen, not
-    bottom HUD; the floor occupies rows 12-17). Floor is 0x00, 0x01.
+    Tile-ID groups derived from row positions in the initial probe:
+      Rows 0-1  tiles 0x11-0x26 : head crest  → pal 4
+      Rows 2-4  tiles 0x27-0x49 : upper shell → pal 6
+      Rows 5-7  tiles 0x4A-0x71 : upper claws → pal 5
+      Row  8    tiles 0x72-0x87 : lower body  → pal 6 (matches shell)
+      Rows 9-12 tiles 0x88-0xA4 : lower claws → pal 3
+    Floor (0x00, 0x01) and unused ranges default to pal 0.
 
-    Phase 1b will split body into multiple palettes per part (shell,
-    claws, legs, eyes) — requires identifying which tile IDs are which.
+    Palette choice rationale:
+      pal 3 — unused in dungeon → safe "claw tip" palette
+      pal 4 — unused in dungeon → safe "crest" palette
+      pal 5 — hazards in dungeon (shared CRAM — tuning affects both)
+      pal 6 — walls in dungeon   (shared CRAM — tuning affects both)
+    Phase 2 (scene-aware CRAM contents) needed for true independence.
     """
     t = bytearray(256)
-    # Shalamar's entire body (shell, body, claws, legs): pal 6.
-    # In dungeon context this range is split (walls→pal6, items→pal1)
-    # but here Shalamar's body covers the whole range.
-    for i in range(0x11, 0xA5):  # 0x11..0xA4 inclusive
+    # Head crest (rows 0-1, tiles 0x11-0x26) → pal 4
+    for i in range(0x11, 0x27):
+        t[i] = 4
+    # Upper shell (rows 2-4, tiles 0x27-0x49) → pal 6
+    for i in range(0x27, 0x4A):
         t[i] = 6
-    # 0xA5-0xDF: not used in Shalamar arena per probe; leave pal 0
-    # (had been pal 1 in dungeon for items 0x88-0xDF, but for arena
-    # we keep these defaulted since nothing references them).
+    # Upper claws (rows 5-7, tiles 0x4A-0x71) → pal 5
+    for i in range(0x4A, 0x72):
+        t[i] = 5
+    # Lower body (row 8, tiles 0x72-0x87) → pal 6 (matches shell)
+    for i in range(0x72, 0x88):
+        t[i] = 6
+    # Lower claws (rows 9-12, tiles 0x88-0xA4) → pal 3
+    for i in range(0x88, 0xA5):
+        t[i] = 3
     # 0xFF sentinel: 0 (per attrinit fix)
     t[0xFF] = 0
     return bytes(t)
