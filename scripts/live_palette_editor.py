@@ -79,6 +79,49 @@ STAGE_BOSSES = [
     (8, "Penta Dragon (Final)",    0x14, "uses tile-range OBJ pal"),
 ]
 
+# Per-stage-boss BG palette assignments — mirrors the _bg_table_<boss>()
+# functions in scripts/build_v301_teleport.py. Each boss's body tiles map
+# to a set of BG palette indices; the indices below are the ones the
+# user actually sees on screen when that boss's arena is loaded (via
+# the per-arena bg_table swapped into WRAM 0xDA00 by scene_detect).
+#
+# Editing the listed BG palette's colors live tunes that body region on
+# the named boss. Palette CRAM is shared globally, so changing BG3 also
+# affects every other boss whose body uses BG3 — for true per-arena
+# CRAM, the build pipeline would need per-arena palette tables (next
+# phase). The "body part" labels below are guidance for tuning intent.
+STAGE_BOSS_BODY_PALETTES = [
+    # (FFBA, name, [(BG pal idx, body part label), ...])
+    (0, "Shalamar (Stage 1)", [
+        (4, "head crest"), (6, "shell"), (5, "upper claws"), (3, "lower claws"),
+    ]),
+    (1, "Riff (Stage 2)", [
+        (5, "gold skull"), (3, "red body"), (7, "dark limbs"),
+    ]),
+    (2, "Crystal Dragon (Stage 3)", [
+        (4, "pale dome"), (6, "silver body"), (5, "sparkle core"),
+    ]),
+    (3, "Cameo (Stage 4)", [
+        (4, "pale crown"), (6, "silver face"), (3, "pink ribbon"),
+    ]),
+    (4, "Ted (Stage 5)", [
+        (3, "red eyes"), (6, "stone body"), (7, "dark tendrils"),
+    ]),
+    (5, "Troop (Stage 6)", [
+        (7, "dark head"), (6, "gray body"), (5, "gold accents"),
+    ]),
+    (6, "Faze (Stage 7)", [
+        (4, "cool head"), (5, "gold body"), (3, "orange torso"), (7, "dark accents"),
+    ]),
+    (7, "Angela", [
+        (6, "silver head"), (7, "purple body"), (4, "cool tentacles"),
+    ]),
+    (8, "Penta Dragon (Final)", [
+        (4, "cool heads"), (5, "gold body"), (3, "red banner"), (7, "dark base"),
+    ]),
+]
+
+
 # Boss-palette YAML entries (FFBF 3-8 → boss-palette CRAM override).
 # These are SEPARATE from stage-boss arena identification. They are
 # the entries that v3.01's palette_loader writes when FFBF != 0
@@ -241,6 +284,44 @@ Make sure mGBA was launched with <code>--script scripts/lua/live_palettes.lua</c
         )
     html_parts.append("</div></div>")
 
+    # ─── Per-stage-boss body palette editor ───
+    # Shows the BG palette indices each boss's bg_table assigns to body
+    # regions (mirrors _bg_table_<boss>() in build_v301_teleport.py).
+    # Editing the colors here writes to live CRAM via /tmp/live_palettes.txt.
+    html_parts.append('<div class="section"><h2>Stage Boss Body Palettes</h2>')
+    html_parts.append('<p style="font-size:0.85em;color:#888;">'
+                      'Each boss\'s body is drawn with a few BG palette indices (assigned by '
+                      'the per-arena <code>bg_table</code> in bank 13, swapped into WRAM 0xDA00 '
+                      'when D880 changes). Click a boss to expand and edit the palettes that '
+                      'cover its body. <strong>Note:</strong> BG palette CRAM is shared across all '
+                      'bosses, so editing pal 3 here also affects every other boss whose body uses '
+                      'pal 3. Per-arena CRAM is a future phase.</p>')
+    for ffba, name, parts in STAGE_BOSS_BODY_PALETTES:
+        html_parts.append(f'<details style="margin:0.4em 0;border:1px solid #333;padding:0.4em;">')
+        html_parts.append(f'<summary style="cursor:pointer;font-weight:bold;">{name} '
+                          f'<span style="font-weight:normal;color:#aaa;">'
+                          f'(uses BG ' + ', '.join(str(p) for p, _ in parts) + ')</span></summary>')
+        html_parts.append('<div style="margin-top:0.6em;">'
+                          f'<button onclick="dxTeleport({ffba + 1})" style="margin-bottom:0.4em;">'
+                          f'Teleport to {name}</button></div>')
+        for pal_idx, body_part in parts:
+            colors = STATE["BG"].get(pal_idx, ["0000"] * 4)
+            html_parts.append('<div class="pal" style="margin:0.3em 0;padding:0.3em;background:#1a1a1a;">')
+            html_parts.append(f'<div class="pal-name">BG{pal_idx} — <em>{body_part}</em></div>')
+            html_parts.append('<div class="color-row" style="margin-top:0.3em;">')
+            for ci, c in enumerate(colors):
+                val15 = int(c, 16)
+                rgb = bgr555_to_rgb888(val15)
+                html_parts.append(
+                    f'<div><input type="color" value="{rgb}" '
+                    f'data-kind="BG" data-pal="{pal_idx}" data-color="{ci}" '
+                    f'onchange="updateColor(this)">'
+                    f'<div class="bgr" id="bgr-BG-{pal_idx}-{ci}-boss{ffba}">{c.upper()}</div></div>'
+                )
+            html_parts.append("</div></div>")
+        html_parts.append("</details>")
+    html_parts.append("</div>")
+
     # ─── Soft state-byte hold (legacy fallback if DX hook not present) ───
     html_parts.append('<div class="section"><h2>State-byte Hold (legacy)</h2>')
     html_parts.append('<p style="font-size:0.85em;color:#888;">'
@@ -329,7 +410,18 @@ function updateColor(input) {
     const pal = parseInt(input.dataset.pal);
     const color = parseInt(input.dataset.color);
     const bgr = rgb888_to_bgr555(input.value);
-    document.getElementById(`bgr-${kind}-${pal}-${color}`).textContent = bgr;
+    // Update hex labels in both the global section and any per-boss views
+    // that include this same palette. Match the canonical ID plus any
+    // `-boss<N>` suffixes introduced by the per-stage-boss editor.
+    const idPrefix = `bgr-${kind}-${pal}-${color}`;
+    document.querySelectorAll(`[id="${idPrefix}"], [id^="${idPrefix}-"]`).forEach(el => {
+        el.textContent = bgr;
+    });
+    // Mirror the new color into every <input type="color"> sharing the same
+    // kind/pal/color (per-boss view and global view stay in sync).
+    document.querySelectorAll(
+        `input[type="color"][data-kind="${kind}"][data-pal="${pal}"][data-color="${color}"]`
+    ).forEach(el => { if (el !== input) el.value = input.value; });
     fetch('/update', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
