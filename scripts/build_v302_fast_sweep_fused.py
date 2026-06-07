@@ -27,7 +27,8 @@ from optimize_bg_sweep import create_bg_sweep_viewport_gated_fast
 
 
 def build_fused(n_calls: int):
-    return build(n_calls, sweep_fn=create_bg_sweep_viewport_gated_fast, tag="_fused")
+    out = Path(f"rom/working/penta_dragon_dx_v302_fast_sweep_fused_x{n_calls}.gb")
+    return build(n_calls, sweep_fn=create_bg_sweep_viewport_gated_fast, out_path=out)
 
 
 if __name__ == "__main__":

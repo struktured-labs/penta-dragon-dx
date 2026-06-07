@@ -178,11 +178,14 @@ def run(code: bytes, base_addr: int, mem: Mem, regs: dict):
             mem.write(w16(), r['A']); cycles += 16
         elif op == 0xB7: # OR A
             r['A'] &= 0xFF; Z[0] = r['A'] == 0; C[0] = False; cycles += 4
-        elif op == 0xC8: # RET Z
-            cycles += 8
+        elif op == 0xC8: # RET Z   (taken: 20T, not taken: 8T)
             if Z[0]:
-                if not stack: return cycles
-                pc = stack.pop(); cycles += 12
+                cycles += 20
+                if not stack:
+                    return cycles
+                pc = stack.pop()
+            else:
+                cycles += 8
         elif op == 0xC9: # RET
             cycles += 16
             if not stack: return cycles

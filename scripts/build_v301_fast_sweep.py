@@ -23,11 +23,13 @@ from build_v301_gdma import (BG_TABLE_BYTES, WRAM_BG_TABLE,
     create_inline_tile_copy_tileonly)
 
 
-def build(n_calls: int, sweep_fn=None, tag: str = ""):
+def build(n_calls: int, sweep_fn=None, tag: str = "", out_path=None):
     """Build the fast-sweep ROM. `sweep_fn` selects the per-row bg_sweep
     implementation (defaults to the original 3-pass sweep); pass the fused
-    2-pass variant for ~34% cheaper calls. `tag` is appended to the output
-    filename so candidates don't clobber each other."""
+    2-pass variant for ~34% cheaper calls. `out_path` overrides the output
+    filename entirely (so wrappers can name the artifact accurately);
+    otherwise `tag` is inserted into the default name so candidates don't
+    clobber each other."""
     if sweep_fn is None:
         sweep_fn = create_bg_sweep_viewport_gated
     rom = bytearray(Path("rom/Penta Dragon (J).gb").read_bytes())
@@ -120,7 +122,8 @@ def build(n_calls: int, sweep_fn=None, tag: str = ""):
     for b in rom[0x134:0x14D]: chk = (chk - b - 1) & 0xFF
     rom[0x14D] = chk
 
-    out = Path(f"rom/working/penta_dragon_dx_v301_fast_sweep{tag}_x{n_calls}.gb")
+    out = (Path(out_path) if out_path
+           else Path(f"rom/working/penta_dragon_dx_v301_fast_sweep{tag}_x{n_calls}.gb"))
     out.write_bytes(rom)
     print(f"Wrote {out}")
 
