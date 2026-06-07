@@ -213,8 +213,15 @@ callbacks:add("frame", function()
         end
     end
 
-    -- Apply palette overrides EVERY frame
-    if cached then apply_writes(cached.writes) end
+    -- Apply palette overrides EVERY frame — EXCEPT during boss arenas.
+    -- Each boss arena (D880 0x0C..0x14) loads its OWN native CRAM; the editor
+    -- pushes the dungeon YAML palettes, which would clobber the arena's colors
+    -- (muted Ted's cyan dome/green tendrils to gray). Skip BG/OBJ pushes in
+    -- arenas so the live preview matches the real ROM. (Combo + force-writes
+    -- still run, so teleport keeps working.) Dungeon palette tuning unaffected.
+    local d880 = emu:read8(0xD880)
+    local in_arena = d880 >= 0x0C and d880 <= 0x14
+    if cached and not in_arena then apply_writes(cached.writes) end
 
     -- Apply force writes EVERY frame (e.g., FFBF=3 for boss preview)
     if cached and cached.force then
