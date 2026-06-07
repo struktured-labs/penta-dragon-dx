@@ -166,7 +166,9 @@ def run(code: bytes, base_addr: int, mem: Mem, regs: dict):
         if steps > GUARD:
             raise RuntimeError("runaway program (no RET)")
         op = code[pc - base_addr]; pc += 1
-        if op == 0xF0:   # LDH A,[FF00+n]
+        if op == 0x00:   # NOP (appears when the FFC1 gate is stripped)
+            cycles += 4
+        elif op == 0xF0:   # LDH A,[FF00+n]
             r['A'] = mem.read(0xFF00 | b()); cycles += 12
         elif op == 0xE0: # LDH [FF00+n],A
             mem.write(0xFF00 | b(), r['A']); cycles += 12
@@ -257,50 +259,68 @@ def _fresh_regs():
 
 
 def verify(trials: int = 4000) -> bool:
-    """Run old vs fused sweep over random inputs; assert attr writes match."""
-    rng = random.Random(0xC0FFEE)
+    """Run old vs fused sweep over random inputs; assert attr writes match.
+
+    Covers both how the sweep is used in production:
+      - gated (FFC1 checked, gameplay): build_v300 / build_v296
+      - gate-stripped (first 4 bytes NOPed, runs regardless of FFC1):
+        build_v301_fast_sweep
+    """
     from build_v300_inline_hook import BG_TABLE_BYTES
     bg_table_addr = 0x7000
     base_addr = 0x6CD0
+
+    def strip_gate(code: bytes) -> bytes:
+        b = bytearray(code); b[0:4] = bytes(4); return bytes(b)
+
+    scenarios = [
+        ("gated (FFC1=1)", lambda c: c, 1),
+        ("gate-stripped (FFC1=0)", strip_gate, 0),  # fast-sweep on title
+        ("gate-stripped (FFC1=1)", strip_gate, 1),  # fast-sweep in game
+    ]
+
+    for name, transform, ffc1 in scenarios:
+        rng = random.Random(0xC0FFEE)
+        old = transform(create_bg_sweep_viewport_gated(bg_table_addr, base_addr))
+        new = transform(create_bg_sweep_viewport_gated_fast(bg_table_addr, base_addr))
+        old_cycles = new_cycles = 0
+        n_old = n_new = 0
+        for t in range(trials):
+            scy = rng.randint(0, 255)
+            lcdc = 0x91 | (rng.randint(0, 1) << 3)   # bit3 = tilemap select
+            df04 = rng.randint(0, 17)
+            base = 0x9C00 if (lcdc & 0x08) else 0x9800
+            tilemap = {i: rng.randint(0, 255) for i in range(0x400)}
+
+            def setup():
+                m = Mem(BG_TABLE_BYTES, bg_table_addr, tilemap, base)
+                m.flat[0xFFC1] = ffc1
+                m.flat[0xFF40] = lcdc
+                m.flat[0xFF42] = scy
+                m.flat[0xDF04] = df04
+                return m
+
+            mo = setup(); old_cycles += run(old, base_addr, mo, _fresh_regs())
+            mn = setup(); new_cycles += run(new, base_addr, mn, _fresh_regs())
+
+            if mo.attr_writes != mn.attr_writes:
+                print(f"MISMATCH [{name}] trial {t}: scy={scy} lcdc={lcdc:#x} df04={df04}")
+                print("  old:", mo.attr_writes[:8])
+                print("  new:", mn.attr_writes[:8])
+                return False
+            if mo.flat[0xDF04] != mn.flat[0xDF04]:
+                print(f"DF04 MISMATCH [{name}] trial {t}: "
+                      f"old={mo.flat[0xDF04]} new={mn.flat[0xDF04]}")
+                return False
+            n_old = len(mo.attr_writes); n_new = len(mn.attr_writes)
+
+        print(f"OK [{name}]: {trials} trials, attr writes byte-identical; "
+              f"attrs/call={n_old}; "
+              f"cyc old={old_cycles/trials:.0f}T fused={new_cycles/trials:.0f}T "
+              f"(-{100*(old_cycles-new_cycles)/old_cycles:.1f}%)")
+
     old = create_bg_sweep_viewport_gated(bg_table_addr, base_addr)
     new = create_bg_sweep_viewport_gated_fast(bg_table_addr, base_addr)
-
-    old_cycles = new_cycles = 0
-    n_old = n_new = 0
-    for t in range(trials):
-        scy = rng.randint(0, 255)
-        lcdc = 0x91 | (rng.randint(0, 1) << 3)   # bit3 = tilemap select
-        df04 = rng.randint(0, 17)
-        base = 0x9C00 if (lcdc & 0x08) else 0x9800
-        tilemap = {i: rng.randint(0, 255) for i in range(0x400)}
-
-        def setup():
-            m = Mem(BG_TABLE_BYTES, bg_table_addr, tilemap, base)
-            m.flat[0xFFC1] = 1          # gameplay
-            m.flat[0xFF40] = lcdc
-            m.flat[0xFF42] = scy
-            m.flat[0xDF04] = df04
-            return m
-
-        mo = setup(); old_cycles += run(old, base_addr, mo, _fresh_regs())
-        mn = setup(); new_cycles += run(new, base_addr, mn, _fresh_regs())
-
-        if mo.attr_writes != mn.attr_writes:
-            print(f"MISMATCH trial {t}: scy={scy} lcdc={lcdc:#x} df04={df04}")
-            print("  old:", mo.attr_writes[:8])
-            print("  new:", mn.attr_writes[:8])
-            return False
-        if mo.flat[0xDF04] != mn.flat[0xDF04]:
-            print(f"DF04 MISMATCH trial {t}: old={mo.flat[0xDF04]} new={mn.flat[0xDF04]}")
-            return False
-        n_old = len(mo.attr_writes); n_new = len(mn.attr_writes)
-
-    print(f"OK: {trials} trials, attribute writes byte-identical (old vs fused).")
-    print(f"    attrs written / call: {n_old} (both)")
-    print(f"    avg cycles/call: old={old_cycles/trials:.0f}T  "
-          f"fused={new_cycles/trials:.0f}T  "
-          f"saved={(old_cycles-new_cycles)/trials:.0f}T "
-          f"({100*(old_cycles-new_cycles)/old_cycles:.1f}%)")
     print(f"    code size: old={len(old)}B  fused={len(new)}B")
     return True
 
