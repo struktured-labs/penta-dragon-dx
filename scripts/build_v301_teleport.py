@@ -45,6 +45,19 @@ TP_OUT = Path("rom/working/penta_dragon_dx_teleport.gb")
 
 BANK13 = 13 * 0x4000
 COLORIZE_ADDR = 0x6E00
+GDMA_ADDR = 0x6D80         # existing GDMA transfer routine (D000 -> VRAM bank1)
+
+# ---- arena position-GDMA (the "holy grail" fix) ----
+# Per-frame, blit a static CELL-indexed position attr map (D000) to VRAM so
+# the boss is colored by SCREEN POSITION, not tile ID. Kills the alternation
+# (atomic full-frame rewrite) + shared-tile bleed (cell-keyed). Gated to
+# arenas (D880 0x0C..0x14). Lives in the 233-byte free gap at 0x6B27.
+ARENA_WRAP_ADDR = 0x6B27       # gate + entry-detect + call expander + GDMA
+POSMAP_EXPAND_ADDR = 0x6B50    # expand compact posmap -> D000
+SHALAMAR_POSMAP_ADDR = 0x6BB0  # compact posmap: (row,lo,hi,pal)*, 0xFF term
+DF24_PREV_ARENA = 0xDF24       # last arena D880 (entry-detect for expand)
+ARENA_GDMA_ROWS = 18           # blit full viewport height (covers any boss)
+
 TELEPORT_ADDR = 0x6E80     # teleport check + state setup + stack redirect
 LANDING_PAD_ROM_ADDR = 0x6F80  # landing pad source (gets copied to WRAM DB00)
                               # — moved from 0x6F00 because the teleport
@@ -397,6 +410,112 @@ def build_teleport_routine() -> bytes:
     return bytes(c)
 
 
+def _shalamar_posmap() -> bytes:
+    """Compact CELL-indexed position map for Shalamar (D880=0x0C).
+
+    Format: a sequence of (row, col_lo, col_hi, palette) 4-byte entries,
+    terminated by 0xFF. The expander fills D000[row*32 + col_lo .. col_hi]
+    with `palette` (and zeroes everything else). Derived from the footprint
+    probe (scripts/diagnostics/footprint_maps.log): rows 0-8, banded
+    crest(4)/shell(6)/claws(5)/lower(3).
+    """
+    entries = [
+        (0, 7, 19, 4), (1, 9, 18, 4), (2, 7, 19, 4),   # crest -> pal4
+        (3, 6, 19, 6), (4, 7, 19, 6),                   # shell -> pal6
+        (5, 7, 19, 5), (6, 7, 19, 5),                   # upper claws -> pal5
+        (7, 8, 19, 3), (8, 8, 18, 3),                   # lower claws -> pal3
+    ]
+    b = bytearray()
+    for r, lo, hi, p in entries:
+        b += bytes([r, lo, hi, p & 7])
+    b.append(0xFF)
+    return bytes(b)
+
+
+def build_posmap_expander() -> bytes:
+    """Expand a compact posmap (HL on entry) into the D000 attr buffer.
+
+    Pre: HL = posmap source addr (entries (row,lo,hi,pal)*, 0xFF term).
+    Sets FF70=2, zeroes ARENA_GDMA_ROWS*32 bytes at D000, fills each entry's
+    run D000[row*32+lo..hi]=pal, restores FF70=1. Regs: DE=posmap ptr,
+    HL=dest. Note: row*32 low byte is a multiple of 32 and lo<32, so
+    row*32_low + lo never carries past 0xFF — `ADD A,L; LD L,A` is safe.
+    """
+    nbytes = ARENA_GDMA_ROWS * 32
+    c = bytearray()
+    c.extend([0xE5])                       # PUSH HL (save posmap ptr)
+    c.extend([0x3E, 0x02, 0xE0, 0x70])     # LD A,2; LDH [FF70],A  (WRAM bank 2)
+    # zero D000..+nbytes (HL, BC)
+    c.extend([0x21, 0x00, 0xD0])           # LD HL, 0xD000
+    c.extend([0x01, nbytes & 0xFF, (nbytes >> 8) & 0xFF])  # LD BC, nbytes
+    z = len(c)
+    c.extend([0xAF])                       # XOR A
+    c.extend([0x22])                       # LD [HL+], A
+    c.extend([0x0B])                       # DEC BC
+    c.extend([0x78, 0xB1])                 # LD A,B; OR C
+    c.extend([0x20, (z - (len(c) + 2)) & 0xFF])  # JR NZ, z
+    c.extend([0xD1])                       # POP DE  (DE = posmap ptr)
+    # entry loop: DE = posmap ptr, HL = dest, B = hi, C = lo(running), E = pal
+    eloop = len(c)
+    c.extend([0x1A, 0x13])                 # LD A,[DE]; INC DE   (A = row / 0xFF)
+    c.extend([0xFE, 0xFF])                 # CP 0xFF
+    j_done = len(c) + 1
+    c.extend([0x28, 0x00])                 # JR Z, done
+    # HL = 0xD000 + row*32
+    c.extend([0x6F, 0x26, 0x00])           # LD L,A; LD H,0
+    c.extend([0x29, 0x29, 0x29, 0x29, 0x29])  # ADD HL,HL x5  (row*32)
+    c.extend([0x7C, 0xF6, 0xD0, 0x67])     # LD A,H; OR 0xD0; LD H,A
+    # HL += lo
+    c.extend([0x1A, 0x13])                 # LD A,[DE]; INC DE   (A = lo)
+    c.extend([0x4F])                       # LD C,A              (C = lo running col)
+    c.extend([0x85, 0x6F])                 # ADD A,L; LD L,A     (HL = dest start; no carry)
+    # B = hi
+    c.extend([0x1A, 0x13])                 # LD A,[DE]; INC DE   (A = hi)
+    c.extend([0x47])                       # LD B,A              (B = hi)
+    # pal: read, then save posmap ptr and use E for pal during fill
+    c.extend([0x1A, 0x13])                 # LD A,[DE]; INC DE   (A = pal; DE -> next entry)
+    c.extend([0xD5])                       # PUSH DE             (save posmap ptr)
+    c.extend([0x5F])                       # LD E,A              (E = pal)
+    fill = len(c)
+    c.extend([0x7B])                       # LD A,E              (A = pal)
+    c.extend([0x22])                       # LD [HL+], A
+    c.extend([0x79, 0xB8])                 # LD A,C; CP B
+    c.extend([0x28, 0x02])                 # JR Z, +2 -> endfill (POP DE)
+    c.extend([0x0C])                       # INC C
+    c.extend([0x18, (fill - (len(c) + 2)) & 0xFF])  # JR fill
+    # endfill:
+    c.extend([0xD1])                       # POP DE              (restore posmap ptr)
+    c.extend([0x18, (eloop - (len(c) + 2)) & 0xFF])  # JR eloop
+    # done:
+    c[j_done] = (len(c) - (j_done + 1)) & 0xFF
+    c.extend([0x3E, 0x01, 0xE0, 0x70])     # LD A,1; LDH [FF70],A  (WRAM bank 1)
+    c.extend([0xC9])                       # RET
+    return bytes(c)
+
+
+def build_arena_wrapper() -> bytes:
+    """Per-VBlank arena hook: gate to D880 0x0C..0x14, expand posmap on arena
+    entry (DF24 change), then GDMA-blit D000 -> VRAM. Ends with RET."""
+    c = bytearray()
+    c.extend([0xFA, 0x80, 0xD8])           # LD A,[D880]
+    c.extend([0xFE, 0x0C])                 # CP 0x0C
+    c.extend([0xD8])                       # RET C   (below arena range)
+    c.extend([0xFE, 0x15])                 # CP 0x15
+    c.extend([0xD0])                       # RET NC  (>= 0x15)
+    # in arena. entry-detect via DF24
+    c.extend([0x21, DF24_PREV_ARENA & 0xFF, (DF24_PREV_ARENA >> 8) & 0xFF])
+    c.extend([0xBE])                       # CP [HL]
+    c.extend([0x28, 0x07])                 # JR Z, +7 -> skip expand (to CALL gdma)
+    c.extend([0x77])                       # LD [HL],A  (DF24 = D880)
+    # load HL = Shalamar posmap (milestone: Shalamar only), CALL expander
+    c.extend([0x21, SHALAMAR_POSMAP_ADDR & 0xFF, (SHALAMAR_POSMAP_ADDR >> 8) & 0xFF])  # 3
+    c.extend([0xCD, POSMAP_EXPAND_ADDR & 0xFF, (POSMAP_EXPAND_ADDR >> 8) & 0xFF])      # 3
+    # NOTE: JR Z +7 skips the 7 bytes above (LD[HL]A=1 + LD HL,nn=3 + CALL=3)
+    c.extend([0xCD, GDMA_ADDR & 0xFF, (GDMA_ADDR >> 8) & 0xFF])  # CALL gdma_transfer
+    c.extend([0xC9])                       # RET
+    return bytes(c)
+
+
 def main():
     # 1. Build the base v3.01 production ROM
     build_v301()
@@ -441,14 +560,47 @@ def main():
     rom[off:off + len(sd)] = sd
     print(f"  scene-detect routine: {len(sd)} bytes at bank13:0x{SCENE_DETECT_ADDR:04X}")
 
-    # 3. Write the teleport routine at bank13:0x6E80, ending with JP COLORIZE
+    # 2c. Arena position-GDMA system (the holy-grail fix). Three pieces in
+    # the 233-byte free gap at 0x6B27 + reuse the GDMA transfer at 0x6D80.
+    def w13(addr, data, label):
+        o = BANK13 + (addr - 0x4000)
+        rom[o:o + len(data)] = data
+        print(f"  {label}: {len(data)} bytes at bank13:0x{addr:04X}")
+
+    wrap = build_arena_wrapper()
+    exp = build_posmap_expander()
+    smap = _shalamar_posmap()
+    assert ARENA_WRAP_ADDR + len(wrap) <= POSMAP_EXPAND_ADDR, "wrapper overruns expander"
+    assert POSMAP_EXPAND_ADDR + len(exp) <= SHALAMAR_POSMAP_ADDR, "expander overruns posmap"
+    assert SHALAMAR_POSMAP_ADDR + len(smap) <= 0x6C10, "posmap overruns free gap"
+    w13(ARENA_WRAP_ADDR, wrap, "arena GDMA wrapper")
+    w13(POSMAP_EXPAND_ADDR, exp, "posmap expander")
+    w13(SHALAMAR_POSMAP_ADDR, smap, "Shalamar posmap")
+
+    # Size the GDMA transfer to ARENA_GDMA_ROWS*32 bytes (HDMA5 = N/16 - 1).
+    # Patch the HDMA5 immediate (the byte after `3E` in `3E xx E0 55`).
+    gbytes = ARENA_GDMA_ROWS * 32
+    hdma5 = (gbytes // 16) - 1
+    goff = BANK13 + (GDMA_ADDR - 0x4000)
+    gd = rom[goff:goff + 70]
+    gi = gd.find(bytes([0xE0, 0x55]))
+    assert gi >= 2 and gd[gi - 2] == 0x3E, "could not find HDMA5 set in GDMA routine"
+    rom[goff + gi - 1] = hdma5 & 0xFF
+    print(f"  GDMA sized: HDMA5=0x{hdma5:02X} ({gbytes} bytes / {ARENA_GDMA_ROWS} rows)")
+
+    # 3. Write the teleport routine. Tail: instead of `JP colorize`, do
+    # `CALL colorize; CALL arena_wrapper; RET` so the arena position-GDMA
+    # runs every VBlank AFTER the normal colorizer (overrides tile-ID attrs).
     tp = build_teleport_routine()
     tp = bytearray(tp)
     assert tp[-1] == 0xC9, "expected RET at end"
-    tp[-1] = 0xC3
+    tp[-1] = 0xCD                              # CALL colorize
     tp.append(COLORIZE_ADDR & 0xFF)
     tp.append((COLORIZE_ADDR >> 8) & 0xFF)
-    print(f"  teleport routine (with JP colorize): {len(tp)} bytes at bank13:0x{TELEPORT_ADDR:04X}")
+    tp.extend([0xCD, ARENA_WRAP_ADDR & 0xFF, (ARENA_WRAP_ADDR >> 8) & 0xFF])  # CALL arena_wrapper
+    tp.append(0xC9)                            # RET
+    print(f"  teleport routine (CALL colorize+arena): {len(tp)} bytes at bank13:0x{TELEPORT_ADDR:04X}")
+    assert TELEPORT_ADDR + len(tp) <= LANDING_PAD_ROM_ADDR, "teleport routine overruns landing pad"
     off = BANK13 + (TELEPORT_ADDR - 0x4000)
     rom[off:off + len(tp)] = tp
 
