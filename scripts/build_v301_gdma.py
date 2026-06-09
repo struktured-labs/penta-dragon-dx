@@ -81,7 +81,7 @@ WRAM_BG_TABLE_HI = (WRAM_BG_TABLE >> 8) & 0xFF
 ATTR_BUFFER = 0xD000  # WRAM bank 2 (DA00 alternative tested, made no difference)
 
 
-def create_inline_tile_copy_tileonly() -> bytes:
+def create_inline_tile_copy_tileonly(arena_neutralize_d880=None) -> bytes:
     """Inline tile+attr copy (formerly tile-only; restored v3.00 behavior).
 
     Per group: 4 tile writes (VBK=0) then 4 attr writes (VBK=1) with
@@ -127,6 +127,22 @@ def create_inline_tile_copy_tileonly() -> bytes:
     # Setup (H pre-set by entry point to 0x98 or 0x9C)
     emit([0x2E, 0x00])               # LD L, 0x00
     emit([0x11, 0xA0, 0xC1])         # LD DE, 0xC1A0 (WRAM tile source)
+
+    # Arena attr-neutralize dispatch (teleport build only). In a boss arena
+    # (D880 in [base, base+9)) jump to a TILE-ONLY copy: there the position
+    # sweep owns the attribute plane, so the hook must NOT write tile-ID attrs
+    # (they fight the fixed posmap between sweep passes -> alternation). On
+    # title/dungeon D880 < base, so JR C is taken immediately (~8T) and the
+    # full tile+attr path runs unchanged.
+    j_tileonly = None
+    if arena_neutralize_d880 is not None:
+        emit([0xFA, 0x80, 0xD8])     # LD A, [D880]
+        emit([0xD6, arena_neutralize_d880 & 0xFF])  # SUB base
+        j_full = emit_jr_fwd(0x38)   # JR C, full      (D880 < base)
+        emit([0xFE, 0x09])           # CP 9
+        j_tileonly = emit_jr_fwd(0x38)  # JR C, tileonly (idx 0..8)
+        patch_jr_fwd(j_full)         # else fall through to full
+
     emit([0x3E, 0x18])               # LD A, 24
     emit([0xF5])                     # PUSH AF (row counter on stack)
 
@@ -210,7 +226,44 @@ def create_inline_tile_copy_tileonly() -> bytes:
         emit([0xC3, target_addr & 0xFF, (target_addr >> 8) & 0xFF])
 
     patch_jr_fwd(j_done)
-    emit([0xC9])                     # RET
+    emit([0xC9])                     # RET (full tile+attr path)
+
+    # ---- TILE-ONLY PATH (arena): copy tiles, write NO attrs ----
+    # Same L/E/HL advancement as the full path (per group the full path nets
+    # +4 to L/E, identical to the tile phase here), so addressing matches.
+    if j_tileonly is not None:
+        patch_jr_fwd(j_tileonly)
+        emit([0x3E, 0x18])           # LD A, 24
+        emit([0xF5])                 # PUSH AF
+        mark('to_row')
+        emit([0x0E, 0x06])           # LD C, 6
+        mark('to_group')
+        emit([0xF3])                 # DI
+        mark('to_s3')
+        emit([0xF0, 0x41, 0xE6, 0x03, 0xFE, 0x03])  # LDH A,[FF41];AND 3;CP 3
+        emit_jr_back(0x20, 'to_s3')                   # JR NZ, to_s3
+        mark('to_s0')
+        emit([0xF0, 0x41, 0xE6, 0x03])               # LDH A,[FF41];AND 3
+        emit_jr_back(0x20, 'to_s0')                   # JR NZ, to_s0
+        for _ in range(4):
+            emit([0x1A, 0x13, 0x22])  # LD A,[DE]; INC DE; LD [HL+],A
+        emit([0xFB])                 # EI
+        emit([0x0D])                 # DEC C
+        emit_jr_back(0x20, 'to_group')
+        # row end: HL += 8 (24 written + 8 skip = 32 stride)
+        emit([0x7D, 0xC6, 0x08, 0x6F, 0x30, 0x01, 0x24])
+        emit([0xF1])                 # POP AF
+        emit([0x3D])                 # DEC A
+        j_to_done = emit_jr_fwd(0x28)  # JR Z, done
+        emit([0xF5])                 # PUSH AF
+        offset = targets['to_row'] - (len(code) + 2)
+        if -128 <= offset <= 127:
+            emit([0x18, offset & 0xFF])
+        else:
+            target_addr = 0x42A7 + targets['to_row']
+            emit([0xC3, target_addr & 0xFF, (target_addr >> 8) & 0xFF])
+        patch_jr_fwd(j_to_done)
+        emit([0xC9])                 # RET
 
     return bytes(code)
 

@@ -38,8 +38,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from build_v301_gdma import build_v301
+from build_v301_gdma import build_v301, create_inline_tile_copy_tileonly
 from build_v296_phantomsafe import create_bg_sweep_viewport_gated
+from arena_position import (
+    parse_footprint_posmaps, create_position_sweep, POSMAP_SIZE,
+)
 
 BASE_OUT = Path("rom/working/penta_dragon_dx_v301.gb")
 TP_OUT = Path("rom/working/penta_dragon_dx_teleport.gb")
@@ -48,6 +51,18 @@ BANK13 = 13 * 0x4000
 COLORIZE_ADDR = 0x6E00
 BG_SWEEP_ADDR = 0x6CD0     # bg_sweep safety-net (re-patched to read WRAM 0xDA00)
 WRAM_BG_TABLE = 0xDA00     # per-scene table kept current by scene_detect
+
+# Position-sweep (holy-grail path) layout in bank 13:
+POSSWEEP_ADDR = 0x7100     # position sweep code (reuses dead attr_comp space)
+POSMAP_DATA_ADDR = 0x7B00  # per-arena 18x32 posmaps (576 bytes each)
+POSMAP_PTR_TABLE = 0x7F80  # 9 x 2-byte LE pointers (arena idx 0..8; 0 = none)
+ROW_CURSOR_ADDR = 0xDF40   # sweep row cursor + scratch (free DF region)
+# Posmaps captured as the MODAL attr the (good) tile-ID hook assigns each cell
+# over the animation (probe_arena_posmap_gen.lua on a hook-active ROM). This
+# freezes the proven Phase-0 look per-cell -> same colors, zero alternation.
+FOOTPRINT_LOG = "scripts/diagnostics/posmap_maps.log"
+ARENA_ORDER = ["shalamar", "riff", "crystal_dragon", "cameo", "ted",
+               "troop", "faze", "angela", "penta_dragon"]
 TELEPORT_ADDR = 0x6E80     # teleport check + state setup + stack redirect
 LANDING_PAD_ROM_ADDR = 0x6F80  # landing pad source (gets copied to WRAM DB00)
                               # — moved from 0x6F00 because the teleport
@@ -460,6 +475,72 @@ def main():
     off = BANK13 + (BG_SWEEP_ADDR - 0x4000)
     rom[off:off + len(sweep)] = sweep
     print(f"  bg_sweep re-patched to WRAM 0x{WRAM_BG_TABLE:04X}: {len(sweep)} bytes at bank13:0x{BG_SWEEP_ADDR:04X}")
+
+    # 2c. POSITION SWEEP (holy-grail path). In arenas, write a FIXED per-cell
+    # posmap to the BG attr plane instead of tile-ID attrs — a fixed map can't
+    # alternate (every write of a cell writes the same value). Maps come from
+    # the probed footprints; stored in bank-13 ROM, read directly by the sweep.
+    # Dispatcher tail-calls the normal (Phase-0) sweep in every non-arena scene
+    # and for any arena that has no posmap yet.
+    posmaps = parse_footprint_posmaps(FOOTPRINT_LOG)
+    ptr = [0] * 9
+    next_addr = POSMAP_DATA_ADDR
+    for idx, name in enumerate(ARENA_ORDER):
+        m = posmaps.get(name)
+        if not m or not any(m):
+            continue
+        if next_addr + POSMAP_SIZE > POSMAP_PTR_TABLE:
+            print(f"  posmap: out of bank-13 space before {name} (idx {idx}) — skipped")
+            break
+        off = BANK13 + (next_addr - 0x4000)
+        rom[off:off + POSMAP_SIZE] = m
+        ptr[idx] = next_addr
+        print(f"  posmap {name:14s}: {POSMAP_SIZE} bytes at bank13:0x{next_addr:04X}")
+        next_addr += POSMAP_SIZE
+    pt = bytearray()
+    for p in ptr:
+        pt += bytes([p & 0xFF, (p >> 8) & 0xFF])
+    off = BANK13 + (POSMAP_PTR_TABLE - 0x4000)
+    rom[off:off + len(pt)] = pt
+
+    possweep = create_position_sweep(POSSWEEP_ADDR, BG_SWEEP_ADDR,
+                                     POSMAP_PTR_TABLE, ROW_CURSOR_ADDR,
+                                     rows_per_frame=2)
+    assert POSSWEEP_ADDR + len(possweep) <= 0x7200, \
+        f"position sweep overruns arena tables: 0x{POSSWEEP_ADDR + len(possweep):04X}"
+    off = BANK13 + (POSSWEEP_ADDR - 0x4000)
+    rom[off:off + len(possweep)] = possweep
+    print(f"  position sweep: {len(possweep)} bytes at bank13:0x{POSSWEEP_ADDR:04X}")
+
+    # Repoint the colorize handler's `CALL bg_sweep (0x6CD0)` -> position sweep.
+    h0 = BANK13 + (COLORIZE_ADDR - 0x4000)
+    patched_sweep = False
+    for i in range(h0, h0 + 0x80):
+        if (rom[i] == 0xCD and rom[i + 1] == (BG_SWEEP_ADDR & 0xFF)
+                and rom[i + 2] == ((BG_SWEEP_ADDR >> 8) & 0xFF)):
+            rom[i + 1] = POSSWEEP_ADDR & 0xFF
+            rom[i + 2] = (POSSWEEP_ADDR >> 8) & 0xFF
+            patched_sweep = True
+            print(f"  colorize handler CALL bg_sweep -> position sweep "
+                  f"(at 0x{i - BANK13 + 0x4000:04X})")
+            break
+    if not patched_sweep:
+        raise SystemExit("could not find CALL bg_sweep in colorize handler")
+
+    # 2d. Neutralize the inline hook's ATTR writes in arenas. There the
+    # position sweep is the sole attr writer; the hook does TILE-ONLY copies so
+    # its tile-ID attrs can't fight the fixed posmap (which would re-introduce
+    # alternation). Title/dungeon behavior is unchanged (D880 < 0x0C -> full
+    # tile+attr path). Overwrites the base build's hook image at bank1:0x42A7.
+    assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98]), \
+        "inline hook entry point changed — neutralize would corrupt it"
+    neut = create_inline_tile_copy_tileonly(arena_neutralize_d880=0x0C)
+    hook_budget = 0x436D - 0x42A7 + 1   # 199 bytes
+    assert len(neut) <= hook_budget, f"neutralized hook too big: {len(neut)} > {hook_budget}"
+    rom[0x42A7:0x42A7 + len(neut)] = neut
+    if 0x42A7 + len(neut) < 0x436E:      # re-pad leftover tail with zeros
+        rom[0x42A7 + len(neut):0x436E] = bytes(0x436E - (0x42A7 + len(neut)))
+    print(f"  inline hook neutralized in arenas: {len(neut)} bytes at 0x42A7")
 
     # 3. Write the teleport routine at bank13:0x6E80, ending with JP COLORIZE
     tp = build_teleport_routine()
