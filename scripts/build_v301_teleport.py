@@ -103,7 +103,13 @@ TROOP_TABLE_ADDR = 0x7700
 FAZE_TABLE_ADDR = 0x7800
 ANGELA_TABLE_ADDR = 0x7900
 PENTA_DRAGON_TABLE_ADDR = 0x7A00
-DF23_PREV_SCENE = 0xDF23       # WRAM byte: previous D880 value
+DF23_PREV_SCENE = 0xDF0D       # WRAM byte: previous D880 value.
+# NOTE: must stay OUTSIDE bg_sweep's 0xDF10-0xDF2F scratch buffer. The old
+# 0xDF23 sat *inside* that buffer, so bg_sweep clobbered it every frame with
+# tile data → scene-detect never hit its RET-Z fast path → it ran a full
+# 256-byte table copy EVERY frame (~23 scanlines), pushing the colorize
+# attribute-write out of VBlank into mid-screen active display = wall flicker
+# while roaming. 0xDF0D is below the buffer, next to the known-safe DF0C/DF0E.
                               # (uninitialized → first frame triggers copy
                               # to whatever the current D880 maps to)
 
