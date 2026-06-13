@@ -531,33 +531,30 @@ def main():
     print(f"  position sweep: {len(possweep)} bytes at bank13:0x{POSSWEEP_ADDR:04X}")
 
     # Repoint the colorize handler's `CALL bg_sweep (0x6CD0)` -> position sweep.
-    # [DISABLED: Using standard tile-ID bg_sweep directly for clean background/claws separation]
-    patched_sweep = True
-    # h0 = BANK13 + (COLORIZE_ADDR - 0x4000)
-    # patched_sweep = False
-    # for i in range(h0, h0 + 0x80):
-    #     if (rom[i] == 0xCD and rom[i + 1] == (BG_SWEEP_ADDR & 0xFF)
-    #             and rom[i + 2] == ((BG_SWEEP_ADDR >> 8) & 0xFF)):
-    #         rom[i + 1] = POSSWEEP_ADDR & 0xFF
-    #         rom[i + 2] = (POSSWEEP_ADDR >> 8) & 0xFF
-    #         patched_sweep = True
-    #         print(f"  colorize handler CALL bg_sweep -> position sweep "
-    #               f"(at 0x{i - BANK13 + 0x4000:04X})")
-    #         break
-    # if not patched_sweep:
-    #     raise SystemExit("could not find CALL bg_sweep in colorize handler")
+    h0 = BANK13 + (COLORIZE_ADDR - 0x4000)
+    patched_sweep = False
+    for i in range(h0, h0 + 0x80):
+        if (rom[i] == 0xCD and rom[i + 1] == (BG_SWEEP_ADDR & 0xFF)
+                and rom[i + 2] == ((BG_SWEEP_ADDR >> 8) & 0xFF)):
+            rom[i + 1] = POSSWEEP_ADDR & 0xFF
+            rom[i + 2] = (POSSWEEP_ADDR >> 8) & 0xFF
+            patched_sweep = True
+            print(f"  colorize handler CALL bg_sweep -> position sweep "
+                  f"(at 0x{i - BANK13 + 0x4000:04X})")
+            break
+    if not patched_sweep:
+        raise SystemExit("could not find CALL bg_sweep in colorize handler")
 
     # 2d. Neutralize the inline hook's ATTR writes in arenas.
-    # [DISABLED: Restored full synchronous tile+attr copy in arenas so boss animates with perfect sync and no background bleed]
     assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98]), \
         "inline hook entry point changed — neutralize would corrupt it"
-    neut = create_inline_tile_copy_tileonly(arena_neutralize_d880=None)
+    neut = create_inline_tile_copy_tileonly(arena_neutralize_d880=0x0C)
     hook_budget = 0x436D - 0x42A7 + 1   # 199 bytes
     assert len(neut) <= hook_budget, f"neutralized hook too big: {len(neut)} > {hook_budget}"
     rom[0x42A7:0x42A7 + len(neut)] = neut
     if 0x42A7 + len(neut) < 0x436E:      # re-pad leftover tail with zeros
         rom[0x42A7 + len(neut):0x436E] = bytes(0x436E - (0x42A7 + len(neut)))
-    print(f"  inline hook restored (full tile+attr copy) in arenas: {len(neut)} bytes at 0x42A7")
+    print(f"  inline hook neutralized in arenas (tile-only): {len(neut)} bytes at 0x42A7")
 
     # 3. Write the teleport routine at bank13:0x6E80, ending with JP COLORIZE
     tp = build_teleport_routine()
