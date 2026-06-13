@@ -39,7 +39,7 @@ except ImportError:
     sys.exit(1)
 
 ROOT = Path(__file__).parent.parent
-LIVE_FILE = Path("/tmp/live_palettes.txt")
+LIVE_FILE = ROOT / "rom" / "working" / "live_palettes.txt"
 YAML_PATH = ROOT / "palettes" / "penta_palettes_v097.yaml"
 
 PORT = 8077
@@ -620,6 +620,7 @@ def main():
     print(f"  mgba-qt rom/working/penta_dragon_dx_v301.gb \\")
     print(f"    --script scripts/lua/live_palettes.lua")
     print()
+    socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", PORT), Handler) as srv:
         srv.allow_reuse_address = True
         try:

@@ -653,20 +653,70 @@ def build_v301():
     print(f"  colorize handler: {len(code)} bytes at 0x{colorize_addr:04X}")
 
     # ============================================================
-    # VBLANK HOOK at 0x0824
+    # VBLANK HOOK at 0x0824 and Wrapper at 0x6F10
     # ============================================================
-    hook = bytearray([
-        0xF0, 0x99, 0xF5,
-        0x3E, 0x20, 0xE0, 0x00, 0xF0, 0x00,
-        0x2F, 0xE6, 0x0F, 0xCB, 0x37, 0x47,
-        0x3E, 0x10, 0xE0, 0x00,
-        0xF0, 0x00, 0xF0, 0x00,
-        0x2F, 0xE6, 0x0F, 0xB0, 0xE0, 0x93,
-        0x3E, 0x30, 0xE0, 0x00,
-        0x3E, 0x0D, 0xEA, 0x00, 0x20,
+    wrapper_addr = 0x6F10
+
+    # Write wrapper to bank 13 ROM (offset in file is 13 * 0x4000 + (wrapper_addr - 0x4000))
+    wrapper_off = 13 * 0x4000 + (wrapper_addr - 0x4000)
+    wrapper = bytearray([
+        # --- PRESERVE REGISTERS ---
+        0xC5,                                 # PUSH BC
+        0xD5,                                 # PUSH DE
+        0xE5,                                 # PUSH HL
+
+        # --- Robust 8-debounce joypad read ---
+        0x3E, 0x20,                           # LD A, 0x20
+        0xE0, 0x00,                           # LDH [FF00], A
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0x2F,                                 # CPL
+        0xE6, 0x0F,                           # AND 0x0F
+        0xCB, 0x37,                           # SWAP A
+        0x47,                                 # LD B, A
+        0x3E, 0x10,                           # LD A, 0x10
+        0xE0, 0x00,                           # LDH [FF00], A
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0x2F,                                 # CPL
+        0xE6, 0x0F,                           # AND 0x0F
+        0xB0,                                 # OR B
+        0xE0, 0x93,                           # LDH [FF93], A
+        0x47,                                 # LD B, A
+        0x3E, 0x30,                           # LD A, 0x30
+        0xE0, 0x00,                           # LDH [FF00], A
+        0x78,                                 # LD A, B
+
+        # --- CALL actual colorize_handler ---
         0xCD, colorize_addr & 0xFF, (colorize_addr >> 8) & 0xFF,
-        0xF1, 0xEA, 0x00, 0x20,
-        0xC9,
+
+        # --- RESTORE REGISTERS ---
+        0xE1,                                 # POP HL
+        0xD1,                                 # POP DE
+        0xC1,                                 # POP BC
+
+        0xC9,                                 # RET
+    ])
+    rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
+    print(f"  VBlank wrapper written: {len(wrapper)} bytes at bank13:0x{wrapper_addr:04X}")
+
+    hook = bytearray([
+        0xF0, 0x99,                           # LDH A, [FF99]
+        0xF5,                                 # PUSH AF (save original bank)
+        0x3E, 0x0D,                           # LD A, 13 (ROM bank of wrapper)
+        0xE0, 0x99,                           # LDH [FF99], A (update shadow to 13)
+        0xEA, 0x00, 0x21,                     # LD [0x2100], A (switch MBC bank to 13)
+        0xCD, wrapper_addr & 0xFF, (wrapper_addr >> 8) & 0xFF,  # CALL wrapper
+        0xF1,                                 # POP AF (restore original bank value)
+        0xE0, 0x99,                           # LDH [FF99], A (restore original shadow)
+        0xEA, 0x00, 0x21,                     # LD [0x2100], A (restore original MBC ROM bank)
+        0xC9,                                 # RET
     ])
     assert len(hook) <= 47
     rom[0x0824:0x0824 + 47] = (hook + bytearray(47 - len(hook)))[:47]

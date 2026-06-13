@@ -1,8 +1,8 @@
 -- Live palette editor — polls /tmp/live_palettes.txt and writes CGB CRAM
 local f = 0
 local last_hash = 0
-local PAL_FILE = "/tmp/live_palettes.txt"
-local SENTINEL = "/tmp/live_palettes_lua.log"
+local PAL_FILE = "/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes.txt"
+local SENTINEL = "/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_lua.log"
 
 -- Log to sentinel file (since mGBA print may not go to stdout)
 local function log(msg)
@@ -137,9 +137,9 @@ local combo_state = nil
 -- documented frames (180-396). Avoids manual keypresses inside mGBA.
 local autostart_armed = false
 do
-    local fh = io.open("/tmp/live_palettes_autostart", "r")
+    local fh = io.open("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_autostart", "r")
     if fh then autostart_armed = true; fh:close()
-        log("autostart armed via /tmp/live_palettes_autostart")
+        log("autostart armed via rom/working/live_palettes_autostart")
     end
 end
 local AUTOSTART_KEYS = {{180,185,0x80},{193,198,0x01},{241,246,0x01},
@@ -163,22 +163,22 @@ callbacks:add("frame", function()
         if f <= 410 then emu:setKeys(k) end
         if f == 500 then
             autostart_armed = false
-            os.remove("/tmp/live_palettes_autostart")
+            os.remove("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_autostart")
             log(string.format("f%d: autostart finished, FFC1=%d D880=0x%02X",
                 f, emu:read8(0xFFC1), emu:read8(0xD880)))
         end
     end
 
-    -- Screenshot trigger: read /tmp/live_palettes_screenshot, save to that path.
+    -- Screenshot trigger: read rom/working/live_palettes_screenshot, save to that path.
     if f % 5 == 0 then
-        local sfh = io.open("/tmp/live_palettes_screenshot", "r")
+        local sfh = io.open("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_screenshot", "r")
         if sfh then
             local path = sfh:read("*all"):gsub("%s+$", "")
             sfh:close()
             if path and #path > 0 then
                 emu:screenshot(path)
                 log(string.format("f%d: screenshot saved to %s", f, path))
-                os.remove("/tmp/live_palettes_screenshot")
+                os.remove("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_screenshot")
             end
         end
     end

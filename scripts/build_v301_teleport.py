@@ -365,12 +365,12 @@ def build_teleport_routine() -> bytes:
     c.extend([0xE0, 0xBF])                # LDH [FFBF], A
 
     # ---- STACK REDIRECT ----
-    c.extend([0xF8, 0x0E])                # LD HL, SP+14
+    c.extend([0xF8, 0x16])                # LD HL, SP+22 (updated for wrapper stack layout)
     c.extend([0x2A])                      # LD A, [HL+] (low byte of PC)
     c.extend([0xEA, 0x20, 0xDF])          # LD [DF20], A
     c.extend([0x7E])                      # LD A, [HL]  (high byte)
     c.extend([0xEA, 0x21, 0xDF])          # LD [DF21], A
-    c.extend([0xF8, 0x0E])                # LD HL, SP+14
+    c.extend([0xF8, 0x16])                # LD HL, SP+22 (updated for wrapper stack layout)
     c.extend([0x3E, LANDING_PAD_WRAM & 0xFF])
     c.extend([0x22])                      # LD [HL+], A
     c.extend([0x3E, (LANDING_PAD_WRAM >> 8) & 0xFF])
@@ -531,34 +531,33 @@ def main():
     print(f"  position sweep: {len(possweep)} bytes at bank13:0x{POSSWEEP_ADDR:04X}")
 
     # Repoint the colorize handler's `CALL bg_sweep (0x6CD0)` -> position sweep.
-    h0 = BANK13 + (COLORIZE_ADDR - 0x4000)
-    patched_sweep = False
-    for i in range(h0, h0 + 0x80):
-        if (rom[i] == 0xCD and rom[i + 1] == (BG_SWEEP_ADDR & 0xFF)
-                and rom[i + 2] == ((BG_SWEEP_ADDR >> 8) & 0xFF)):
-            rom[i + 1] = POSSWEEP_ADDR & 0xFF
-            rom[i + 2] = (POSSWEEP_ADDR >> 8) & 0xFF
-            patched_sweep = True
-            print(f"  colorize handler CALL bg_sweep -> position sweep "
-                  f"(at 0x{i - BANK13 + 0x4000:04X})")
-            break
-    if not patched_sweep:
-        raise SystemExit("could not find CALL bg_sweep in colorize handler")
+    # [DISABLED: Using standard tile-ID bg_sweep directly for clean background/claws separation]
+    patched_sweep = True
+    # h0 = BANK13 + (COLORIZE_ADDR - 0x4000)
+    # patched_sweep = False
+    # for i in range(h0, h0 + 0x80):
+    #     if (rom[i] == 0xCD and rom[i + 1] == (BG_SWEEP_ADDR & 0xFF)
+    #             and rom[i + 2] == ((BG_SWEEP_ADDR >> 8) & 0xFF)):
+    #         rom[i + 1] = POSSWEEP_ADDR & 0xFF
+    #         rom[i + 2] = (POSSWEEP_ADDR >> 8) & 0xFF
+    #         patched_sweep = True
+    #         print(f"  colorize handler CALL bg_sweep -> position sweep "
+    #               f"(at 0x{i - BANK13 + 0x4000:04X})")
+    #         break
+    # if not patched_sweep:
+    #     raise SystemExit("could not find CALL bg_sweep in colorize handler")
 
-    # 2d. Neutralize the inline hook's ATTR writes in arenas. There the
-    # position sweep is the sole attr writer; the hook does TILE-ONLY copies so
-    # its tile-ID attrs can't fight the fixed posmap (which would re-introduce
-    # alternation). Title/dungeon behavior is unchanged (D880 < 0x0C -> full
-    # tile+attr path). Overwrites the base build's hook image at bank1:0x42A7.
+    # 2d. Neutralize the inline hook's ATTR writes in arenas.
+    # [DISABLED: Restored full synchronous tile+attr copy in arenas so boss animates with perfect sync and no background bleed]
     assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98]), \
         "inline hook entry point changed — neutralize would corrupt it"
-    neut = create_inline_tile_copy_tileonly(arena_neutralize_d880=0x0C)
+    neut = create_inline_tile_copy_tileonly(arena_neutralize_d880=None)
     hook_budget = 0x436D - 0x42A7 + 1   # 199 bytes
     assert len(neut) <= hook_budget, f"neutralized hook too big: {len(neut)} > {hook_budget}"
     rom[0x42A7:0x42A7 + len(neut)] = neut
     if 0x42A7 + len(neut) < 0x436E:      # re-pad leftover tail with zeros
         rom[0x42A7 + len(neut):0x436E] = bytes(0x436E - (0x42A7 + len(neut)))
-    print(f"  inline hook neutralized in arenas: {len(neut)} bytes at 0x42A7")
+    print(f"  inline hook restored (full tile+attr copy) in arenas: {len(neut)} bytes at 0x42A7")
 
     # 3. Write the teleport routine at bank13:0x6E80, ending with JP COLORIZE
     tp = build_teleport_routine()
@@ -571,18 +570,78 @@ def main():
     off = BANK13 + (TELEPORT_ADDR - 0x4000)
     rom[off:off + len(tp)] = tp
 
-    # 4. Patch VBlank hook: CALL 0x6E00 → CALL 0x6E80
-    hook = rom[0x0824:0x0824 + 47]
-    patched = False
-    for i in range(len(hook) - 2):
-        if hook[i] == 0xCD and hook[i + 1] == 0x00 and hook[i + 2] == 0x6E:
-            rom[0x0824 + i + 1] = TELEPORT_ADDR & 0xFF
-            rom[0x0824 + i + 2] = (TELEPORT_ADDR >> 8) & 0xFF
-            patched = True
-            print(f"  VBlank hook patched at 0x0824+{i}: CALL → 0x{TELEPORT_ADDR:04X}")
-            break
-    if not patched:
-        raise SystemExit("could not find CALL 0x6E00 in VBlank hook")
+    # 4. Write new VBlank hook at 0x0824 and wrapper at WRAPPER_ADDR (0x6F10)
+    WRAPPER_ADDR = 0x6F10
+
+    # 4a. Write wrapper to bank 13
+    wrapper = bytearray([
+        # --- PRESERVE REGISTERS ---
+        0xC5,                                 # PUSH BC
+        0xD5,                                 # PUSH DE
+        0xE5,                                 # PUSH HL
+
+        # --- Robust 8-debounce joypad read ---
+        0x3E, 0x20,                           # LD A, 0x20
+        0xE0, 0x00,                           # LDH [FF00], A
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0x2F,                                 # CPL
+        0xE6, 0x0F,                           # AND 0x0F
+        0xCB, 0x37,                           # SWAP A
+        0x47,                                 # LD B, A
+        0x3E, 0x10,                           # LD A, 0x10
+        0xE0, 0x00,                           # LDH [FF00], A
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00]
+        0x2F,                                 # CPL
+        0xE6, 0x0F,                           # AND 0x0F
+        0xB0,                                 # OR B
+        0xE0, 0x93,                           # LDH [FF93], A
+        0x47,                                 # LD B, A
+        0x3E, 0x30,                           # LD A, 0x30
+        0xE0, 0x00,                           # LDH [FF00], A
+        0x78,                                 # LD A, B
+
+        # --- CALL Teleport routine ---
+        0xCD, TELEPORT_ADDR & 0xFF, (TELEPORT_ADDR >> 8) & 0xFF,
+
+        # --- RESTORE REGISTERS ---
+        0xE1,                                 # POP HL
+        0xD1,                                 # POP DE
+        0xC1,                                 # POP BC
+
+        0xC9,                                 # RET
+    ])
+
+    wrapper_off = BANK13 + (WRAPPER_ADDR - 0x4000)
+    rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
+    print(f"  VBlank wrapper written: {len(wrapper)} bytes at bank13:0x{WRAPPER_ADDR:04X}")
+
+    # 4b. Write the new hook at 0x0824
+    new_hook = bytearray([
+        0xF0, 0x99,                           # LDH A, [FF99]
+        0xF5,                                 # PUSH AF (save original bank)
+        0x3E, 0x0D,                           # LD A, 13 (ROM bank of wrapper)
+        0xE0, 0x99,                           # LDH [FF99], A (update shadow to 13)
+        0xEA, 0x00, 0x21,                     # LD [0x2100], A (switch MBC bank to 13)
+        0xCD, WRAPPER_ADDR & 0xFF, (WRAPPER_ADDR >> 8) & 0xFF,  # CALL wrapper
+        0xF1,                                 # POP AF (restore original bank value)
+        0xE0, 0x99,                           # LDH [FF99], A (restore original shadow)
+        0xEA, 0x00, 0x21,                     # LD [0x2100], A (restore original MBC ROM bank)
+        0xC9,                                 # RET
+    ])
+
+    assert len(new_hook) <= 47
+    # Zero-pad remaining bytes of the 47-byte slot at 0x0824
+    new_hook_padded = (new_hook + bytearray(47 - len(new_hook)))[:47]
+    rom[0x0824:0x0824 + 47] = new_hook_padded
+    print(f"  Safe-switching VBlank hook written at 0x0824: {len(new_hook)} bytes (padded to 47)")
 
     # Header checksum (recompute for safety)
     chk = 0

@@ -68,31 +68,31 @@ bg_palettes:
 
   # Palette 1 - Items/pickups (gold/yellow - makes them pop!)
   BG1:
-    colors: ["03FF", "02DF", "019F", "0000"]  # Bright yellow, Gold, Dark gold, Black
+    colors: ["7FFF", "03FF", "019F", "0000"]  # White background, Bright yellow, Dark gold, Black
 
   # Palette 2 - Decorative elements (purple/magenta)
   BG2:
-    colors: ["7E1F", "5C0F", "3807", "0000"]  # Light magenta, Purple, Dark purple, Black
+    colors: ["7FFF", "7E1F", "3807", "0000"]  # White background, Purple, Dark purple, Black
 
   # Palette 3 - Nature/organic (green tones)
   BG3:
-    colors: ["03E0", "02A0", "0160", "0000"]  # Bright green, Forest green, Dark green, Black
+    colors: ["7FFF", "03E0", "0160", "0000"]  # White background, Forest green, Dark green, Black
 
   # Palette 4 - Water/ice (cyan/teal)
   BG4:
-    colors: ["7FE0", "5EC0", "3D80", "0000"]  # Cyan, Teal, Dark teal, Black
+    colors: ["7FFF", "7FE0", "3D80", "0000"]  # White background, Cyan, Dark teal, Black
 
   # Palette 5 - Fire/lava (red/orange)
   BG5:
-    colors: ["03FF", "00DF", "001F", "0000"]  # Yellow, Orange, Red, Black
+    colors: ["7FFF", "03FF", "001F", "0000"]  # White background, Yellow, Red, Black
 
   # Palette 6 - Stone/castle (blue-gray)
   BG6:
-    colors: ["6F7B", "4E73", "2D4A", "0000"]  # Light slate, Blue-gray, Dark slate, Black
+    colors: ["7FFF", "6F7B", "2D4A", "0000"]  # White background, Blue-gray, Dark slate, Black
 
   # Palette 7 - Mystery/special (deep blue)
   BG7:
-    colors: ["7E10", "5C08", "3800", "0000"]  # Sky blue, Royal blue, Navy, Black
+    colors: ["7FFF", "7E10", "3800", "0000"]  # White background, Royal blue, Navy, Black
 
 # ============================================
 # SPRITE PALETTES - VERIFIED MAPPINGS
