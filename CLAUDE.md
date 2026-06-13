@@ -48,6 +48,17 @@ md5 `dd617b7e83d1fef30b07d70be0a13586`). Re-synced to v3.01 on
 - **Always verify against the five probes in `scripts/probes/`
   before declaring a build good.** The user's eyes are the final
   judge, but no-probe regressions waste their time.
+- **Colorize VBlank timing: keep custom WRAM scratch OUT of
+  `0xDF10–0xDF2F`** (bg_sweep's per-frame swept-row buffer — anything
+  there is clobbered every frame). A cache byte at `0xDF23` collided
+  with it and caused the dungeon wall-flicker (scene-detect ran a 256B
+  copy every frame → colorize spilled out of VBlank into active
+  display). Timing bugs like this are **invisible to headless PyBoy**
+  (it doesn't enforce VRAM windows) — diagnose with an LY-timing probe
+  (`hook_register` on bg_sweep, read `FF44`/LY; writes must land at
+  LY 144–153). Full write-up + reusable methods (deterministic A/B
+  frame diff, banked VRAM reads, palette-RAM reads, Riff arena
+  colorization): `docs/FINDINGS_2026_06_13_dungeon_flicker_and_riff.md`.
 - **Promote to FIXED.gb only via the backup pattern**
   `cp FIXED.gb FIXED.vNN.backup.gb && cp candidate.gb FIXED.gb`.
   Keeps rollback one command away.

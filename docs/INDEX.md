@@ -48,6 +48,16 @@ then dive into the specific subsystem you care about.
   accumulates uninit attrs that flash when LCDC bit 3 toggles. Both v3.00
   and v3.01 have this characteristic. Three potential fixes described
   but deferred (regression risk).
+- [`FINDINGS_2026_06_13_dungeon_flicker_and_riff.md`](FINDINGS_2026_06_13_dungeon_flicker_and_riff.md)
+  — **TELEPORT-build dungeon wall-flicker root cause + fix** (distinct from
+  the double-buffer scroll flicker above): scene-detect's cache byte at
+  `0xDF23` collided with bg_sweep's `0xDF10–0xDF2F` scratch buffer → 256B
+  table copy every frame → colorize spilled out of VBlank → flicker while
+  roaming. Fix: move byte to `0xDF0D` (tag `v8.6-gold-flicker-fixed`). Also:
+  Riff single-purple-body colorization (tag `v8.7-gold-riff-purple`), and
+  reusable diagnostic methods (LY-timing probe, deterministic A/B frame diff,
+  banked VRAM / palette-RAM reads in PyBoy). Key rule: keep custom WRAM scratch
+  out of `0xDF10–0xDF2F`.
 - [`inline_tile_attr_copy.md`](inline_tile_attr_copy.md) — Full
   documentation of the 0x42A7 inline tile+attr copy: entry points,
   5 static callers, tile/attr phase structure with STAT-mode waits,
