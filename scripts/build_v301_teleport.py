@@ -548,13 +548,13 @@ def main():
     # 2d. Neutralize the inline hook's ATTR writes in arenas.
     assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98]), \
         "inline hook entry point changed — neutralize would corrupt it"
-    neut = create_inline_tile_copy_tileonly(arena_neutralize_d880=0x0C)
+    neut = create_inline_tile_copy_tileonly(arena_neutralize_d880=None)
     hook_budget = 0x436D - 0x42A7 + 1   # 199 bytes
     assert len(neut) <= hook_budget, f"neutralized hook too big: {len(neut)} > {hook_budget}"
     rom[0x42A7:0x42A7 + len(neut)] = neut
     if 0x42A7 + len(neut) < 0x436E:      # re-pad leftover tail with zeros
         rom[0x42A7 + len(neut):0x436E] = bytes(0x436E - (0x42A7 + len(neut)))
-    print(f"  inline hook neutralized in arenas (tile-only): {len(neut)} bytes at 0x42A7")
+    print(f"  inline hook restored (full tile+attr copy) in arenas: {len(neut)} bytes at 0x42A7")
 
     # 3. Write the teleport routine at bank13:0x6E80, ending with JP COLORIZE
     tp = build_teleport_routine()
