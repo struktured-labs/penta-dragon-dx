@@ -127,6 +127,16 @@ LAVA_OVERRIDE_ADDR = 0x7E00
 # multi-tone ("color bleed"). scene_detect swaps this all-pal0 table into 0xDA00
 # on the splash so every splash tile resolves to one palette (clean letters).
 SPLASH_TABLE_ADDR = 0x7E40
+# Post-DMA HW-OAM recolor (items 3,4,6,11): enemies render OBJ pal0 (blue/black)
+# because the colorizer assigns the right palette in the SHADOW buffer but the
+# game's main-loop OAM rebuild + the double-buffer DMA leave the DISPLAYED HW OAM
+# at pal0. This routine runs in the wrapper AFTER colorize+DMA and re-stamps the
+# palette bits of HW OAM (0xFE00) by tile range, reusing the existing colorizer
+# at 0x6A10. mGBA-verified only; VBlank-budget/hardware risk -> teleport build
+# (opt-in branch) only. See docs/audit/obj_enemy_color_race.md.
+HWOAM_RECOLOR_ADDR = 0x7F40       # free bank-13 space after the splash table
+OBJ_COLORIZER_ADDR = 0x6A10      # create_tile_based_colorizer install addr (gdma)
+BOSS_SLOT_TABLE_ADDR = 0x68C0    # boss_slot_addr (gdma)
 # Per-stage molten tile IDs (probe_lava_ffba.lua histograms + docs/audit/stage2_lava.md):
 LAVA_STAGE5_IDS = [0x02, 0x03, 0x04, 0x05, 0x12, 0x13, 0x14, 0x15]  # FFBA=4 (stage 5)
 LAVA_STAGE7_IDS = [0x19, 0x1A]                                       # FFBA=6 (stage 7)
@@ -415,6 +425,45 @@ def build_levelsel_attr_clear_stub() -> bytes:
     c.extend([0xE1])                       # POP HL
     # JP to original target
     c.extend([0xC3, 0x93, 0x73])           # JP 0x7393
+    return bytes(c)
+
+
+def build_hwoam_recolor() -> bytes:
+    """Re-stamp HW OAM (0xFE00) palette bits by tile range, AFTER colorize+DMA.
+
+    Runs from the wrapper once colorize (which DMAs the shadow buffer to HW OAM)
+    has returned, so it fixes the DISPLAYED sprites that the game's pal0 rebuild
+    + double-buffer DMA leaves uncolored. Sets up D (Sara form palette from FFBE)
+    and E (boss slot from FFBF + boss_slot_table) exactly like shadow_main, points
+    HL at the first HW-OAM attr byte, and tail-calls the existing tile-based
+    colorizer at 0x6A10 (which loops 40 sprites: read tile [HL-1], map to palette,
+    OR into attr [HL], advance 4). The colorizer RETs, so this RETs.
+    """
+    c = bytearray()
+    # D = Sara form palette: FFBE==0 -> 2 (witch), else -> 1 (dragon)
+    c.extend([0xF0, 0xBE, 0xB7, 0x20, 0x04, 0x16, 0x02, 0x18, 0x02, 0x16, 0x01])
+    # E = boss slot: FFBF==0 -> 0, else boss_slot_table[FFBF-1]
+    c.extend([0xF0, 0xBF, 0xB7])
+    j_noboss = len(c) + 1
+    c.extend([0x28, 0x00])                 # JR Z, no_boss
+    c.extend([0x3D, 0x4F, 0x06, 0x00])     # DEC A; LD C,A; LD B,0
+    c.extend([0x21, BOSS_SLOT_TABLE_ADDR & 0xFF, (BOSS_SLOT_TABLE_ADDR >> 8) & 0xFF])
+    c.extend([0x09, 0x5E])                 # ADD HL,BC; LD E,[HL]
+    j_done = len(c) + 1
+    c.extend([0x18, 0x00])                 # JR done
+    no_boss = len(c)
+    c[j_noboss] = (no_boss - j_noboss - 1) & 0xFF
+    c.extend([0x1E, 0x00])                 # LD E, 0
+    done = len(c)
+    c[j_done] = (done - j_done - 1) & 0xFF
+    # HL = HW OAM first attr byte; B = 40 (full OAM coverage for the HW pass only).
+    # Tail-jump to the colorizer's loop_start (addr+2) to skip its own `LD B,10`,
+    # so the shared shadow colorize stays cheap (cap 10) but the HW pass covers all
+    # 40 sprites. The colorizer RETs, so this RETs.
+    c.extend([0x21, 0x03, 0xFE])           # LD HL, 0xFE03
+    c.extend([0x06, 0x28])                 # LD B, 40
+    loop_start = OBJ_COLORIZER_ADDR + 2    # after the colorizer's LD B,n
+    c.extend([0xC3, loop_start & 0xFF, (loop_start >> 8) & 0xFF])  # JP colorizer loop_start
     return bytes(c)
 
 
@@ -744,6 +793,15 @@ def main():
     rom[off:off + 256] = bytes(256)   # all pal0
     print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
+    # Post-DMA HW-OAM recolor (enemies items 3,4,6,11), CALLed from the wrapper.
+    hwoam = build_hwoam_recolor()
+    assert SPLASH_TABLE_ADDR + 256 <= HWOAM_RECOLOR_ADDR, "splash table overruns hwoam recolor"
+    assert HWOAM_RECOLOR_ADDR + len(hwoam) <= POSMAP_PTR_TABLE, \
+        f"hwoam recolor 0x{HWOAM_RECOLOR_ADDR + len(hwoam):04X} overruns posmap ptr table 0x{POSMAP_PTR_TABLE:04X}"
+    off = BANK13 + (HWOAM_RECOLOR_ADDR - 0x4000)
+    rom[off:off + len(hwoam)] = hwoam
+    print(f"  hwoam recolor: {len(hwoam)} bytes at bank13:0x{HWOAM_RECOLOR_ADDR:04X}")
+
     # 2b. Re-patch bg_sweep to read the PER-SCENE WRAM table (0xDA00) instead
     # of the ROM dungeon table (0x7000). The base build bakes the sweep with
     # the dungeon table, so in arenas the sweep wrote dungeon-palette attrs for
@@ -885,8 +943,11 @@ def main():
         0xE0, 0x00,                           # LDH [FF00], A
         0x78,                                 # LD A, B
 
-        # --- CALL Teleport routine ---
+        # --- CALL Teleport routine (runs scene_detect + lava + JP colorize+DMA) ---
         0xCD, TELEPORT_ADDR & 0xFF, (TELEPORT_ADDR >> 8) & 0xFF,
+
+        # --- Post-DMA HW-OAM recolor (enemies; items 3,4,6,11) ---
+        0xCD, HWOAM_RECOLOR_ADDR & 0xFF, (HWOAM_RECOLOR_ADDR >> 8) & 0xFF,
 
         # --- RESTORE REGISTERS ---
         0xE1,                                 # POP HL
