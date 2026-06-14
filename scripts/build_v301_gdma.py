@@ -454,6 +454,14 @@ def build_v301():
     w(shadow_main_addr, create_shadow_colorizer_main(colorizer_addr, boss_slot_addr))
 
     colorizer = bytearray(create_tile_based_colorizer(colorizer_addr))
+    # OAM scan cap (LD B,n at colorizer entry). Kept at 0x0A=10 (the shipped,
+    # hardware-verified VBlank-safe value). Raising it to 0x28=40 (full OAM
+    # coverage) was TESTED for the black-enemy issue (items 3,4,6,11) but did NOT
+    # fix in-game enemies: they still render p0 (blue/black) because the real bug
+    # is a DMA-ordering race (the colorizer assigns p6/p7 in the shadow buffer but
+    # the game's main-loop OAM rebuild overwrites HW OAM with p0 before display).
+    # The full OBJ fix (cap 40 + DMA-ordering rework) is timing-critical and needs
+    # MiSTer hardware verification — see docs/audit/obj_enemy_color_race.md.
     colorizer[1] = 0x0A
     w(colorizer_addr, bytes(colorizer))
 
