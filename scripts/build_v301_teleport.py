@@ -110,6 +110,12 @@ PENTA_DRAGON_TABLE_ADDR = 0x7A00
 # free bank-13 space above the (static) posmap blob. Verified: FFBA is stable at
 # the stage value during normal dungeon roaming (probe_lava_ffba.lua).
 LAVA_OVERRIDE_ADDR = 0x7E00
+# Uniform table for the STAGE-intro / boss-name splash (D880=0x18). The big
+# "STAGE NN" letters reuse mid-range tile IDs (0x2C/0x2D/0x3C/0x45/0x54/0x55…)
+# that the dungeon table colors p6/p5 (walls/spikes), so the letters render
+# multi-tone ("color bleed"). scene_detect swaps this all-pal0 table into 0xDA00
+# on the splash so every splash tile resolves to one palette (clean letters).
+SPLASH_TABLE_ADDR = 0x7E40
 # Per-stage molten tile IDs (probe_lava_ffba.lua histograms + docs/audit/stage2_lava.md):
 LAVA_STAGE5_IDS = [0x02, 0x03, 0x04, 0x05, 0x12, 0x13, 0x14, 0x15]  # FFBA=4 (stage 5)
 LAVA_STAGE7_IDS = [0x19, 0x1A]                                       # FFBA=6 (stage 7)
@@ -172,7 +178,8 @@ def _bg_table_penta_dragon() -> bytes:   return _table_from_dict("penta_dragon")
 
 
 
-def build_scene_detect(dungeon_addr: int, arena_base_addr: int) -> bytes:
+def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
+                       splash_addr: int) -> bytes:
     """Detect D880 scene change, swap WRAM 0xDA00 with the right bg_table.
 
     Reads D880 (WRAM scene state). Compares to DF23 (previous). If same,
@@ -198,7 +205,22 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int) -> bytes:
     c.extend([0xC8])                      # RET Z (no change — fast path)
 
     # Scene changed: save new value
-    c.extend([0x77])                      # LD [HL], A   (DF23 = new D880)
+    c.extend([0x77])                      # LD [HL], A   (DF23 = new D880)   (A still = D880)
+
+    # Splash scene (D880=0x18, STAGE-intro / boss-name): load the uniform splash
+    # table so the big letters don't inherit wall/spike p6 (color bleed). Also
+    # re-assert DF02=0x5A so the colorize cold-boot copy (the stage-load re-zeroes
+    # DF02) can't restore the dungeon table over it mid-splash.
+    c.extend([0xFE, 0x18])                # CP 0x18
+    j_not_splash = len(c) + 1
+    c.extend([0x20, 0x00])                # JR NZ, not_splash
+    c.extend([0x3E, 0x5A, 0xEA, 0x02, 0xDF])  # LD A,0x5A; LD [DF02],A
+    c.extend([0x21, splash_addr & 0xFF, (splash_addr >> 8) & 0xFF])  # LD HL, splash
+    j_copy_splash = len(c) + 1
+    c.extend([0x18, 0x00])                # JR copy
+    not_splash_pos = len(c)
+    c[j_not_splash] = (not_splash_pos - j_not_splash - 1) & 0xFF
+    # (A is still = D880 here: CP 0x18 above does not modify A)
 
     # Compute arena_idx = D880 - 0x0C. If carry → too low → dungeon.
     # If result >= 9 → too high → dungeon. Else load arena table.
@@ -233,6 +255,7 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int) -> bytes:
     # copy target
     copy_pos = len(c)
     c[j_copy] = (copy_pos - j_copy - 1) & 0xFF
+    c[j_copy_splash] = (copy_pos - j_copy_splash - 1) & 0xFF
 
     # Copy 256 bytes: HL → DE = 0xDA00
     c.extend([0x11, 0x00, 0xDA])          # LD DE, 0xDA00
@@ -590,7 +613,7 @@ def main():
         print(f"  {name:14s} bg_table: 256 bytes at bank13:0x{addr:04X}")
 
     # Write scene-detect routine. Verify we don't overrun the landing pad.
-    sd = build_scene_detect(DUNGEON_TABLE_ADDR, ARENA_BASE_ADDR)
+    sd = build_scene_detect(DUNGEON_TABLE_ADDR, ARENA_BASE_ADDR, SPLASH_TABLE_ADDR)
     assert SCENE_DETECT_ADDR + len(sd) <= DUNGEON_TABLE_ADDR, \
         f"scene-detect overruns dungeon table: 0x{SCENE_DETECT_ADDR + len(sd):04X} > 0x{DUNGEON_TABLE_ADDR:04X}"
     off = BANK13 + (SCENE_DETECT_ADDR - 0x4000)
@@ -607,6 +630,15 @@ def main():
     print(f"  lava override: {len(lava)} bytes at bank13:0x{LAVA_OVERRIDE_ADDR:04X} "
           f"(stage5 IDs {['%02X' % x for x in LAVA_STAGE5_IDS]}, "
           f"stage7 IDs {['%02X' % x for x in LAVA_STAGE7_IDS]})")
+
+    # Splash table (256 bytes, all pal0) for D880=0x18 — uniform STAGE/boss text.
+    assert LAVA_OVERRIDE_ADDR + len(lava) <= SPLASH_TABLE_ADDR, \
+        f"lava override 0x{LAVA_OVERRIDE_ADDR + len(lava):04X} collides with splash table 0x{SPLASH_TABLE_ADDR:04X}"
+    assert SPLASH_TABLE_ADDR + 256 <= POSMAP_PTR_TABLE, \
+        f"splash table 0x{SPLASH_TABLE_ADDR + 256:04X} collides with posmap ptr table 0x{POSMAP_PTR_TABLE:04X}"
+    off = BANK13 + (SPLASH_TABLE_ADDR - 0x4000)
+    rom[off:off + 256] = bytes(256)   # all pal0
+    print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
     # 2b. Re-patch bg_sweep to read the PER-SCENE WRAM table (0xDA00) instead
     # of the ROM dungeon table (0x7000). The base build bakes the sweep with
