@@ -73,6 +73,17 @@ LANDING_PAD_ROM_ADDR = 0x6F80  # landing pad source (gets copied to WRAM DB00)
                               # routine grew past 128 bytes and was
                               # overwriting the landing pad source.
 LANDING_PAD_WRAM = 0xDB00      # runtime landing pad location
+# Level-select score-screen attr-clear stub. The game's GAME-START path
+# (DCFD != 0) JPs to bank1:0x7393 which runs its own DI'd input loop, so our
+# VBlank colorizer is dark while shown. Stale attrs from earlier screens
+# bleed (orange/red). Patch the JP NZ at bank1:0x3B47 to point HERE instead;
+# this stub clears VBK=1 attrs at 0x9800-0x9FFF (LCD-off, fast), then JPs
+# to the original 0x7393. Diagnosed in commit 306f73e / docs/audit/levelselect_score_bleed.md.
+LEVELSEL_STUB_ROM_ADDR = 0x53C2  # 36-byte free run in bank 13 (not contiguous
+                                 # with landing pad — separate cold-boot copy)
+LEVELSEL_STUB_WRAM = 0xDB28      # 0xDB00 + 40 — right after landing pad in WRAM
+LEVELSEL_PATCH_ADDR = 0x3B47     # bank0 (always-mapped); JP NZ target
+LEVELSEL_STUB_MAX = 36           # size cap (the free run is 36 bytes)
 
 # ---- scene-aware bg_table (Phase 1b: all 9 boss arenas) ----
 # Scene-detect routine sits in the gap between landing pad and bg_table.
@@ -340,6 +351,58 @@ def build_lava_override(base_addr: int) -> bytes:
     return bytes(c)
 
 
+def build_levelsel_attr_clear_stub() -> bytes:
+    """~34-byte WRAM stub: clears VBK=1 BG attrs (0x9800-0x9FFF) then JPs to
+    the original 0x7393. Triggered by the patched `JP NZ` at bank1:0x3B47.
+
+    No VBlank-wait: disabling LCD mid-frame causes one frame of glitch, but
+    we're already in a screen transition (title-menu → level-select), so a
+    single blank frame is invisible. Saves 7 bytes vs the safe version,
+    letting the source fit in the available 36-byte ROM free run.
+
+    Why save HL/BC only (not AF): we arrived via `JP NZ` so the Z flag has
+    already done its job. F is dead; B/H are touched by the clear; A is
+    constant 0 by the time we return. HL/BC need restoring for the title-
+    menu code at 0x7393 that uses them.
+
+    Why JP not CALL: 0x7393 runs the level-select's own forever-loop and
+    only RETs via its own EI'd input handler; our caller isn't expecting
+    control back.
+    """
+    c = bytearray()
+    c.extend([0xE5])                       # PUSH HL
+    c.extend([0xC5])                       # PUSH BC
+    # Save LCDC, disable LCD (1-frame glitch acceptable in screen-switch)
+    c.extend([0xF0, 0x40])                 # LDH A, [FF40]
+    c.extend([0x47])                       # LD B, A (save LCDC)
+    c.extend([0xE6, 0x7F])                 # AND 0x7F (clear bit 7)
+    c.extend([0xE0, 0x40])                 # LDH [FF40], A
+    # VBK = 1
+    c.extend([0x3E, 0x01])                 # LD A, 1
+    c.extend([0xE0, 0x4F])                 # LDH [FF4F], A
+    # Clear 0x9800..0x9FFF: HL=0x9800, write 0 until H==0xA0 (2048 bytes)
+    c.extend([0x21, 0x00, 0x98])           # LD HL, 0x9800
+    clear_loop = len(c)
+    c.extend([0xAF])                       # XOR A
+    c.extend([0x22])                       # LD [HL+], A
+    c.extend([0x7C])                       # LD A, H
+    c.extend([0xFE, 0xA0])                 # CP 0xA0
+    off = clear_loop - (len(c) + 2)
+    c.extend([0x20, off & 0xFF])           # JR NZ, clear_loop
+    # VBK = 0
+    c.extend([0xAF])                       # XOR A
+    c.extend([0xE0, 0x4F])                 # LDH [FF4F], A
+    # Restore LCDC (B still holds saved value)
+    c.extend([0x78])                       # LD A, B
+    c.extend([0xE0, 0x40])                 # LDH [FF40], A
+    # Restore regs
+    c.extend([0xC1])                       # POP BC
+    c.extend([0xE1])                       # POP HL
+    # JP to original target
+    c.extend([0xC3, 0x93, 0x73])           # JP 0x7393
+    return bytes(c)
+
+
 def build_landing_pad() -> bytes:
     """Executable code that runs in main-loop context AFTER the RETI.
 
@@ -409,10 +472,10 @@ def build_teleport_routine() -> bytes:
     c.extend([0xFE, 0x5A])                # CP 0x5A
     j_copy_done = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z, copy_done
-    # Copy 40 bytes from bank13 ROM to WRAM DB00
+    # Copy 40 bytes (landing pad) from bank13 ROM to WRAM DB00.
     c.extend([0x21, LANDING_PAD_ROM_ADDR & 0xFF, (LANDING_PAD_ROM_ADDR >> 8) & 0xFF])  # LD HL, ROM_SRC
     c.extend([0x11, LANDING_PAD_WRAM & 0xFF, (LANDING_PAD_WRAM >> 8) & 0xFF])          # LD DE, WRAM_DST
-    c.extend([0x06, 40])                  # LD B, 40 (max landing pad bytes)
+    c.extend([0x06, 40])                  # LD B, 40
     copy_loop = len(c)
     c.extend([0x2A])                      # LD A, [HL+]
     c.extend([0x12])                      # LD [DE], A
@@ -420,6 +483,17 @@ def build_teleport_routine() -> bytes:
     c.extend([0x05])                      # DEC B
     offset = copy_loop - (len(c) + 2)
     c.extend([0x20, offset & 0xFF])       # JR NZ, copy_loop
+
+    # Second copy: 36 bytes (levelsel attr-clear stub) from LEVELSEL_STUB_ROM_ADDR
+    # to LEVELSEL_STUB_WRAM. Same sentinel (DF0E) gates both copies, so this
+    # block also only runs once per cold-boot.
+    c.extend([0x21, LEVELSEL_STUB_ROM_ADDR & 0xFF, (LEVELSEL_STUB_ROM_ADDR >> 8) & 0xFF])
+    c.extend([0x11, LEVELSEL_STUB_WRAM & 0xFF, (LEVELSEL_STUB_WRAM >> 8) & 0xFF])
+    c.extend([0x06, LEVELSEL_STUB_MAX])   # LD B, 36
+    ls_loop = len(c)
+    c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
+    off = ls_loop - (len(c) + 2)
+    c.extend([0x20, off & 0xFF])          # JR NZ, ls_loop
     # Set sentinel only. Do NOT touch FFBA in cold-boot — writing 0xFF
     # there causes the game's dispatch tables (FFBA-indexed) to read
     # garbage and crash. First user press goes to Riff (FFBA 0→1);
@@ -581,12 +655,27 @@ def main():
     rom[0x4EA5:0x4EA5 + len(title_list)] = title_list
     print(f"  title: PENTA DRAGON DX header + STRUKTURED LABS ({len(title_list)}/126 bytes @0x4EA5)")
 
-    # 2. Write the landing pad source bytes in bank13 ROM at 0x6F00
+    # 2. Write the landing pad source bytes in bank13 ROM at LANDING_PAD_ROM_ADDR
     lp = build_landing_pad()
     print(f"  landing pad source: {len(lp)} bytes at bank13:0x{LANDING_PAD_ROM_ADDR:04X}")
     assert len(lp) <= 40, f"landing pad too big: {len(lp)} > 40"
     off = BANK13 + (LANDING_PAD_ROM_ADDR - 0x4000)
     rom[off:off + len(lp)] = lp
+
+    # 2b. Level-select score-screen attr-clear stub. Stored in a 36-byte
+    # free run at bank13:0x53C2 (non-contiguous with landing pad — has its
+    # own cold-boot copy block). Patch step at the bottom of build()
+    # repoints bank1:0x3B47's JP NZ to its WRAM-resident copy.
+    ls = build_levelsel_attr_clear_stub()
+    print(f"  levelsel attr-clear stub: {len(ls)} bytes at bank13:0x{LEVELSEL_STUB_ROM_ADDR:04X}")
+    assert len(ls) <= LEVELSEL_STUB_MAX, f"levelsel stub too big: {len(ls)} > {LEVELSEL_STUB_MAX}"
+    # Verify the destination slot in ROM is actually free (all 0x00) before clobbering
+    off = BANK13 + (LEVELSEL_STUB_ROM_ADDR - 0x4000)
+    for i in range(LEVELSEL_STUB_MAX):
+        assert rom[off + i] == 0x00, (
+            f"levelsel stub site at 0x{LEVELSEL_STUB_ROM_ADDR + i:04X} not free "
+            f"(byte {rom[off + i]:02X}) — choose a different free run")
+    rom[off:off + len(ls)] = ls
 
     # 2a. Scene-aware bg_table system (Phase 1b: all 9 boss arenas)
     arena_tables = [
@@ -736,11 +825,13 @@ def main():
     rom[off:off + len(tp)] = tp
 
     # 4. Write new VBlank hook at 0x0824 and wrapper at WRAPPER_ADDR.
-    # Wrapper moved 0x6F10 -> 0x6F20: the teleport routine grew to 147 bytes
-    # (added a per-frame CALL lava_override) and at 0x6F10 the wrapper write
+    # Wrapper moved 0x6F10 -> 0x6F20 -> 0x6F30: the teleport routine grew (per-
+    # frame CALL lava_override, then the levelsel-stub cold-boot copy block)
+    # — each bump frees ~16 bytes for the teleport routine. The 40 bytes
+    # between WRAPPER_ADDR end and LANDING_PAD_ROM_ADDR=0x6F80 are unused.
     # would clobber the teleport routine's final `JP colorize`, breaking the
     # whole colorize chain (symptom: entire screen renders uncolored/white).
-    WRAPPER_ADDR = 0x6F20
+    WRAPPER_ADDR = 0x6F30
     assert TELEPORT_ADDR + len(tp) <= WRAPPER_ADDR, \
         f"teleport routine 0x{TELEPORT_ADDR + len(tp):04X} overruns wrapper 0x{WRAPPER_ADDR:04X}"
 
@@ -815,6 +906,19 @@ def main():
     new_hook_padded = (new_hook + bytearray(47 - len(new_hook)))[:47]
     rom[0x0824:0x0824 + 47] = new_hook_padded
     print(f"  Safe-switching VBlank hook written at 0x0824: {len(new_hook)} bytes (padded to 47)")
+
+    # ---- Patch bank0:0x3B47 — redirect JP NZ 0x7393 → JP NZ LEVELSEL_STUB_WRAM ----
+    # Pre-condition: bytes at 0x3B47..0x3B49 must be C2 93 73 (JP NZ 0x7393).
+    # We replace just the target, preserving the JP NZ opcode & condition.
+    expected = bytes([0xC2, 0x93, 0x73])
+    actual = bytes(rom[LEVELSEL_PATCH_ADDR:LEVELSEL_PATCH_ADDR + 3])
+    assert actual == expected, (
+        f"levelsel patch site corrupted: expected {expected.hex()} at "
+        f"0x{LEVELSEL_PATCH_ADDR:04X}, got {actual.hex()} — game logic may have moved")
+    rom[LEVELSEL_PATCH_ADDR + 1] = LEVELSEL_STUB_WRAM & 0xFF
+    rom[LEVELSEL_PATCH_ADDR + 2] = (LEVELSEL_STUB_WRAM >> 8) & 0xFF
+    print(f"  Levelsel JP NZ patched: bank0:0x{LEVELSEL_PATCH_ADDR:04X} → "
+          f"0x7393 → 0x{LEVELSEL_STUB_WRAM:04X} (WRAM stub clears attrs then JPs to 0x7393)")
 
     # Header checksum (recompute for safety)
     chk = 0
