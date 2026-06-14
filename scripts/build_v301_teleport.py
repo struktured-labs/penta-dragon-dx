@@ -103,6 +103,16 @@ TROOP_TABLE_ADDR = 0x7700
 FAZE_TABLE_ADDR = 0x7800
 ANGELA_TABLE_ADDR = 0x7900
 PENTA_DRAGON_TABLE_ADDR = 0x7A00
+# ---- Lava colorization (later stages reuse stage-1 floor/wall tile IDs as a
+# molten field). scene_detect, after copying the dungeon table to WRAM 0xDA00,
+# tail-jumps to this helper which (in a lava stage, keyed on FFBA) over-writes
+# the molten tile IDs in 0xDA00 with pal5 (BG5 = orange/red lava CRAM). Lives in
+# free bank-13 space above the (static) posmap blob. Verified: FFBA is stable at
+# the stage value during normal dungeon roaming (probe_lava_ffba.lua).
+LAVA_OVERRIDE_ADDR = 0x7E00
+# Per-stage molten tile IDs (probe_lava_ffba.lua histograms + docs/audit/stage2_lava.md):
+LAVA_STAGE5_IDS = [0x02, 0x03, 0x04, 0x05, 0x12, 0x13, 0x14, 0x15]  # FFBA=4 (stage 5)
+LAVA_STAGE7_IDS = [0x19, 0x1A]                                       # FFBA=6 (stage 7)
 DF23_PREV_SCENE = 0xDF0D       # WRAM byte: previous D880 value.
 # NOTE: must stay OUTSIDE bg_sweep's 0xDF10-0xDF2F scratch buffer. The old
 # 0xDF23 sat *inside* that buffer, so bg_sweep clobbered it every frame with
@@ -235,6 +245,78 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int) -> bytes:
     return bytes(c)
 
 
+def build_lava_override(base_addr: int) -> bytes:
+    """Repaint molten tiles in WRAM 0xDA00 to pal5 (BG5 lava) for lava stages.
+
+    CALLed every frame from the teleport routine (right after scene_detect), not
+    just on scene change: the stage-load WRAM clear re-zeroes the cold-boot
+    sentinel DF02 a few frames after entry, after which the colorize handler's
+    cold-boot copy re-copies the plain DUNGEON table over our pal5 writes. Re-
+    applying every frame (and re-asserting DF02=0x5A each frame, before the same-
+    frame cold-boot runs) makes the override win permanently. It's WRAM-only and
+    tiny, so per-frame cost is negligible. Guards:
+      - D880 must be a dungeon-family scene (0x02..0x0B). Arenas (0x0C+) and
+        title/uninit (<0x02) early-RET, touching nothing (incl. DF02).
+      - FFBA selects the molten ID list: 4 -> stage 5, 6 -> stage 7, else RET.
+    Then walks a 0xFF-terminated ID list and writes pal5 to 0xDA00[id] for each.
+    The ID lists are appended to this blob; HL pointers patched to absolutes.
+    """
+    c = bytearray()
+    # ---- guard: dungeon-family scene only ----
+    c.extend([0xFA, 0x80, 0xD8])          # LD A, [D880]
+    c.extend([0xFE, 0x0C])                # CP 0x0C
+    c.extend([0xD0])                      # RET NC   (>= 0x0C -> arena/death/etc)
+    c.extend([0xFE, 0x02])                # CP 0x02
+    c.extend([0xD8])                      # RET C    (< 0x02 -> title/uninit)
+    # ---- select molten ID list by FFBA (stage) ----
+    c.extend([0xF0, 0xBA])                # LDH A, [FFBA]
+    c.extend([0xFE, 0x04])                # CP 4 (stage 5)
+    j_set5 = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z, set5
+    c.extend([0xFE, 0x06])                # CP 6 (stage 7)
+    c.extend([0xC0])                      # RET NZ   (not a lava stage)
+    # stage 7: HL = lava7 list (pointer patched below)
+    p_hl7 = len(c) + 1
+    c.extend([0x21, 0x00, 0x00])          # LD HL, lava7
+    j_apply = len(c) + 1
+    c.extend([0x18, 0x00])                # JR apply
+    # set5: HL = lava5 list
+    set5_pos = len(c)
+    c[j_set5] = (set5_pos - j_set5 - 1) & 0xFF
+    p_hl5 = len(c) + 1
+    c.extend([0x21, 0x00, 0x00])          # LD HL, lava5
+    # apply: suppress the colorize handler's same-frame cold-boot 0xDA00 copy
+    # (it re-copies the DUNGEON table over our pal5 writes otherwise — the same
+    # race that flooded the crystal arena red). scene_detect runs before the
+    # colorize cold-boot, so DF02=0x5A here makes the later copy skip. Already a
+    # lava stage at this point, so this only fires in stage 5 / stage 7.
+    apply_pos = len(c)
+    c[j_apply] = (apply_pos - j_apply - 1) & 0xFF
+    c.extend([0x3E, 0x5A, 0xEA, 0x02, 0xDF])  # LD A,0x5A; LD [DF02],A
+    # walk 0xFF-terminated list, write pal5 to 0xDA00[id]
+    loop_pos = len(c)
+    c.extend([0x2A])                      # LD A, [HL+]   (tile id)
+    c.extend([0xFE, 0xFF])                # CP 0xFF
+    c.extend([0xC8])                      # RET Z         (end of list)
+    c.extend([0x5F])                      # LD E, A
+    c.extend([0x16, 0xDA])                # LD D, 0xDA    (DE = 0xDA00 + id)
+    c.extend([0x3E, 0x05])                # LD A, 5       (pal5 = lava)
+    c.extend([0x12])                      # LD [DE], A
+    off = loop_pos - (len(c) + 2)
+    c.extend([0x18, off & 0xFF])          # JR loop
+    # ---- data: ID lists (0xFF-terminated) ----
+    lava7_off = len(c)
+    c.extend(LAVA_STAGE7_IDS + [0xFF])
+    lava5_off = len(c)
+    c.extend(LAVA_STAGE5_IDS + [0xFF])
+    # patch HL pointers to absolute bank-13 addresses
+    a7 = base_addr + lava7_off
+    a5 = base_addr + lava5_off
+    c[p_hl7], c[p_hl7 + 1] = a7 & 0xFF, (a7 >> 8) & 0xFF
+    c[p_hl5], c[p_hl5 + 1] = a5 & 0xFF, (a5 >> 8) & 0xFF
+    return bytes(c)
+
+
 def build_landing_pad() -> bytes:
     """Executable code that runs in main-loop context AFTER the RETI.
 
@@ -292,6 +374,11 @@ def build_teleport_routine() -> bytes:
     # D880, compares to DF23, copies the right table to WRAM 0xDA00 on
     # change. Fast path (~16T) when scene unchanged.
     c.extend([0xCD, SCENE_DETECT_ADDR & 0xFF, (SCENE_DETECT_ADDR >> 8) & 0xFF])
+
+    # ---- Lava repaint: every frame, re-apply pal5 to molten tiles in lava
+    # stages (no-op elsewhere). Must run after scene_detect (which may have just
+    # copied the dungeon table) and before the colorize cold-boot copy. ----
+    c.extend([0xCD, LAVA_OVERRIDE_ADDR & 0xFF, (LAVA_OVERRIDE_ADDR >> 8) & 0xFF])
 
     # ---- One-shot: ensure landing pad is copied to WRAM 0xDB00 ----
     # Check sentinel DF1E
@@ -510,6 +597,17 @@ def main():
     rom[off:off + len(sd)] = sd
     print(f"  scene-detect routine: {len(sd)} bytes at bank13:0x{SCENE_DETECT_ADDR:04X}")
 
+    # Lava override helper (tail-jumped from scene_detect). Repaints molten BG
+    # tiles to pal5 in lava stages. Lives above the static posmap blob.
+    lava = build_lava_override(LAVA_OVERRIDE_ADDR)
+    assert LAVA_OVERRIDE_ADDR + len(lava) <= 0x8000, \
+        f"lava override overruns bank 13: 0x{LAVA_OVERRIDE_ADDR + len(lava):04X}"
+    off = BANK13 + (LAVA_OVERRIDE_ADDR - 0x4000)
+    rom[off:off + len(lava)] = lava
+    print(f"  lava override: {len(lava)} bytes at bank13:0x{LAVA_OVERRIDE_ADDR:04X} "
+          f"(stage5 IDs {['%02X' % x for x in LAVA_STAGE5_IDS]}, "
+          f"stage7 IDs {['%02X' % x for x in LAVA_STAGE7_IDS]})")
+
     # 2b. Re-patch bg_sweep to read the PER-SCENE WRAM table (0xDA00) instead
     # of the ROM dungeon table (0x7000). The base build bakes the sweep with
     # the dungeon table, so in arenas the sweep wrote dungeon-palette attrs for
@@ -549,6 +647,8 @@ def main():
         blob += rle
         ptr[idx] = addr
         print(f"  posmap {name:14s}: RLE {len(rle):3d} bytes at bank13:0x{addr:04X}")
+    assert POSMAP_DATA_ADDR + len(blob) <= LAVA_OVERRIDE_ADDR, \
+        f"posmap blob 0x{POSMAP_DATA_ADDR + len(blob):04X} collides with lava override 0x{LAVA_OVERRIDE_ADDR:04X}"
     off = BANK13 + (POSMAP_DATA_ADDR - 0x4000)
     rom[off:off + len(blob)] = blob
     print(f"  posmap RLE total: {len(blob)} bytes "
@@ -603,8 +703,14 @@ def main():
     off = BANK13 + (TELEPORT_ADDR - 0x4000)
     rom[off:off + len(tp)] = tp
 
-    # 4. Write new VBlank hook at 0x0824 and wrapper at WRAPPER_ADDR (0x6F10)
-    WRAPPER_ADDR = 0x6F10
+    # 4. Write new VBlank hook at 0x0824 and wrapper at WRAPPER_ADDR.
+    # Wrapper moved 0x6F10 -> 0x6F20: the teleport routine grew to 147 bytes
+    # (added a per-frame CALL lava_override) and at 0x6F10 the wrapper write
+    # would clobber the teleport routine's final `JP colorize`, breaking the
+    # whole colorize chain (symptom: entire screen renders uncolored/white).
+    WRAPPER_ADDR = 0x6F20
+    assert TELEPORT_ADDR + len(tp) <= WRAPPER_ADDR, \
+        f"teleport routine 0x{TELEPORT_ADDR + len(tp):04X} overruns wrapper 0x{WRAPPER_ADDR:04X}"
 
     # 4a. Write wrapper to bank 13
     wrapper = bytearray([
@@ -652,6 +758,8 @@ def main():
         0xC9,                                 # RET
     ])
 
+    assert WRAPPER_ADDR + len(wrapper) <= LANDING_PAD_ROM_ADDR, \
+        f"wrapper 0x{WRAPPER_ADDR + len(wrapper):04X} overruns landing pad 0x{LANDING_PAD_ROM_ADDR:04X}"
     wrapper_off = BANK13 + (WRAPPER_ADDR - 0x4000)
     rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
     print(f"  VBlank wrapper written: {len(wrapper)} bytes at bank13:0x{WRAPPER_ADDR:04X}")
