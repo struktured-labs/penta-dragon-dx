@@ -65,8 +65,13 @@ def _bg_table() -> bytes:
     # pal 5 stays free for stage-2 LAVA. (0x47/0x57 excluded — wall corners.)
     for i in [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]:
         table[i] = 6
-    # Items
-    for i in range(0x88, 0xE0):
+    # Items + FONT. Tiles 0x80-0x99 are the title/menu uppercase font (A=0x80..
+    # Z=0x99); 0x88-0xDF are item pickups. Both -> pal 1 so ALL title/menu text
+    # is one uniform color (red) instead of the A-H(pal0=black)/I-Z(pal1=red)
+    # two-tone split. Verified safe: tiles 0x80-0x9F never appear as dungeon BG
+    # tiles (they're font/letters only), so the dungeon is unaffected; arenas
+    # use their own tables. Start at 0x80 (was 0x88) to also catch A-H.
+    for i in range(0x80, 0xE0):
         table[i] = 1
     # Sentinel — was 0xFF historically (palette 7 sentinel for ff_filter).
     # Changed to 0x00 (pal 0): inline tile+attr copy at 0x42A7 looks up
