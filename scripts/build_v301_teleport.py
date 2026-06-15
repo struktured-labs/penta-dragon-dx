@@ -440,6 +440,14 @@ def build_hwoam_recolor() -> bytes:
     OR into attr [HL], advance 4). The colorizer RETs, so this RETs.
     """
     c = bytearray()
+    # Scope: dungeon-family scenes only (D880 < 0x0C). This covers the gameplay
+    # demo + dungeon enemies + the mini-boss (0x0A), but EXCLUDES the 9 stage-boss
+    # arenas (0x0C-0x14), death (0x17), splash/title (0x16/0x18/0x1B/0x1C) — those
+    # color their sprites natively (verified-good) and must not be re-stamped by
+    # the tile-range recolor.
+    c.extend([0xFA, 0x80, 0xD8])          # LD A, [D880]
+    c.extend([0xFE, 0x0C])                # CP 0x0C
+    c.extend([0xD0])                      # RET NC  (>= 0x0C -> skip)
     # D = Sara form palette: FFBE==0 -> 2 (witch), else -> 1 (dragon)
     c.extend([0xF0, 0xBE, 0xB7, 0x20, 0x04, 0x16, 0x02, 0x18, 0x02, 0x16, 0x01])
     # E = boss slot: FFBF==0 -> 0, else boss_slot_table[FFBF-1]
