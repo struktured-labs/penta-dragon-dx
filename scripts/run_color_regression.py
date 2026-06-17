@@ -62,8 +62,23 @@ end
 
 callbacks:add("frame", function()
     frame_count = frame_count + 1
+    -- Bump dump frame by +10 so the recolor's HW OAM writes have a stable
+    -- window. The double-buffered DMA alternates shadow A/B every frame; with
+    -- only +1-2 frames after save-state load, one buffer still holds stale
+    -- pre-colorize data, briefly DMAing pal0/pal4 race-residue to HW OAM at
+    -- the moment Lua's frame callback fires. +10 gives the alternation enough
+    -- cycles to stabilize. (Verified: visual screenshot at +10 matches the
+    -- OAM read, both showing the colorizer's intended palette.)
     if frame_count >= target_frames then
-        -- Take screenshot
+        -- KNOWN ISSUE: Lua's "frame" callback fires BEFORE the VBlank IRQ
+        -- handler's hwoam_recolor finishes writing HW OAM, so single-frame OAM
+        -- reads can catch a transient pre-recolor state (slot N attr shows the
+        -- post-DMA race-residue palette rather than the final colorizer
+        -- assignment). The screenshot below DOES reflect the LCD's actual
+        -- rendering (which sees the post-recolor OAM), so visually-verified
+        -- regressions remain caught even when the OAM dump disagrees.
+        -- See docs/audit/test_runner_oam_timing.md for full analysis + planned
+        -- fix (scanline callback or busy-loop + retry until OAM stabilizes).
         emu:screenshot("{output_prefix}.png")
 
         -- Dump OAM data
@@ -221,6 +236,7 @@ def main():
     parser.add_argument("--test", "-t", help="Run only specific test by name")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--config", "-c", default="tests/color_regression_tests.yaml", help="Test config file")
+    parser.add_argument("--rom", help="ROM path override (takes precedence over config)")
     args = parser.parse_args()
 
     # Load test configuration
@@ -233,7 +249,7 @@ def main():
         config = yaml.safe_load(f)
 
     test_config = config.get("test_config", {})
-    rom_path = test_config.get("rom_path", "rom/working/penta_dragon_dx_FIXED.gb")
+    rom_path = args.rom or test_config.get("rom_path", "rom/working/penta_dragon_dx_FIXED.gb")
     savestate_dir = test_config.get("savestate_dir", "save_states_for_claude")
     output_dir = test_config.get("output_dir", "tests/results")
 

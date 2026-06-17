@@ -142,6 +142,16 @@ HWOAM_RECOLOR_ADDR = 0x7F40       # free bank-13 space after the splash table
 # name glyphs (0x80-0x99) -> p5 gold, JAM logo (0xCA-0xCF/0xDA-0xDE) -> p1 red.
 # Patches 0xDA00 (loaded all-p0 by scene_detect at 0x1B) every frame at 0x1B.
 BANNER_OVERRIDE_ADDR = 0x7F70
+# Intro cutscene overlay (D880=0x15: opening "treasure scroll", "Sara face closeup",
+# "dragon eyes", and Japanese-text textbox panels — all share one D880 value, per
+# the 2026-06-15 cutscene probe). The dungeon table's 0x80-0xDF->pal1 (red font)
+# rule floods every panel red. This overlay (called every frame from teleport)
+# patches the WRAM bg_table after scene_detect's copy: textbox border (0x6B-0x72)
+# -> pal4 cyan, font glyphs + Sara portrait band (0x80-0xC9) -> pal2 warm beige
+# (legible on white textbox AND reads as skin tones for Sara's portrait), dragon-
+# eye highlights (0xF0-0xFF) -> pal1 red. Scroll/brick low-band art (0x10-0x4F)
+# -> pal3 parchment/gold (matches the cap-110 scroll). No-op at other scenes.
+CUTSCENE_OVERRIDE_ADDR = 0x7FA4   # right after BANNER_OVERRIDE (~51 bytes ends 0x7FA3)
 OBJ_COLORIZER_ADDR = 0x6A10      # create_tile_based_colorizer install addr (gdma)
 BOSS_SLOT_TABLE_ADDR = 0x68C0    # boss_slot_addr (gdma)
 # Per-stage molten tile IDs (probe_lava_ffba.lua histograms + docs/audit/stage2_lava.md):
@@ -471,12 +481,24 @@ def build_hwoam_recolor() -> bytes:
     c.extend([0x1E, 0x00])                 # LD E, 0
     done = len(c)
     c[j_done] = (done - j_done - 1) & 0xFF
-    # HL = HW OAM first attr byte; B = 40 (full OAM coverage for the HW pass only).
-    # Tail-jump to the colorizer's loop_start (addr+2) to skip its own `LD B,10`,
-    # so the shared shadow colorize stays cheap (cap 10) but the HW pass covers all
-    # 40 sprites. The colorizer RETs, so this RETs.
+    # HL = HW OAM first attr byte; B = 10 (match shadow pass coverage).
+    # Tail-jump to the colorizer's loop_start (addr+2) to skip its own `LD B,n`.
+    #
+    # B=10 was selected after a parallel investigation probe (2026-06-15) found
+    # that B=40 stamped slots 10-39 with tile-range-derived palettes, but
+    # tiles 0x10-0x1F are Sara's secondary body sprites (X=93/101 Y=79-87,
+    # immediately adjacent to Sara). The colorizer's fall-through for
+    # tile<0x20 paints them pal4 (Hornet ORANGE per penta_palettes_v097.yaml)
+    # → "Sara half-orange" + pause-menu quadrant flicker as the game keeps
+    # updating shadow OAM during pause.
+    #
+    # Trade-off: enemies allocated to OAM slots 10+ stay at pal0 (the
+    # original DMA-race issue from items 3,4,11 is partially un-fixed for
+    # those rare cases). But that affects only frames with >10 active
+    # sprites and is visually MUCH less loud than the half-orange Sara,
+    # which was immediate and disturbing.
     c.extend([0x21, 0x03, 0xFE])           # LD HL, 0xFE03
-    c.extend([0x06, 0x28])                 # LD B, 40
+    c.extend([0x06, 0x0A])                 # LD B, 10
     loop_start = OBJ_COLORIZER_ADDR + 2    # after the colorizer's LD B,n
     c.extend([0xC3, loop_start & 0xFF, (loop_start >> 8) & 0xFF])  # JP colorizer loop_start
     return bytes(c)
@@ -497,10 +519,61 @@ def build_banner_override() -> bytes:
         lp = len(c)
         c.extend([0x22, 0x05])            # LD [HL+],A; DEC B
         c.extend([0x20, (lp - (len(c) + 2)) & 0xFF])  # JR NZ, lp
-    fill(0xE0, 0x20, 4)                   # "PENTA DRAGON" letters -> cyan
-    fill(0x80, 0x1A, 5)                   # monster-name glyphs -> gold
-    fill(0xCA, 0x06, 1)                   # JAM logo (0xCA-0xCF) -> red
-    fill(0xDA, 0x05, 1)                   # JAM logo (0xDA-0xDE) -> red
+    # Banner-readable palette assignment:
+    # - Letters (0xE0-0xFF) → pal6 BG (white/blue-gray/dark-slate/black) reads
+    #   as bold blue-gray on white — vibrant, distinct from red JAM logo, and
+    #   doesn't reuse pal4 (which is YAML-cyan/white-white-teal-black — invisible
+    #   on the white banner backdrop, per the 2026-06-15 banner probe).
+    # - Names (0x80-0x99) → pal3 BG (white/forest-green/dark-green/black) — green
+    #   names POP against the blue-gray letters and red JAM logo, no need for a
+    #   per-scene CRAM rewrite (which would consume bank13 space we don't have).
+    # - JAM logo (0xCA-0xCF, 0xDA-0xDE) → pal1 red (unchanged).
+    fill(0xE0, 0x20, 6)
+    fill(0x80, 0x1A, 3)
+    fill(0xCA, 0x06, 1)
+    fill(0xDA, 0x05, 1)
+    c.extend([0xC9])                      # RET
+    return bytes(c)
+
+
+def build_cutscene_override() -> bytes:
+    """At D880=0x15 (intro cutscenes: treasure scroll, Sara face closeup,
+    dragon eyes, Japanese-text textbox — all 4 share one D880 value per the
+    2026-06-15 probe), patch 0xDA00 to give panels intentional palettes
+    instead of red-flooding (the dungeon table's 0x80-0xDF->pal1 rule).
+
+    Per-panel art is in low tile bands (treasure 0x01-0x5B, dragon 0x01-0x2D
+    + 0xF0-0xFC). Textbox border (0x6B-0x72) and font/portrait band
+    (0x80-0xC9) are present in EVERY panel, safe to color with one stable
+    overlay. CALLed every frame from teleport routine; cheap no-op at other
+    scenes (CP+RET in 6 cycles).
+    """
+    c = bytearray()
+    c.extend([0xFA, 0x80, 0xD8])          # LD A,[D880]
+    c.extend([0xFE, 0x15])                # CP 0x15
+    c.extend([0xC0])                      # RET NZ (no-op at any other scene)
+
+    def fill(lo, n, pal):                 # 0xDA00+lo .. +lo+n-1 = pal
+        c.extend([0x3E, pal])             # LD A, pal
+        c.extend([0x21, lo, 0xDA])        # LD HL, 0xDA00+lo
+        c.extend([0x06, n])               # LD B, n
+        lp = len(c)
+        c.extend([0x22, 0x05])            # LD [HL+],A; DEC B
+        c.extend([0x20, (lp - (len(c) + 2)) & 0xFF])  # JR NZ, lp
+
+    # Textbox border tiles (cyan) — visible blue outline on all panels
+    fill(0x6B, 0x08, 4)
+    # Font glyphs + Sara portrait band (warm beige — legible on white textbox
+    # AND reads as skin tones for the Sara portrait that shares this tile band)
+    fill(0x80, 0x4A, 2)
+    # Dragon-eye highlights + JAM-logo art (red)
+    fill(0xF0, 0x10, 1)
+    # Treasure scroll body + brick wall low-band art (parchment gold).
+    # Per panel: treasure uses 0x10-0x1F, 0x20-0x2F, 0x30-0x3F, 0x40-0x4F art;
+    # dragon scales use 0x01-0x2D (overlap). Gold parchment works for both
+    # (scroll naturally gold; dragon's scales tinted gold-instead-of-red is a
+    # minor visual tweak vs the red-flood baseline).
+    fill(0x10, 0x40, 3)
     c.extend([0xC9])                      # RET
     return bytes(c)
 
@@ -572,6 +645,12 @@ def build_teleport_routine() -> bytes:
     # (the all-p0 splash table) so the showcase reads as gold names / cyan
     # "PENTA DRAGON" letters / red JAM logo. No-op elsewhere. ----
     c.extend([0xCD, BANNER_OVERRIDE_ADDR & 0xFF, (BANNER_OVERRIDE_ADDR >> 8) & 0xFF])
+
+    # ---- Cutscene colorize: at D880=0x15 (intro cutscenes — treasure, Sara
+    # face, dragon eyes, Japanese-text), patch 0xDA00 with intentional palettes
+    # for the textbox, font/portrait, dragon highlights, and scroll art bands.
+    # No-op elsewhere. ----
+    c.extend([0xCD, CUTSCENE_OVERRIDE_ADDR & 0xFF, (CUTSCENE_OVERRIDE_ADDR >> 8) & 0xFF])
 
     # ---- One-shot: ensure landing pad is copied to WRAM 0xDB00 ----
     # Check sentinel DF1E
@@ -853,6 +932,16 @@ def main():
     off = BANK13 + (BANNER_OVERRIDE_ADDR - 0x4000)
     rom[off:off + len(banner)] = banner
     print(f"  banner override: {len(banner)} bytes at bank13:0x{BANNER_OVERRIDE_ADDR:04X}")
+
+    # Cutscene colorize override (D880=0x15 intro panels), CALLed from teleport routine.
+    cutscene = build_cutscene_override()
+    assert BANNER_OVERRIDE_ADDR + len(banner) <= CUTSCENE_OVERRIDE_ADDR, \
+        f"banner 0x{BANNER_OVERRIDE_ADDR + len(banner):04X} overruns cutscene 0x{CUTSCENE_OVERRIDE_ADDR:04X}"
+    assert CUTSCENE_OVERRIDE_ADDR + len(cutscene) <= POSMAP_PTR_TABLE, \
+        f"cutscene override 0x{CUTSCENE_OVERRIDE_ADDR + len(cutscene):04X} overruns posmap ptr table 0x{POSMAP_PTR_TABLE:04X}"
+    off = BANK13 + (CUTSCENE_OVERRIDE_ADDR - 0x4000)
+    rom[off:off + len(cutscene)] = cutscene
+    print(f"  cutscene override: {len(cutscene)} bytes at bank13:0x{CUTSCENE_OVERRIDE_ADDR:04X}")
 
     # 2b. Re-patch bg_sweep to read the PER-SCENE WRAM table (0xDA00) instead
     # of the ROM dungeon table (0x7000). The base build bakes the sweep with
