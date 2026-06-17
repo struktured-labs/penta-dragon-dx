@@ -151,7 +151,7 @@ BANNER_OVERRIDE_ADDR = 0x7F70
 # (legible on white textbox AND reads as skin tones for Sara's portrait), dragon-
 # eye highlights (0xF0-0xFF) -> pal1 red. Scroll/brick low-band art (0x10-0x4F)
 # -> pal3 parchment/gold (matches the cap-110 scroll). No-op at other scenes.
-CUTSCENE_OVERRIDE_ADDR = 0x7FA4   # right after BANNER_OVERRIDE (~51 bytes ends 0x7FA3)
+CUTSCENE_OVERRIDE_ADDR = 0x7FB0   # right after BANNER_OVERRIDE (~63 bytes ends 0x7FB0 incl. burst-sweep loop)
 OBJ_COLORIZER_ADDR = 0x6A10      # create_tile_based_colorizer install addr (gdma)
 BOSS_SLOT_TABLE_ADDR = 0x68C0    # boss_slot_addr (gdma)
 # Per-stage molten tile IDs (probe_lava_ffba.lua histograms + docs/audit/stage2_lava.md):
@@ -532,6 +532,22 @@ def build_banner_override() -> bytes:
     fill(0x80, 0x1A, 3)
     fill(0xCA, 0x06, 1)
     fill(0xDA, 0x05, 1)
+
+    # Burst bg_sweep: call BG_SWEEP_ADDR 4 extra times so the VRAM attr plane
+    # catches up to 0xDA00 changes within ~4 frames instead of bg_sweep's
+    # default ~18 frames. Without this, mid-cycle tile-data rewrites (the
+    # cycled monster name + scroll-in animation) show transient checkered
+    # palettes because bg_sweep is rate-limited to 1 row/frame. Banner is
+    # non-gameplay so the extra VBlank cost (~2700 cycles) is safe.
+    # Loop form (9 bytes vs 12 unrolled) — saves space for cutscene_override.
+    c.extend([0x06, 0x04])                # LD B, 4
+    burst_loop = len(c)
+    c.extend([0xC5])                      # PUSH BC   (bg_sweep clobbers BC)
+    c.extend([0xCD, BG_SWEEP_ADDR & 0xFF, (BG_SWEEP_ADDR >> 8) & 0xFF])
+    c.extend([0xC1])                      # POP BC
+    c.extend([0x05])                      # DEC B
+    c.extend([0x20, (burst_loop - (len(c) + 2)) & 0xFF])  # JR NZ, burst_loop
+
     c.extend([0xC9])                      # RET
     return bytes(c)
 
@@ -566,14 +582,12 @@ def build_cutscene_override() -> bytes:
     # Font glyphs + Sara portrait band (warm beige — legible on white textbox
     # AND reads as skin tones for the Sara portrait that shares this tile band)
     fill(0x80, 0x4A, 2)
-    # Dragon-eye highlights + JAM-logo art (red)
-    fill(0xF0, 0x10, 1)
-    # Treasure scroll body + brick wall low-band art (parchment gold).
-    # Per panel: treasure uses 0x10-0x1F, 0x20-0x2F, 0x30-0x3F, 0x40-0x4F art;
-    # dragon scales use 0x01-0x2D (overlap). Gold parchment works for both
-    # (scroll naturally gold; dragon's scales tinted gold-instead-of-red is a
-    # minor visual tweak vs the red-flood baseline).
-    fill(0x10, 0x40, 3)
+    # Dragon-eye highlights + JAM-logo art (red).
+    # Dungeon table already maps 0xF0-0xFF to pal1 (red), so this matches
+    # without an explicit fill — saved 11 bytes for bank13 layout.
+    # Treasure scroll low-range art (0x10-0x4F) intentionally NOT overridden;
+    # falls through to dungeon table mapping (mostly readable, no red flood
+    # because the dungeon table only maps 0x80-0xDF to red).
     c.extend([0xC9])                      # RET
     return bytes(c)
 
