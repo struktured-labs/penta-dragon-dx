@@ -85,6 +85,21 @@ LEVELSEL_STUB_WRAM = 0xDB28      # 0xDB00 + 40 — right after landing pad in WR
 LEVELSEL_PATCH_ADDR = 0x3B47     # bank0 (always-mapped); JP NZ target
 LEVELSEL_STUB_MAX = 36           # size cap (the free run is 36 bytes)
 
+# ---- STAT IRQ WRAM stub (fixes Sara slot-1 alternation in boss fights) ----
+# Iteration 9 plan: relocate the STAT prelude to WRAM with an FFBF != 0
+# gate so dungeon scenes (where the iteration-8 prelude introduced a
+# parallax-scroll timing side-effect that broke sara_w_alone) are NOT
+# affected. Boss scenes (FFBF != 0) see the prelude — alternation fixed.
+#
+# Cold-boot copy from ROM bank 13 (free at 0x53F2) to WRAM (0xDB50, right
+# after the levelsel stub). WRAM is always-mapped → IRQ vector at 0x0048
+# can JP into WRAM. The stub ends with a hard JP 0x0853 to chain to the
+# original game STAT handler (parallax scroll).
+STAT_STUB_ROM_ADDR = 0x53F2      # bank 13, 36 bytes free
+STAT_STUB_WRAM = 0xDB50          # 0xDB28 + 40 — right after levelsel stub
+STAT_STUB_MAX = 36               # cap (matches the 36-byte free run at 0x53F2)
+STAT_IRQ_VECTOR_LO_BYTE = 0x0049 # low byte of "JP nn" at 0x0048
+
 # ---- scene-aware bg_table (Phase 1b: all 9 boss arenas) ----
 # Scene-detect routine sits in the gap between landing pad and bg_table.
 # bg_table variants live after attr_comp (which ends ~0x713A).
@@ -393,6 +408,67 @@ def build_lava_override(base_addr: int) -> bytes:
     return bytes(c)
 
 
+def build_stat_irq_wram_stub() -> bytes:
+    """WRAM-resident STAT IRQ prelude that runs ONLY in boss scenes (FFBF != 0)
+    to re-stamp OAM slot 1 attr with Sara's correct form palette.
+
+    Iteration 8 demonstrated that an unconditional ROM-resident prelude
+    (at 0x0838, falling through to 0x0853) introduced a ~30-cycle delay
+    that shifted the chained parallax-scroll handler's SCY/SCX writes,
+    which exposed a slot 0/2 transient pal-4 read in dungeon scenes
+    (sara_w_alone OAM dump failed even though LCD rendered correctly).
+
+    Solution: relocate to WRAM (size-unconstrained), add an FFBF gate so
+    the work only runs when there's actually a boss to fight. Dungeon
+    scenes (FFBF=0) take a fast-path that just chains to the original
+    handler with no timing impact.
+
+    Ends with JP 0x0853 (hard jump, not fall-through, because WRAM and
+    ROM are different address spaces).
+    """
+    c = bytearray()
+    # FFBF gate: only re-stamp slot 1 when boss is active (FFBF != 0).
+    # Dungeon scenes (FFBF=0) skip work to avoid the parallax-scroll
+    # timing interaction documented in iteration 8.
+    #
+    # KNOWN LIMITATION (iter 9 conclusion): with the gate in place,
+    # gargoyle_miniboss pal-6 alternation IS NOT REDUCED (stays at ~62%).
+    # The gate appears to skip work even when FFBF=1, for reasons we
+    # haven't isolated yet (possibly the JR Z offset computation, or a
+    # STAT IRQ timing issue with the extra cycles, or FFBF being 0 at
+    # STAT-fire moments specifically). Without-gate WRAM stub achieved
+    # 0.13% pal-6 reduction (verified iter 9) but breaks sara_w_alone
+    # via the same timing side-effect as iter 8.
+    #
+    # Net: this WRAM stub is currently a no-op (safe but ineffective).
+    # The infrastructure (cold-boot copy + IRQ vector redirect) is in
+    # place for iteration 10+ to investigate why the gate blocks work.
+    c.extend([0xF5])              # PUSH AF
+    c.extend([0xF0, 0xBF])        # LDH A, [FFBF]
+    c.extend([0xB7])              # OR A
+    j_skip = len(c) + 1
+    c.extend([0x28, 0x00])        # JR Z, .skip
+    c.extend([0xC5])              # PUSH BC
+    c.extend([0xF0, 0xBE])        # LDH A, [FFBE]
+    c.extend([0xB7])              # OR A
+    c.extend([0x20, 0x04])        # JR NZ, +4
+    c.extend([0x3E, 0x02])        # LD A, 2 (Sara W)
+    c.extend([0x18, 0x02])        # JR +2
+    c.extend([0x3E, 0x01])        # LD A, 1 (Sara D)
+    c.extend([0x47])              # LD B, A
+    c.extend([0xFA, 0x07, 0xFE])  # LD A, [0xFE07]
+    c.extend([0xE6, 0xF8])        # AND 0xF8
+    c.extend([0xB0])              # OR B
+    c.extend([0xEA, 0x07, 0xFE])  # LD [0xFE07], A
+    c.extend([0xC1])              # POP BC
+    skip_pos = len(c)
+    c[j_skip] = (skip_pos - j_skip - 1) & 0xFF
+    c.extend([0xF1])              # POP AF
+    c.extend([0xC3, 0x53, 0x08])  # JP 0x0853
+    assert len(c) <= STAT_STUB_MAX, f"STAT WRAM stub {len(c)} > {STAT_STUB_MAX}-byte budget"
+    return bytes(c)
+
+
 def build_levelsel_attr_clear_stub() -> bytes:
     """~34-byte WRAM stub: clears VBK=1 BG attrs (0x9800-0x9FFF) then JPs to
     the original 0x7393. Triggered by the patched `JP NZ` at bank1:0x3B47.
@@ -694,6 +770,17 @@ def build_teleport_routine() -> bytes:
     c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
     off = ls_loop - (len(c) + 2)
     c.extend([0x20, off & 0xFF])          # JR NZ, ls_loop
+
+    # Third copy: STAT IRQ WRAM stub from STAT_STUB_ROM_ADDR (bank13 0x53F2)
+    # to STAT_STUB_WRAM (0xDB50). Cold-boot only (gated by DF0E sentinel
+    # check at the head of this whole copy block).
+    c.extend([0x21, STAT_STUB_ROM_ADDR & 0xFF, (STAT_STUB_ROM_ADDR >> 8) & 0xFF])
+    c.extend([0x11, STAT_STUB_WRAM & 0xFF, (STAT_STUB_WRAM >> 8) & 0xFF])
+    c.extend([0x06, STAT_STUB_MAX])       # LD B, 36
+    stat_loop = len(c)
+    c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
+    off = stat_loop - (len(c) + 2)
+    c.extend([0x20, off & 0xFF])          # JR NZ, stat_loop
     # Set sentinel only. Do NOT touch FFBA in cold-boot — writing 0xFF
     # there causes the game's dispatch tables (FFBA-indexed) to read
     # garbage and crash. First user press goes to Riff (FFBA 0→1);
@@ -877,6 +964,21 @@ def main():
             f"(byte {rom[off + i]:02X}) — choose a different free run")
     rom[off:off + len(ls)] = ls
 
+    # 2c. STAT IRQ WRAM stub source. Stored at bank13:0x53F2 (36-byte free
+    # run, copied to WRAM at 0xDB50 at cold-boot by the teleport routine's
+    # third copy block). The IRQ vector at 0x0048 is patched below to JP
+    # 0xDB50, so STAT IRQ executes the WRAM stub (FFBF-gated slot-1
+    # re-stamp) then chains to original 0x0853 (parallax scroll).
+    stat_stub = build_stat_irq_wram_stub()
+    print(f"  STAT IRQ WRAM stub: {len(stat_stub)} bytes at bank13:0x{STAT_STUB_ROM_ADDR:04X} "
+          f"→ copied to WRAM 0x{STAT_STUB_WRAM:04X}")
+    off = BANK13 + (STAT_STUB_ROM_ADDR - 0x4000)
+    for i in range(STAT_STUB_MAX):
+        assert rom[off + i] == 0x00, (
+            f"STAT stub site at 0x{STAT_STUB_ROM_ADDR + i:04X} not free "
+            f"(byte {rom[off + i]:02X}) — choose a different free run")
+    rom[off:off + len(stat_stub)] = stat_stub
+
     # 2a. Scene-aware bg_table system (Phase 1b: all 9 boss arenas)
     arena_tables = [
         ("Shalamar",      SHALAMAR_TABLE_ADDR,        _bg_table_shalamar),
@@ -1059,7 +1161,9 @@ def main():
     # between WRAPPER_ADDR end and LANDING_PAD_ROM_ADDR=0x6F80 are unused.
     # would clobber the teleport routine's final `JP colorize`, breaking the
     # whole colorize chain (symptom: entire screen renders uncolored/white).
-    WRAPPER_ADDR = 0x6F30
+    WRAPPER_ADDR = 0x6F40  # iter 9 bumped from 0x6F30 to accommodate
+                           # teleport routine's added STAT-stub cold-boot
+                           # copy block (third copy of ~14 bytes).
     assert TELEPORT_ADDR + len(tp) <= WRAPPER_ADDR, \
         f"teleport routine 0x{TELEPORT_ADDR + len(tp):04X} overruns wrapper 0x{WRAPPER_ADDR:04X}"
 
@@ -1150,6 +1254,18 @@ def main():
     rom[LEVELSEL_PATCH_ADDR + 2] = (LEVELSEL_STUB_WRAM >> 8) & 0xFF
     print(f"  Levelsel JP NZ patched: bank0:0x{LEVELSEL_PATCH_ADDR:04X} → "
           f"0x7393 → 0x{LEVELSEL_STUB_WRAM:04X} (WRAM stub clears attrs then JPs to 0x7393)")
+
+    # ---- Patch IRQ vector 0x0048 (STAT) to JP into our WRAM stub ----
+    # Pre-condition: 0x0048 must be C3 53 08 (JP 0x0853, game's parallax scroll handler).
+    # Our WRAM stub at 0xDB50 will gate on FFBF and chain back to 0x0853.
+    expected = bytes([0xC3, 0x53, 0x08])
+    actual = bytes(rom[0x0048:0x004B])
+    assert actual == expected, (
+        f"STAT vector at 0x0048 not the expected JP 0x0853: {actual.hex()}")
+    rom[0x0049] = STAT_STUB_WRAM & 0xFF
+    rom[0x004A] = (STAT_STUB_WRAM >> 8) & 0xFF
+    print(f"  STAT IRQ vector patched: 0x0048 JP target 0x0853 → "
+          f"0x{STAT_STUB_WRAM:04X} (WRAM stub gates on FFBF, chains to 0x0853)")
 
     # Header checksum (recompute for safety)
     chk = 0
