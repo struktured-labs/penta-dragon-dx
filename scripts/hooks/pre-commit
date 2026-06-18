@@ -53,6 +53,14 @@ TESTS=(
   postboss_reload_bg_table_all_pal0
   miniboss_uses_dungeon_table
   dungeon_uses_dungeon_table
+  # Iter 16: hazard + wall + item bg_table regression tests. These verify
+  # the dungeon table maps spike tiles (0x2A-0x2E, 0x3A-0x3D) to pal 6
+  # (metallic, not lava), wall corners (0x47/0x57 etc.) to pal 6 (not the
+  # 2026-05-23 orange regression), and items+font (0x80-0xDF) to pal 1
+  # (uniform red). Catches anyone who reverts _bg_table() in build_v301_gdma.
+  dungeon_table_spikes_metallic
+  dungeon_table_wall_corners
+  dungeon_table_items_and_font
   # All 9 boss arena dispatches (D880 = 0x0C..0x14):
   shalamar_arena_dispatch
   riff_arena_dispatch

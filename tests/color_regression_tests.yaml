@@ -401,3 +401,64 @@ tests:
       - tile_range: [0xE0, 0xE0]
         palette: 0
         description: "Dungeon table maps 0xE0 (PENTA banner art) to pal0 — NOT pal6 (which would mean banner_override leaked into dungeon)"
+
+  # Hazard regression: rotating spike cylinders MUST be pal 6 (metallic
+  # slate/gunmetal). They were pal 5 (yellow/red/lava) until the
+  # docs/audit/hazard_tile_colorization.md fix moved them to pal 6 so
+  # pal 5 is free for stage-2 lava (project_lava_and_ending.md).
+  # If someone reverts the bg_table change in _bg_table(), this catches it.
+  # Tile IDs from the audit: pixel-verified spike cylinders at 0x2A-0x2E
+  # and 0x3A-0x3D.
+  - name: "dungeon_table_spikes_metallic"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "Rotating spike cylinders use pal 6 (metallic), NOT pal 5 (lava)"
+    force_d880: 0x02
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x2A, 0x2E]
+        palette: 6
+        description: "Spike cylinders 0x2A-0x2E → pal 6 (metallic slate/gunmetal)"
+      - tile_range: [0x3A, 0x3D]
+        palette: 6
+        description: "Spike cylinders 0x3A-0x3D → pal 6 (metallic slate/gunmetal)"
+
+  # Wall regression: corner/doorway tiles 0x47/0x57 must be pal 6 (wall
+  # slate), NOT pal 5 (which caused orange wall-corner artifacts that
+  # was the user-reported regression of 2026-05-23). The "thrusting
+  # spike" interpretation lost to the "wall corner" interpretation
+  # because wall corners are more visible than spikes.
+  - name: "dungeon_table_wall_corners"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "Wall corner tiles 0x47/0x57 use pal 6 (wall slate), NOT pal 5"
+    force_d880: 0x02
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x47, 0x47]
+        palette: 6
+        description: "0x47 (wall corner/doorway) → pal 6"
+      - tile_range: [0x57, 0x57]
+        palette: 6
+        description: "0x57 (wall corner/doorway) → pal 6"
+      - tile_range: [0x44, 0x49]
+        palette: 6
+        description: "Wall-corner block 0x44-0x49 → pal 6 (0x43 intentionally pal 0)"
+      - tile_range: [0x54, 0x57]
+        palette: 6
+        description: "Wall-corner block 0x54-0x57 → pal 6"
+
+  # Item color regression: ALL item tile IDs 0x88-0xDF should be pal 1.
+  # docs/audit/hazard_tile_colorization.md notes the items range, and
+  # the FONT was also moved to pal 1 (0x80-0x87 expanded the range so
+  # all title/menu text is uniform red instead of two-tone A-H/I-Z).
+  - name: "dungeon_table_items_and_font"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "Items + font (0x80-0xDF) all pal 1 (red, uniform)"
+    force_d880: 0x02
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x9F]
+        palette: 1
+        description: "Title/menu font 0x80-0x9F (A-Z + extras) → pal 1"
+      - tile_range: [0xA0, 0xDF]
+        palette: 1
+        description: "Items 0xA0-0xDF → pal 1"
