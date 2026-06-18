@@ -441,3 +441,42 @@ write all 4 colors explicitly (set BCPS without auto-inc, write each
 color).
 
 No code changes this iteration. Documented for next session.
+
+## Iteration 14 — Colorizer tile 0x10-0x1F → sara_palette attempted + reverted
+
+Tried a 1-byte ROM patch to colorizer at offset 49: change JR NC offset
+from 0x0B (jump to pal_4) to 0x1B (jump to sara_palette). This would
+route tiles 0x10-0x1F (Sara's secondary body sprites per iteration-1
+audit) to Sara's form palette (D = 2 W or 1 D) instead of pal_4 (Hornet
+orange).
+
+The patch installed cleanly (verified bytes 0x1B at offset 49). gargoyle
+alternation preserved (0.13% pal-6). hornets test PASSED (Sara D
+secondary tiles now correctly routed).
+
+**REVERTED** because sara_w_alone test now FAILS — slot 3 with tile 0x23
+(in Sara range 0x20-0x2F, untouched by my change) reports pal 4 in OAM
+dump. My direct probe of slots 0-3 across frames 50-75 shows ALL pal 2.
+
+Same root-cause family as iteration 8: the colorizer change introduces
+a TIMING side-effect (cycles spent processing tile 0x10-0x1F via the
+new sara_palette branch) that interacts with the Lua test runner's
+sample-window catching slot 3 mid-transition. The LCD probably still
+draws Sara correctly (per the direct probe), but the test reads see
+a transient pal 4 in slot 3.
+
+Trade-off rejected: -sara_w_alone vs +hornets is net -1 hook coverage,
+and the visual benefit (Sara secondary sprites consistent with body)
+is small.
+
+Same pattern: any colorizer/STAT/prelude cycle change that affects the
+chained handler timing tends to introduce a downstream OAM-read
+inconsistency in some other save state. The 1-slot WRAM STAT-IRQ stub
+from iteration 10 is the only such change that has survived hook
+verification — and only because WRAM placement happens to have
+consistent timing across LCD modes.
+
+Conclusion: 5 remaining boss-save OBJ failures + tile 0x10-0x1F
+secondary-sprite improvement all need to wait for either (a) a
+fundamentally different IRQ mechanism, or (b) game-side fixes that
+attack the source of OAM writes. STAT-IRQ approach is exhausted.
