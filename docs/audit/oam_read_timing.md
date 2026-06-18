@@ -136,6 +136,26 @@ the game IS wrong — but the test would flicker pass/fail with the
 alternation. Mark them as `known_flaky_until_alternation_fixed: true`
 when widening the hook.
 
+## Iteration 6 finding: same root cause family for non-boss enemies
+
+Probe of `level1_sara_w_orc_healpotion1_poison_cure.ss0` over 491 frames
+showed slot 4 (orc body tile 0x05) alternating between pal 0 (362 frames)
+and pal 4 (129 frames). The test ACTUALLY fails on slot 12 (orc body tile
+0x55 expected pal 5, got pal 0) because the colorizer assigns orc to
+slots 10+ where my B=10 recolor doesn't reach — same DMA-race-residue
+mechanism as Sara slot 1 in boss fights, just affecting non-Sara
+sprites in higher slots.
+
+So the "9 excluded OBJ tests" all share ONE underlying issue:
+**sprites past slot 10 don't get re-colored by my HW recolor**, so the
+game's main-loop OAM writes (which use default pal 0 or game-chosen pals
+that differ from the colorizer's intent) win at LCD draw time.
+
+The cleanest fix is option 2 from above (STAT-IRQ re-recolor — pure
+re-stamp during HBlank, no need to expand B which would bring back Sara's
+half-orange via slot 10-11 secondary sprites mapping tile 0x10-0x1F to
+pal 4). This unifies the fix for ALL 9 excluded tests at once.
+
 ## What's in the hook now
 
 - 6 BG-table tests (banner/cutscene/splash/postboss/2 arena dispatches)
