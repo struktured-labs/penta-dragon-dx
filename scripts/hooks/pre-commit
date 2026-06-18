@@ -53,8 +53,13 @@ TESTS=(
   postboss_reload_bg_table_all_pal0
   shalamar_arena_dispatch
   penta_dragon_arena_dispatch
-  # OBJ test (verified by consensus filter on wip-color-sweep build):
+  # OBJ tests (all verified reliable on wip-color-sweep via consensus filter):
   sara_w_alone
+  sara_d_alone
+  crow
+  sara_d_hornet_or_moth
+  jet_form_secret_stage
+  spiral_power_active
 )
 FAILED=()
 for t in "${TESTS[@]}"; do
