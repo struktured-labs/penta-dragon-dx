@@ -350,3 +350,34 @@ the correct pal-2 a few cycles later).
 **Recommendation:** Option 1 (WRAM relocation + FFBF gate) — cleanest and
 addresses the root cause (timing impact in dungeon scenes is unwanted).
 Iteration 9+ task.
+
+## Iteration 10 SUCCESS + iteration 11 LIMIT
+
+**Iter 10 (52c7f0b) WIN:** Ungated WRAM STAT-IRQ stub (28 bytes at 0xDB50)
+re-stamps OAM slot 1 every IRQ. gargoyle_miniboss pal-6 frequency dropped
+**62% → 0.13%**. sara_w_alone still passes (no parallax-timing regression
+that iter-8 ROM-prelude had). Hook expanded 21 → 23 tests (+moth,
++gargoyle_miniboss).
+
+**Iter 11 FOUND THE LIMIT:** Extending the WRAM stub to ALSO re-stamp
+slot 0 (and 2/3 via loop) regresses gargoyle to ~100% pal-6. The cycle
+overhead of the additional re-stamps makes STAT IRQ take longer →
+chained parallax handler at 0x0853 runs later → LCD scanline timing
+disrupted → consensus filter catches a TOTALLY different (mostly pal-6)
+state in slot 1.
+
+Tested variants that all regressed gargoyle:
+- 4-slot loop (Sara slots 0,1,2,3): 36 bytes, 99.9% pal-6
+- 2-slot unrolled (slots 0,1): 35 bytes, 99.9% pal-6
+- The single-slot version (28 bytes, slot 1 only) is the ONLY one that
+  fits the STAT-IRQ timing budget without disrupting the chained handler.
+
+So the additional 5 boss-save OBJ tests (spider_*, mage, orc, soldier,
+metal_ball_mage_soldier) cannot be unlocked via STAT-IRQ stub extension.
+Each needs a different approach:
+- spider_*: game-side fix (boss code writes pal 1 to Sara slots)
+- mage/orc/metal_ball_*: slot 0 transient — needs a separate IRQ trigger
+  OR a structurally different stub
+- soldier: slot 12+ DMA-race — outside the colorizer's B=10 cap
+
+These five remain known limitations.
