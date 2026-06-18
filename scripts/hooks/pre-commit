@@ -106,15 +106,43 @@ TESTS=(
   moth
   gargoyle_miniboss
 )
+# Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
+# post-hoc summary via .ok/.fail markers.
+#
+# Wall-clock observation (38 tests, P=4): 5m4s parallel vs ~5m sequential —
+# basically identical, because the bottleneck is mGBA Qt init + xvfb-run
+# per-launch overhead, not CPU. The parallel form is kept anyway because
+# (a) the summary is ordered like TESTS[] regardless of completion order,
+# (b) .ok/.fail markers are easier to inspect after a failed run, and
+# (c) future test additions / faster CI machines benefit linearly from P.
+#
+# P is capped at 4 to limit mGBA resource contention; the retry-on-JSON-flake
+# from iter 17 covers the occasional under-load output-flush failure.
+NPROC=$(nproc 2>/dev/null || echo 4)
+PARALLEL=$((NPROC > 4 ? 4 : NPROC))
+echo "[pre-commit] Running ${#TESTS[@]} tests with up to $PARALLEL parallel workers..."
+
+printf '%s\n' "${TESTS[@]}" | xargs -I {} -P "$PARALLEL" bash -c '
+  t="$1"
+  rom="$2"
+  if QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy xvfb-run -a \
+       uv run python scripts/run_color_regression.py --rom "$rom" --test "$t" \
+       > "/tmp/precommit_${t}.log" 2>&1; then
+    : > "/tmp/precommit_${t}.ok"
+  else
+    : > "/tmp/precommit_${t}.fail"
+  fi
+' _ {} "$ROM"
+
 FAILED=()
 for t in "${TESTS[@]}"; do
-  if ! QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy xvfb-run -a \
-       uv run python scripts/run_color_regression.py --rom "$ROM" --test "$t" \
-       > "/tmp/precommit_${t}.log" 2>&1; then
+  if [[ -e "/tmp/precommit_${t}.fail" ]]; then
     FAILED+=("$t")
     echo "  [FAIL] $t — see /tmp/precommit_${t}.log"
+    rm -f "/tmp/precommit_${t}.fail"
   else
     echo "  [PASS] $t"
+    rm -f "/tmp/precommit_${t}.ok"
   fi
 done
 
