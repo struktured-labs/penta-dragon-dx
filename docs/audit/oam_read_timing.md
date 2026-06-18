@@ -411,3 +411,33 @@ in the wrong colour for the entire spider fight. Fix paths:
 This is queued for future iteration alongside the mage/orc slot-0
 transient (similar root cause family — game-side writes too frequent
 for my IRQ-driven stamps to catch).
+
+## Iteration 13 — Title menu CRAM patch attempted + reverted
+
+Pivoted to a separate visible improvement: making the title menu text
+darker/more readable (light blue on white was hard to read). Implemented
+a 16-byte `build_title_menu_override()` at bank13:0x7FCE that fires when
+D880=0x1C and writes BGP0 color 1 = 0x0000 (black) via BCPS/BCPD.
+
+Verified CRAM dump: color 1 = 0x0000 ✓ (override took effect).
+
+**REVERTED:** screenshot showed the menu with a glitched red background
+instead of the original clean white-with-light-blue-text. The CRAM
+write from my override (via BCPS auto-increment) somehow interacts
+poorly with cond_pal (the hash-cached palette loader) or bg_sweep —
+possibly the auto-increment leaves BCPS pointing at color 2 lo byte,
+which then gets written by some other downstream code with the wrong
+value. Or the CALL adds cycles that push colorize+bg_sweep past VBlank
+into rendering window.
+
+Without override: menu renders as user originally saw it (white BG,
+visible light-blue text — readable, just light-colored).
+With override: red BG floods everything.
+
+For now: leave title menu alone. The user has not complained about
+title legibility and the safe baseline is acceptable. Future iteration
+could investigate the BCPS auto-increment interaction OR rewrite to
+write all 4 colors explicitly (set BCPS without auto-inc, write each
+color).
+
+No code changes this iteration. Documented for next session.
