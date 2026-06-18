@@ -37,8 +37,25 @@ if [[ ! -f "$ROM" ]]; then
     || { echo "[pre-commit] BUILD FAILED — see /tmp/precommit_build.log"; exit 1; }
 fi
 
-echo "[pre-commit] Running BG-scene regression tests against $ROM..."
-TESTS=(banner_bg_table_palettes cutscene_bg_table_palettes splash_bg_table_all_pal0)
+echo "[pre-commit] Running regression tests against $ROM..."
+# Tests selected for the hook are the ones VERIFIED to pass reliably on the
+# current wip-color-sweep build. Tests that fail due to pre-existing test-
+# data issues (e.g., gargoyle YAML says "expected pal7 but intended pal6")
+# are intentionally excluded until the YAML is corrected. The consensus
+# OAM filter (commit 457cc73) lets us include sara_w_alone in the hook —
+# it was failing before due to the Lua frame-callback timing artifact.
+TESTS=(
+  # BG scene-dispatch tests (verify scene_detect routes the right D880 to the
+  # right bg_table + per-scene overrides patch 0xDA00 correctly):
+  banner_bg_table_palettes
+  cutscene_bg_table_palettes
+  splash_bg_table_all_pal0
+  postboss_reload_bg_table_all_pal0
+  shalamar_arena_dispatch
+  penta_dragon_arena_dispatch
+  # OBJ test (verified by consensus filter on wip-color-sweep build):
+  sara_w_alone
+)
 FAILED=()
 for t in "${TESTS[@]}"; do
   if ! QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy xvfb-run -a \
