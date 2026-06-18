@@ -381,3 +381,33 @@ Each needs a different approach:
 - soldier: slot 12+ DMA-race — outside the colorizer's B=10 cap
 
 These five remain known limitations.
+
+## Iteration 12: spider boss is a real visible game bug
+
+Probe of `level1_sara_w_spier_miniboss.ss0` over 1491 frames:
+- All 4 Sara slots (0-3) = pal 1 (SaraDragon GREEN) for 100% of frames
+- FFBE=0 (Sara WITCH form — should be pal 2 pink)
+- Screenshot confirms: Sara visually renders GREEN in spider miniboss
+
+The colorize handler + my hwoam_recolor + STAT IRQ stub all write pal 2
+to slot 1 once per frame, but the game's spider-boss main-loop code
+writes attr=0x01 (pal 1) to Sara slots so frequently that any single-
+shot re-stamp is overwhelmed. The Lua read catches pal 1 at every
+sampling moment.
+
+This is a REAL visible bug, not just a test artifact — Sara is rendering
+in the wrong colour for the entire spider fight. Fix paths:
+
+1. **Find and NOP the game's spider-boss OAM write** — requires
+   disassembly + identifying which routine writes pal 1 to Sara slots
+   during spider scene. Most reliable fix.
+2. **Run my re-stamp from a MUCH more frequent trigger** — e.g., LYC
+   match at Sara's Y position (LY=80) so re-stamp fires per-frame at
+   the exact moment LCD is about to draw Sara. Untested viability.
+3. **Game-side patch**: find the spider-boss sprite-init code that
+   sets attr=0x01 and change to attr=0x02 (Sara W) or compute from
+   FFBE. Cleanest but requires disassembly to locate.
+
+This is queued for future iteration alongside the mage/orc slot-0
+transient (similar root cause family — game-side writes too frequent
+for my IRQ-driven stamps to catch).
