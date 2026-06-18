@@ -462,3 +462,59 @@ tests:
       - tile_range: [0xA0, 0xDF]
         palette: 1
         description: "Items 0xA0-0xDF → pal 1"
+
+  # Iter 17: stage-5 LAVA override regression. The lava override at
+  # bank13:0x7E00 (CALLed every frame from the teleport routine) patches
+  # the molten tile IDs in WRAM 0xDA00 to pal 5 (BG5 = orange/red lava CRAM)
+  # when D880 is dungeon-family AND FFBA matches a lava stage. The test forces
+  # FFBA=4 (stage 5) and verifies the IDs flip to pal 5. Catches anyone who
+  # disables build_lava_override / breaks the per-frame CALL or the FFBA
+  # dispatch logic. Per docs/audit/stage2_lava.md, stage 5 molten IDs are
+  # 0x02-0x05 + 0x12-0x15 (also stage-1 floor/wall — proves the override
+  # WINS over the dungeon table at WRAM 0xDA00).
+  - name: "lava_stage5_override"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "FFBA=4 (stage 5) lava override flips molten IDs to pal 5"
+    force_d880: 0x02
+    force_ffba: 0x04
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x02, 0x05]
+        palette: 5
+        description: "Stage 5 molten IDs 0x02-0x05 → pal 5 (lava override)"
+      - tile_range: [0x12, 0x15]
+        palette: 5
+        description: "Stage 5 molten IDs 0x12-0x15 → pal 5 (lava override)"
+
+  # Iter 17: stage-7 LAVA override regression. Same mechanism, FFBA=6 path.
+  # Stage 7 molten IDs are 0x19, 0x1A. 0x19 normally is in the wall set
+  # (0x19 → pal 6 by default), so this also verifies the per-stage override
+  # wins over the wall assignment in dungeon table.
+  - name: "lava_stage7_override"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "FFBA=6 (stage 7) lava override flips 0x19/0x1A to pal 5"
+    force_d880: 0x02
+    force_ffba: 0x06
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x19, 0x1A]
+        palette: 5
+        description: "Stage 7 molten IDs 0x19, 0x1A → pal 5 (overrides wall pal 6 for 0x19)"
+
+  # Iter 17: confirm the lava override has the FFBA GUARD. With FFBA=0 (any
+  # non-lava stage), 0x19 should stay pal 6 (wall) and 0x02-0x05 / 0x12-0x15
+  # should stay pal 0 (floor). Catches regression where someone makes the
+  # override fire unconditionally.
+  - name: "lava_off_at_ffba0"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "FFBA=0 (non-lava) keeps molten IDs at default palettes"
+    force_d880: 0x02
+    force_ffba: 0x00
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x19, 0x19]
+        palette: 6
+        description: "0x19 stays pal 6 (wall) when FFBA=0"
+      - tile_range: [0x02, 0x05]
+        palette: 0
+        description: "Floor IDs 0x02-0x05 stay pal 0 (floor) when FFBA=0"

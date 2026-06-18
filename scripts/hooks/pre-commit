@@ -61,6 +61,14 @@ TESTS=(
   dungeon_table_spikes_metallic
   dungeon_table_wall_corners
   dungeon_table_items_and_font
+  # Iter 17: stage-5/7 LAVA override + FFBA guard regression. Verifies the
+  # build_lava_override at bank13:0x7E00 patches molten tile IDs to pal 5
+  # when FFBA = 4 or 6, AND that the FFBA guard prevents the override from
+  # leaking into stage 1 (FFBA=0). Catches anyone who disables the per-frame
+  # CALL, breaks the FFBA dispatch, or weakens the guard.
+  lava_stage5_override
+  lava_stage7_override
+  lava_off_at_ffba0
   # All 9 boss arena dispatches (D880 = 0x0C..0x14):
   shalamar_arena_dispatch
   riff_arena_dispatch

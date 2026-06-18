@@ -33,13 +33,16 @@ class TestResult:
 
 def create_test_lua_script(output_prefix: str, frames: int = 60,
                            force_d880: int | None = None,
-                           force_dcfd: int | None = None) -> str:
+                           force_dcfd: int | None = None,
+                           force_ffba: int | None = None) -> str:
     """Generate Lua script for testing palette assignments + BG attrs."""
     force_block = ""
     if force_d880 is not None:
         force_block += f"        emu:write8(0xD880, 0x{force_d880:02X})\n"
     if force_dcfd is not None:
         force_block += f"        emu:write8(0xDCFD, 0x{force_dcfd:02X})\n"
+    if force_ffba is not None:
+        force_block += f"        emu:write8(0xFFBA, 0x{force_ffba:02X})\n"
     return f'''
 -- Color regression test script (OAM + BG attr histogram)
 local frame_count = 0
@@ -364,6 +367,7 @@ def run_single_test(test: dict, rom_path: str, savestate_dir: str, output_dir: s
         output_prefix,
         force_d880=test.get("force_d880"),
         force_dcfd=test.get("force_dcfd"),
+        force_ffba=test.get("force_ffba"),
     )
     with open(lua_script_path, "w") as f:
         f.write(lua_script)
