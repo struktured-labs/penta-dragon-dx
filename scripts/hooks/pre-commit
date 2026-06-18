@@ -51,6 +51,8 @@ TESTS=(
   cutscene_bg_table_palettes
   splash_bg_table_all_pal0
   postboss_reload_bg_table_all_pal0
+  miniboss_uses_dungeon_table
+  dungeon_uses_dungeon_table
   # All 9 boss arena dispatches (D880 = 0x0C..0x14):
   shalamar_arena_dispatch
   riff_arena_dispatch

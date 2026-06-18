@@ -369,3 +369,33 @@ tests:
       - tile_range: [0x00, 0x00]
         palette: 0
         description: "tile 0x00 sanity at high-index — catches off-by-one in dispatch math"
+
+  # D880=0x0A is the mini-boss scene (Gargoyle/Spider). It's a sub-mode of
+  # the dungeon — scene_detect should route to the DUNGEON table, NOT arena.
+  # Catches: regression where someone accidentally added 0x0A to the arena
+  # dispatch range (which would route to arena_base + (0x0A-0x0C)*0x100 =
+  # arena_base - 0x200 = wrong/uninitialized memory).
+  - name: "miniboss_uses_dungeon_table"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "D880=0x0A (mini-boss) falls through to dungeon table — NOT arena"
+    force_d880: 0x0A
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x80]
+        palette: 1
+        description: "Tile 0x80 in dungeon table = pal1 (red font) — confirms NOT splash/arena"
+
+  # D880=0x02 = regular dungeon gameplay. Same table as 0x0A. Acts as a
+  # sanity baseline — if this regresses, the whole scene_detect is broken.
+  - name: "dungeon_uses_dungeon_table"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "D880=0x02 (dungeon) loads the dungeon table (baseline scene_detect sanity)"
+    force_d880: 0x02
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x80]
+        palette: 1
+        description: "Dungeon table maps 0x80 to pal1 (red font)"
+      - tile_range: [0xE0, 0xE0]
+        palette: 0
+        description: "Dungeon table maps 0xE0 (PENTA banner art) to pal0 — NOT pal6 (which would mean banner_override leaked into dungeon)"
