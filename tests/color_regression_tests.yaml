@@ -692,3 +692,35 @@ tests:
       - tile_range: [0x80, 0x80]
         palette: 1
         description: "Tile 0x80 = pal 1 (red font — intentional for the title menu)"
+
+  # Iter 28: Untested OBJ-scene coverage. Sweep at scripts/diagnostics/
+  # sweep_untested_savestates.sh showed Sara is correctly pal-2 colored at
+  # frame 68 in these unique scene states (D880=0x0B item-pickup, D880=0x09
+  # FFBA=7 secret stage, plus a VRAM-in-flux pulsing state). These broaden
+  # hook coverage beyond the existing sara_w_alone (D880=0x02 dungeon only).
+  - name: "sara_w_item_pickup_scene"
+    savestate: "level1_sara_w_p_item.ss0"
+    description: "D880=0x0B item-pickup scene — hwoam_recolor must still fire (D880<0x0C gate)"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W during item pickup"
+
+  - name: "sara_w_pulsing_vram"
+    savestate: "level1_sara_w_pulsing_bg_tiles.ss0"
+    description: "Pulsing BG-tile scene — VRAM in flux, Sara colorization must hold"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with active BG-tile pulse"
+
+  - name: "sara_w_secret_stage_shmup"
+    savestate: "level1_sara_w_secret_stage_1_gbc.ss0"
+    description: "D880=0x09 / FFBA=7 — top-down SHMUP secret stage, Sara still pal 2"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W in secret stage SHMUP"

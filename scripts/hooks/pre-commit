@@ -121,6 +121,14 @@ TESTS=(
   mage
   metal_ball_mage_soldier
   hornets
+  # Iter 28: expand coverage to scenes not previously tested in hook.
+  # sweep_untested_savestates.sh found these are correctly colorized:
+  #  - D880=0x0B item-pickup scene (hwoam_recolor gate is < 0x0C so it fires)
+  #  - Pulsing-BG state (VRAM in flux, Sara colorize must hold)
+  #  - D880=0x09 / FFBA=7 SHMUP secret stage (previously untested)
+  sara_w_item_pickup_scene
+  sara_w_pulsing_vram
+  sara_w_secret_stage_shmup
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
