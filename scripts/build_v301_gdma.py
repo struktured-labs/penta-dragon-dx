@@ -707,8 +707,12 @@ def build_v301():
         0xD5,                                 # PUSH DE
         0xE5,                                 # PUSH HL
 
-        # --- Robust 8-debounce joypad read ---
-        0x3E, 0x20,                           # LD A, 0x20
+        # --- Joypad read (iter 39: trimmed direction-half debounce 9 → 3 reads) ---
+        # Per docs/audit/teleport_performance_audit.md item 4.1, direction-
+        # half had 9 reads but real hardware needs only 2-3 reads to debounce
+        # the matrix. Trimming saves 6 × 12T = 72T/VBlank — recovery buffer
+        # for iter 31's hwoam_recolor cost (when backported here).
+        0x3E, 0x20,                           # LD A, 0x20 (button mode)
         0xE0, 0x00,                           # LDH [FF00], A
         0xF0, 0x00,                           # LDH A, [FF00]
         0xF0, 0x00,                           # LDH A, [FF00]
@@ -716,16 +720,11 @@ def build_v301():
         0xE6, 0x0F,                           # AND 0x0F
         0xCB, 0x37,                           # SWAP A
         0x47,                                 # LD B, A
-        0x3E, 0x10,                           # LD A, 0x10
+        0x3E, 0x10,                           # LD A, 0x10 (direction mode)
         0xE0, 0x00,                           # LDH [FF00], A
-        0xF0, 0x00,                           # LDH A, [FF00]
-        0xF0, 0x00,                           # LDH A, [FF00]
-        0xF0, 0x00,                           # LDH A, [FF00]
-        0xF0, 0x00,                           # LDH A, [FF00]
-        0xF0, 0x00,                           # LDH A, [FF00]
-        0xF0, 0x00,                           # LDH A, [FF00]
-        0xF0, 0x00,                           # LDH A, [FF00]
-        0xF0, 0x00,                           # LDH A, [FF00]
+        0xF0, 0x00,                           # LDH A, [FF00] (read 1)
+        0xF0, 0x00,                           # LDH A, [FF00] (read 2)
+        0xF0, 0x00,                           # LDH A, [FF00] (read 3)
         0x2F,                                 # CPL
         0xE6, 0x0F,                           # AND 0x0F
         0xB0,                                 # OR B
