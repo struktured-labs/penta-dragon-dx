@@ -865,3 +865,14 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 1
         description: "Sara D with turbo powerup active"
+
+  # Iter 51 finding: of 20 sampled savestates, only one
+  # (level1_sara_w_right_before_secret_stage_trigger_gbc.ss0) has a Sara
+  # secondary tile (0x10-0x1F) visible at frame 68. Single-frame probe shows
+  # the colorizer DOES write pal 2 (correct iter-31 remap), but the 5-sample
+  # consensus filter (frames 58/60/62/65/68) votes pal 4 — game's main loop
+  # overwrites attr between hwoam_recolor stamps, and only one of the five
+  # samples catches the post-stamp moment. This is the same timing-shift
+  # class that iter 8/43 hit. NOT added as a live test — verify_colorizer_
+  # bytes.py at bank13:0x6A41 = 0x1B is the cleaner safety net for the
+  # iter-31 tile-remap regression.
