@@ -168,6 +168,11 @@ Teleport's marginal cost over base is small (~330T); the whole-program cost is d
    `read tile → table lookup → store palette` in a single 32-iter loop, eliminating one full
    32-iteration loop. Saves **~1,300–2,000T/VBlank**. Medium risk (touches the live sweep; verify
    attr correctness in mgba/MiSTer). Applies to BOTH base and teleport.
+   - **DONE iter 40 (commit 854c8b6).** Used `LD B, bg_table_hi; LD C, tile; LD A, [BC]` since
+     bg_table is 256-byte aligned, eliminating the carry-aware ADD math. Counter via DE-end
+     compare (E=0x10→0x30). mGBA-verified across 15 critical tests (sara_w_alone, dungeon_table
+     spike/wall/font, miniboss/banner/cutscene/death/victory routing, lava-5/7, shalamar_arena,
+     spider_miniboss_live, orc, moth). MiSTer hardware verification recommended before promoting.
 3. **(Optional) Gate scene-detect to gameplay only.** scene-detect runs unconditionally in the
    teleport routine even on title/menu (FFC1=0). It is only 56T fast-path, but moving its CALL
    inside an FFC1 check would shave it on non-gameplay frames. Saves ~80T on title/menu frames.
