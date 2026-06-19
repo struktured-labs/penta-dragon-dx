@@ -56,7 +56,7 @@ tests:
   # === ENEMY TYPE TESTS ===
   - name: "hornets"
     savestate: "level1_sara_w_4_hornets.ss0"
-    description: "4 hornets - verify palette 4 (Sara in dragon form in this savestate)"
+    description: "4 hornets - verify palette 4 + Sara D GREEN + Sara projectile BLUE renders"
     expected_boss_flag: 0
     expectations:
       # Note: Despite filename, Sara is in Dragon form (tiles 0x28+) in this savestate
@@ -66,6 +66,18 @@ tests:
       - tile_range: [0x40, 0x4F]
         palette: 4
         description: "Hornets should be palette 4 (yellow)"
+    # Iter 66: stable colors across 3 fresh runs — Sara D mid-green
+    # (#00A500, 108 pixels), Sara projectile dark-blue (#0000B5, 180),
+    # Sara projectile cyan (#0084FF, 100). Verifies OBP-1 SaraDragon
+    # AND OBP-3 SaraProjectile both load correctly in a scene with
+    # active enemies (hornets) and projectiles.
+    pixel_expectations:
+      - color: "0000B5"
+        min_pixels: 60
+        description: "Sara projectile dark-blue (OBP 3) renders"
+      - color: "00A500"
+        min_pixels: 50
+        description: "Sara D green (OBP 1) renders alongside enemies"
 
   - name: "orc"
     savestate: "level1_sara_w_orc.ss0"
