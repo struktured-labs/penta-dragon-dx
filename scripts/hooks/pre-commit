@@ -165,6 +165,10 @@ TESTS=(
   sara_d_with_soldier
   sara_w_secret_stage_transition
   sara_w_catfish_with_arrows_items
+  # Iter 37: Sara alt-anim frame validation (tile 0x28-0x2B instead of
+  # 0x20-0x23). Locks down that the sara_palette mapping covers the FULL
+  # 0x20-0x2F range, not just the rest-pose subset.
+  sara_w_diagonal_arrows_alt_anim
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.

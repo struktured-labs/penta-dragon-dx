@@ -833,3 +833,16 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W stable across crowded combo state"
+
+  # Iter 37: diagonal-arrow-heavy state — Sara primary tiles 0x28-0x2B (alt
+  # animation frame from the existing 0x20-0x23 in sara_w_alone). Validates
+  # the colorizer's tile range 0x20-0x2F mapping uniformly across Sara
+  # animation cycle, not just the rest-pose tiles.
+  - name: "sara_w_diagonal_arrows_alt_anim"
+    savestate: "level1_sara_w_all_diagnol_arrow_item.ss0"
+    description: "Many diagonal arrows + alt Sara animation tiles (0x28-0x2B). Verifies tile 0x20-0x2F sara_palette mapping uniform across Sara animation frames."
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W alt anim frame (tile 0x28-0x2B) still pal 2"
