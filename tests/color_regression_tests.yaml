@@ -984,12 +984,25 @@ tests:
 
   - name: "sara_w_catfish_with_arrows_items"
     savestate: "level1_sara_w_cat_fish_fat_arrow_all_diagnos_arrow_item.ss0"
-    description: "Catfish + fat arrow + multiple diagonal arrows + item — combined stress (sara + projectile + enemy + item all in same frame)"
+    description: "Catfish + fat arrow + multiple diagonal arrows + item — combined stress (sara + projectile + enemy + item all in same frame) + multi-CRAM pixel guard"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W stable across crowded combo state"
+    # Iter 68: this savestate exercises MULTIPLE OBP CRAM palettes
+    # simultaneously — catfish (#FF0000 ≈ pal 7 red), arrows (#FF7300
+    # orange) and other elements (#7B00F7 purple). Verified stable
+    # across 3 fresh runs: red=273, orange=45, purple=25. Catches a
+    # multi-palette-load regression in palette_loader (e.g. one of the
+    # OBP branches gets reordered or skipped).
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 100
+        description: "Catfish/item red dominant (multi-CRAM load)"
+      - color: "FF7300"
+        min_pixels: 20
+        description: "Arrow orange present"
 
   # Iter 37: diagonal-arrow-heavy state — Sara primary tiles 0x28-0x2B (alt
   # animation frame from the existing 0x20-0x23 in sara_w_alone). Validates
