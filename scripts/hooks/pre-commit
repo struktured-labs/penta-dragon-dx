@@ -37,6 +37,10 @@ if [[ ! -f "$ROM" ]]; then
     || { echo "[pre-commit] BUILD FAILED — see /tmp/precommit_build.log"; exit 1; }
 fi
 
+echo "[pre-commit] Verifying iter-31 colorizer ROM bytes..."
+uv run python scripts/diagnostics/verify_colorizer_bytes.py --rom "$ROM" \
+  || { echo "[pre-commit] ROM byte verification FAILED — see output above"; exit 1; }
+
 echo "[pre-commit] Running regression tests against $ROM..."
 # Tests selected for the hook are the ones VERIFIED to pass reliably on the
 # current wip-color-sweep build. Tests that fail due to pre-existing test-
