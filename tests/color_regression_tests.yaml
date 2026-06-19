@@ -922,6 +922,29 @@ tests:
         palette: 5
         description: "Orc tiles 0x58-0x5B → pal 5 (orc-green)"
 
+  # Iter 57: pixel-based screenshot test for the PENTA DRAGON DX title
+  # menu — a BG-only scene (no visible OAM, so the slots/tile_range
+  # checks have nothing to assert on). Verifies the four design colors
+  # of the menu (the build comment at build_v301_teleport.py:271 calls
+  # the red font "by design") are present in expected quantities.
+  - name: "titlemenu_colored"
+    savestate: "titlemenu_colored.ss0"
+    description: "PENTA DRAGON DX title menu (D880=0x1C) renders red font + lavender accents (BG-only scene)"
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FFFFFF"
+        min_pixels: 15000
+        description: "White background dominates the menu (>15k of 23040 pixels)"
+      - color: "A5A5FF"
+        min_pixels: 800
+        description: "Lavender PENTA DRAGON title accents present"
+      - color: "940000"
+        min_pixels: 50
+        description: "Dark-red menu font present (the 'by design' red text)"
+      - color: "000000"
+        min_pixels: 500
+        description: "Black title outline / letters present"
+
   # Iter 51 finding: of 20 sampled savestates, only one
   # (level1_sara_w_right_before_secret_stage_trigger_gbc.ss0) has a Sara
   # secondary tile (0x10-0x1F) visible at frame 68. Single-frame probe shows

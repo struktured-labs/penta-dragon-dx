@@ -202,6 +202,13 @@ TESTS=(
   sara_w_2_metal_ball
   sara_w_teleport_animation
   sara_w_pulsing_bg_with_enemies
+  # Iter 57: BG-only pixel-based test. The PENTA DRAGON DX title menu
+  # has no OAM sprites, so the existing slot/tile_range expectations have
+  # nothing to assert. The new pixel_expectations type counts RGB pixels
+  # in the rendered screenshot — guards the BG palette CRAM load + scene
+  # routing for D880=0x1C (catches anyone who breaks the dungeon-table
+  # default for menu, or the BG palette load that puts dark red in BGP1).
+  titlemenu_colored
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.

@@ -289,6 +289,78 @@ def verify_bg_table_expectations(bg_table: list, exps: list) -> list:
     return errors
 
 
+def verify_pixel_expectations(screenshot_path: str | None, pixel_exps: list) -> list:
+    """Verify rendered screenshot contains expected colors. Returns list of errors.
+
+    Each pixel_expectation is a dict with:
+      color: str (6-char hex "RRGGBB", case-insensitive)
+      min_pixels: int (minimum pixel count required)
+      max_pixels: int (optional, upper bound — useful for "no flood" checks)
+      tolerance: int (optional, per-channel +/- 0..255; default 0 = exact match)
+      region: [x1, y1, x2, y2] (optional; default = full 160x144 screen)
+      description: str (optional)
+
+    Used for BG-only scenes (titlemenu, splash, banner) where there are no
+    visible OAM sprites — the existing OAM/tile-range/BG-attr expectations
+    have nothing to assert on. Sampling the final rendered RGB also catches
+    palette-load regressions that BG-attr alone misses (a wrong CRAM color
+    won't change which palette a tile uses, only what it renders as).
+    """
+    errors = []
+    if not pixel_exps:
+        return errors
+    if screenshot_path is None or not os.path.exists(screenshot_path):
+        errors.append(f"pixel_expectations require a screenshot; none found at {screenshot_path}")
+        return errors
+    try:
+        from PIL import Image
+    except ImportError:
+        errors.append("pixel_expectations require Pillow (uv pip install pillow)")
+        return errors
+    img = Image.open(screenshot_path).convert("RGB")
+    px = img.load()
+    width, height = img.size
+
+    def parse_color(s: str) -> tuple[int, int, int]:
+        s = s.strip().lstrip("#")
+        return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+
+    for exp in pixel_exps:
+        color_str = exp.get("color")
+        if not color_str:
+            errors.append(f"pixel_expectation missing 'color' field: {exp}")
+            continue
+        try:
+            target = parse_color(color_str)
+        except (ValueError, IndexError):
+            errors.append(f"pixel_expectation has invalid 'color' (need RRGGBB): {color_str}")
+            continue
+        tol = int(exp.get("tolerance", 0))
+        region = exp.get("region")
+        if region is not None:
+            x1, y1, x2, y2 = region
+        else:
+            x1, y1, x2, y2 = 0, 0, width, height
+        count = 0
+        for y in range(max(0, y1), min(height, y2)):
+            for x in range(max(0, x1), min(width, x2)):
+                r, g, b = px[x, y]
+                if (abs(r - target[0]) <= tol
+                        and abs(g - target[1]) <= tol
+                        and abs(b - target[2]) <= tol):
+                    count += 1
+        min_p = exp.get("min_pixels", 0)
+        max_p = exp.get("max_pixels")
+        desc = exp.get("description", "")
+        if count < min_p:
+            errors.append(
+                f"pixel #{color_str}: count {count} < min {min_p} (tol={tol}) - {desc}")
+        if max_p is not None and count > max_p:
+            errors.append(
+                f"pixel #{color_str}: count {count} > max {max_p} (tol={tol}) - {desc}")
+    return errors
+
+
 def verify_bg_expectations(bg_histo: list, bg_expectations: list) -> list:
     """Verify BG attr histogram matches expectations. Returns list of errors.
 
@@ -320,6 +392,8 @@ def verify_bg_expectations(bg_histo: list, bg_expectations: list) -> list:
 def verify_expectations(oam_data: list, boss_flag: int, expectations: list, expected_boss_flag: int,
                         bg_histo: list = None, bg_expectations: list = None,
                         bg_table: list = None, bg_table_expectations: list = None,
+                        pixel_expectations: list = None,
+                        screenshot_path: str | None = None,
                         check_boss_flag: bool = True) -> tuple[bool, str]:
     """Verify OAM + BG data matches expectations. Returns (passed, message)."""
     errors = []
@@ -364,6 +438,11 @@ def verify_expectations(oam_data: list, boss_flag: int, expectations: list, expe
     # force D880 to verify scene_detect + per-scene overrides patched 0xDA00.
     if bg_table is not None and bg_table_expectations:
         errors.extend(verify_bg_table_expectations(bg_table, bg_table_expectations))
+
+    # pixel_expectations (iter 57): screenshot RGB sampling for BG-only scenes
+    # (titlemenu, splash, banner) where OAM/tile_range have nothing to assert.
+    if pixel_expectations:
+        errors.extend(verify_pixel_expectations(screenshot_path, pixel_expectations))
 
     if errors:
         return False, "\n".join(errors)
@@ -436,22 +515,25 @@ def run_single_test(test: dict, rom_path: str, savestate_dir: str, output_dir: s
     expectations = test.get("expectations", [])
     bg_expectations = test.get("bg_expectations", [])
     bg_table_expectations = test.get("bg_table_expectations", [])
+    pixel_expectations = test.get("pixel_expectations", [])
     expected_boss_flag = test.get("expected_boss_flag", 0)
     # For non-gameplay tests (cutscene/menu/title), the boss flag is undefined.
     # YAML can set `check_boss_flag: false` to skip that check.
     check_boss_flag = test.get("check_boss_flag", True)
+
+    screenshot_path = f"{output_prefix}.png"
+    if not os.path.exists(screenshot_path):
+        screenshot_path = None
 
     # Verify expectations
     passed, message = verify_expectations(
         oam_data, boss_flag, expectations, expected_boss_flag,
         bg_histo=bg_histo, bg_expectations=bg_expectations,
         bg_table=bg_table, bg_table_expectations=bg_table_expectations,
+        pixel_expectations=pixel_expectations,
+        screenshot_path=screenshot_path,
         check_boss_flag=check_boss_flag,
     )
-
-    screenshot_path = f"{output_prefix}.png"
-    if not os.path.exists(screenshot_path):
-        screenshot_path = None
 
     return TestResult(
         name=name,
