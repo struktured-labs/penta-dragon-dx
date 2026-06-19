@@ -1,6 +1,29 @@
 # v3.01 production vs teleport — hook test baseline
 
-## 2026-06-19 UPDATE (iter 45): full 60-test matrix
+## 2026-06-19 UPDATE (iter 46): full 65-test matrix with corrected regex
+
+  **v3.01:    42/65 pass (65%)**
+  **teleport: 65/65 pass (100%)**
+  **Both failing: 0** (no "real bugs", only documented gaps).
+
+The 23 v3.01-only failures, by cluster:
+
+  - **13 teleport-routine per-frame overrides** (banner, cutscene, splash,
+    postboss, lava_stage5/7, 9 per-arena bg_table content tests)
+  - **6 iter-31 slot-10+ OBJ tests** (hornets, orc, orc_with_items,
+    soldier, catfish, spider_miniboss_sara_d)
+  - **2 timing-dependent transient tests**:
+    - `dragon_powerup`: probe at frame 68 shows v3.01 Sara slots 0-3 at
+      pal 2 (Sara W per FFBE=0), teleport same slots at pal 1
+      (Sara D — game's main-loop wrote during powerup transition).
+      Both ROMs render correctly visually; the difference is which
+      writer wins the timing race. Test was added with teleport's
+      timing in mind.
+    - `sara_w_secret_stage_transition` (FFC1=0 state): similar — depends
+      on teleport's per-frame patches firing during the FFC1-gated
+      transition window.
+
+## 2026-06-19 (iter 45): full 60-test matrix (superseded by iter 46)
 `scripts/diagnostics/compare_v301_vs_teleport.sh` now uses xargs -P 4 and
 ran the full hook suite. Result:
 
