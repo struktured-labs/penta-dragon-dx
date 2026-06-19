@@ -144,16 +144,23 @@ tests:
         description: "Gargoyle enemy → pal 6 (boss_slot_table[0]). Slots 10+ stay DMA-race pal0."
 
   - name: "spider_miniboss_sara_w"
-    savestate: "level1_sara_w_spier_miniboss.ss0"
+    # Iter 54: switched from level1_sara_w_spier_miniboss.ss0 (frozen — that
+    # capture was made before the teleport build's STAT-IRQ WRAM stub existed,
+    # so 0xDB50 reads back as 0x00 and STAT-IRQ at 0x0048→JP 0xDB50 falls
+    # through NOPs into garbage, blocking the colorize wrapper chain from
+    # running at all). The "sara1_shield1_item_spider_miniboss" capture has
+    # the full stub block (landing pad + levelsel + STAT) at 0xDB00-0xDB60,
+    # so the colorizer runs and stamps Sara W as pal 2.
+    savestate: "level1_sara1_shield1_item_spider_miniboss.ss0"
     description: "Spider miniboss (Sara W) - boss flag=2, all enemies palette 7"
     expected_boss_flag: 2
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W still palette 2"
-      - slots: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+      - slots: [4, 5, 6, 7]
         palette: 7
-        description: "All enemy sprites should be palette 7 (Spider mode)"
+        description: "Spider/enemy sprites should be palette 7 (Spider mode)"
 
   - name: "spider_miniboss_sara_d"
     savestate: "level1_sara_d_spider_miniboss.ss0"

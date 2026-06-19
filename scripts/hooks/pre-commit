@@ -185,6 +185,13 @@ TESTS=(
   # Iter 47: 2 more sweep-discovered tests.
   sara_w_miniboss_dying
   sara_d_turbo_powerup_active
+  # Iter 54: last excluded YAML test unlocked. The old
+  # level1_sara_w_spier_miniboss.ss0 capture was frozen — made before the
+  # WRAM cold-boot stubs existed, so STAT-IRQ at 0x0048→JP 0xDB50 fell
+  # into zeroed WRAM and blocked the colorize wrapper chain. Switched the
+  # savestate to level1_sara1_shield1_item_spider_miniboss.ss0 which has
+  # the stub block populated (DB00-DB60 non-zero). 68/68 YAML coverage now.
+  spider_miniboss_sara_w
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
