@@ -664,13 +664,23 @@ tests:
 
   - name: "riff_arena_content"
     savestate: "level1_sara_d_alone.ss0"
-    description: "Riff arena table: body tile 0x30 → pal 2 (purple)"
+    description: "Riff arena table: body tile 0x30 → pal 2 (purple) + red-flood render verify"
     force_d880: 0x0D
     check_boss_flag: false
     bg_table_expectations:
       - tile_range: [0x30, 0x30]
         palette: 2
         description: "0x30 (Riff purple body) → pal 2"
+    # Iter 72: forcing D880=0x0D copies the Riff arena bg_table to WRAM
+    # 0xDA00; rendering the underlying dungeon tilemap against that table
+    # produces 12595 #FF0000 pixels (~55% of the screen) — empirically
+    # stable across 5 fresh runs. Floor at 8000. Catches scene_detect
+    # regressions where 0x0D routes to the wrong table (would drop the
+    # dominant red).
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 8000
+        description: "Riff arena dominant red present (scene_detect routes 0x0D correctly)"
 
   - name: "crystal_dragon_arena_content"
     savestate: "level1_sara_d_alone.ss0"
@@ -684,7 +694,7 @@ tests:
 
   - name: "cameo_arena_content"
     savestate: "level1_sara_d_alone.ss0"
-    description: "Cameo arena table: tile 0x10 → pal 5 (border gold), tile 0x61 → pal 2 (face)"
+    description: "Cameo arena table: tile 0x10 → pal 5 (border gold), tile 0x61 → pal 2 (face) + red render"
     force_d880: 0x0F
     check_boss_flag: false
     bg_table_expectations:
@@ -694,16 +704,28 @@ tests:
       - tile_range: [0x61, 0x61]
         palette: 2
         description: "0x61 (Cameo face/body) → pal 2"
+    # Iter 72: D880=0x0F routes to Cameo's arena bg_table; render produces
+    # 4594 #FF0000 pixels (stable across 5 fresh runs). Floor at 3000.
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 3000
+        description: "Cameo arena red render (scene_detect routes 0x0F correctly)"
 
   - name: "ted_arena_content"
     savestate: "level1_sara_d_alone.ss0"
-    description: "Ted arena table: tile 0x17 → pal 1 (gold body, dominant)"
+    description: "Ted arena table: tile 0x17 → pal 1 (gold body, dominant) + red render verify"
     force_d880: 0x10
     check_boss_flag: false
     bg_table_expectations:
       - tile_range: [0x17, 0x17]
         palette: 1
         description: "0x17 (Ted gold body) → pal 1"
+    # Iter 72: D880=0x10 routes to Ted's arena bg_table; render produces
+    # 7115 #FF0000 pixels (stable × 5 fresh runs). Floor at 5000.
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 5000
+        description: "Ted arena red render (scene_detect routes 0x10 correctly)"
 
   - name: "troop_arena_content"
     savestate: "level1_sara_d_alone.ss0"
@@ -740,7 +762,7 @@ tests:
 
   - name: "penta_dragon_arena_content"
     savestate: "level1_sara_d_alone.ss0"
-    description: "Penta Dragon arena: tile 0x48 → pal 5 (red), 0x68 → pal 4 (cyan)"
+    description: "Penta Dragon arena: tile 0x48 → pal 5 (red), 0x68 → pal 4 (cyan) + red render verify"
     force_d880: 0x14
     check_boss_flag: false
     bg_table_expectations:
@@ -750,6 +772,12 @@ tests:
       - tile_range: [0x68, 0x68]
         palette: 4
         description: "0x68 (Penta Dragon cyan head) → pal 4"
+    # Iter 72: D880=0x14 routes to Penta Dragon's arena bg_table; render
+    # produces 5664 #FF0000 pixels (stable × 5 fresh runs). Floor at 4000.
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 4000
+        description: "Penta Dragon arena red render (scene_detect routes 0x14 correctly)"
 
   # Iter 20: scene-routing tests for D880 values that scene_detect should
   # route to the DUNGEON table (i.e., NOT splash/all-pal0 like 0x16/0x18/0x1B,
