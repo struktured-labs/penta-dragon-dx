@@ -36,12 +36,22 @@ tests:
 
   - name: "sara_d_alone"
     savestate: "level1_sara_d_alone.ss0"
-    description: "Sara Dragon alone - verify palette 1"
+    description: "Sara Dragon alone - verify palette 1 + actual GREEN rendering at f=68"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 1
         description: "Sara D sprites should be palette 1 (green)"
+    # Iter 60: unlike sara_w_alone (where the savestate's OBP 2 CRAM is
+    # grayscale-stale and DF1F gates colorize from reloading), sara_d_alone's
+    # savestate captures OBP 1 *already* loaded with SaraDragon green
+    # (#00A500 = 0x01C0 mGBA-corrected). So we can pixel-check green at the
+    # default f=68 target — Sara D renders ~38 pixels of #00A500 and ~19
+    # pixels of #00FF00 in the (70-95, 70-95) Sara region.
+    pixel_expectations:
+      - color: "00A500"
+        min_pixels: 15
+        description: "SaraDragon mid-green (#00A500) actually rendered at f=68 (not just OAM attr=1)"
 
   # === ENEMY TYPE TESTS ===
   - name: "hornets"
@@ -215,12 +225,19 @@ tests:
   # === POWER-UP TESTS ===
   - name: "dragon_powerup"
     savestate: "level1_sara_w_dragon_powerup_item.ss0"
-    description: "Dragon powerup item visible - note: Sara is in Dragon form in this savestate"
+    description: "Dragon powerup item visible - note: Sara is in Dragon form in this savestate + GREEN render check"
     expected_boss_flag: 0
     expectations:
       - tile_range: [0x28, 0x2F]
         palette: 1
         description: "Sara D (dragon form despite filename)"
+    # Iter 60: savestate's OBP 1 captures SaraDragon green; Sara region has
+    # ~61 green (#00A500) pixels at f=68. Pixel guard catches a rendering
+    # regression even if the OAM attr/tile mapping stays correct.
+    pixel_expectations:
+      - color: "00A500"
+        min_pixels: 25
+        description: "SaraDragon green (#00A500) actually rendered at f=68"
 
   - name: "spiral_power_active"
     savestate: "level1_sara_w_spiral_power_active.ss0"
@@ -779,12 +796,23 @@ tests:
 
   - name: "sara_w_dual_enemies_with_arrows"
     savestate: "level1_sara_w_2orcs_one_flickering_fat_arrow_bidirectioal_array_half_diagnol_arrow_random_item.ss0"
-    description: "2 orcs + multiple arrow types + random item — high-OAM-occupancy stress test"
+    description: "2 orcs + multiple arrow types + random item — high-OAM-occupancy stress test + pink RENDER check"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W stays pal 2 even with crowded OAM (orcs occupy slot 10+)"
+    # Iter 60: this savestate captures OBP 2 *already* loaded with
+    # SaraWitch (unlike sara_w_alone, where OBP 2 is grayscale and DF1F
+    # blocks reload), so the Sara region renders pink+peach at the
+    # default f=68 — sampled 34 pink + 35 peach pixels in survey.
+    pixel_expectations:
+      - color: "FF42A5"
+        min_pixels: 15
+        description: "SaraWitch pink-red (#FF42A5) actually rendered at f=68"
+      - color: "F7AD5A"
+        min_pixels: 15
+        description: "SaraWitch peach (#F7AD5A) actually rendered at f=68"
 
   # Iter 33: 2 more from iter-32 sweep — Sara D variants and Sara W
   # transient/powerup states. The dragon_powerup_item_crow combo exercises
