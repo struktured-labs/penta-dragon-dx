@@ -121,7 +121,7 @@ tests:
 
   - name: "mage"
     savestate: "level1_sara_w_mage_health1_items.ss0"
-    description: "Mage enemy - verify palette 6"
+    description: "Mage enemy - verify palette 6 + lavender/purple-blue BG render"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
@@ -130,15 +130,37 @@ tests:
       - tile_range: [0x60, 0x6F]
         palette: 6
         description: "Mage should be palette 6 (purple)"
+    # Iter 61: the mage scene's BG renders with a distinctive purple
+    # aesthetic — pale lavender (#DEC6FF, ~9k pixels) + blue-purple
+    # (#8484C6, ~8k pixels) + dark blue (#42427B, ~3k). Catches BG
+    # palette regressions (wrong CRAM load on entering mage room) even
+    # though the OAM/tile_range expectations stay pal-6 for the mage
+    # tiles.
+    pixel_expectations:
+      - color: "DEC6FF"
+        min_pixels: 5000
+        description: "Mage BG pale lavender dominates"
+      - color: "8484C6"
+        min_pixels: 4000
+        description: "Mage BG blue-purple secondary"
 
   - name: "catfish"
     savestate: "level1_cat_fish_moth_spike_hazard_orb_item.ss0"
-    description: "Catfish - NOTE: v1.09 uses palette 7 for 0x70+ tiles (miniboss range)"
+    description: "Catfish - NOTE: v1.09 uses palette 7 for 0x70+ tiles + RED rendering check"
     expected_boss_flag: 0
     expectations:
       - tile_range: [0x70, 0x7F]
         palette: 7
         description: "Catfish gets palette 7 in v1.09 (0x70+ treated as miniboss range)"
+    # Iter 61: catfish scene shows a distinctive red on red-tile enemies
+    # (#FF0000, observed ~177 pixels) plus orange (#FF7300, ~28) and
+    # purple (#7B00F7, ~13) accents. The OAM/tile_range checks confirm
+    # the catfish tile maps to pal 7; this verifies pal-7 CRAM actually
+    # has the expected red colors loaded.
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 50
+        description: "Catfish scene red accents present (pal-7 CRAM loaded correctly)"
 
   # === MINIBOSS TESTS (CRITICAL) ===
   - name: "gargoyle_miniboss"
