@@ -283,7 +283,7 @@ tests:
 
   - name: "banner_bg_table_palettes"
     savestate: "level1_sara_d_alone.ss0"
-    description: "D880=0x1B banner_override patches: letters pal6, names pal3, JAM pal1"
+    description: "D880=0x1B banner_override patches: letters pal6, names pal3, JAM pal1 + lavender BG render"
     force_d880: 0x1B
     check_boss_flag: false
     bg_table_expectations:
@@ -299,6 +299,22 @@ tests:
       - tile_range: [0xDA, 0xDE]
         palette: 1
         description: "JAM logo lower -> pal1 (red)"
+    # Iter 62: force_d880=0x1B makes scene_detect copy the banner table
+    # to WRAM 0xDA00, so the underlying dungeon tilemap renders with
+    # banner palettes. The BG palette CRAM is still the dungeon load
+    # (cond_pal doesn't reload for forced scenes since FFC0/FFD0 etc.
+    # don't change), so we get the BANNER pal mappings rendered with
+    # DUNGEON CRAM colors — which happens to produce a distinctive
+    # lavender (#A5A5FF, ~8k pixels) + dark-blue (#52527B, ~4k) result.
+    # This pixel check guards against scene_detect routing the wrong
+    # table for D880=0x1B (it'd flip the dominant rendered colors).
+    pixel_expectations:
+      - color: "A5A5FF"
+        min_pixels: 5000
+        description: "Banner-routed lavender dominant (#A5A5FF, banner pal map on dungeon CRAM)"
+      - color: "52527B"
+        min_pixels: 2000
+        description: "Banner-routed dark-blue secondary (#52527B)"
 
   - name: "cutscene_bg_table_palettes"
     savestate: "level1_sara_d_alone.ss0"
@@ -790,12 +806,28 @@ tests:
 
   - name: "sara_w_secret_stage_shmup"
     savestate: "level1_sara_w_secret_stage_1_gbc.ss0"
-    description: "D880=0x09 / FFBA=7 — top-down SHMUP secret stage, Sara still pal 2"
+    description: "D880=0x09 / FFBA=7 — top-down SHMUP secret stage, Sara still pal 2 + RICH BG render"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W in secret stage SHMUP"
+    # Iter 62: SHMUP secret stage has the richest non-arena color
+    # profile in the suite — dark blue (#52527B, ~1870) and lavender
+    # (#A5A5FF, ~1660) BG + red flame (#FF3100, ~130) + yellow (~110)
+    # accents. Catches BG palette CRAM regressions for the SHMUP scene
+    # (D880=0x09 uses dungeon table; if scene_detect routed it to
+    # splash instead, BG would lose the SHMUP space-station palette).
+    pixel_expectations:
+      - color: "52527B"
+        min_pixels: 800
+        description: "SHMUP dark-blue space station BG present"
+      - color: "A5A5FF"
+        min_pixels: 800
+        description: "SHMUP lavender accents present"
+      - color: "FF3100"
+        min_pixels: 30
+        description: "SHMUP red flame/ship tile present"
 
   # Iter 32: more sweep-discovered tests for unique scene combinations.
   - name: "sara_w_in_spider_miniboss_live"
