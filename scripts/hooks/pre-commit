@@ -215,6 +215,11 @@ TESTS=(
   # gray even when OAM attr correctly says pal 2).
   sara_w_pink_render
   sara_d_green_render
+  # Iter 67: complement to sara_w_pink_render — force_df1f=0 path covers
+  # cond_pal's load logic independent of the DF1F drain mechanism. If
+  # someone breaks force_df1f or cond_pal's OBP-2 branch, this fails
+  # before the f=300-based pink_render does.
+  sara_w_pink_force_df1f
   # Iter 59: visual fidelity for mini-bosses, SHMUP secret stage, and a
   # lava-flood regression check on stage 1. The arena_content tests
   # already cover bg_table mapping; these cover the *rendered* CRAM.

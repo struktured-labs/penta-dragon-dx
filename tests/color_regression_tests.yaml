@@ -1108,6 +1108,27 @@ tests:
         min_pixels: 5
         description: "SaraDragon mid-green (OBP 1 idx 2 = 0x01C0) present"
 
+  - name: "sara_w_pink_force_df1f"
+    # Iter 67: complements sara_w_pink_render (frames=300, naturally-drained
+    # DF1F path). Here we force_df1f=0 to verify cond_pal can load OBP 2
+    # SaraWitch CRAM independently of the DF1F drain mechanism. Sampled
+    # at the default f=68. OAM expectations OMITTED because force_df1f=0
+    # exposes the iter-53 slot 0/2 alternation (shadow_main vs game DMA
+    # race), but the rendered pixels still include enough pal-2 Sara
+    # pixels from slots 1/3 to clear the min=5 floor. Stable: 26/21
+    # pink/peach pixels across 5 fresh runs.
+    savestate: "level1_sara_w_alone.ss0"
+    description: "force_df1f=0 → cond_pal loads SaraWitch CRAM by f=68 (skip OAM since alternation expected)"
+    force_df1f: 0
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF42A5"
+        min_pixels: 5
+        description: "Sara W pink-red (#FF42A5) after force_df1f=0 unblocks cond_pal"
+      - color: "F7AD5A"
+        min_pixels: 5
+        description: "Sara W peach (#F7AD5A) after force_df1f=0 unblocks cond_pal"
+
   - name: "gargoyle_visual_render"
     savestate: "level1_sara_w_gargoyle_mini_boss.ss0"
     description: "Gargoyle mini-boss must render with the Gargoyle palette (replaces pal 6 in FFBF=1)"
