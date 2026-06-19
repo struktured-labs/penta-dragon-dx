@@ -209,7 +209,7 @@ tests:
 
   - name: "spider_miniboss_sara_d"
     savestate: "level1_sara_d_spider_miniboss.ss0"
-    description: "Spider miniboss (Sara D) - boss flag=2, all enemies palette 7"
+    description: "Spider miniboss (Sara D) - boss flag=2, all enemies palette 7 + Sara D GREEN render"
     expected_boss_flag: 2
     expectations:
       - slots: [0, 1, 2, 3]
@@ -218,6 +218,14 @@ tests:
       - slots: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
         palette: 7
         description: "All enemy sprites should be palette 7 (Spider mode)"
+    # Iter 65: Sara D renders 50 #00A500 pixels at f=68 (stable across
+    # 5 fresh runs). Verifies SaraDragon CRAM survives even in FFBF=2
+    # boss mode, where boss_pal injection only overwrites OBP 7 (Spider)
+    # — OBP 1 (SaraDragon) should be untouched.
+    pixel_expectations:
+      - color: "00A500"
+        min_pixels: 20
+        description: "SaraDragon green stays loaded in FFBF=2 spider mode (boss_pal injection only touches OBP 7)"
 
   # === MIXED ENEMY TESTS ===
   - name: "orc_with_items"
@@ -875,12 +883,19 @@ tests:
 
   - name: "sara_d_teleport_tile"
     savestate: "level1_sara_d_teleport_tile.ss0"
-    description: "Sara D dungeon scene with teleport tile in view — Sara form palette stable through teleport-tile rendering"
+    description: "Sara D dungeon scene with teleport tile in view — Sara form palette stable through teleport-tile rendering + GREEN check"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 1
         description: "Sara D on a teleport tile"
+    # Iter 65: stable Sara D render (green=38 × 5 fresh runs). Catches
+    # OBP-1 CRAM corruption during teleport-tile transitions (D880 may
+    # transiently flip during teleport sequence).
+    pixel_expectations:
+      - color: "00A500"
+        min_pixels: 20
+        description: "SaraDragon green stays loaded during teleport-tile rendering"
 
   - name: "sara_w_dual_enemies_with_arrows"
     savestate: "level1_sara_w_2orcs_one_flickering_fat_arrow_bidirectioal_array_half_diagnol_arrow_random_item.ss0"
@@ -907,12 +922,19 @@ tests:
   # form-change + non-trivial enemy in the same frame.
   - name: "sara_d_metal_ball_enemy"
     savestate: "level1_sara_d_metal_ball.ss0"
-    description: "Sara D + metal-ball enemy — Sara D form palette holds in dungeon"
+    description: "Sara D + metal-ball enemy — Sara D form palette holds in dungeon + GREEN render check"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 1
         description: "Sara D in dungeon with metal-ball enemy"
+    # Iter 65: stable green=38 across 5 fresh runs. Same OBP-1 guard
+    # as the other Sara D pixel tests, in a different scene context
+    # (Sara D + metal-ball enemy vs. Sara D alone).
+    pixel_expectations:
+      - color: "00A500"
+        min_pixels: 20
+        description: "SaraDragon green renders with metal-ball enemy onscreen"
 
   - name: "sara_w_dragon_powerup_with_crow"
     savestate: "level1_sara_w_dragon_powerup_item_crow.ss0"
