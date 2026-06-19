@@ -1,5 +1,35 @@
 # Audit: Monster / OBJ Sprite Colorization
 
+## 2026-06-18 UPDATE: iter 31 unblocked item F via post-DMA stamp; A/B/C/D/E still candidates
+The "OAM scan cap" issue (item F below — `LD B,0x0A` in `build_v301_gdma.py`
+leaves OAM slots 10-39 uncolorized) is **partially resolved on the teleport
+ROM** via `hwoam_recolor` (iter 31, commit 534179f, tag v8.11-obj-slot10-unlock):
+
+  - The shadow-pass `LD B,0x0A` cap is kept in production v3.01 / FIXED.gb.
+  - The **teleport** ROM adds a post-DMA `hwoam_recolor` at bank13:0x7F40
+    that re-stamps ALL 40 HW OAM slots by tile range (effectively raising
+    B to 40 in the post-DMA pass). Sara secondary tiles 0x10-0x1F were
+    simultaneously remapped to `sara_palette` to avoid the documented
+    "Sara half-orange" regression at slots 10-11.
+  - All 6 previously-DMA-race-blocked tests now pass in the hook on the
+    teleport ROM: `orc`, `soldier`, `orc_with_items`, `catfish`,
+    `spider_miniboss_sara_d`, `dragon_powerup`.
+  - Production v3.01 backport requires also the iter-10 STAT-IRQ WRAM
+    stub (`build_stat_irq_wram_stub`) — iter 34 verified that
+    `hwoam_recolor` alone in v3.01 regresses Sara odd slots to pal 4
+    because the base game's STAT IRQ chain timing shifts. Filed for
+    multi-iter backport with MiSTer hardware verification.
+
+Items A (tile 0x00-0x01 → OBP0), B (dedicated boss slot), C (tile-scoped
+boss override), D (humanoid sub-types), E (per-scene OBJ palettes) remain
+open candidates. C is the most impactful for ongoing-fight monster color
+quality but has test-coverage implications (`gargoyle_miniboss` expects
+slot 4-9 = pal 6, which today comes from the blanket tile>=0x30 boss
+override). Any C-style change would need a coordinated test update.
+
+---
+
+
 Static analysis only. Verified against the shipped binaries
 `rom/working/penta_dragon_dx_FIXED.gb` (synced production v3.01),
 `rom/working/penta_dragon_dx_v301.gb`, and
