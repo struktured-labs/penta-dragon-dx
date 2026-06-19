@@ -122,22 +122,23 @@ def create_bg_sweep_viewport_gated(bg_table_addr: int, base_addr: int) -> bytes:
     s.extend([0x7B, 0x6F])               # LD A,E; LD L,A
     s.extend([0x11, 0x10, 0xDF])         # DE = DF10 (buffer)
 
-    # Phase 1: read 32 tile IDs from tilemap (VBK=0) into DF10..DF2F
+    # Iter 40 (audit item 4.2): FUSE Phase 1+2 into a single read-lookup-write
+    # pass. Saves ~1400T/VBlank vs the original 3-phase staging through DF10.
+    # bg_table at 0x7000 is 256-byte aligned, so `LD B, bg_table_hi; LD C, tile;
+    # LD A, [BC]` does the lookup in 16T per iter — no `ADD A, L; carry H++` math.
+    # Counter is by DE-end compare (DE = DF10 → DF30, E ranges 0x10 → 0x30).
     s.extend([0xAF, 0xE0, 0x4F])         # VBK=0
-    s.extend([0x06, 0x20])               # B = 32
-    s.extend([0x2A, 0x12, 0x13])         # A=[HL+]; [DE]=A; INC DE
-    s.extend([0x05, 0x20, 0xFA])         # DEC B; JR NZ -6
-
-    # Phase 2: lookup palette for each tile via bg_table (still VBK=0)
     s.extend([0x11, 0x10, 0xDF])         # DE = DF10
-    s.extend([0x06, 0x20])               # B = 32
+    s.extend([0x06, bg_table_hi])        # B = bg_table_hi (0x70 for 0x7000-aligned table)
     # loop:
-    s.extend([0x1A])                      # A = [DE]
-    s.extend([0x21, 0x00, bg_table_hi])  # HL = bg_table base
-    s.extend([0x85, 0x6F])               # L += A
-    s.extend([0x30, 0x01, 0x24])         # if carry, H++
-    s.extend([0x7E, 0x12, 0x13])         # A=[HL]; [DE]=A; INC DE
-    s.extend([0x05, 0x20, 0xF1])         # DEC B; JR NZ -15
+    s.extend([0x2A])                      # A = [HL+]  (tile from tilemap, HL → next)
+    s.extend([0x4F])                      # C = A      (tile into BC's low byte)
+    s.extend([0x0A])                      # A = [BC]   (bg_table[tile])
+    s.extend([0x12])                      # [DE] = A   (palette → DF10[i])
+    s.extend([0x13])                      # INC DE
+    s.extend([0x7B])                      # A = E
+    s.extend([0xFE, 0x30])                # CP 0x30    (reached DF30?)
+    s.extend([0x20, 0xF7])                # JR NZ, loop (-9 to retry)
 
     # Phase 3: write palette attrs to active tilemap (VBK=1)
     s.extend([0x3E, 0x01, 0xE0, 0x4F])   # VBK=1
