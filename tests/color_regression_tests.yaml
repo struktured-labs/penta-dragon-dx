@@ -184,7 +184,7 @@ tests:
     # the full stub block (landing pad + levelsel + STAT) at 0xDB00-0xDB60,
     # so the colorizer runs and stamps Sara W as pal 2.
     savestate: "level1_sara1_shield1_item_spider_miniboss.ss0"
-    description: "Spider miniboss (Sara W) - boss flag=2, all enemies palette 7"
+    description: "Spider miniboss (Sara W) - boss flag=2, all enemies palette 7 + Spider visual render"
     expected_boss_flag: 2
     expectations:
       - slots: [0, 1, 2, 3]
@@ -193,6 +193,19 @@ tests:
       - slots: [4, 5, 6, 7]
         palette: 7
         description: "Spider/enemy sprites should be palette 7 (Spider mode)"
+    # Iter 63: the Sara-W variant of the spider scene also renders Spider
+    # colors (#7B00F7 purple, #FF7300 orange, #FF0000 red — Spider pal 7
+    # replacement is "Red, Orange, Black"). Survey: 169/116/162 pixels
+    # respectively. The companion spider_visual_render uses the Sara-D
+    # savestate; this confirms the same boss-palette swap also lands on
+    # the Sara-W variant (different cold-boot path, same colorize chain).
+    pixel_expectations:
+      - color: "FF7300"
+        min_pixels: 50
+        description: "Spider vivid-orange body (Sara-W variant)"
+      - color: "7B00F7"
+        min_pixels: 100
+        description: "Spider purple accent present"
 
   - name: "spider_miniboss_sara_d"
     savestate: "level1_sara_d_spider_miniboss.ss0"
@@ -209,7 +222,7 @@ tests:
   # === MIXED ENEMY TESTS ===
   - name: "orc_with_items"
     savestate: "level1_sara_w_orc_healpotion1_poison_cure.ss0"
-    description: "Orc with health items"
+    description: "Orc with health items + verify items render with cherry-red pal 1"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
@@ -218,6 +231,16 @@ tests:
       - tile_range: [0x50, 0x5F]
         palette: 5
         description: "Orc should be palette 5"
+    # Iter 63: item / font tiles (0x80-0xDF) map to pal 1 (BG1 "Items/
+    # pickups" — cherry red #001F = #FF0000 mGBA-corrected). This
+    # savestate has visible health items, so ~361 #FF0000 pixels show
+    # in the rendered screenshot. Catches a BG-1 CRAM-load regression
+    # (which would leave the bg_table mapping intact but render items
+    # as grayscale or some other color).
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 100
+        description: "Items render with cherry-red (pal 1 CRAM load verified)"
 
   - name: "metal_ball_mage_soldier"
     savestate: "level1_sara_w_metal_ball_mage_soldier.ss0"
