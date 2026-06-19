@@ -158,6 +158,10 @@ Teleport's marginal cost over base is small (~330T); the whole-program cost is d
 1. **Wrapper button-half reads 8 → 3.** Remove 5 of the 9 `F0 00` (LDH A,[FF00]) in the button half
    at bank13:0x6F23+. Saves **~60T/VBlank**. Lowest risk; keep ≥2–3 reads for matrix settle.
    (`scripts/build_v301_teleport.py` wrapper block, lines ~585–593.)
+   - **DONE iter 39 (commit 9795514...).** Reduced from 9 to 3 reads on the direction half (the
+     code's actual layout — audit description was slightly off). v3.01 wrapper went 58 → 46 bytes,
+     saved 6 × 12T = **72T/VBlank**. Verified via `probe_v301_boots.lua` that v3.01 still boots
+     cleanly through 300 frames; teleport ROM unaffected (wrapper rewritten by build_v301_teleport).
 2. **Fuse bg_sweep Phase 1+2 into one pass.** Currently: read 32 tile IDs to DF10 (Phase1), then
    re-read DF10 and table-lookup back into DF10 (Phase2), then read DF10 and write attrs (Phase3).
    The inline hook already does the fused `[BC]` lookup in one pass; bg_sweep can do
