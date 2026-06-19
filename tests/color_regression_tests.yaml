@@ -254,12 +254,23 @@ tests:
   # === SPECIAL FORM TESTS ===
   - name: "sara_d_hornet_or_moth"
     savestate: "level1_sara_d_hornet_or_moth.ss0"
-    description: "Sara Dragon with flying enemy"
+    description: "Sara Dragon with flying enemy + verify GREEN rendering at f=68"
     expected_boss_flag: 0
     expectations:
       - slots: [0, 1, 2, 3]
         palette: 1
         description: "Sara D should be palette 1"
+    # Iter 64: empirically this savestate produces a stable Sara D render
+    # at f=68 — measured 54 #00A500 pixels across 5 consecutive fresh
+    # runs (0% variance). Unlike sara_d_with_soldier and sara_d_turbo_
+    # powerup_active, which intermittently render green=0 vs green=38/41
+    # across runs (mGBA boot-timing sensitivity on the cond_pal first-
+    # call window), this scene's CRAM state is reliably loaded by f=68.
+    # Floor at 20 (well below the observed 54).
+    pixel_expectations:
+      - color: "00A500"
+        min_pixels: 20
+        description: "SaraDragon mid-green (#00A500) actually rendered at f=68 (consistent 54 across 5 runs)"
 
   - name: "jet_form_secret_stage"
     savestate: "level1_sara_w_in_jet_form_secret_stage.ss0"
