@@ -1131,6 +1131,22 @@ tests:
         min_pixels: 5
         description: "SaraDragon mid-green (OBP 1 idx 2 = 0x01C0) present"
 
+  # Iter 71 abandoned experiment: a "sara_d_green_force_invalidate" test
+  # using force_df00: 0xFF every frame was tried as a SaraDragon
+  # corruption catcher (per the iter-70 adversarial probe). It turned
+  # out to break the clean case too — forcing DF00 cache invalidation
+  # makes palette_loader run on every VBlank, but its OBP 1 write
+  # timing is sensitive enough that running it that often actually
+  # corrupts the clean OBP 1 instead of stabilizing it. Empirical:
+  #   clean ROM + force_df00:    green=0 (TEST FAILS — should be 25)
+  #   corrupted ROM + force_df00: green=0 (TEST FAILS — expected)
+  # The force_df00 option is kept in the runner as future infrastructure
+  # but no test currently uses it. Properly catching SaraDragon CRAM
+  # regressions needs a different mechanism (e.g. direct CRAM probe at
+  # an LCD-mode-1 boundary, or a Lua frame-callback that triggers on
+  # cond_pal completion). Filed for later — see
+  # project_adversarial_coverage.md to-investigate list.
+
   - name: "sara_w_pink_force_df1f"
     # Iter 67: complements sara_w_pink_render (frames=300, naturally-drained
     # DF1F path). Here we force_df1f=0 to verify cond_pal can load OBP 2

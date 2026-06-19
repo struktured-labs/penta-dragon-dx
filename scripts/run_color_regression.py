@@ -35,7 +35,8 @@ def create_test_lua_script(output_prefix: str, frames: int = 60,
                            force_d880: int | None = None,
                            force_dcfd: int | None = None,
                            force_ffba: int | None = None,
-                           force_df1f: int | None = None) -> str:
+                           force_df1f: int | None = None,
+                           force_df00: int | None = None) -> str:
     """Generate Lua script for testing palette assignments + BG attrs."""
     force_block = ""
     if force_d880 is not None:
@@ -44,6 +45,16 @@ def create_test_lua_script(output_prefix: str, frames: int = 60,
         force_block += f"        emu:write8(0xDCFD, 0x{force_dcfd:02X})\n"
     if force_ffba is not None:
         force_block += f"        emu:write8(0xFFBA, 0x{force_ffba:02X})\n"
+    if force_df00 is not None:
+        # DF00 = cond_pal's hash cache (per project_title_investigation.md).
+        # When the cached hash matches the computed hash, cond_pal RETs early
+        # and palette_loader doesn't run — so any ROM-source palette
+        # corruption stays masked because the CRAM keeps whatever the
+        # savestate captured. Forcing DF00=0xFF every frame invalidates the
+        # cache, palette_loader runs each VBlank, and ROM-source regressions
+        # actually propagate to the rendered screenshot. Used by the iter-71
+        # SaraDragon corruption-catcher test.
+        force_block += f"        emu:write8(0xDF00, 0x{force_df00:02X})\n"
     if force_df1f is not None:
         # DF1F = colorize-skip counter set by the teleport-cheat path. Saves
         # captured DURING a teleport transition have DF1F=0xFF and the
@@ -469,6 +480,7 @@ def run_single_test(test: dict, rom_path: str, savestate_dir: str, output_dir: s
         force_dcfd=test.get("force_dcfd"),
         force_ffba=test.get("force_ffba"),
         force_df1f=test.get("force_df1f"),
+        force_df00=test.get("force_df00"),
     )
     with open(lua_script_path, "w") as f:
         f.write(lua_script)
