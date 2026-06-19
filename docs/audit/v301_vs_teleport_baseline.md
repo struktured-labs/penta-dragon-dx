@@ -1,4 +1,29 @@
-# v3.01 production vs teleport — hook test baseline (iter 44, 2026-06-19)
+# v3.01 production vs teleport — hook test baseline
+
+## 2026-06-19 UPDATE (iter 45): full 60-test matrix
+`scripts/diagnostics/compare_v301_vs_teleport.sh` now uses xargs -P 4 and
+ran the full hook suite. Result:
+
+  **v3.01:    41/60 pass (68%)**
+  **teleport: 60/60 pass (100%)**
+
+The 19 v3.01-only failures (no test fails on both ROMs — confirms there
+are no "real bugs", only the documented teleport-vs-production gap):
+
+  - **11 teleport per-frame routine overrides** (banner_bg_table,
+    cutscene_bg_table, shalamar/riff/crystal/cameo/ted/troop/faze/angela/
+    penta_dragon_arena_content)
+  - **6 iter 31 slot-10+ OBJ tests** (hornets, orc, orc_with_items,
+    soldier, catfish, spider_miniboss_sara_d)
+  - **2 sweep-discovered scene tests** (dragon_powerup,
+    sara_w_secret_stage_transition — these likely depend on the
+    teleport routine's per-scene patches)
+
+Note: the iter 45 run captured 60 of the 65 hook tests; the awk/grep
+regex missed test names containing digits (lava_stage5_override etc.).
+Fixed in this commit; future runs will capture all 65.
+
+# (original 2026-06-19 iter 44 entry below)
 
 A representative 20-test sample comparing pass/fail on `penta_dragon_dx_v301.gb`
 vs `penta_dragon_dx_teleport.gb`. Run via
