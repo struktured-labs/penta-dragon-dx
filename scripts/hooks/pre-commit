@@ -37,6 +37,10 @@ if [[ ! -f "$ROM" ]]; then
     || { echo "[pre-commit] BUILD FAILED — see /tmp/precommit_build.log"; exit 1; }
 fi
 
+echo "[pre-commit] Verifying hook-tests ↔ YAML integrity..."
+uv run python scripts/diagnostics/verify_hook_tests_exist.py \
+  || { echo "[pre-commit] hook-vs-YAML check FAILED — see output above"; exit 1; }
+
 echo "[pre-commit] Verifying iter-31/39/40 ROM bytes (teleport + v3.01)..."
 uv run python scripts/diagnostics/verify_colorizer_bytes.py --rom "$ROM" \
   || { echo "[pre-commit] ROM byte verification FAILED (teleport) — see output above"; exit 1; }
