@@ -670,6 +670,13 @@ def build_v301():
     w(colorize_addr, bytes(code))
     print(f"  colorize handler: {len(code)} bytes at 0x{colorize_addr:04X}")
 
+    # Iter 40 perf note: bg_sweep at 0x6CD0 (above) now uses the fused
+    # Phase 1+2 design (single read-lookup-write pass via LD [BC] since
+    # bg_table is 256-byte aligned at 0x7000). Saves ~1,400T/VBlank in
+    # both v3.01 production and teleport. See build_v296_phantomsafe.py
+    # `create_bg_sweep_viewport_gated` and docs/audit/teleport_performance_audit.md
+    # item 4.2 (marked DONE iter 40, commit 854c8b6).
+
     # Iter 34 experiment: tried backporting build_v301_teleport's
     # hwoam_recolor (iter 31) into v3.01 production at 0x7F40 + adding a
     # CALL after the colorize_handler in the wrapper. mGBA verification
