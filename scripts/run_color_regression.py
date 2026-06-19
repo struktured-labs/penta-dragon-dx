@@ -464,6 +464,7 @@ def run_single_test(test: dict, rom_path: str, savestate_dir: str, output_dir: s
     # Generate and write Lua script (with optional state-forcing)
     lua_script = create_test_lua_script(
         output_prefix,
+        frames=test.get("frames", 60),
         force_d880=test.get("force_d880"),
         force_dcfd=test.get("force_dcfd"),
         force_ffba=test.get("force_ffba"),

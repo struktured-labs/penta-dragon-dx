@@ -922,6 +922,42 @@ tests:
         palette: 5
         description: "Orc tiles 0x58-0x5B → pal 5 (orc-green)"
 
+  # Iter 58: pixel-based visual fidelity tests for the Sara-baseline scenes.
+  # The existing sara_w_alone / sara_d_alone tests verify OAM attr at f=68
+  # (passes because hwoam_recolor stamps pal 2/1 regardless of DF1F), but
+  # the rendered Sara is GRAY at f=68 — the savestate captures stale OBP
+  # CRAM and DF1F > 0 blocks cond_pal from reloading until ~f=255 (per
+  # iter 53 finding). These tests sample at frames=300 (post DF1F drain)
+  # to verify SaraWitch / SaraDragon palette colors actually reach CRAM.
+  # Separate from the f=68 OAM tests because shadow_main races the game
+  # at f=300 and produces slot 0/2 OAM alternation (iter 53), but the
+  # rendered pixels still include the correct SaraWitch / SaraDragon hues
+  # because most of Sara's 16x16 region is still covered by pal-2/1 slots.
+  - name: "sara_w_pink_render"
+    savestate: "level1_sara_w_alone.ss0"
+    description: "Sara W must render PINK at f=300 (proves SaraWitch CRAM loaded by cond_pal)"
+    frames: 300
+    expected_boss_flag: 0
+    check_boss_flag: false  # OAM alternation at f=300 makes FFBF noisy
+    pixel_expectations:
+      - color: "FF42A5"
+        min_pixels: 5
+        description: "SaraWitch pink-red (OBP 2 idx 1 = 0x511F) present"
+      - color: "F7AD5A"
+        min_pixels: 5
+        description: "SaraWitch peach (OBP 2 idx 2 = 0x2EBE) present"
+
+  - name: "sara_d_green_render"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "Sara D must render GREEN at f=300 (proves SaraDragon CRAM loaded by cond_pal)"
+    frames: 300
+    expected_boss_flag: 0
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "00A500"
+        min_pixels: 5
+        description: "SaraDragon mid-green (OBP 1 idx 2 = 0x01C0) present"
+
   # Iter 57: pixel-based screenshot test for the PENTA DRAGON DX title
   # menu — a BG-only scene (no visible OAM, so the slots/tile_range
   # checks have nothing to assert on). Verifies the four design colors

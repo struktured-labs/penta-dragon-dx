@@ -209,6 +209,12 @@ TESTS=(
   # routing for D880=0x1C (catches anyone who breaks the dungeon-table
   # default for menu, or the BG palette load that puts dark red in BGP1).
   titlemenu_colored
+  # Iter 58: visual fidelity tests — Sara baseline savestates rendered
+  # at f=300 to skip the DF1F transient (iter 53). Catches OBP 2/1 CRAM
+  # regressions that the OAM tests miss (a wrong CRAM color renders Sara
+  # gray even when OAM attr correctly says pal 2).
+  sara_w_pink_render
+  sara_d_green_render
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
