@@ -1149,15 +1149,26 @@ tests:
         description: "Dungeon BG light-teal — guards BG palette CRAM load path"
 
   - name: "sara_d_green_render"
+    # Iter 73 audit: this test is largely a no-op for ROM-source
+    # regressions. sara_d_alone.ss0 captures OBP 1 CRAM already loaded
+    # with SaraDragon green, AND has DF1F=0xFF so JP COLORIZE is gated
+    # for ~255 frames after load. By f=300 cond_pal HAS run, palette_
+    # loader writes from ROM source — but the rendered #00A500 pixels
+    # at f=300 (25 of them) come from BG-pal-3 background tiles around
+    # Sara's position, NOT from her OBJ sprite. Zeroing all 15 0xE003
+    # bytes in the ROM still leaves green=25 at f=300. The test stays
+    # in the suite as a smoke check that "BG-pal-3 isn't catastrophically
+    # broken" but it doesn't actually verify the SaraDragon palette
+    # source. See project_adversarial_coverage.md for the full audit.
     savestate: "level1_sara_d_alone.ss0"
-    description: "Sara D must render GREEN at f=300 (proves SaraDragon CRAM loaded by cond_pal)"
+    description: "BG-pal-3 green renders at f=300 (DOES NOT verify OBP-1 SaraDragon load — see iter 73 audit)"
     frames: 300
     expected_boss_flag: 0
     check_boss_flag: false
     pixel_expectations:
       - color: "00A500"
         min_pixels: 5
-        description: "SaraDragon mid-green (OBP 1 idx 2 = 0x01C0) present"
+        description: "Some #00A500 green still rendered (smoke check, not a real SaraDragon guard)"
 
   # Iter 71 abandoned experiment: a "sara_d_green_force_invalidate" test
   # using force_df00: 0xFF every frame was tried as a SaraDragon
