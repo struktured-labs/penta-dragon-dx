@@ -958,6 +958,64 @@ tests:
         min_pixels: 5
         description: "SaraDragon mid-green (OBP 1 idx 2 = 0x01C0) present"
 
+  - name: "gargoyle_visual_render"
+    savestate: "level1_sara_w_gargoyle_mini_boss.ss0"
+    description: "Gargoyle mini-boss must render with the Gargoyle palette (replaces pal 6 in FFBF=1)"
+    frames: 300
+    expected_boss_flag: 1
+    pixel_expectations:
+      - color: "4A0800"
+        min_pixels: 100
+        description: "Gargoyle dark-magenta body color present (boss_pal idx 1/2, ~0x4A0800 mGBA-corrected)"
+      - color: "000063"
+        min_pixels: 50
+        description: "Dark-blue accent present (BG palette in arena)"
+
+  - name: "spider_visual_render"
+    savestate: "level1_sara_d_spider_miniboss.ss0"
+    description: "Spider mini-boss must render with the Spider palette (replaces pal 7 in FFBF=2)"
+    frames: 300
+    expected_boss_flag: 2
+    pixel_expectations:
+      - color: "FF7300"
+        min_pixels: 50
+        description: "Spider vivid-orange body (boss_pal idx 2 = 0x00BF mGBA-corrected)"
+      - color: "7B00F7"
+        min_pixels: 100
+        description: "Spider/arena purple accent present"
+
+  - name: "jet_form_visual_render"
+    savestate: "level1_sara_w_in_jet_form_secret_stage.ss0"
+    description: "SHMUP secret stage jet form — verify red flame/ship + dark-blue space render"
+    frames: 300
+    expected_boss_flag: 0
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 30
+        description: "Bright red jet flame / ship tile (BG palette in SHMUP)"
+      - color: "000063"
+        min_pixels: 20
+        description: "Dark-blue space background present"
+      - color: "000000"
+        min_pixels: 10000
+        description: "Black space dominates (>10k of 23040 pixels)"
+
+  - name: "stage1_no_lava_flood"
+    # Regression catch: stage 1 must NOT contain pure red (#FF0000) flood
+    # pixels — those would indicate the lava override leaked from FFBA=4/6
+    # into FFBA=0, the same class of bug that flooded the crystal arena red
+    # before iter 17 added the FFBA guard to build_lava_override.
+    savestate: "level1_sara_w_alone.ss0"
+    description: "Stage 1 (FFBA=0) must NOT show lava-flood pure red — guards build_lava_override's FFBA gate"
+    frames: 300
+    expected_boss_flag: 0
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 0
+        max_pixels: 0
+        description: "Stage 1 sara_w_alone must have ZERO #FF0000 pixels (lava-flood indicator)"
+
   # Iter 57: pixel-based screenshot test for the PENTA DRAGON DX title
   # menu — a BG-only scene (no visible OAM, so the slots/tile_range
   # checks have nothing to assert on). Verifies the four design colors

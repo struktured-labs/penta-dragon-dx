@@ -215,6 +215,13 @@ TESTS=(
   # gray even when OAM attr correctly says pal 2).
   sara_w_pink_render
   sara_d_green_render
+  # Iter 59: visual fidelity for mini-bosses, SHMUP secret stage, and a
+  # lava-flood regression check on stage 1. The arena_content tests
+  # already cover bg_table mapping; these cover the *rendered* CRAM.
+  gargoyle_visual_render
+  spider_visual_render
+  jet_form_visual_render
+  stage1_no_lava_flood
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
