@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Take settled screenshots across key scenes to verify nothing's catastrophically
-# broken. Headless via xvfb-run; each shot is captured at frame 68 after load.
+# broken. Headless via xvfb-run; each shot is captured at frame 300 after load.
+#
+# IMPORTANT: frame 300, not 68. The teleport ROM's DF1F gate skips JP COLORIZE
+# while DF1F > 0; uninitialized WRAM gives DF1F=0xFF on savestate load, which
+# decrements 1/frame, so OBJ/BG palette CRAM stays at savestate values for the
+# first ~255 frames after load. By frame 300 DF1F has reached 0 and cond_pal
+# has run, so the screenshot reflects the real colorized state. (Real gameplay
+# is not affected — DF1F naturally drains to 0 during title/menu before the
+# dungeon ever loads, so end-users never see the transient. iter 53.)
 cd "$(git rev-parse --show-toplevel)"
 ROM="rom/working/penta_dragon_dx_teleport.gb"
 OUT_DIR="/tmp/visual_sweep"
@@ -27,7 +35,7 @@ cat > "$OUT_DIR/dump.lua" << 'LUA'
 local f = 0
 callbacks:add("frame", function()
   f = f + 1
-  if f == 68 then
+  if f == 300 then
     emu:screenshot(os.getenv("SHOT_PATH"))
     emu:stop()
   end
@@ -39,7 +47,7 @@ for entry in "${SCENES[@]}"; do
   ss="${entry#*:}"
   out="$OUT_DIR/${label}.png"
   SHOT_PATH="$out" QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy \
-    timeout 25 xvfb-run -a mgba-qt "$ROM" -t "save_states_for_claude/${ss}" \
+    timeout 40 xvfb-run -a mgba-qt "$ROM" -t "save_states_for_claude/${ss}" \
     --script "$OUT_DIR/dump.lua" -l 0 > /dev/null 2>&1
   if [[ -s "$out" ]]; then
     size=$(stat -c%s "$out")
