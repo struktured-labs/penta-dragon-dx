@@ -92,6 +92,12 @@ TESTS=(
   victory_intermediate_uses_dungeon_table
   victory_final_uses_dungeon_table
   title_menu_uses_dungeon_table
+  # Iter 30: more scene-routing tests for D880 values that should default
+  # to the DUNGEON table (i.e., NOT in splash_body list at 0x16/0x18/0x1B
+  # and NOT in arena range 0x0C-0x14). Catches anyone who accidentally
+  # adds these to splash dispatch.
+  title_screen_uses_dungeon_table
+  shmup_secret_stage_uses_dungeon_table
   # All 9 boss arena dispatches (D880 = 0x0C..0x14):
   shalamar_arena_dispatch
   riff_arena_dispatch

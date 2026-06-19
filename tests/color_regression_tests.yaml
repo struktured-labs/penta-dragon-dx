@@ -693,6 +693,32 @@ tests:
         palette: 1
         description: "Tile 0x80 = pal 1 (red font — intentional for the title menu)"
 
+  # Iter 30: scene-routing tests for D880=0x00 and D880=0x09 (currently
+  # untested in the BG-table dispatch matrix). Per scene_detect: only 0x18,
+  # 0x1B, 0x16 are special-cased to the splash table and 0x0C-0x14 to arenas;
+  # ALL OTHER values (including 0x00 title/level-select and 0x09 SHMUP)
+  # default to the dungeon table. These tests catch any future regression
+  # that adds these to splash dispatch or breaks the default fallthrough.
+  - name: "title_screen_uses_dungeon_table"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "D880=0x00 (title / level-select / ending) routes to dungeon table"
+    force_d880: 0x00
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x80]
+        palette: 1
+        description: "Tile 0x80 = pal 1 (dungeon-font signature — proves dungeon table loaded)"
+
+  - name: "shmup_secret_stage_uses_dungeon_table"
+    savestate: "level1_sara_d_alone.ss0"
+    description: "D880=0x09 (top-down SHMUP secret stage) routes to dungeon table"
+    force_d880: 0x09
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x80]
+        palette: 1
+        description: "Tile 0x80 = pal 1 (dungeon-font signature — proves dungeon table loaded)"
+
   # Iter 28: Untested OBJ-scene coverage. Sweep at scripts/diagnostics/
   # sweep_untested_savestates.sh showed Sara is correctly pal-2 colored at
   # frame 68 in these unique scene states (D880=0x0B item-pickup, D880=0x09
