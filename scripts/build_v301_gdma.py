@@ -677,31 +677,43 @@ def build_v301():
     # `create_bg_sweep_viewport_gated` and docs/audit/teleport_performance_audit.md
     # item 4.2 (marked DONE iter 40, commit 854c8b6).
 
-    # Iter 34 experiment: tried backporting build_v301_teleport's
-    # hwoam_recolor (iter 31) into v3.01 production at 0x7F40 + adding a
-    # CALL after the colorize_handler in the wrapper. mGBA verification
-    # against rom/working/penta_dragon_dx_v301.gb showed Sara slot-1
-    # alternation (all odd slots read pal 4 in dungeon Sara W scenes):
+    # Iter 43 experiment (REVERTED): tried full v3.01 backport of iter 31
+    # hwoam_recolor + iter 10 STAT-IRQ WRAM stub + cold-boot init +
+    # IRQ vector patch. Even with the STAT stub re-stamping slot 1 and the
+    # sentinel-gated init (12T post-first-frame), the wrapper timing shift
+    # exposed a different transient pattern:
     #
-    #     sara_w_alone slot 0 = pal 2 (Sara W ✓)
-    #     sara_w_alone slot 1 = pal 4 (FAIL — expected 2)
-    #     sara_w_alone slot 2 = pal 2 ✓
-    #     sara_w_alone slot 3 = pal 4 (FAIL — expected 2)
+    #     sara_w_alone slot 0 attr alternated between 0x02 (colorize win)
+    #     and 0xFC (game-overwrite win, pal 4) across consecutive frames.
     #
-    # Root cause: v3.01 production lacks the STAT-IRQ WRAM stub (iter 10,
-    # `build_stat_irq_wram_stub` in build_v301_teleport.py:411) which
-    # re-stamps HW OAM slot 1 attr with Sara form palette every STAT IRQ.
-    # Without that stub, the base game's STAT IRQ chain leaves slot 1/3/5/7
-    # at pal 4 even though hwoam_recolor writes pal 2. Iter 31's win
-    # requires both fixes; a partial backport regresses Sara visibly.
+    # Probe `probe_v301_iter43_slot.lua` confirms:
+    #   - STAT stub IS copied to WRAM 0xDB50 (sentinel DF03 = 0x5A).
+    #   - Slot 1 attr is stable at 0x02 across all 23 sampled frames.
+    #   - Slot 0/2 attrs flip between colorize and game-overwrite values
+    #     based on the timing of when colorize_handler completes vs when
+    #     the game's main-loop OAM rebuild runs.
     #
-    # Full v3.01 backport requires also installing the STAT-IRQ WRAM stub
-    # AND the IRQ vector patch at 0x0048. That's a multi-step backport
-    # (cold-boot copy, vector patch, FFBF gate, etc.) and needs separate
-    # MiSTer hardware verification because v3.01 is the production ROM.
+    # Iter 8's lesson (docs/audit/oam_read_timing.md): ANY wrapper timing
+    # change shifts the chained parallax-scroll handler at 0x0853, and
+    # the test runner's Lua OAM dump catches transient pal-4 reads. The
+    # screenshot still rendered correctly, but consensus voting picked the
+    # wrong frame. iter 10's WRAM-stub-only fix avoided this by NOT
+    # changing wrapper timing — only iter 31's hwoam_recolor adds cycles,
+    # which is why the teleport ROM is the gold standard even though it
+    # also has the stub.
+    #
+    # Full v3.01 backport requires either:
+    #   (i)  Reducing wrapper timing impact to zero (very hard — hwoam_recolor
+    #        inherently adds cycles).
+    #   (ii) Extending the STAT stub to also re-stamp slots 0/2/3, since
+    #        those are the slots the new timing shift exposes. But the
+    #        existing stub is already at the budget for one STAT IRQ; per-
+    #        scanline cost would balloon.
+    #   (iii) MiSTer hardware testing the timing — mGBA's Lua sample may
+    #        be picking up a transient that real hardware paints over.
+    #        ROM smoke test (`probe_v301_boots.lua`) and visual screenshot
+    #        suggested rendering was fine; only the dump is failing.
     # Filed for future iteration. teleport ROM remains the gold standard.
-
-    # ============================================================
     # VBLANK HOOK at 0x0824 and Wrapper at 0x6F10
     # ============================================================
     wrapper_addr = 0x6F10
@@ -713,6 +725,13 @@ def build_v301():
         0xC5,                                 # PUSH BC
         0xD5,                                 # PUSH DE
         0xE5,                                 # PUSH HL
+
+        # Iter 43 reverted: STAT stub copy + sentinel was added here but
+        # caused slot 0/2 attr to flip between colorize and game-overwrite
+        # frame-to-frame, breaking the test runner's consensus filter.
+        # See the long comment above the wrapper for full details. The
+        # teleport ROM keeps these changes via build_v301_teleport.py's
+        # own landing-pad/STAT-stub copy + IRQ vector patch.
 
         # --- Joypad read (iter 39: trimmed direction-half debounce 9 → 3 reads) ---
         # Per docs/audit/teleport_performance_audit.md item 4.1, direction-
@@ -744,9 +763,9 @@ def build_v301():
         # --- CALL actual colorize_handler ---
         0xCD, colorize_addr & 0xFF, (colorize_addr >> 8) & 0xFF,
 
-        # Iter 34: tried adding `CALL HWOAM_RECOLOR_ADDR` here as a
-        # backport of iter 31's teleport fix. Regressed Sara slots 1/3/5/7
-        # to pal 4 (see the long comment above the HWOAM block). Reverted.
+        # Iter 43 reverted: CALL hwoam_recolor added here regressed sara_w_alone
+        # slot 0 (attr flipped 0x02 ↔ 0xFC frame-to-frame). See long comment
+        # above the wrapper block.
 
         # --- RESTORE REGISTERS ---
         0xE1,                                 # POP HL

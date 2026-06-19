@@ -965,9 +965,19 @@ def main():
     print(f"  STAT IRQ WRAM stub: {len(stat_stub)} bytes at bank13:0x{STAT_STUB_ROM_ADDR:04X} "
           f"→ copied to WRAM 0x{STAT_STUB_WRAM:04X}")
     off = BANK13 + (STAT_STUB_ROM_ADDR - 0x4000)
-    for i in range(STAT_STUB_MAX):
+    # Iter 43: build_v301_gdma now also installs the same STAT stub at this
+    # address. Accept either "all zeros" (legacy v3.01 base) or "already the
+    # iter-43 stub bytes" — both cases get overwritten harmlessly. Anything
+    # else means a build-script drift the caller should debug.
+    existing = bytes(rom[off:off + len(stat_stub)])
+    assert existing == bytes(len(stat_stub)) or existing == stat_stub, (
+        f"STAT stub site at 0x{STAT_STUB_ROM_ADDR:04X} has unexpected bytes: "
+        f"{existing.hex()} — expected zeros or the iter-43 stub")
+    # Also enforce that the remaining padding bytes (past the stub) are zero
+    # so the cold-boot copy doesn't drag garbage into WRAM.
+    for i in range(len(stat_stub), STAT_STUB_MAX):
         assert rom[off + i] == 0x00, (
-            f"STAT stub site at 0x{STAT_STUB_ROM_ADDR + i:04X} not free "
+            f"STAT stub padding at 0x{STAT_STUB_ROM_ADDR + i:04X} not free "
             f"(byte {rom[off + i]:02X}) — choose a different free run")
     rom[off:off + len(stat_stub)] = stat_stub
 
@@ -1248,12 +1258,14 @@ def main():
           f"0x7393 → 0x{LEVELSEL_STUB_WRAM:04X} (WRAM stub clears attrs then JPs to 0x7393)")
 
     # ---- Patch IRQ vector 0x0048 (STAT) to JP into our WRAM stub ----
-    # Pre-condition: 0x0048 must be C3 53 08 (JP 0x0853, game's parallax scroll handler).
-    # Our WRAM stub at 0xDB50 will gate on FFBF and chain back to 0x0853.
-    expected = bytes([0xC3, 0x53, 0x08])
+    # Pre-condition: 0x0048 must be JP — either C3 53 08 (legacy v3.01 base) or
+    # already C3 50 DB (iter 43: build_v301_gdma patches the same vector).
+    expected_legacy = bytes([0xC3, 0x53, 0x08])
+    expected_iter43 = bytes([0xC3, STAT_STUB_WRAM & 0xFF, (STAT_STUB_WRAM >> 8) & 0xFF])
     actual = bytes(rom[0x0048:0x004B])
-    assert actual == expected, (
-        f"STAT vector at 0x0048 not the expected JP 0x0853: {actual.hex()}")
+    assert actual == expected_legacy or actual == expected_iter43, (
+        f"STAT vector at 0x0048 not the expected JP 0x0853 or JP 0x{STAT_STUB_WRAM:04X}: "
+        f"{actual.hex()}")
     rom[0x0049] = STAT_STUB_WRAM & 0xFF
     rom[0x004A] = (STAT_STUB_WRAM >> 8) & 0xFF
     print(f"  STAT IRQ vector patched: 0x0048 JP target 0x0853 → "
