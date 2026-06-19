@@ -179,7 +179,7 @@ callbacks:add("frame", function()
        frame_count == target_frames + 2 or frame_count == target_frames + 5 then
         record_oam_sample()
     end
-    if frame_count >= target_frames + 8 then
+    if frame_count == target_frames + 8 then
         record_oam_sample()
         emu:screenshot("{output_prefix}.png")
 
@@ -222,7 +222,15 @@ callbacks:add("frame", function()
             f:close()
         end
 
-        emu:quit()
+        -- Iter 27: emu:stop() actually halts the script. emu:quit() was a
+        -- silent no-op — the frame callback continued firing after the JSON
+        -- write, the second `if frame_count >= target_frames + 8` block
+        -- re-entered every frame, and consensus_oam was computed over
+        -- HUNDREDS of post-target samples (one per frame until the 30s
+        -- timeout). That swamped the intended 5-sample consensus and
+        -- caused tests like `mage` to read pal 4 even though Sara was
+        -- pal 2 at the intended sample frames 58/60/62/65/68.
+        emu:stop()
     end
 end)
 '''

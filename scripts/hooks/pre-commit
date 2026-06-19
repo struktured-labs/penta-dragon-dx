@@ -113,6 +113,14 @@ TESTS=(
   # alternation in boss fights, unlocking these previously-flaky tests:
   moth
   gargoyle_miniboss
+  # Iter 27: test-runner bug fix unblocked these. Previously `frame_count
+  # >= target_frames + 8` caused record_oam_sample to be called every
+  # frame after f=68 (hundreds of extra samples) until mGBA timed out.
+  # Consensus then voted across hundreds of post-target samples instead of
+  # the intended 5. Fix was `>=` → `==`. After the fix:
+  mage
+  metal_ball_mage_soldier
+  hornets
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
