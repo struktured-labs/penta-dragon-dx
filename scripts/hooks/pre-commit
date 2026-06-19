@@ -192,6 +192,16 @@ TESTS=(
   # savestate to level1_sara1_shield1_item_spider_miniboss.ss0 which has
   # the stub block populated (DB00-DB60 non-zero). 68/68 YAML coverage now.
   spider_miniboss_sara_w
+  # Iter 55: sweep-discovered tests from previously-unused .ss0 captures.
+  # Each adds a tile/pal combination not present in prior tests:
+  #   thrusting_spike_hazard — D880=0x0B FFBF=0 + spike tiles 0x54-0x57 pal 5
+  #   2_metal_ball          — 2 metal balls (tiles 0x40-0x43 pal 4)
+  #   teleport_animation    — Sara mid-teleport (tiles 0x2C-0x2F pal 2)
+  #   pulsing_bg_with_enemies — BG-transition + soldiers (0x60-0x63 pal 6) + orcs
+  sara_w_thrusting_spike_hazard
+  sara_w_2_metal_ball
+  sara_w_teleport_animation
+  sara_w_pulsing_bg_with_enemies
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
