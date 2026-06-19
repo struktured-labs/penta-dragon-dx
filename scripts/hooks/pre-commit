@@ -169,6 +169,9 @@ TESTS=(
   # 0x20-0x23). Locks down that the sara_palette mapping covers the FULL
   # 0x20-0x2F range, not just the rest-pose subset.
   sara_w_diagonal_arrows_alt_anim
+  # Iter 47: 2 more sweep-discovered tests.
+  sara_w_miniboss_dying
+  sara_d_turbo_powerup_active
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
