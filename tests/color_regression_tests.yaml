@@ -799,3 +799,37 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W still pal 2 even with dragon powerup pickup visible"
+
+  # Iter 35: 3 more sweep-discovered tests for additional unique scene
+  # combinations. These widen the coverage to:
+  #   - Sara D + non-Sara enemy (soldier) — counterpart to existing sara_w + soldier
+  #   - Secret-stage SEQUENCE STARTED state (D880=0x02 but FFC1=0 — palettes
+  #     not loaded yet; transition window before SHMUP secret stage kicks in)
+  #   - Multi-enemy stress test (catfish + multiple arrow types + item)
+  - name: "sara_d_with_soldier"
+    savestate: "level1_sara_d_soldier.ss0"
+    description: "Sara D + soldier enemy in dungeon — iter 31 fix unlocked slot-10+ soldier coloring; verify Sara D form holds"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 1
+        description: "Sara D in dungeon with soldier"
+
+  - name: "sara_w_secret_stage_transition"
+    savestate: "level1_sara_w_secret_stage_sequence_started.ss0"
+    description: "D880=0x02 / FFC1=0 — transition window before SHMUP secret stage; palettes not yet loaded for SHMUP scene"
+    expected_boss_flag: 0
+    check_boss_flag: false
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W still pal 2 during secret-stage entry transition"
+
+  - name: "sara_w_catfish_with_arrows_items"
+    savestate: "level1_sara_w_cat_fish_fat_arrow_all_diagnos_arrow_item.ss0"
+    description: "Catfish + fat arrow + multiple diagonal arrows + item — combined stress (sara + projectile + enemy + item all in same frame)"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W stable across crowded combo state"

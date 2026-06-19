@@ -159,6 +159,12 @@ TESTS=(
   # form-change + non-Sara-enemy combinations.
   sara_d_metal_ball_enemy
   sara_w_dragon_powerup_with_crow
+  # Iter 35: 3 more sweep-discovered tests for unique scene combinations
+  # (Sara D + non-Sara enemy; secret-stage transition window FFC1=0;
+  # multi-enemy stress with arrows + items).
+  sara_d_with_soldier
+  sara_w_secret_stage_transition
+  sara_w_catfish_with_arrows_items
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
