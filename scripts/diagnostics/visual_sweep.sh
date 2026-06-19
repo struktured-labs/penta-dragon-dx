@@ -29,6 +29,11 @@ SCENES=(
   # Special states
   "secret_stage_shmup:level1_sara_w_secret_stage_1_gbc.ss0"
   "spike_hazard_metallic:level1_sara_w_pulsing_bg_tiles.ss0"
+  # Iter 56: title-menu colorization sanity check. D880=0x1C menu scene
+  # uses dungeon table + dungeon BG palette — should show red/lavender on
+  # white (not pure B&W). Capture from a fresh-boot @ f=3000 via
+  # scripts/diagnostics/probe_*; see project_title_investigation.md.
+  "titlemenu_colored:titlemenu_colored.ss0"
 )
 
 cat > "$OUT_DIR/dump.lua" << 'LUA'
