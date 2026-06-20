@@ -469,10 +469,10 @@ tests:
     bg_table_expectations:
       - tile_range: [0x00, 0x00]
         palette: 0
-    pixel_expectations:
-      - color: "FF0000"
-        min_pixels: 10000
-        description: "Riff arena red flood (observed 12595, 5/5 runs) — catches scene_detect regression"
+    # NOTE iter 99: pixel_expectations would duplicate riff_arena_content
+    # (same force_d880 + savestate produces identical screenshot, verified
+    # via md5sum). Pixel coverage lives in *_content; this test owns the
+    # bg_table dispatch check only.
 
   - name: "crystal_dragon_arena_dispatch"
     savestate: "level1_sara_d_alone.ss0"
@@ -491,10 +491,7 @@ tests:
     bg_table_expectations:
       - tile_range: [0x00, 0x00]
         palette: 0
-    pixel_expectations:
-      - color: "FF0000"
-        min_pixels: 3600
-        description: "Cameo arena red flood (observed 4594, 5/5 runs)"
+    # Pixel coverage lives in cameo_arena_content (same screenshot).
 
   - name: "ted_arena_dispatch"
     savestate: "level1_sara_d_alone.ss0"
@@ -504,10 +501,7 @@ tests:
     bg_table_expectations:
       - tile_range: [0x00, 0x00]
         palette: 0
-    pixel_expectations:
-      - color: "FF0000"
-        min_pixels: 5600
-        description: "Ted arena red flood (observed 7115, 5/5 runs)"
+    # Pixel coverage lives in ted_arena_content (same screenshot).
 
   - name: "troop_arena_dispatch"
     savestate: "level1_sara_d_alone.ss0"
@@ -545,10 +539,7 @@ tests:
       - tile_range: [0x00, 0x00]
         palette: 0
         description: "tile 0x00 sanity at high-index — catches off-by-one in dispatch math"
-    pixel_expectations:
-      - color: "FF0000"
-        min_pixels: 4500
-        description: "Penta Dragon arena red flood (observed 5664, 5/5 runs) — catches highest-index dispatch regression"
+    # Pixel coverage lives in penta_dragon_arena_content (same screenshot).
 
   # D880=0x0A is the mini-boss scene (Gargoyle/Spider). It's a sub-mode of
   # the dungeon — scene_detect should route to the DUNGEON table, NOT arena.
