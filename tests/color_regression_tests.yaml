@@ -102,6 +102,13 @@ tests:
       - tile_range: [0x60, 0x6F]
         palette: 6
         description: "Soldier should be palette 6 (purple)"
+    pixel_expectations:
+      - color: "FFFF00"
+        min_pixels: 30
+        description: "Soldier yellow accents (observed 40, 5/5 runs)"
+      - color: "FF2900"
+        min_pixels: 25
+        description: "Soldier orange accents (observed 35, 5/5 runs)"
 
   - name: "moth"
     savestate: "level1_sara_w_moth.ss0"
@@ -335,6 +342,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W"
+    pixel_expectations:
+      - color: "0000B5"
+        min_pixels: 35
+        description: "Spiral-power dark-blue projectile accents (observed 44, 5/5 runs)"
 
   # === BG SCENE TESTS (cutscene/banner/menu) ===
   # These force a target D880 mid-test and assert the WRAM bg_table at 0xDA00

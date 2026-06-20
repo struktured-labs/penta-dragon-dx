@@ -28,11 +28,32 @@ NN" letters (same tile shows palette 0 AND palette 1 on different cells).
   splash at D880=0x18, a different screen.)
 - A real fix must inject an attr-plane clear into the level-select path itself
   (e.g., repoint `JP NZ 0x7393` through an LCD-off attr-clear, then JP 0x7393).
-- **No free space in bank 0 or bank 1** (both packed; largest single-byte runs
-  are tile data, not padding; the previously-noted "0x431C gap" is actually a
-  STAT-wait copy loop). The clear routine must live in a mapped bank (0 or 1) to
-  be reachable from the level-select, so injection requires reclaiming bytes from
-  existing code/data — careful, verifiable, but risky.
+
+## Free space update (iter 94, 2026-06-20)
+The earlier "no free space" claim is **out of date** for the teleport ROM. Bank
+1 `0x431C-0x436D` is 82 truly-free bytes:
+- Original ROM had a STAT-wait copy loop here; teleport zeroed all 82 bytes.
+- The 9 ROM-wide refs that point into `0x4326-0x4363` are all intra-bank from
+  banks 2/3/7 (those banks have their own code at those addresses, since
+  `0x4326` etc. is in the switchable-bank window). Bank 1 is NOT being called
+  there.
+- Verified by diffing `rom/Penta Dragon (J).gb` vs
+  `rom/working/penta_dragon_dx_teleport.gb` at `0x431C-0x436D`: 81 of 82 bytes
+  differ (all zeroed in teleport).
+
+## Teleport dispatch redirection
+The teleport ROM already redirects `JP NZ 0x7393` at `0x3B48` to `JP NZ 0xDB28`
+(WRAM stub). Any attr-clear injection should hook at the DB28 WRAM stub source
+OR inject a new bank-1 attr-clear routine and repoint `0x3B48` to it (then JP
+to `0xDB28` from the new routine to preserve the existing redirection chain).
+
+## Reproduction note
+Headless cold-boot probes (force DCFD=1 + auto DOWN+A from title) do reach a
+level-select-like screen at f≥320 but the rendered letters are uniform
+lavender — no obvious bleed at this entry path. The audit's bleed likely
+requires populated SRAM checkpoint data (a real save with prior gameplay)
+because that's what causes the "STAGE 01 STAGE LOAD ◆ TOP 3 …" full screen.
+See `tmp/probe_lvlsel_bleed.lua`.
 
 ## Note
 OPENING START (DCFD==0) bypasses the level-select and is clean. The bleed is
