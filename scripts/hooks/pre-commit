@@ -227,6 +227,13 @@ TESTS=(
   spider_visual_render
   jet_form_visual_render
   stage1_no_lava_flood
+  # Iter 101: three more item-scene tests using previously-unused .ss0
+  # captures (sweep of 5 unused saves; one — sara_w_2_soldier — was
+  # flaky and skipped). Each covers a distinct item type at a stable
+  # frame=68 sample (5/5 zero-jitter): rock item, flash item, extra-life.
+  sara_w_rock_item
+  sara_w_flash_item
+  sara_w_extra_life_item
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.

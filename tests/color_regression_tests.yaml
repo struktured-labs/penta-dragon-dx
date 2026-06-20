@@ -929,6 +929,49 @@ tests:
         min_pixels: 115
         description: "Sara W red accents during item pickup (observed 145, 5/5 runs)"
 
+  # Iter 101: three more item-scene tests using previously-unused saves.
+  # All 5/5 zero-jitter at f=68. Different item types (rock/flash/extra-life)
+  # exercise distinct item tile bands; pal coverage assertion is the
+  # standard Sara W slots-0-3 → pal 2.
+  - name: "sara_w_rock_item"
+    savestate: "level1_sara_w_rock_item.ss0"
+    description: "D880=0x02 Sara W + rock item — extends item-scene coverage"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with rock item visible"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 150
+        description: "Sara W red accents with rock item (observed 186, 5/5 runs)"
+
+  - name: "sara_w_flash_item"
+    savestate: "level1_sara_w_flash_item.ss0"
+    description: "D880=0x02 Sara W + flash item — extends item-scene coverage"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with flash item visible"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 115
+        description: "Sara W red accents with flash item (observed 145, 5/5 runs)"
+
+  - name: "sara_w_extra_life_item"
+    savestate: "level1_sara_w_extra_life_item.ss0"
+    description: "D880=0x0B Sara W + extra-life item — D880=0x0B item-pickup variant"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with extra-life item visible"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 100
+        description: "Sara W red accents with extra-life item (observed 125, 5/5 runs)"
+
   - name: "sara_w_pulsing_vram"
     savestate: "level1_sara_w_pulsing_bg_tiles.ss0"
     description: "Pulsing BG-tile scene — VRAM in flux, Sara colorization must hold"
