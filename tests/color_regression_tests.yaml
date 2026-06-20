@@ -186,6 +186,13 @@ tests:
       - slots: [4, 5, 6, 7, 8, 9]
         palette: 6
         description: "Gargoyle enemy → pal 6 (boss_slot_table[0]). Slots 10+ stay DMA-race pal0."
+    pixel_expectations:
+      - color: "FF2900"
+        min_pixels: 200
+        description: "Gargoyle/Sara orange pixels (observed 253 across 3 runs)"
+      - color: "FFFF00"
+        min_pixels: 130
+        description: "Gargoyle/Sara yellow accents (observed 169 across 3 runs)"
 
   - name: "spider_miniboss_sara_w"
     # Iter 54: switched from level1_sara_w_spier_miniboss.ss0 (frozen — that
@@ -988,6 +995,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W still pal 2 even with dragon powerup pickup visible"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 140
+        description: "Sara W red accents present with dragon powerup + crow (observed 176)"
 
   # Iter 35: 3 more sweep-discovered tests for additional unique scene
   # combinations. These widen the coverage to:
@@ -1067,6 +1078,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 1
         description: "Sara D with turbo powerup active"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 200
+        description: "Sara D + turbo + item red accents (observed 257)"
 
   # Iter 55: sweep-discovered tests for novel scene/enemy combos.
   - name: "sara_w_thrusting_spike_hazard"
