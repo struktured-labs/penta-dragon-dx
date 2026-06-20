@@ -277,6 +277,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W"
+    pixel_expectations:
+      - color: "0084FF"
+        min_pixels: 50
+        description: "Metal-ball/mage blue accents (observed 67, 5/5 runs)"
 
   # === SPECIAL FORM TESTS ===
   - name: "sara_d_hornet_or_moth"
@@ -1022,6 +1026,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 1
         description: "Sara D in dungeon with soldier"
+    pixel_expectations:
+      - color: "FF2900"
+        min_pixels: 25
+        description: "Soldier orange tint (observed 33, 5/5 runs)"
 
   - name: "sara_w_secret_stage_transition"
     savestate: "level1_sara_w_secret_stage_sequence_started.ss0"
@@ -1067,6 +1075,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W alt anim frame (tile 0x28-0x2B) still pal 2"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 95
+        description: "Sara W red accents with diagonal arrows (observed 120, 5/5 runs)"
 
   # Iter 47: 2 more sweep-discovered tests covering unique transient scenes.
   - name: "sara_w_miniboss_dying"
