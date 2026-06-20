@@ -310,9 +310,10 @@ tests:
     # Iter 60: savestate's OBP 1 captures SaraDragon green; Sara region has
     # ~61 green (#00A500) pixels at f=68. Pixel guard catches a rendering
     # regression even if the OAM attr/tile mapping stays correct.
+    # Iter 90: tightened min from 25 to 50 (observed 108 stable × 3 runs).
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 25
+        min_pixels: 50
         description: "SaraDragon green (#00A500) actually rendered at f=68"
 
   - name: "spiral_power_active"
@@ -907,8 +908,9 @@ tests:
       - color: "A5A5FF"
         min_pixels: 800
         description: "SHMUP lavender accents present"
+      # Iter 90: tightened min from 30 to 70 (observed 132 stable × 3 runs).
       - color: "FF3100"
-        min_pixels: 30
+        min_pixels: 70
         description: "SHMUP red flame/ship tile present"
 
   # Iter 32: more sweep-discovered tests for unique scene combinations.
@@ -949,9 +951,11 @@ tests:
     # SaraWitch (unlike sara_w_alone, where OBP 2 is grayscale and DF1F
     # blocks reload), so the Sara region renders pink+peach at the
     # default f=68 — sampled 34 pink + 35 peach pixels in survey.
+    # Iter 90: tightened min from 15 to 30 (observed 60 stable × 3 runs;
+    # peach observed 39 = OK at 15 already).
     pixel_expectations:
       - color: "FF42A5"
-        min_pixels: 15
+        min_pixels: 30
         description: "SaraWitch pink-red (#FF42A5) actually rendered at f=68"
       - color: "F7AD5A"
         min_pixels: 15
