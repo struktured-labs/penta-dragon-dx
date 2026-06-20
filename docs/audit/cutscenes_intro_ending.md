@@ -408,3 +408,32 @@ cinematic IS colorized via the existing dispatch chain. The
 `gap_bank14_death_cinematic.md` reference predates the current
 colorize chain that handles this via BG-pal-5 (lava) bleeding into
 the window layer's text region.
+
+## 8. ADDENDUM (2026-06-20, iter 123): splash CRAM modification is BINARY across FFBA
+
+Probed splash savestates (D880=0x18) for ALL 7 stages via the level-
+select reach + emu:saveStateFile technique:
+
+| Stage | FFBA | Splash render at f=68 |
+|-------|------|----------------------|
+| 1 | 0 | lavender (#A5A5FF=180), NO lava (FF3900=0) |
+| 2 | 1 | lava-red (#FF3900=22301) |
+| 3 | 2 | lava-red (#FF3900=22302) |
+| 4 | 3 | lava-red (#FF3900=22279) |
+| 5 | 4 | lava-red (#FF3900=22300) |
+| 6 | 5 | lava-red (#FF3900=22274) |
+| 7 | 6 | lava-red (#FF3900=22302) |
+
+The splash CRAM modification path is **BINARY on FFBA**:
+  - FFBA == 0 (stage 1): default CRAM, lavender splash
+  - FFBA != 0 (stages 2-7): modified CRAM, lava-red splash
+
+This is different from the lava OVERRIDE (build_lava_override) which
+fires only for FFBA=4 or 6 (stages 5+7). The splash CRAM
+modification is a SEPARATE mechanism — likely cond_pal's palette_
+loader applies different ROM sources based on FFBA.
+
+The existing tests `splash_stage1_native` (lavender) +
+`splash_stage7_native_dispatch` (lava-red) cover the binary
+distinction. No need for intermediate stage splash tests — they'd
+all be redundant copies of splash_stage7.
