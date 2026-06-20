@@ -25,7 +25,7 @@ cd "$REPO_ROOT"
 # Detect whether the ROM-side build files were touched. If not, the regression
 # tests have nothing new to validate — skip to keep the hook fast.
 CHANGED=$(git diff --cached --name-only)
-if ! echo "$CHANGED" | grep -qE 'scripts/(build_v301|build_v296|bg_experiment|create_vblank|run_color)|tests/color_regression|palettes/.*\.yaml|rom/working/'; then
+if ! echo "$CHANGED" | grep -qE 'scripts/(build_v301|build_v296|bg_experiment|create_vblank|run_color|diagnostics/test_fresh_boot|hooks/pre-commit)|tests/color_regression|palettes/.*\.yaml|rom/working/'; then
   echo "[pre-commit] No build/test/palette changes staged — skipping regression suite."
   exit 0
 fi
@@ -276,4 +276,17 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
 fi
 
 echo "[pre-commit] All BG-scene regression tests passed."
+
+# Iter 75: fresh-boot end-to-end test. All YAML tests use savestates,
+# whose captured CRAM persists through the test sample window — so
+# they pass even if the ROM palette source is corrupted (see iter
+# 70/73/74 + project_adversarial_coverage.md). This script does a
+# cold-boot, auto-presses the title-menu input sequence, and verifies
+# Sara W renders pink + peach at f=1500. Adds ~30s wall-clock.
+echo "[pre-commit] Running fresh-boot end-to-end test..."
+if ! uv run python scripts/diagnostics/test_fresh_boot.py 2>&1 | tail -8; then
+  echo "[pre-commit] Fresh-boot test FAILED — likely a SaraWitch ROM palette regression."
+  exit 1
+fi
+
 exit 0
