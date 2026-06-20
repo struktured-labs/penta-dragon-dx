@@ -1106,6 +1106,38 @@ tests:
         min_pixels: 16
         description: "Item yellow accents (observed 21, 5/5 runs)"
 
+  # Iter 105: two more from the unused-saves sweep. The .2 variants are
+  # NOT duplicates (different file sizes/hashes vs original) — they
+  # capture different scene moments for the same enemy category.
+  - name: "sara_w_moth_alt_scene"
+    savestate: "level1_sara_w_moth.2.ss0"
+    description: "Alt moth scene (D880=0x0B vs original moth's 0x02). Different enemy combination — orange+yellow flying enemy compound (vs original moth's blue+yellow)."
+    check_boss_flag: false
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W in alt-moth scene"
+    pixel_expectations:
+      - color: "FFFF00"
+        min_pixels: 26
+        description: "Moth-variant yellow body (observed 35, 5/5 runs)"
+      - color: "FF2900"
+        min_pixels: 16
+        description: "Moth-variant orange accents (observed 21, 5/5 runs)"
+
+  - name: "sara_w_p_item_alt_scene"
+    savestate: "level1_sara_w_p_item.2.ss0"
+    description: "Alt p-item scene (D880=0x02 dungeon vs original p_item's 0x0B item-pickup). Verifies p-item tile colorization in dungeon context too."
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W in dungeon with p-item visible"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 115
+        description: "P-item red render in dungeon (observed 145, 5/5 runs)"
+
   - name: "sara_w_pulsing_vram"
     savestate: "level1_sara_w_pulsing_bg_tiles.ss0"
     description: "Pulsing BG-tile scene — VRAM in flux, Sara colorization must hold"

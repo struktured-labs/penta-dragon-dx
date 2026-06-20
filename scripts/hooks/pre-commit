@@ -262,6 +262,12 @@ TESTS=(
   # OBP-2 CRAM at a different sampling moment than sara_w_pink_render's
   # f=300 — catches different regression classes.
   sara_w_right_before_secret_stage_gbc
+  # Iter 105: .2 variants of moth/p_item — NOT duplicates (different
+  # file sizes/hashes vs originals). moth_alt has a different enemy
+  # combo (orange+yellow vs blue+yellow); p_item_alt is in D880=0x02
+  # dungeon scene (vs original p_item's D880=0x0B pickup state).
+  sara_w_moth_alt_scene
+  sara_w_p_item_alt_scene
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
