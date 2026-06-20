@@ -40,6 +40,12 @@ Iter 81: Verified test against v3.01 ROM as well — passes 7 of 9
   to the hook — hook uses teleport, and the v3.01 ROM byte verifier
   separately confirms the iter-31/39/40 instruction signatures.
   Documented here so future iters don't re-investigate.
+Iter 82: Added second mGBA invocation as a STANDALONE FFC0=1 test
+  to catch sp_addr (bank13:0x68E0) corruption. The iter 80 chained
+  attempt failed because A-button projectiles aren't reliably on-
+  screen after FFBE/FFBF juggling, but the standalone version is
+  stable (5/5 fresh runs all show #0031B5=24). Adds ~30s wall-clock
+  for one more guard. sp_addr corruption empirically drops to 0.
 
 Usage:
     uv run python scripts/diagnostics/test_fresh_boot.py [--rom PATH]
@@ -168,6 +174,45 @@ SAMPLE_FRAME_GARG = 2100
 FFBF2_FORCE_START = 2100
 SAMPLE_FRAME_SPIDER = 2400
 
+# Iter 82: standalone FFC0=1 test (separate mGBA invocation). Doesn't
+# share state with the chained 4-phase test because chaining FFC0=1
+# after the FFBE/FFBF juggling makes A-button projectiles disappear
+# (per iter 80 finding). This standalone Lua only forces FFC0=1.
+LUA_SCRIPT_FFC0 = r"""
+local TITLE = {
+    {180, 185, 0x80}, {193, 198, 0x01}, {241, 246, 0x01},
+    {291, 296, 0x01}, {341, 346, 0x08}, {391, 396, 0x01},
+}
+local frame = 0
+callbacks:add("keysRead", function()
+    local keys = 0
+    for _, seq in ipairs(TITLE) do
+        if frame >= seq[1] and frame <= seq[2] then keys = seq[3]; break end
+    end
+    if frame >= 500 and frame %% 4 == 0 then keys = 0x01 end  -- A spam
+    emu:setKeys(keys)
+end)
+callbacks:add("frame", function()
+    frame = frame + 1
+    if frame >= 1500 then
+        emu:write8(0xFFC0, 0x01)  -- SaraProjectile mode
+    end
+    if frame == 1800 then
+        emu:screenshot("%s")
+        emu:stop()
+    end
+end)
+"""
+
+EXPECTED_FFC0 = [
+    # Iter 82: forcing FFC0=1 in a STANDALONE mGBA run (no preceding
+    # FFBE/FFBF juggling) makes palette_loader's OBP-0 conditional swap
+    # in sp_addr's bytes (bank13:0x68E0). Sara's A-button-fired
+    # projectiles render with #0031B5 — 24 pixels stable × 5 fresh
+    # runs. sp_addr corruption empirically drops to 0.
+    ("0031B5", 10, "SpiralProjectile blue (sp_addr swap, FFC0=1, standalone mGBA run)"),
+]
+
 
 def run_mgba(rom_path: Path, lua_path: Path, timeout: int = 90) -> bool:
     cmd = [
@@ -256,6 +301,29 @@ def main() -> int:
             print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {exp_label}")
             if count < min_px:
                 errors.append(f"{label.split('(')[0].strip()} #{color}: count {count} < min {min_px}")
+
+    # Iter 82: standalone FFC0=1 run for OBP-0/sp_addr coverage.
+    ffc0_screenshot = tmp_dir / "fresh_boot_ffc0.png"
+    if ffc0_screenshot.exists():
+        ffc0_screenshot.unlink()
+    ffc0_lua_path = tmp_dir / "fresh_boot_ffc0.lua"
+    ffc0_lua_path.write_text(LUA_SCRIPT_FFC0 % ffc0_screenshot)
+    print(f"[fresh-boot] Running standalone FFC0=1 invocation...")
+    success_ffc0 = run_mgba(rom_path, ffc0_lua_path)
+    if not success_ffc0:
+        errors.append("FFC0 standalone mGBA execution failed")
+    elif not ffc0_screenshot.exists():
+        errors.append("FFC0 standalone screenshot missing")
+    else:
+        print(f"[fresh-boot] FFC0=1 standalone (f=1800) checks:")
+        for color, min_px, exp_label in EXPECTED_FFC0:
+            count = count_color(ffc0_screenshot, color)
+            marker = "[PASS]" if count >= min_px else "[FAIL]"
+            print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {exp_label}")
+            if count < min_px:
+                errors.append(f"FFC0 #{color}: count {count} < min {min_px}")
+    if not args.keep_artifacts:
+        ffc0_lua_path.unlink(missing_ok=True)
 
     if not args.keep_artifacts:
         lua_path.unlink(missing_ok=True)
