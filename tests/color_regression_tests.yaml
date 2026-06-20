@@ -1363,14 +1363,17 @@ tests:
         min_pixels: 15000
         description: "White background dominates the menu (>15k of 23040 pixels)"
       - color: "A5A5FF"
-        min_pixels: 800
-        description: "Lavender PENTA DRAGON title accents present"
+        min_pixels: 950
+        description: "Lavender PENTA DRAGON title accents (observed 1224, 5/5 runs; iter 97 tightened from 800)"
+      - color: "FF0000"
+        min_pixels: 350
+        description: "Vivid red text accents (observed 443, 5/5 runs; iter 97 new)"
       - color: "940000"
-        min_pixels: 50
-        description: "Dark-red menu font present (the 'by design' red text)"
+        min_pixels: 120
+        description: "Dark-red menu font (observed 156, 5/5 runs; iter 97 tightened from 50)"
       - color: "000000"
-        min_pixels: 500
-        description: "Black title outline / letters present"
+        min_pixels: 1400
+        description: "Black title outline / letters (observed 1808, 5/5 runs; iter 97 tightened from 500)"
 
   # Iter 51 finding: of 20 sampled savestates, only one
   # (level1_sara_w_right_before_secret_stage_trigger_gbc.ss0) has a Sara

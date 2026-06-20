@@ -335,3 +335,37 @@ Deferred pending that anchor. The ending currently renders via pal0 (the Dungeon
 palette: white/light-blue/teal), so it is monochrome-blue, not grayscale.
 
 Probes: scripts/diagnostics/probe_ending_trigger.lua, probe_ending_capture.lua.
+
+## 6. ADDENDUM (2026-06-20, iter 97): death-cinematic-trigger investigation
+
+Goal: reach the death cinematic (D880=0x17) headlessly to test
+colorization. Status: **same showstopper as the ending — D880 transition
+not triggerable from arbitrary state.**
+
+Findings:
+- Forcing `DCBB=0` (via Lua emu:write8) for 300 consecutive frames after
+  reaching gameplay (D880=0x02) does **NOT** transition D880 to 0x17.
+  The death check is in the game's natural decrement paths (0x1024 and
+  0x4200, per MEMORY.md), and just writing 0 to DCBB without the
+  decrement-then-check sequence apparently doesn't satisfy the death
+  trigger predicate.
+- Also tried zeroing `DCDD` (HP) and `DCDC` (sub-counter) simultaneously
+  with DCBB=0 — no transition either.
+- The existing `death_uses_dungeon_table` test uses
+  `force_d880: 0x17` to test the bg_table dispatch, but it does NOT
+  trigger the actual death cinematic visual sequence (the screenshot
+  shows the original savestate's dungeon room, not the death window
+  layer + bank14 graphics).
+
+Reachability options not yet tried:
+1. Let the game's natural time-based decrement at 0x4200 fire by waiting
+   in gameplay long enough (~minutes? per the per-DCDF/DCDE tick rate).
+2. Force `JP 0x4A44` directly via a ROM patch (no Lua PC redirect
+   available in mGBA).
+3. Trigger via damage path: spawn an enemy with high attack on top of
+   Sara at low HP, let collision do the SUB B at 0x1024.
+
+Conclusion: death cinematic colorization is gated on the same
+"natural game state" requirement as the ending. Filed for future
+iter with proper damage simulation. Probes:
+`tmp/probe_death_cinematic.lua` (deleted).
