@@ -1729,6 +1729,24 @@ tests:
         min_pixels: 18000
         description: "STAGE 07 splash dominant lava red (observed 22318 at f=68, 5/5 zero-jitter)"
 
+  # Iter 124: stage 1 entry savestate where Sara W pink RENDERS at f=68.
+  # Unlike sara_w_alone (DF1F-gated, all grayscale at f=68 per iter 53),
+  # this savestate was captured via level-select reach which doesn't
+  # trigger DF1F=0xFF. Sara W pink (#FF42A5=24, OBP2 idx 1) renders
+  # correctly at f=68 — first OBP-2 CRAM verification test that doesn't
+  # need frames=300 or force_df1f=0 hacks.
+  - name: "sara_w_stage1_pink_at_f68"
+    savestate: "stage1_entry_pink_renders.ss0"
+    description: "Sara W pink RENDERS at f=68 (no DF1F gate). Complements sara_w_pink_render which uses frames=300 to bypass the DF1F transient on sara_w_alone."
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF42A5"
+        min_pixels: 18
+        description: "Sara W pink at f=68 — no DF1F-gating needed (observed 24, 5/5 zero-jitter)"
+      - color: "F7AD5A"
+        min_pixels: 14
+        description: "Sara W peach at f=68 (observed 19, 5/5 zero-jitter)"
+
   # Iter 121: stage 6 (FFBA=5 non-lava-stage) live gameplay test.
   # Surprising finding: stage 6 IS using pal 5 (orange/red) for some
   # decorative tiles (diagonal-striped walls), even though it's NOT a

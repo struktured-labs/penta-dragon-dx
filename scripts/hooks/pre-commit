@@ -340,6 +340,12 @@ TESTS=(
   # for diagonal-stripe wall tiles — 2426/2444 #FF3900 orange (2-way
   # alternation, both clusters stable). Conservative min=2000.
   stage6_decorative_pal5
+  # Iter 124: Sara W pink RENDERS at f=68 (no DF1F gate). The existing
+  # sara_w_pink_render uses frames=300 to bypass DF1F=0xFF transient
+  # on sara_w_alone (iter 53). This new savestate (captured via level-
+  # select reach) doesn't have the DF1F issue so Sara W pink renders
+  # immediately. Provides early-frame OBP-2 CRAM verification.
+  sara_w_stage1_pink_at_f68
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
