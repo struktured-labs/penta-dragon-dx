@@ -382,6 +382,25 @@ Each needs a different approach:
 
 These five remain known limitations.
 
+## STATUS: all 9 boss-save OBJ tests now in hook (iter 109, 2026-06-20)
+
+The "Until fixed, the 9 boss-save OBJ tests stay out of the pre-commit
+hook" note above is **out of date**. All 9 boss-save OBJ tests now run
+in the hook (per `scripts/hooks/pre-commit`):
+
+  - gargoyle_miniboss (iter 10 STAT-IRQ stub)
+  - moth (iter 10)
+  - mage (iter 27 test-runner bug fix)
+  - metal_ball_mage_soldier (iter 27)
+  - hornets (iter 27)
+  - orc, orc_with_items, soldier, catfish (iter 31 hwoam_recolor B=40)
+  - spider_miniboss_sara_d, dragon_powerup, sara_w_in_spider_miniboss_live (iter 31)
+  - spider_miniboss_sara_w (iter 54, switched to LIVE savestate)
+
+The combination of iters 10/27/31/54 unlocked all 9 boss tests
+without the STAT-IRQ stub extension that iter 11 documented as
+infeasible.
+
 ## Iteration 12: spider boss "real visible game bug" — REVISITED iter 100
 
 ### Original (incorrect) finding
