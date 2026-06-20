@@ -1029,6 +1029,62 @@ tests:
         min_pixels: 25
         description: "Dark-blue menu border (observed 33, 5/5 runs)"
 
+  # Iter 103: four more unused saves promoted to tests. All 3/3 stable.
+  - name: "sara_d_special_spiral_weapon"
+    savestate: "sara_d_special_spiral_weapon_activated_level1_v_2.31.ss0"
+    description: "D880=0x02 Sara D + special spiral weapon active — distinctive #007300 dark green projectiles + lavender BG"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 1
+        description: "Sara D with special spiral weapon"
+    pixel_expectations:
+      - color: "007300"
+        min_pixels: 160
+        description: "Special spiral weapon dark-green projectile render (observed 208, 3/3 runs)"
+      - color: "00FF00"
+        min_pixels: 85
+        description: "Spiral weapon bright-green secondary (observed 115, 3/3 runs)"
+
+  - name: "sara_w_gray_monster_pink_projectile"
+    savestate: "sara_w_gray_projectile_monster_pink_projectile_level_1_test.ss0"
+    description: "D880=0x02 Sara W with gray-projectile monster onscreen — exercises BG monster tile + Sara projectile path"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with gray-projectile monster"
+    pixel_expectations:
+      - color: "FF42A5"
+        min_pixels: 45
+        description: "Sara W pink (#FF42A5 OBP2 idx 1) renders (observed 60, 3/3 runs)"
+
+  - name: "sara_w_square_arrows_combo"
+    savestate: "level1_sara_w_square_fat_arrow_item_all_diagnols_arrow_item.ss0"
+    description: "D880=0x02 Sara W + square enemy + fat-arrow + diagonal-arrow items — multi-item + enemy"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with square enemy + arrow items"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 240
+        description: "Multi-item + arrow red render (observed 296, 3/3 runs)"
+
+  - name: "sara_w_health_items_wild_card"
+    savestate: "level1_sara_w_health2_health1_poision_cure_wild_card.ss0"
+    description: "D880=0x0B Sara W + multiple health/poison-cure items + wild card — densest item scene yet"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with dense item layout"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 420
+        description: "Dense item-tile red render (observed 519, 3/3 runs)"
+
   - name: "sara_w_pulsing_vram"
     savestate: "level1_sara_w_pulsing_bg_tiles.ss0"
     description: "Pulsing BG-tile scene — VRAM in flux, Sara colorization must hold"

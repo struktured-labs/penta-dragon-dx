@@ -244,6 +244,17 @@ TESTS=(
   sara_w_spiral_active_low_health
   sara_spiral_powerup_item_render
   sara_w_catfish_menu_open
+  # Iter 103: four more from unused-saves sweep continued.
+  # sara_d_special_spiral_weapon: distinctive #007300 dark-green projectile
+  # render — only test in suite asserting on that specific color.
+  # sara_w_gray_monster_pink_projectile: explicit Sara W pink CRAM
+  # verification (#FF42A5=60 OBP2 idx 1).
+  # sara_w_square_arrows_combo + sara_w_health_items_wild_card: dense
+  # multi-item scenes (red render 296 and 519 pixels respectively).
+  sara_d_special_spiral_weapon
+  sara_w_gray_monster_pink_projectile
+  sara_w_square_arrows_combo
+  sara_w_health_items_wild_card
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
