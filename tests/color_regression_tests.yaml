@@ -1608,3 +1608,19 @@ tests:
   # class that iter 8/43 hit. NOT added as a live test — verify_colorizer_
   # bytes.py at bank13:0x6A41 = 0x1B is the cleaner safety net for the
   # iter-31 tile-remap regression.
+
+  # Iter 110: attempted to add live-gameplay tests for stages 3+7 via
+  # savestates captured by the level-select probe technique using mGBA's
+  # emu:saveStateFile API (flag 0x01 = PNG format, compatible with -t).
+  # Savestates ARE captured + checked into save_states_for_claude/, but
+  # NO TESTS ADDED THIS ITER: my iter 109 "5/5 stable" measurement was
+  # WRONG — caused by a parallel race in the verify script where
+  # tmp/load_stage.png was overwritten by concurrent mGBA invocations.
+  # Actual cold-load f=68 of stage7_ffba6_levelselect.ss0 shows only
+  # 125 #FF0000 pixels (blue+gray dungeon, not the lava room), because
+  # the level-select-reach savestate captures a stage-entry/post-clear
+  # state, not the actual molten room. Reaching the lava room requires
+  # playing through the stage. Filed for future iter — needs in-stage
+  # navigation, not just level-select reach.
+  #   Useful savestate files preserved:
+  #     save_states_for_claude/stage{3,4,5,6,7}_ffba{2..6}_levelselect.ss0
