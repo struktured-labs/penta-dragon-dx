@@ -63,8 +63,15 @@ end)
 
 EXPECTED = [
     # (color_hex, min_pixels, label)
+    # Sara W OBJ (catches SaraWitch palette source corruption)
     ("FF42A5", 15, "SaraWitch pink-red (OBP 2 idx 1)"),
     ("F7AD5A", 15, "SaraWitch peach (OBP 2 idx 2)"),
+    # BG palettes — iter 76 found these are stable at f=1500 fresh-boot
+    # and catch ROM-source corruption of the respective BG palette slots:
+    ("A5A5FF", 5000, "Dungeon BG idx 1 light-lavender (catches BG-pal-0 corruption)"),
+    ("52527B", 1500, "Dungeon BG idx 2 dark-blue (catches BG-pal-0 corruption)"),
+    ("940000", 50, "BG1 cherry red (idx 1, catches items/font palette corruption)"),
+    ("FF0000", 20, "BG5 vivid red (catches BG-pal-5 corruption)"),
 ]
 SAMPLE_FRAME = 1500
 
