@@ -884,6 +884,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W during item pickup"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 115
+        description: "Sara W red accents during item pickup (observed 145, 5/5 runs)"
 
   - name: "sara_w_pulsing_vram"
     savestate: "level1_sara_w_pulsing_bg_tiles.ss0"
@@ -929,6 +933,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W during spider miniboss — proves iter 31 fix covers spider scene"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 130
+        description: "Sara W red accents in live spider miniboss (observed 162, 5/5 runs)"
 
   - name: "sara_d_teleport_tile"
     savestate: "level1_sara_d_teleport_tile.ss0"
@@ -1116,6 +1124,10 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W teleport-anim tiles → pal 2 (witch)"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 125
+        description: "Sara W red accents during teleport animation (observed 159, 5/5 runs)"
 
   - name: "sara_w_pulsing_bg_with_enemies"
     savestate: "level1_sara_w_half_pulsing_bottom_half_regular_top_bg_tiles.ss0"
