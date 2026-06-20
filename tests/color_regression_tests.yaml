@@ -1729,6 +1729,24 @@ tests:
         min_pixels: 18000
         description: "STAGE 07 splash dominant lava red (observed 22318 at f=68, 5/5 zero-jitter)"
 
+  # Iter 118: stage 3 BG-pal-2 purple pixel test. The iter-110 attempt
+  # failed on #00C6FF (cyan, which is unstable due to miniboss animation
+  # variance), but iter 118 found #AD29B5 (purple-high) + #42007B (purple-
+  # low) at f=68 are rock-solid 5/5 zero-jitter. This is the FIRST pixel
+  # test asserting on BG-pal-2 colors (iter 83 listed BG-pal-2 as "NOT
+  # CAUGHT" — this closes that adversarial gap).
+  - name: "stage3_purple_pal2"
+    savestate: "stage3_ffba2_levelselect.ss0"
+    description: "Stage 3 (D880=0x0A miniboss, FFBA=2) renders BG-pal-2 purple — closes iter 83 'NOT CAUGHT' coverage gap for BG-pal-2"
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "AD29B5"
+        min_pixels: 140
+        description: "Stage 3 BG-pal-2 purple-high (#AD29B5) renders (observed 184, 5/5 zero-jitter)"
+      - color: "42007B"
+        min_pixels: 130
+        description: "Stage 3 BG-pal-2 purple-low (#42007B) renders (observed 175, 5/5 zero-jitter)"
+
   # Iter 117: stage 1 splash (D880=0x18 + FFBA=00) — counterpart to
   # splash_stage7 (FFBA=06 lava). Same scene byte but FFBA=00 routes to
   # NO lava override, so STAGE 01 letters render in dungeon lavender,

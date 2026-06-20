@@ -313,6 +313,13 @@ TESTS=(
   # into stage 1. The MAX=0 #FF3900 guard makes regressions in the
   # FFBA guard immediately visible.
   splash_stage1_native
+  # Iter 118: FIRST pixel test asserting on BG-pal-2 (purple) colors.
+  # iter 83's adversarial coverage listed BG-pal-2 as "NOT CAUGHT" —
+  # no existing test could detect BG-pal-2 ROM-source corruption.
+  # Iter 110's first attempt failed on cyan (unstable due to miniboss
+  # animation); iter 118 isolates the stable purple colors at f=68.
+  # Stage 3 is the only scene in the suite that visibly uses BG-pal-2.
+  stage3_purple_pal2
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
