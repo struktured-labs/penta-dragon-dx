@@ -1131,11 +1131,15 @@ tests:
     expected_boss_flag: 0
     check_boss_flag: false  # OAM alternation at f=300 makes FFBF noisy
     pixel_expectations:
+      # Iter 89: raised min from 5 to 15. Observed counts stable at 26/21
+      # across 5 fresh runs, so 15 still has 1.4x+ headroom but catches
+      # a partial-corruption case where the count drops to single digits
+      # without going all the way to 0.
       - color: "FF42A5"
-        min_pixels: 5
+        min_pixels: 15
         description: "SaraWitch pink-red (OBP 2 idx 1 = 0x511F) present"
       - color: "F7AD5A"
-        min_pixels: 5
+        min_pixels: 15
         description: "SaraWitch peach (OBP 2 idx 2 = 0x2EBE) present"
       # Iter 70: adversarial-test finding — palette_loader's BG palette
       # write path (FF68/FF69, runs FIRST in cond_pal) is the only
@@ -1165,9 +1169,11 @@ tests:
     frames: 300
     expected_boss_flag: 0
     check_boss_flag: false
+    # Iter 89: raised min from 5 to 15 — sara_d_alone shows green=25
+    # stable across 5 runs, leaving 1.7x headroom.
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 5
+        min_pixels: 15
         description: "Some #00A500 green still rendered (smoke check, not a real SaraDragon guard)"
 
   # Iter 71 abandoned experiment: a "sara_d_green_force_invalidate" test
@@ -1199,12 +1205,14 @@ tests:
     description: "force_df1f=0 → cond_pal loads SaraWitch CRAM by f=68 (skip OAM since alternation expected)"
     force_df1f: 0
     check_boss_flag: false
+    # Iter 89: raised both mins from 5 to 15 — same headroom rationale as
+    # sara_w_pink_render (stable at 26/21 across 5 fresh runs).
     pixel_expectations:
       - color: "FF42A5"
-        min_pixels: 5
+        min_pixels: 15
         description: "Sara W pink-red (#FF42A5) after force_df1f=0 unblocks cond_pal"
       - color: "F7AD5A"
-        min_pixels: 5
+        min_pixels: 15
         description: "Sara W peach (#F7AD5A) after force_df1f=0 unblocks cond_pal"
 
   - name: "gargoyle_visual_render"
