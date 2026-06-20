@@ -32,6 +32,14 @@ Iter 80: Attempted FFC0=1 SaraProjectile phase but it broke in the
   the earlier phases. Could revisit with a parallel mGBA run instead
   of chained phases if the SaraProjectile/OBP-0 catcher is worth ~30s
   more wall-clock.
+Iter 81: Verified test against v3.01 ROM as well — passes 7 of 9
+  checks (all Sara W + Sara D phases). Gargoyle/Spider phases fail
+  on v3.01 because v3.01's wrapper takes a different code path on
+  FFBF changes (no teleport routine, no DF1F gate, the boss palette
+  swap timing differs from teleport). Not adding cross-ROM testing
+  to the hook — hook uses teleport, and the v3.01 ROM byte verifier
+  separately confirms the iter-31/39/40 instruction signatures.
+  Documented here so future iters don't re-investigate.
 
 Usage:
     uv run python scripts/diagnostics/test_fresh_boot.py [--rom PATH]
