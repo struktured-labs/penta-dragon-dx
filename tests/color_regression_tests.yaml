@@ -90,6 +90,10 @@ tests:
       - tile_range: [0x50, 0x5F]
         palette: 5
         description: "Orc should be palette 5 (green/brown)"
+    pixel_expectations:
+      - color: "0000B5"
+        min_pixels: 16
+        description: "Orc dark-blue body accents (observed 22, 5/5 runs)"
 
   - name: "soldier"
     savestate: "level1_sara_w_soldier.ss0"
@@ -123,6 +127,13 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W"
+    pixel_expectations:
+      - color: "0000B5"
+        min_pixels: 18
+        description: "Moth dark-blue body (observed 24, 5/5 runs)"
+      - color: "FFFF00"
+        min_pixels: 18
+        description: "Moth yellow accents (observed 24, 5/5 runs)"
 
   - name: "crow"
     savestate: "level1_sara_w_crow.ss0"

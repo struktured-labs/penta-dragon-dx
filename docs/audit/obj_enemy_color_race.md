@@ -48,20 +48,39 @@ buffers or tile graphics:
   - `bank13:0x6D3F` — 65 bytes
   - `bank13:0x6DAE` — 82 bytes
 
-`hwoam_recolor` is ~43 bytes (see `build_v301_teleport.py:build_hwoam_recolor`).
-Plus a 3-byte CALL hook in the v3.01 wrapper → ~46 bytes total. Fits trivially
-in any of the four regions. **0x6B27 is the safest choice** — largest run,
-furthest from neighboring live code.
+`hwoam_recolor` is ~43 bytes + 3-byte CALL hook → ~46 bytes total. Fits
+trivially.
 
-Backport plan (future iter):
-  1. Modify `scripts/build_v301_gdma.py` (NOT `build_v301_teleport.py`) to:
-     - Write `hwoam_recolor` body at `bank13:0x6B27`
-     - Add `CALL 0x6B27` to the v3.01 VBlank wrapper after colorize+DMA
-  2. Verify mGBA: 80-test regression hook + fresh-boot guards
-  3. Hardware-verify on MiSTer (B=40 adds ~900 T-states to post-DMA wrapper).
-MiSTer hardware verification still required because B=40 adds ~30 cycles × 30
-slots ≈ 900 T-states to the post-DMA wrapper; mGBA tolerates VBlank overruns
-more than real CGB/DMG.
+### Real blocker (iter 96 finding, 2026-06-20)
+**Free space was a red herring.** The actual blocker is documented in
+`scripts/build_v301_gdma.py:680-716` as the **iter 43 REVERT**:
+
+> Even with the STAT stub re-stamping slot 1 and the sentinel-gated
+> init (12T post-first-frame), the wrapper timing shift exposed a
+> different transient pattern:
+>
+>     sara_w_alone slot 0 attr alternated between 0x02 (colorize win)
+>     and 0xFC (game-overwrite win, pal 4) across consecutive frames.
+
+Iter 43 actually shipped the full backport (hwoam_recolor + STAT stub
++ cold-boot init + IRQ vector patch), but the wrapper timing shift
+moved the chained parallax-scroll handler at 0x0853, and the test
+runner's Lua OAM dump caught the post-game-write transient. **Visual
+rendering was reportedly fine** — only the OAM dump failed.
+
+Iter 43's documented remediation options:
+  1. Reduce wrapper timing impact to zero — inherently hard since
+     hwoam_recolor adds cycles.
+  2. Extend the STAT stub to also re-stamp slots 0/2/3 — significant
+     work, per-scanline budget concern.
+  3. **Hardware-verify on MiSTer** — mGBA's Lua may be sampling a
+     transient that real hardware paints over.
+
+For now: teleport ROM remains the gold standard for any feature that
+depends on hwoam_recolor. Production v3.01 / FIXED.gb does NOT get
+the post-DMA recolor of slots 10+. The previously claimed "fix" is
+gated on MiSTer hardware verification of option 3 — a manual
+session (not headless-automatable).
 
 ---
 
