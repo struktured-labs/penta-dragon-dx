@@ -382,21 +382,43 @@ Each needs a different approach:
 
 These five remain known limitations.
 
-## Iteration 12: spider boss is a real visible game bug
+## Iteration 12: spider boss "real visible game bug" — REVISITED iter 100
 
+### Original (incorrect) finding
 Probe of `level1_sara_w_spier_miniboss.ss0` over 1491 frames:
 - All 4 Sara slots (0-3) = pal 1 (SaraDragon GREEN) for 100% of frames
 - FFBE=0 (Sara WITCH form — should be pal 2 pink)
 - Screenshot confirms: Sara visually renders GREEN in spider miniboss
 
-The colorize handler + my hwoam_recolor + STAT IRQ stub all write pal 2
-to slot 1 once per frame, but the game's spider-boss main-loop code
-writes attr=0x01 (pal 1) to Sara slots so frequently that any single-
-shot re-stamp is overwhelmed. The Lua read catches pal 1 at every
-sampling moment.
+### Iter 100 (2026-06-20) revisit — the "bug" is the savestate, not the game
+Re-probe with the LIVE spider savestate
+`level1_sara1_shield1_item_spider_miniboss.ss0` (the one currently used
+by `spider_miniboss_sara_w` in the test YAML):
+- Slot 0-3 attrs read **0x32** (pal 2 + flags) at f=60–300, drifting to
+  **0x22** (also pal 2) by f=600. All correct pal 2 (Sara WITCH).
+- Screenshot at f=600 visually confirms Sara is **pink/peach** (Sara W
+  palette), NOT green. Spider miniboss is colorizing CORRECTLY in
+  current builds.
 
-This is a REAL visible bug, not just a test artifact — Sara is rendering
-in the wrong colour for the entire spider fight. Fix paths:
+The original iter-12 finding was specific to the FROZEN savestate
+`level1_sara_w_spier_miniboss.ss0`. Per iter 53's documented
+`project_df1f_savestate_transient`: that savestate has DF1F=0xFF
+(uninitialized WRAM after ROM-source state load), which gates JP
+COLORIZE for the first ~255 frames after load. The colorizer literally
+doesn't run during the test window, so Sara slot attrs stay at whatever
+the savestate's HW OAM had — which happened to be 0x01 (pal 1) for that
+particular capture.
+
+The LIVE savestate (taken from active gameplay) has DF1F=187 < 0xFF,
+so the colorizer runs normally and writes pal 2 to Sara slots within
+~one frame of load.
+
+**Conclusion**: spider miniboss Sara rendering is NOT a game bug. It's
+a savestate-specific artifact of the DF1F gate. The test YAML already
+uses the LIVE savestate (the iter-54 switch) — spider_miniboss_sara_w
+test passes today.
+
+### Original (now-deferred) fix paths kept for reference
 
 1. **Find and NOP the game's spider-boss OAM write** — requires
    disassembly + identifying which routine writes pal 1 to Sara slots
