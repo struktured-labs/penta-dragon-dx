@@ -19,6 +19,27 @@ Stage-2 lava (still UNKNOWN per the original audit) is independent: the
 v8.9-lava milestone (2026-06-14) shipped the stages-5/7 fix; stage-2 lava
 remains untreated because no stage-2 BG dump exists in the repo.
 
+## 2026-06-20 UPDATE (iter 107): stage-2 reached, NOT a lava stage
+
+Reached FFBA=1 (stage 2) via the level-select probe technique from
+`docs/audit/stage2_lava.md` §1. Screenshot at `tmp/lava_stage2_ffba1.png`
++ tilemap histogram (1024-byte 0x9800 dump) show:
+
+- Dominant tile: 0x07 (205 cells = 20% of tilemap) — not a "molten field" tile
+- Second: 0x01 (85 cells = 8.3%) — structured floor
+- Brown-red rendered pixels (#A52100): only 88 px (<0.5% of screen)
+- Dominant rendered colors: dungeon lavender (#A5A5FF=6633, #52527B=1632)
+
+Stage 2 IS visually distinct from stage 1 (different rock formations,
+small brown-red palette accents in rock outlines), but it does NOT have
+the molten field-tile pattern that stages 5/7 have. The existing
+`build_lava_override` does NOT need to be extended to stage 2 — there's
+no large molten-field tile to repaint.
+
+The MEMORY.md / older-audit "stage-2 lava (still UNKNOWN)" reference is
+now clarified: stage 2 has stage-specific BG art but it's not lava-styled
+in the stage-5/7 sense. No new override needed.
+
 ---
 
 # (original 2026-06-14 audit follows)
