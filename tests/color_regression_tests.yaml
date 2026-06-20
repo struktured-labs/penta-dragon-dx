@@ -1729,6 +1729,32 @@ tests:
         min_pixels: 18000
         description: "STAGE 07 splash dominant lava red (observed 22318 at f=68, 5/5 zero-jitter)"
 
+  # Iter 121: stage 6 (FFBA=5 non-lava-stage) live gameplay test.
+  # Surprising finding: stage 6 IS using pal 5 (orange/red) for some
+  # decorative tiles (diagonal-striped walls), even though it's NOT a
+  # lava stage. This produces 2426/2444 #FF3900 orange pixels (2-way
+  # animation alternation, both clusters stable).
+  #
+  # Refines the iter 108 audit claim "only stages 5+7 use pal 5":
+  # stage 6 ALSO uses pal 5, but for non-lava decoration. The original
+  # audit was based on tile histograms (tile-ID counts) which missed
+  # this because stage 6's pal-5 tiles aren't dominant.
+  #
+  # Test uses conservative minimums (lower than both observed clusters):
+  #   #FF3900 >= 2000 (observed 2426 + 2444)
+  #   #A5A5FF >= 7500 (observed 7822 + 7935)
+  - name: "stage6_decorative_pal5"
+    savestate: "stage6_ffba5_levelselect.ss0"
+    description: "Stage 6 (FFBA=5) decorative pal-5 use — refines iter 108 audit that thought only stages 5+7 used pal 5. Stage 6 uses it for stripe walls."
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 2000
+        description: "Stage 6 decorative pal-5 orange (2-way alternation: 2426/2444, conservative min)"
+      - color: "A5A5FF"
+        min_pixels: 7500
+        description: "Stage 6 dominant lavender BG (2-way: 7822/7935)"
+
   # Iter 120: stage 4 (FFBA=3 non-lava) live gameplay test. 5/5 perfectly
   # stable (all metrics identical across 5 runs). Distinctive #A52100=41
   # brown accent (stage-4 styling) + lava-leak max=0 guard. Counterpart

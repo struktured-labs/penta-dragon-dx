@@ -45,6 +45,24 @@ that needs pal 5 repainting.
 2/3/4/6. The "stage-2 lava (still UNKNOWN)" reference in MEMORY.md /
 older audits is now fully resolved: every stage characterized.
 
+### iter 121 refinement: stage 6 ALSO uses pal 5 (but for decoration)
+
+The iter 108 conclusion was based on tile histograms — counting which
+tiles dominate each stage. Iter 121 visual probe of stage 6
+(stage6_ffba5_levelselect.ss0) found 2426 #FF3900 orange pixels
+rendered from BG tiles using pal 5. The stage 6 walls have a
+**diagonal-striped pattern** with orange decorative tiles.
+
+So pal 5 (lava palette) is used for MORE than just stages 5+7's
+molten field. Stage 6 uses pal 5 for decoration. This doesn't
+change the lava override (which targets only the specific molten
+tile IDs of stages 5+7), but it does mean a "pal 5 is lava-only"
+mental model is wrong — pal 5 is "the bright-orange palette" used
+wherever the BG art wants that color.
+
+Implication: corrupting BG-pal-5 CRAM would affect stage 6 walls
+too (now caught by iter 121's stage6_decorative_pal5 test).
+
 ## 2026-06-20 UPDATE (iter 111): runtime verification — override IS firing but lava room is unreachable headlessly
 
 Tried to add a `stage7_lava_live` regression test using a savestate

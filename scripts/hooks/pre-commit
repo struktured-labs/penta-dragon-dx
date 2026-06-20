@@ -335,6 +335,11 @@ TESTS=(
   # (all metrics identical across runs). Brown accent + MAX=0 lava
   # orange guard.
   stage4_live_render
+  # Iter 121: stage 6 decorative pal-5 use. Refines iter 108 audit
+  # which claimed "only stages 5+7 use pal 5". Stage 6 ALSO uses pal 5
+  # for diagonal-stripe wall tiles — 2426/2444 #FF3900 orange (2-way
+  # alternation, both clusters stable). Conservative min=2000.
+  stage6_decorative_pal5
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
