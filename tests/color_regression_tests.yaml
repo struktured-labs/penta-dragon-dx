@@ -1729,6 +1729,28 @@ tests:
         min_pixels: 18000
         description: "STAGE 07 splash dominant lava red (observed 22318 at f=68, 5/5 zero-jitter)"
 
+  # Iter 117: stage 1 splash (D880=0x18 + FFBA=00) — counterpart to
+  # splash_stage7 (FFBA=06 lava). Same scene byte but FFBA=00 routes to
+  # NO lava override, so STAGE 01 letters render in dungeon lavender,
+  # not lava red. Together with splash_stage7 this verifies the splash
+  # dispatch's FFBA-conditional rendering.
+  - name: "splash_stage1_native"
+    savestate: "splash_stage1_d880_18.ss0"
+    description: "Native D880=0x18 (STAGE 01 splash, FFBA=00) — lavender render (NOT lava, opposite of splash_stage7)"
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x80]
+        palette: 0
+        description: "Stage splash all-pal0 SPLASH_TABLE (same as splash_stage7)"
+    pixel_expectations:
+      - color: "A5A5FF"
+        min_pixels: 140
+        description: "Stage 1 splash lavender (observed 180 at f=68, 5/5 zero-jitter)"
+      - color: "FF3900"
+        max_pixels: 0
+        min_pixels: 0
+        description: "Stage 1 splash MUST NOT show lava red (proves FFBA=00 guard works)"
+
   # Iter 115: PIXEL test for the death cinematic — GAME OVER text
   # rendered in lava pal 5 colors (#FF3900 red dominant + #00C6FF cyan).
   # The cutscenes_intro_ending audit said "death cinematic NOT colorized"

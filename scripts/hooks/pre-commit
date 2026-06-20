@@ -306,6 +306,13 @@ TESTS=(
   # from surrounding tile attrs. This locks in that the death
   # cinematic stays visually colorized.
   death_cinematic_game_over_colorized
+  # Iter 117: counterpart to splash_stage7_native_dispatch — same
+  # D880=0x18 scene byte but with FFBA=00 (stage 1). Verifies the
+  # splash dispatch correctly renders STAGE 01 in lavender (NOT lava
+  # red), proving the FFBA-conditional lava override doesn't leak
+  # into stage 1. The MAX=0 #FF3900 guard makes regressions in the
+  # FFBA guard immediately visible.
+  splash_stage1_native
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
