@@ -289,6 +289,15 @@ TESTS=(
   # the cold-boot DA00 copy fails on real savestate load.
   stage3_dungeon_table_native
   stage6_dungeon_table_native
+  # Iter 114: native-savestate dispatch tests for D880=0x17 (death
+  # cinematic, dungeon table) + D880=0x18 (splash, all-pal0 SPLASH_TABLE).
+  # Captured via level-select reach where Sara died repeatedly (no save
+  # data — natural transitions through both scene values). Complementary
+  # to the existing force_d880 tests (death_uses_dungeon_table,
+  # splash_bg_table_all_pal0) by exercising the cold-boot DA00 copy
+  # path with the scene byte captured natively in the savestate.
+  death_cinematic_native_dispatch
+  splash_stage7_native_dispatch
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
