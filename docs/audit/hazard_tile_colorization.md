@@ -19,26 +19,31 @@ Stage-2 lava (still UNKNOWN per the original audit) is independent: the
 v8.9-lava milestone (2026-06-14) shipped the stages-5/7 fix; stage-2 lava
 remains untreated because no stage-2 BG dump exists in the repo.
 
-## 2026-06-20 UPDATE (iter 107): stage-2 reached, NOT a lava stage
+## 2026-06-20 UPDATE (iter 107-108): exhaustive stage-2-to-6 lava audit — ONLY stages 5+7 are lava
 
-Reached FFBA=1 (stage 2) via the level-select probe technique from
-`docs/audit/stage2_lava.md` §1. Screenshot at `tmp/lava_stage2_ffba1.png`
-+ tilemap histogram (1024-byte 0x9800 dump) show:
+Reached all 6 dungeon stages (FFBA=1..6 = stages 2-7) via the level-
+select probe from `docs/audit/stage2_lava.md` §1. Histograms +
+screenshots show:
 
-- Dominant tile: 0x07 (205 cells = 20% of tilemap) — not a "molten field" tile
-- Second: 0x01 (85 cells = 8.3%) — structured floor
-- Brown-red rendered pixels (#A52100): only 88 px (<0.5% of screen)
-- Dominant rendered colors: dungeon lavender (#A5A5FF=6633, #52527B=1632)
+| Stage (FFBA) | Top BG tiles                              | Distinctive color    | Lava-styled? |
+|--------------|-------------------------------------------|----------------------|--------------|
+| 2 (FFBA=1)   | 0x07=205 (20.0%), 0x01=85                 | #A52100=88           | NO           |
+| 3 (FFBA=2)   | 0x11=245 (23.9%), 0x01=110, 0x02=38       | #AD29B5=164 (purple) | NO           |
+| 4 (FFBA=3)   | 0x13=51, 0x12=51, 0x11=43, 0x10=43        | #A52100=114          | NO           |
+| 5 (FFBA=4)   | 0x12=65, 0x13=65, 0x02=64, 0x03=62        | molten field         | **YES**      |
+| 6 (FFBA=5)   | 0x3D=58, 0x3E=58, 0x6A=31, 0x6B=31        | #A52100=61           | NO           |
+| 7 (FFBA=6)   | 0x19=201 (dominant), 0x1A=73              | molten field         | **YES**      |
 
-Stage 2 IS visually distinct from stage 1 (different rock formations,
-small brown-red palette accents in rock outlines), but it does NOT have
-the molten field-tile pattern that stages 5/7 have. The existing
-`build_lava_override` does NOT need to be extended to stage 2 — there's
-no large molten-field tile to repaint.
+Only stages 5 and 7 have the molten field-tile pattern that the
+existing `build_lava_override` covers (LAVA_STAGE5_IDS + LAVA_STAGE7_IDS
+in `build_v301_teleport.py:173-174`). Other stages have distinct BG
+art (purple in stage 3, diagonal stripes in stage 6, brown-red rock
+outline accents in stages 2/4) but none has a large molten-field area
+that needs pal 5 repainting.
 
-The MEMORY.md / older-audit "stage-2 lava (still UNKNOWN)" reference is
-now clarified: stage 2 has stage-specific BG art but it's not lava-styled
-in the stage-5/7 sense. No new override needed.
+**The lava coverage is COMPLETE.** No new overrides needed for stages
+2/3/4/6. The "stage-2 lava (still UNKNOWN)" reference in MEMORY.md /
+older audits is now fully resolved: every stage characterized.
 
 ---
 
