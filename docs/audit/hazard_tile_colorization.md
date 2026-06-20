@@ -45,6 +45,42 @@ that needs pal 5 repainting.
 2/3/4/6. The "stage-2 lava (still UNKNOWN)" reference in MEMORY.md /
 older audits is now fully resolved: every stage characterized.
 
+## 2026-06-20 UPDATE (iter 111): runtime verification — override IS firing but lava room is unreachable headlessly
+
+Tried to add a `stage7_lava_live` regression test using a savestate
+captured via level-select reach + emu:saveStateFile (iter 110). The
+test failed: at f=68 the stage 7 savestate renders only 125 #FF0000
++ 60 #FFFF00 pixels (mostly blue+gray dungeon entry), not lava.
+
+Probe of WRAM 0xDA00 confirmed: **lava override IS firing correctly**.
+`DA00[0x19] = 05` and `DA00[0x1A] = 05` at f=60/200/400 in the loaded
+state (FFBA=06). So `build_lava_override` does its job — but the
+level-select savestate captures the STAGE ENTRY CORRIDOR, not the
+molten-field room.
+
+Tile histogram of the loaded state's tilemap:
+  - 0x00: 540 (uninit / blank)
+  - 0x01: 95, 0x02: 87, 0x03: 48, 0x04: 41 (dungeon entry tiles)
+  - 0x19/0x1A (the lava-field IDs): **0 visible tiles**
+
+Per the original audit, stage 7's lava-field room has 201/360 cells
+of tile 0x19. Reaching that room requires walking through the entry
+corridor.
+
+Tried automated walking (probe_walk_until_lava.lua, 12000 frames
+with rotating direction inputs): max lava_tile_count = 6, never
+crossed the 50-tile threshold for a "lava-dominant" room. Random
+walks aren't sufficient — needs actual path-finding.
+
+**Conclusion**: the live-gameplay lava regression test is filed as
+"needs RL/scripted-walk infrastructure" — not a quick iter win. The
+existing `lava_stage5_override` / `lava_stage7_override` /
+`lava_off_at_ffba0` tests (which check WRAM table contents via
+force_d880) remain the canonical regression coverage. The savestates
+captured in iter 110 (`save_states_for_claude/stage{3..7}_ffba{2..6}
+_levelselect.ss0`) ARE useful as starting points for future
+RL/walk-based probes, just not directly as pixel-test fixtures.
+
 ---
 
 # (original 2026-06-14 audit follows)
