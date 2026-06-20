@@ -1657,3 +1657,35 @@ tests:
       - tile_range: [0x19, 0x19]
         palette: 6
         description: "Stage 4 tile 0x19 stays pal 6 (wall) — lava override correctly skips FFBA=3"
+
+  # Iter 113: scene_detect dispatch verification from native non-lava
+  # FFBA savestates. The existing splash/arena/dungeon dispatch tests
+  # use force_d880 against a baseline savestate; these use NATIVE D880
+  # captured in real gameplay (D880=0x05/0x07/0x0A — scroll/post-clear
+  # states + mini-boss spawn). Catches: a regression where scene_detect
+  # accidentally adds these D880 values to splash dispatch or arena
+  # range, OR where the cold-boot DA00 copy fails to load the dungeon
+  # table on real savestate load.
+  - name: "stage3_dungeon_table_native"
+    savestate: "stage3_ffba2_levelselect.ss0"
+    description: "Live stage 3 savestate (D880=0x0A miniboss, FFBA=2). Verifies dungeon table loaded — DA00 has standard mappings (pal 1 font, pal 6 wall)."
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x80]
+        palette: 1
+        description: "Stage 3 tile 0x80 → pal 1 (font signature, dungeon table loaded)"
+      - tile_range: [0x18, 0x18]
+        palette: 6
+        description: "Stage 3 tile 0x18 → pal 6 (wall edge, dungeon table loaded)"
+
+  - name: "stage6_dungeon_table_native"
+    savestate: "stage6_ffba5_levelselect.ss0"
+    description: "Live stage 6 savestate (D880=0x07 scroll, FFBA=5). Verifies dungeon table loaded (FFBA=5 is NOT lava — between stages 5 and 7)."
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x80]
+        palette: 1
+        description: "Stage 6 tile 0x80 → pal 1 (font, dungeon table)"
+      - tile_range: [0x19, 0x19]
+        palette: 6
+        description: "Stage 6 tile 0x19 stays pal 6 (wall) — FFBA guard skips override"

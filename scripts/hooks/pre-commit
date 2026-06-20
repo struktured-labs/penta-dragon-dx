@@ -280,6 +280,15 @@ TESTS=(
   stage7_lava_override_native_save
   stage5_lava_override_native_save
   stage4_no_lava_override_native
+  # Iter 113: scene_detect dispatch verification from native (not
+  # force_d880) D880 values captured in real gameplay. Stage 3's
+  # savestate has D880=0x0A (miniboss); stage 6's has D880=0x07 (scroll).
+  # Both must route to dungeon table per scene_detect's "else" branch.
+  # Catches: regression where these D880 values get accidentally added
+  # to splash dispatch (would zero out dungeon font + walls), OR where
+  # the cold-boot DA00 copy fails on real savestate load.
+  stage3_dungeon_table_native
+  stage6_dungeon_table_native
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
