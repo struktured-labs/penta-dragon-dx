@@ -35,14 +35,30 @@ for that savestate; not a colorizer bug.
 The teleport ROM (`penta_dragon_dx_teleport.gb`) has the iter-31 fix. The
 production v3.01 ROM (`penta_dragon_dx_v301.gb`) and the MiSTer-deployed
 `penta_dragon_dx_FIXED.gb` do NOT have `hwoam_recolor` installed — their bank-13
-0x7F40 area contains tile graphics, not code. Backporting requires either:
-  - Finding free space in production bank 13 (~52 bytes for hwoam_recolor +
-    wrapper hook for the CALL). Bank 13 in v3.01 is almost full; 0x7700 has
-    a tight ~16-byte gap but hwoam_recolor needs ~52 bytes.
-  - Reclaiming bytes from existing v3.01 features (e.g., the documented "dead
-    position-sweep system" at 0x7100 saves 159 bytes — see
-    `full_correctness_audit_2026-06-14.md`).
-  - Replacing the production ROM with the teleport ROM as the new gold standard.
+0x7F40 area contains tile graphics, not code.
+
+### Free space update (iter 95, 2026-06-20)
+The earlier "Bank 13 in v3.01 is almost full" claim is **wrong**. Audit of
+`rom/working/penta_dragon_dx_v301.gb` bank 13 turned up **524 truly-free
+bytes across 4 contiguous zero regions**, all verified zero in the ORIGINAL
+ROM (`rom/Penta Dragon (J).gb`) as well — so they're not load-time
+buffers or tile graphics:
+  - `bank13:0x6A70` — 144 bytes
+  - `bank13:0x6B27` — 233 bytes  ← largest single contiguous run
+  - `bank13:0x6D3F` — 65 bytes
+  - `bank13:0x6DAE` — 82 bytes
+
+`hwoam_recolor` is ~43 bytes (see `build_v301_teleport.py:build_hwoam_recolor`).
+Plus a 3-byte CALL hook in the v3.01 wrapper → ~46 bytes total. Fits trivially
+in any of the four regions. **0x6B27 is the safest choice** — largest run,
+furthest from neighboring live code.
+
+Backport plan (future iter):
+  1. Modify `scripts/build_v301_gdma.py` (NOT `build_v301_teleport.py`) to:
+     - Write `hwoam_recolor` body at `bank13:0x6B27`
+     - Add `CALL 0x6B27` to the v3.01 VBlank wrapper after colorize+DMA
+  2. Verify mGBA: 80-test regression hook + fresh-boot guards
+  3. Hardware-verify on MiSTer (B=40 adds ~900 T-states to post-DMA wrapper).
 MiSTer hardware verification still required because B=40 adds ~30 cycles × 30
 slots ≈ 900 T-states to the post-DMA wrapper; mGBA tolerates VBlank overruns
 more than real CGB/DMG.

@@ -137,6 +137,13 @@ tests:
       # slot 10, so slots 16+ stay at pal 0). Visually the crows DO render
       # in pal 3 most of the time, but the test's Lua OAM read catches
       # the post-game-write transient.
+    pixel_expectations:
+      - color: "0000B5"
+        min_pixels: 28
+        description: "Crow dark-blue body (observed 36, 5/5 runs)"
+      - color: "0084FF"
+        min_pixels: 18
+        description: "Crow light-blue accents (observed 24, 5/5 runs)"
 
   - name: "mage"
     savestate: "level1_sara_w_mage_health1_items.ss0"
@@ -1138,6 +1145,10 @@ tests:
       - slots: [16, 17, 18, 19]
         palette: 4
         description: "Metal balls tiles 0x40-0x43 → pal 4 (hornet/metal)"
+    pixel_expectations:
+      - color: "0084FF"
+        min_pixels: 36
+        description: "Metal-ball light-blue accents (observed 46, 5/5 runs)"
 
   - name: "sara_w_teleport_animation"
     savestate: "level1_sara_w_teleport.ss0"
