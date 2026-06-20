@@ -268,6 +268,18 @@ TESTS=(
   # dungeon scene (vs original p_item's D880=0x0B pickup state).
   sara_w_moth_alt_scene
   sara_w_p_item_alt_scene
+  # Iter 112: WRAM-level lava override regression tests using natively-
+  # captured FFBA savestates (iter 110 captures via level-select probe).
+  # Catches a regression class the existing lava_stage5/7_override tests
+  # CAN'T: if build_lava_override stopped firing every-frame (only on
+  # scene change per iter 17 fix), force_ffba tests would still pass (the
+  # framework re-applies on every test run) but a real savestate load
+  # wouldn't get the override re-applied after the cold-boot DA00 copy.
+  # stage4_no_lava_override_native verifies the FFBA guard (stage 4 FFBA=3
+  # must NOT get the override — tile 0x19 stays pal 6 wall).
+  stage7_lava_override_native_save
+  stage5_lava_override_native_save
+  stage4_no_lava_override_native
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.

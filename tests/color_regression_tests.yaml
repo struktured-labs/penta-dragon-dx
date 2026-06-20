@@ -1609,18 +1609,51 @@ tests:
   # bytes.py at bank13:0x6A41 = 0x1B is the cleaner safety net for the
   # iter-31 tile-remap regression.
 
-  # Iter 110: attempted to add live-gameplay tests for stages 3+7 via
-  # savestates captured by the level-select probe technique using mGBA's
-  # emu:saveStateFile API (flag 0x01 = PNG format, compatible with -t).
-  # Savestates ARE captured + checked into save_states_for_claude/, but
-  # NO TESTS ADDED THIS ITER: my iter 109 "5/5 stable" measurement was
-  # WRONG — caused by a parallel race in the verify script where
-  # tmp/load_stage.png was overwritten by concurrent mGBA invocations.
-  # Actual cold-load f=68 of stage7_ffba6_levelselect.ss0 shows only
-  # 125 #FF0000 pixels (blue+gray dungeon, not the lava room), because
-  # the level-select-reach savestate captures a stage-entry/post-clear
-  # state, not the actual molten room. Reaching the lava room requires
-  # playing through the stage. Filed for future iter — needs in-stage
-  # navigation, not just level-select reach.
-  #   Useful savestate files preserved:
-  #     save_states_for_claude/stage{3,4,5,6,7}_ffba{2..6}_levelselect.ss0
+  # Iter 110-111: attempted live-gameplay lava tests via the level-select
+  # probe technique. Hit a reachability blocker — the savestates capture
+  # stage entry corridors, NOT the actual lava room (Sara needs to navigate
+  # into it which random walks can't achieve). However iter 111's WRAM probe
+  # confirmed the lava override IS firing correctly: DA00[0x19/0x1A] = 0x05
+  # at f=60/200/400 in stage7_ffba6_levelselect.ss0.
+  #
+  # Iter 112: convert iter 111's WRAM probe finding into a regression test.
+  # This is the FIRST test that verifies build_lava_override fires from a
+  # NATIVELY-CAPTURED FFBA=6 savestate (not via test-framework force_ffba
+  # manipulation). Catches a regression class the existing lava_stage5/7
+  # _override tests can't: if the override stopped firing every-frame and
+  # only ran on scene change (per iter 17 fix), force_ffba tests would
+  # still pass (the framework re-applies on every test run) but a real
+  # savestate load wouldn't get the override re-applied after the cold-boot
+  # DA00 copy.
+  - name: "stage7_lava_override_native_save"
+    savestate: "stage7_ffba6_levelselect.ss0"
+    description: "Live stage 7 savestate (native FFBA=6). Verifies build_lava_override fires correctly from real savestate state (iter 111 WRAM probe confirms DA00[0x19/0x1A]=05)."
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x19, 0x19]
+        palette: 5
+        description: "Stage 7 molten tile 0x19 → pal 5 (lava override fires in native FFBA=6 savestate)"
+      - tile_range: [0x1A, 0x1A]
+        palette: 5
+        description: "Stage 7 molten tile 0x1A → pal 5 (lava override fires in native FFBA=6 savestate)"
+
+  - name: "stage5_lava_override_native_save"
+    savestate: "stage5_ffba4_levelselect.ss0"
+    description: "Live stage 5 savestate (native FFBA=4). Verifies build_lava_override fires for stage 5 molten IDs."
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x02, 0x05]
+        palette: 5
+        description: "Stage 5 molten IDs 0x02-0x05 → pal 5 (lava override fires in native FFBA=4 savestate)"
+      - tile_range: [0x12, 0x15]
+        palette: 5
+        description: "Stage 5 molten IDs 0x12-0x15 → pal 5 (lava override fires in native FFBA=4 savestate)"
+
+  - name: "stage4_no_lava_override_native"
+    savestate: "stage4_ffba3_levelselect.ss0"
+    description: "Live stage 4 savestate (native FFBA=3, NOT a lava stage). Verifies FFBA guard prevents lava override from leaking into stage 4."
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x19, 0x19]
+        palette: 6
+        description: "Stage 4 tile 0x19 stays pal 6 (wall) — lava override correctly skips FFBA=3"
