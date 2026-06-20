@@ -1002,16 +1002,23 @@ tests:
 
   - name: "sara_spiral_powerup_item_render"
     savestate: "level1_sara_spiral_powerup_item.ss0"
-    description: "D880=0x02 Sara + spiral-powerup item tile (renders #00A500 green) — verify item-tile palette renders"
-    # NOTE: this savestate captured at a moment where FFBE=00 (Witch flag)
-    # but slot attrs report pal 1. Likely a transient Sara D form just
-    # transitioning back to W (the "powerup pickup" state). Skipping
-    # slot/palette assertions; just verify the green item tile renders.
+    description: "D880=0x02 Sara + spiral-powerup item tile (renders #00A500 green) — verifies BG tile colorization works while OBJ path is DF1F-gated"
+    # Iter 106 investigation revisited iter 102's "form-change transient"
+    # hypothesis. Real cause: this savestate captures DF1F=0xFF for the
+    # ENTIRE test window (verified via 1-500 frame trace — no drain).
+    # Per iter 53's project_df1f_savestate_transient, DF1F=0xFF gates JP
+    # COLORIZE for ~255 frames. Here the drain mechanism never fires —
+    # so OBJ path skips for the whole sample window. Slot 0-3 attrs
+    # report pal 1 (savestate-captured stale value, not the iter-31
+    # hwoam_recolor's pal 2 output) — that's documented behavior, NOT
+    # a bug. This test is still GOOD coverage: the green BG tile reaches
+    # WRAM 0xDA00 via bg_sweep which DF1F does NOT gate. If someone
+    # breaks bg_sweep's BG path independently of OBJ, this test fails.
     expected_boss_flag: 0
     pixel_expectations:
       - color: "00A500"
         min_pixels: 85
-        description: "Spiral-powerup item green tile (observed 108, 5/5 runs) — pal 1 BG tile path"
+        description: "Spiral-powerup item green tile (observed 108) — verifies bg_sweep's BG path works with DF1F=0xFF gating OBJ"
 
   - name: "sara_w_catfish_menu_open"
     savestate: "level1_square_cat_fish_menu_open.ss0"
