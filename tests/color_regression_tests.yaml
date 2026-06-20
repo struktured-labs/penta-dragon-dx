@@ -1710,7 +1710,7 @@ tests:
 
   - name: "splash_stage7_native_dispatch"
     savestate: "splash_stage7_d880_18.ss0"
-    description: "Native D880=0x18 (stage 7 splash 'STAGE 07') — verifies SPLASH_TABLE all-pal0 loaded"
+    description: "Native D880=0x18 (stage 7 splash 'STAGE 07') — verifies SPLASH_TABLE all-pal0 loaded + visual render: STAGE 07 letters render in lava pal 5 dominant red"
     check_boss_flag: false
     bg_table_expectations:
       - tile_range: [0x80, 0x80]
@@ -1719,6 +1719,15 @@ tests:
       - tile_range: [0x18, 0x18]
         palette: 0
         description: "Stage splash tile 0x18 → pal 0 (SPLASH_TABLE override)"
+    # Iter 116: added pixel guard. The "STAGE 07" splash renders 22318
+    # #FF3900 pixels at f=68 (96.9% of the 23040-pixel screen) — full
+    # lava-red flood with STAGE 07 letters cut out. 5/5 zero-jitter.
+    # Catches: regression where BG-pal-5 (lava) palette CRAM gets
+    # corrupted before the splash renders.
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 18000
+        description: "STAGE 07 splash dominant lava red (observed 22318 at f=68, 5/5 zero-jitter)"
 
   # Iter 115: PIXEL test for the death cinematic — GAME OVER text
   # rendered in lava pal 5 colors (#FF3900 red dominant + #00C6FF cyan).
