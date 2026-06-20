@@ -1729,6 +1729,23 @@ tests:
         min_pixels: 18000
         description: "STAGE 07 splash dominant lava red (observed 22318 at f=68, 5/5 zero-jitter)"
 
+  # Iter 119: stage 5 (FFBA=4 LAVA) live gameplay test. 5/5 zero-jitter
+  # shows 7802 #FF3900 lava-orange pixels (33% of screen!). This is the
+  # FIRST test asserting on REAL in-game lava render at the pixel level.
+  # (stage7 lava-room reachability was filed for future iter — stage 5
+  # works because its molten tile IDs 0x02-0x05/0x12-0x15 are the dungeon
+  # entry corridor tiles, so they appear in the lava override window).
+  # Counterpart to iter 117's splash_stage1_native MAX=0 lava-leak guard:
+  # this is the POSITIVE lava render proof.
+  - name: "stage5_lava_live_render"
+    savestate: "stage5_ffba4_levelselect.ss0"
+    description: "Live stage 5 (FFBA=4) gameplay — 33% of screen renders lava-orange via build_lava_override (FIRST pixel-level lava live render proof)"
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 6500
+        description: "Stage 5 lava-orange render (observed 7802, 5/5 zero-jitter) — proves build_lava_override is producing visible lava-styled rendering, not just bg_table writes"
+
   # Iter 118: stage 3 BG-pal-2 purple pixel test. The iter-110 attempt
   # failed on #00C6FF (cyan, which is unstable due to miniboss animation
   # variance), but iter 118 found #AD29B5 (purple-high) + #42007B (purple-

@@ -320,6 +320,15 @@ TESTS=(
   # animation); iter 118 isolates the stable purple colors at f=68.
   # Stage 3 is the only scene in the suite that visibly uses BG-pal-2.
   stage3_purple_pal2
+  # Iter 119: FIRST pixel-level test on the LIVE lava render. The
+  # stage 5 (FFBA=4) savestate captures Sara in the stage entry where
+  # the molten tile IDs 0x02-0x05/0x12-0x15 are the stage entry corridor
+  # tiles, so the lava override produces 7802 #FF3900 pixels visible
+  # at f=68 (33% of screen). Iter 110 attempted similar for stage 7
+  # but stage 7's molten IDs aren't in the entry corridor. This is
+  # the unique pixel-level proof of build_lava_override producing
+  # visible output, complementing the WRAM table tests added iters 112-113.
+  stage5_lava_live_render
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
