@@ -255,6 +255,13 @@ TESTS=(
   sara_w_gray_monster_pink_projectile
   sara_w_square_arrows_combo
   sara_w_health_items_wild_card
+  # Iter 104: pre-secret-stage transition Sara at tiles 0x28-0x2B with
+  # menu overlay active. Verifies sara_palette tile-range mapping for
+  # the 0x28-0x2F sub-band (existing sara_w_diagonal_arrows_alt_anim
+  # covers a similar but different sub-band). Also asserts on the
+  # OBP-2 CRAM at a different sampling moment than sara_w_pink_render's
+  # f=300 — catches different regression classes.
+  sara_w_right_before_secret_stage_gbc
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.

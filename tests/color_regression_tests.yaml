@@ -1085,6 +1085,27 @@ tests:
         min_pixels: 420
         description: "Dense item-tile red render (observed 519, 3/3 runs)"
 
+  # Iter 104: pre-secret-stage transition state. Sara renders with
+  # tiles 0x28-0x2B (alt-anim) at correct pal 2, with menu overlay
+  # visible. Different from sara_w_catfish_menu_open (uses tiles
+  # 0x20-0x23) — verifies the tile 0x28-0x2F branch of sara_palette
+  # mapping with a menu overlay active.
+  - name: "sara_w_right_before_secret_stage_gbc"
+    savestate: "level1_sara_w_right_before_secret_stage_trigger_gbc.ss0"
+    description: "D880=0x0B Sara W mid-anim (tiles 0x28-0x2B) + menu overlay — pre-secret-stage transition state"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W alt-anim tiles 0x28-0x2B → pal 2"
+    pixel_expectations:
+      - color: "FF42A5"
+        min_pixels: 35
+        description: "Sara W pink (#FF42A5 OBP2 idx 1) renders during menu overlay (observed 46, 5/5 runs)"
+      - color: "FFFF00"
+        min_pixels: 16
+        description: "Item yellow accents (observed 21, 5/5 runs)"
+
   - name: "sara_w_pulsing_vram"
     savestate: "level1_sara_w_pulsing_bg_tiles.ss0"
     description: "Pulsing BG-tile scene — VRAM in flux, Sara colorization must hold"
