@@ -20,9 +20,18 @@ Iter 78: Added second screenshot at f=1800 with FFBE forced to 1
   SaraDragon green pixels at f=1800 catch SaraDragon corruption.
 Iter 79: Added third + fourth screenshots forcing FFBF=1 (Gargoyle)
   and FFBF=2 (Spider). The boss-palette injection branch in
-  palette_loader overwrites OBP 6/7 with the boss colors, and we can
-  verify them via the rendered #FFC6D6 (Gargoyle) and #FFC6FF +
-  #00F7FF (Spider) pixels on BG tiles that happen to use pal 6/7.
+  palette_loader overwrites OBP 6/7 with the boss colors. Spider phase
+  catches OBP-7 corruption; Gargoyle phase reduces to a BG-pal-6 smoke
+  check because no Garg OBJ sprite is on screen during auto-play.
+Iter 80: Attempted FFC0=1 SaraProjectile phase but it broke in the
+  chained sequence (the standalone FFC0=1 test showed #0031B5=24, but
+  after running through the FFBE/FFBF phases first, by f=2700 the
+  pixel count is 0 on the clean ROM too — A-button projectiles aren't
+  reliably on-screen after the multi-phase juggling). Reverted; the
+  A-button auto-fire was kept in keysRead because it doesn't hurt
+  the earlier phases. Could revisit with a parallel mGBA run instead
+  of chained phases if the SaraProjectile/OBP-0 catcher is worth ~30s
+  more wall-clock.
 
 Usage:
     uv run python scripts/diagnostics/test_fresh_boot.py [--rom PATH]
@@ -59,6 +68,11 @@ callbacks:add("keysRead", function()
             keys = seq[3]
             break
         end
+    end
+    -- Press A periodically from frame 500 to fire projectiles (so OBP-0
+    -- SaraProjectile pixels show on screen during the FFC0=1 phase).
+    if frame >= 500 and frame %% 4 == 0 then
+        keys = 0x01  -- A
     end
     emu:setKeys(keys)
 end)
@@ -134,10 +148,7 @@ EXPECTED_GARG = [
 EXPECTED_SPIDER = [
     # Iter 79: forcing FFBF=2 makes boss_pal overwrite OBP 7 with Spider.
     # Render shows 106 #FF2900 (Spider orange, 0x00BF mGBA-corrected).
-    # SW phase had no #FF2900 (BG5 vivid red is #FF0000, not #FF2900).
-    # The 106 must be from Sara's projectiles or another OBJ that uses
-    # OBP 7 — Spider corruption empirically drops it to 0, so this IS
-    # a real OBJ-7 catcher. Floor at 50.
+    # Spider corruption empirically drops it to 0 — real OBJ-7 catcher.
     ("FF2900", 50, "Spider distinctive orange (OBP 7 boss_pal, FFBF=2)"),
 ]
 
