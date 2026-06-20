@@ -2,16 +2,23 @@
 """Fresh-boot end-to-end test.
 
 Unlike the YAML-driven savestate tests, this loads the ROM from cold-
-boot, presses the title-menu input sequence, and samples Sara W's
-rendered colors after she reaches gameplay. Catches ROM-source palette
-corruptions that the savestate tests miss — savestate CRAM persists
-through the test sample window so OBJ palette source corruptions don't
-propagate (see project_adversarial_coverage.md iter 70/73/74).
+boot, presses the title-menu input sequence, and samples the rendered
+screen at two distinct moments — first as Sara Witch in the default
+gameplay state, then after forcing FFBE=1 to transform her to Dragon
+form so the cond_pal cache miss reloads OBP 1 from ROM source. Catches
+ROM-source palette corruptions that the savestate tests miss because
+savestate CRAM persists through their test sample window (see
+project_adversarial_coverage.md iter 70/73/74).
 
-Iter 75: Verified that this catches a SaraWitch ROM-source corruption
-(0x4210 over both 0x2EBE and 0x511F at 0x36852-0x36856). Clean ROM
-shows pink=26, peach=34 stably across 5 fresh runs. Corrupted ROM
-shows pink=0, peach=0 at f=1500+.
+Iter 75: First version, single screenshot at f=1500, caught SaraWitch
+  corruption (2 OBP-2 colors).
+Iter 76: Added 4 BG palette guards (Dungeon, BG1, BG5) from the same
+  screenshot.
+Iter 78: Added second screenshot at f=1800 with FFBE forced to 1
+  (Sara Dragon). The form change forces a cond_pal cache miss, so
+  palette_loader reloads OBP 1 from ROM source — and the rendered
+  SaraDragon green pixels at f=1800 catch SaraDragon corruption
+  (which iter 70-74 could not catch via any savestate-based test).
 
 Usage:
     uv run python scripts/diagnostics/test_fresh_boot.py [--rom PATH]
@@ -54,6 +61,16 @@ end)
 
 callbacks:add("frame", function()
     frame = frame + 1
+    -- Sara Witch screenshot at f=1500 (gameplay reached, palettes loaded)
+    if frame == %d then
+        emu:screenshot("%s")
+    end
+    -- After SW screenshot, force Sara to Dragon form. The FFBE change
+    -- causes cond_pal's hash to mismatch the DF00 cache, so palette_
+    -- loader reloads — overwriting OBP 1 CRAM from the ROM source.
+    if frame >= %d then
+        emu:write8(0xFFBE, 0x01)
+    end
     if frame == %d then
         emu:screenshot("%s")
         emu:stop()
@@ -61,9 +78,8 @@ callbacks:add("frame", function()
 end)
 """
 
-EXPECTED = [
-    # (color_hex, min_pixels, label)
-    # Sara W OBJ (catches SaraWitch palette source corruption)
+EXPECTED_SW = [
+    # Sara W OBJ — catches SaraWitch (OBP 2) palette source corruption
     ("FF42A5", 15, "SaraWitch pink-red (OBP 2 idx 1)"),
     ("F7AD5A", 15, "SaraWitch peach (OBP 2 idx 2)"),
     # BG palettes — iter 76 found these are stable at f=1500 fresh-boot
@@ -73,7 +89,18 @@ EXPECTED = [
     ("940000", 50, "BG1 cherry red (idx 1, catches items/font palette corruption)"),
     ("FF0000", 20, "BG5 vivid red (catches BG-pal-5 corruption)"),
 ]
-SAMPLE_FRAME = 1500
+
+EXPECTED_SD = [
+    # Sara D OBJ — catches SaraDragon (OBP 1) palette source corruption.
+    # Forcing FFBE=1 triggers a cond_pal cache miss, palette_loader runs,
+    # and OBP 1 CRAM gets reloaded from ROM source. Sara then renders
+    # with the SaraDragon green (#00FF00 = 0x03E0 mGBA-corrected).
+    ("00FF00", 15, "SaraDragon bright-green (OBP 1 idx 1) after FFBE=1 forced"),
+]
+
+SAMPLE_FRAME_SW = 1500
+FFBE_FORCE_FRAME = 1500
+SAMPLE_FRAME_SD = 1800
 
 
 def run_mgba(rom_path: Path, lua_path: Path, timeout: int = 90) -> bool:
@@ -121,27 +148,42 @@ def main() -> int:
     tmp_dir = REPO_ROOT / "tests/results"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     lua_path = tmp_dir / "fresh_boot_test.lua"
-    screenshot_path = tmp_dir / "fresh_boot.png"
-    if screenshot_path.exists():
-        screenshot_path.unlink()
-    lua_path.write_text(LUA_SCRIPT % (SAMPLE_FRAME, screenshot_path))
+    sw_screenshot = tmp_dir / "fresh_boot.png"
+    sd_screenshot = tmp_dir / "fresh_boot_sd.png"
+    for p in (sw_screenshot, sd_screenshot):
+        if p.exists():
+            p.unlink()
+    lua_path.write_text(LUA_SCRIPT % (
+        SAMPLE_FRAME_SW, sw_screenshot,
+        FFBE_FORCE_FRAME,
+        SAMPLE_FRAME_SD, sd_screenshot,
+    ))
 
-    print(f"[fresh-boot] Running mGBA from cold boot, sampling at f={SAMPLE_FRAME}...")
+    print(f"[fresh-boot] Running mGBA from cold boot, sampling SW@f={SAMPLE_FRAME_SW} + SD@f={SAMPLE_FRAME_SD}...")
     success = run_mgba(rom_path, lua_path)
     if not success:
         print("  [FAIL] mGBA execution failed")
         return 1
-    if not screenshot_path.exists():
-        print(f"  [FAIL] No screenshot at {screenshot_path}")
-        return 1
+    for p in (sw_screenshot, sd_screenshot):
+        if not p.exists():
+            print(f"  [FAIL] No screenshot at {p}")
+            return 1
 
     errors = []
-    for color, min_px, label in EXPECTED:
-        count = count_color(screenshot_path, color)
+    print("[fresh-boot] Sara Witch (f={}) checks:".format(SAMPLE_FRAME_SW))
+    for color, min_px, label in EXPECTED_SW:
+        count = count_color(sw_screenshot, color)
         marker = "[PASS]" if count >= min_px else "[FAIL]"
         print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {label}")
         if count < min_px:
-            errors.append(f"#{color}: count {count} < min {min_px}")
+            errors.append(f"SW #{color}: count {count} < min {min_px}")
+    print("[fresh-boot] Sara Dragon (f={}, FFBE=1 forced) checks:".format(SAMPLE_FRAME_SD))
+    for color, min_px, label in EXPECTED_SD:
+        count = count_color(sd_screenshot, color)
+        marker = "[PASS]" if count >= min_px else "[FAIL]"
+        print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {label}")
+        if count < min_px:
+            errors.append(f"SD #{color}: count {count} < min {min_px}")
 
     if not args.keep_artifacts:
         lua_path.unlink(missing_ok=True)
