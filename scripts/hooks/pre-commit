@@ -234,6 +234,16 @@ TESTS=(
   sara_w_rock_item
   sara_w_flash_item
   sara_w_extra_life_item
+  # Iter 102: four more scenes from the unused-saves sweep continued.
+  # multi_arrow_items has the biggest red render in the suite (630
+  # pixels — 4 arrow item types onscreen at once). spiral_active_low_health
+  # covers spiral-power + 1HP corner case. spiral_powerup_item_render
+  # captures a transient Sara form-change state with the green item tile.
+  # catfish_menu_open covers menu-overlay layer rendering.
+  sara_w_multi_arrow_items
+  sara_w_spiral_active_low_health
+  sara_spiral_powerup_item_render
+  sara_w_catfish_menu_open
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.

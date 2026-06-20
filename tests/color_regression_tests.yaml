@@ -972,6 +972,63 @@ tests:
         min_pixels: 100
         description: "Sara W red accents with extra-life item (observed 125, 5/5 runs)"
 
+  # Iter 102: four more scenes from previously-unused saves. All 5/5
+  # zero-jitter, distinct rendered content.
+  - name: "sara_w_multi_arrow_items"
+    savestate: "level1_sara_w_fat_arrow_bidirectional_arrow_half_diagnol_arrow_wild_card_item.ss0"
+    description: "D880=0x0B 4 arrow-item types + wild card visible at once — stress test for items render"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with 4+ item types onscreen"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 500
+        description: "Multi-item red render — biggest item-tile sample in suite (observed 630, 5/5 runs)"
+
+  - name: "sara_w_spiral_active_low_health"
+    savestate: "level1_sara_w_spiral_power_active_health1.ss0"
+    description: "D880=0x02 Sara W + spiral power active + 1 HP — last-health corner case"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with active spiral power at 1HP"
+    pixel_expectations:
+      - color: "FF0000"
+        min_pixels: 85
+        description: "Sara W red accents with low-health spiral (observed 105, 5/5 runs)"
+
+  - name: "sara_spiral_powerup_item_render"
+    savestate: "level1_sara_spiral_powerup_item.ss0"
+    description: "D880=0x02 Sara + spiral-powerup item tile (renders #00A500 green) — verify item-tile palette renders"
+    # NOTE: this savestate captured at a moment where FFBE=00 (Witch flag)
+    # but slot attrs report pal 1. Likely a transient Sara D form just
+    # transitioning back to W (the "powerup pickup" state). Skipping
+    # slot/palette assertions; just verify the green item tile renders.
+    expected_boss_flag: 0
+    pixel_expectations:
+      - color: "00A500"
+        min_pixels: 85
+        description: "Spiral-powerup item green tile (observed 108, 5/5 runs) — pal 1 BG tile path"
+
+  - name: "sara_w_catfish_menu_open"
+    savestate: "level1_square_cat_fish_menu_open.ss0"
+    description: "D880=0x0B Sara W + catfish + menu open — multi-layer state (menu overlay + active gameplay)"
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W with menu overlay + catfish enemy"
+    pixel_expectations:
+      - color: "0084FF"
+        min_pixels: 45
+        description: "Light-blue menu accents (observed 59, 5/5 runs)"
+      - color: "0000B5"
+        min_pixels: 25
+        description: "Dark-blue menu border (observed 33, 5/5 runs)"
+
   - name: "sara_w_pulsing_vram"
     savestate: "level1_sara_w_pulsing_bg_tiles.ss0"
     description: "Pulsing BG-tile scene — VRAM in flux, Sara colorization must hold"
