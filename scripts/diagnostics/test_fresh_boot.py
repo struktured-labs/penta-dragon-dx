@@ -242,6 +242,21 @@ def run_mgba(rom_path: Path, lua_path: Path, timeout: int = 90) -> bool:
         return True
 
 
+def start_mgba(rom_path: Path, lua_path: Path, timeout: int = 90) -> subprocess.Popen:
+    """Start mGBA in the background, return Popen handle for parallel waits."""
+    cmd = [
+        "timeout", str(timeout),
+        "xvfb-run", "-a", "mgba-qt",
+        str(rom_path),
+        "--script", str(lua_path),
+        "-l", "0",
+    ]
+    env = os.environ.copy()
+    env["SDL_AUDIODRIVER"] = "dummy"
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+
+
 def count_color(image_path: Path, target_hex: str) -> int:
     from PIL import Image
     target = (int(target_hex[0:2], 16), int(target_hex[2:4], 16), int(target_hex[4:6], 16))
@@ -313,6 +328,9 @@ def main() -> int:
                 errors.append(f"{label.split('(')[0].strip()} #{color}: count {count} < min {min_px}")
 
     # Iter 82: standalone FFC0=1 run for OBP-0/sp_addr coverage.
+    # Iter 86: tried parallelizing with the 4-phase run — made it SLOWER
+    # (1m30s vs 60s sequential), likely xvfb-run startup contention or
+    # CPU sharing. Reverted to sequential.
     ffc0_screenshot = tmp_dir / "fresh_boot_ffc0.png"
     if ffc0_screenshot.exists():
         ffc0_screenshot.unlink()
@@ -334,8 +352,6 @@ def main() -> int:
                 errors.append(f"FFC0 #{color}: count {count} < min {min_px}")
     if not args.keep_artifacts:
         ffc0_lua_path.unlink(missing_ok=True)
-
-    if not args.keep_artifacts:
         lua_path.unlink(missing_ok=True)
 
     if errors:
