@@ -298,6 +298,14 @@ TESTS=(
   # path with the scene byte captured natively in the savestate.
   death_cinematic_native_dispatch
   splash_stage7_native_dispatch
+  # Iter 115: FIRST pixel test for the death cinematic visual render.
+  # The cutscenes_intro_ending.md TL;DR said "death cinematic NOT
+  # colorized" but iter 115 visual probe disproved it — GAME OVER
+  # text actually renders in lava pal 5 colors (#FF3900 red dominant
+  # 8232 px + #00C6FF cyan 3191 px). The window layer picks up BG-pal-5
+  # from surrounding tile attrs. This locks in that the death
+  # cinematic stays visually colorized.
+  death_cinematic_game_over_colorized
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.

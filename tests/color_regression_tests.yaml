@@ -1719,3 +1719,23 @@ tests:
       - tile_range: [0x18, 0x18]
         palette: 0
         description: "Stage splash tile 0x18 → pal 0 (SPLASH_TABLE override)"
+
+  # Iter 115: PIXEL test for the death cinematic — GAME OVER text
+  # rendered in lava pal 5 colors (#FF3900 red dominant + #00C6FF cyan).
+  # The cutscenes_intro_ending audit said "death cinematic NOT colorized"
+  # but iter 115 visual probe shows it IS colorized via the existing
+  # dispatch (the window-layer GAME OVER text picks up BG-pal-5 from
+  # nearby tile attrs). This test locks in that the death cinematic
+  # render stays colorized. Frames=172 to sample at f=180 (target+8).
+  - name: "death_cinematic_game_over_colorized"
+    savestate: "death_cinematic_native.ss0"
+    description: "Death cinematic (D880=0x17) — GAME OVER text colorized in red+cyan (iter 115 found the audit's 'not colorized' claim was WRONG)"
+    frames: 172
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 6500
+        description: "Death cinematic red dominant (#FF3900, observed 8232 at f=180, 5/5 zero-jitter)"
+      - color: "00C6FF"
+        min_pixels: 2500
+        description: "Death cinematic cyan accents (#00C6FF, observed 3191 at f=180)"

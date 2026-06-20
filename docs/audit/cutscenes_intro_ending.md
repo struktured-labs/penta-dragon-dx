@@ -369,3 +369,42 @@ Conclusion: death cinematic colorization is gated on the same
 "natural game state" requirement as the ending. Filed for future
 iter with proper damage simulation. Probes:
 `tmp/probe_death_cinematic.lua` (deleted).
+
+## 7. ADDENDUM (2026-06-20, iter 114-115): RESOLVED — death cinematic IS reachable and IS colorized
+
+The iter-97 conclusion ("death cinematic not triggerable") was based
+on trying to force DCBB=0 against a healthy savestate. Iter 114
+found the actual reachability path: **level-select with no save data**.
+
+In `tmp/probe_death_capture.lua` (level-select to FFBA=6 with empty
+SRAM), Sara naturally dies because:
+1. Level-select copies a 0x20-byte checkpoint slot (all 0xFF) into
+   gameplay state. DCDD (HP) gets initialized OK but DCBB starts
+   low and decrements past 0 quickly.
+2. D880 cycles naturally: splash 0x18 → dungeon 0x08 → **death 0x17**
+   → title 0x01 → boot 0x00 → splash 0x18 → ... (saved log captured
+   at f=538, 1707, 3594, 5217, 6833, 8841 — Sara dies repeatedly).
+
+Savestate captured at `save_states_for_claude/death_cinematic_native.ss0`
+(D880=0x17, FFE4=01, FFBA=06).
+
+### iter 115 visual finding — already colorized
+The audit's TL;DR claim "Death/game-over cinematic ... NO (see
+gap_bank14_death_cinematic.md)" is **WRONG for current builds**.
+Iter 115 probed the actual render via the captured savestate:
+
+  f=180 colors: #FF3900=8232, #00C6FF=3191, #A5A5FF=108
+
+The **"GAME OVER" text renders in lava pal 5 colors** (red+cyan)!
+The window-layer text picks up BG-pal-5 from surrounding tile attrs
+that the dispatch already applied. Visual: the "GAME OVER" splash
+shows red GAME OVER letters against red background with cyan accents.
+
+Regression test added: `death_cinematic_game_over_colorized`
+(pixel guards #FF3900 ≥ 6500, #00C6FF ≥ 2500, 5/5 zero-jitter).
+
+**The TL;DR table at the top of this doc is OUT OF DATE.** Death
+cinematic IS colorized via the existing dispatch chain. The
+`gap_bank14_death_cinematic.md` reference predates the current
+colorize chain that handles this via BG-pal-5 (lava) bleeding into
+the window layer's text region.
