@@ -1729,6 +1729,25 @@ tests:
         min_pixels: 18000
         description: "STAGE 07 splash dominant lava red (observed 22318 at f=68, 5/5 zero-jitter)"
 
+  # Iter 120: stage 4 (FFBA=3 non-lava) live gameplay test. 5/5 perfectly
+  # stable (all metrics identical across 5 runs). Distinctive #A52100=41
+  # brown accent (stage-4 styling) + lava-leak max=0 guard. Counterpart
+  # to stage 5 lava test (iter 119): stage 4 has the same Sara W pose
+  # but FFBA=3 should produce ZERO lava-orange pixels — same FFBA-guard
+  # contract as splash_stage1_native at the dungeon level.
+  - name: "stage4_live_render"
+    savestate: "stage4_ffba3_levelselect.ss0"
+    description: "Live stage 4 (FFBA=3 non-lava) gameplay — verifies FFBA guard prevents lava leak into stage 4 + checks stage-4 brown accents render"
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "A52100"
+        min_pixels: 30
+        description: "Stage 4 brown accents (#A52100=41, 5/5 zero-jitter)"
+      - color: "FF3900"
+        max_pixels: 0
+        min_pixels: 0
+        description: "Stage 4 MUST NOT show lava-orange — FFBA=3 not in lava override range (FFBA-guard catcher)"
+
   # Iter 119: stage 5 (FFBA=4 LAVA) live gameplay test. 5/5 zero-jitter
   # shows 7802 #FF3900 lava-orange pixels (33% of screen!). This is the
   # FIRST test asserting on REAL in-game lava render at the pixel level.

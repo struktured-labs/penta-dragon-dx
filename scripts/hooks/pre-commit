@@ -329,6 +329,12 @@ TESTS=(
   # the unique pixel-level proof of build_lava_override producing
   # visible output, complementing the WRAM table tests added iters 112-113.
   stage5_lava_live_render
+  # Iter 120: stage 4 (FFBA=3 non-lava) live render counterpart to
+  # stage 5. Verifies the FFBA guard at the dungeon-level (the lava
+  # override doesn't leak from FFBA=4 → FFBA=3). 5/5 perfectly stable
+  # (all metrics identical across runs). Brown accent + MAX=0 lava
+  # orange guard.
+  stage4_live_render
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.
