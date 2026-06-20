@@ -46,6 +46,16 @@ Iter 82: Added second mGBA invocation as a STANDALONE FFC0=1 test
   screen after FFBE/FFBF juggling, but the standalone version is
   stable (5/5 fresh runs all show #0031B5=24). Adds ~30s wall-clock
   for one more guard. sp_addr corruption empirically drops to 0.
+Iter 83: Adversarially probed which palettes the 10 guards actually
+  catch by corrupting each obj_data / bg_data palette index 1 byte
+  (1 of 16) and running the full test. Results:
+    Caught: OBP-1, OBP-2, OBP-6, OBP-7, BG-pal-0, BG-pal-1, BG-pal-5,
+            BG-pal-6, sp_addr (special OBP-0 path)
+    NOT caught: OBP-0 default, OBP-3, OBP-4, OBP-5,
+                BG-pal-2/3/4/7, shp_addr, tp_addr, boss_pal entries
+  9 of ~17 ROM-source palette locations have real catch behavior.
+  The remaining gaps (OBP-3/4/5, BG-2/3/4/7, OBP-0 default) need
+  scenes where those palettes' tiles are actually drawn on screen.
 
 Usage:
     uv run python scripts/diagnostics/test_fresh_boot.py [--rom PATH]
