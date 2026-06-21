@@ -50,8 +50,8 @@ tests:
     # pixels of #00FF00 in the (70-95, 70-95) Sara region.
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 15
-        description: "SaraDragon mid-green (#00A500) actually rendered at f=68 (not just OAM attr=1)"
+        min_pixels: 40
+        description: "SaraDragon mid-green (#00A500) actually rendered at f=68 (observed 50, 5/5 zero-jitter; iter 127 tightened 15→40)"
 
   # === ENEMY TYPE TESTS ===
   - name: "hornets"
@@ -73,11 +73,11 @@ tests:
     # active enemies (hornets) and projectiles.
     pixel_expectations:
       - color: "0000B5"
-        min_pixels: 60
-        description: "Sara projectile dark-blue (OBP 3) renders"
+        min_pixels: 140
+        description: "Sara projectile dark-blue (OBP 3) renders (observed 180, 5/5 zero-jitter; iter 127 tightened 60→140)"
       - color: "00A500"
-        min_pixels: 50
-        description: "Sara D green (OBP 1) renders alongside enemies"
+        min_pixels: 80
+        description: "Sara D green (OBP 1) renders alongside enemies (observed 108, 5/5 stable; iter 127 tightened 50→80)"
 
   - name: "orc"
     savestate: "level1_sara_w_orc.ss0"
@@ -196,8 +196,8 @@ tests:
     # has the expected red colors loaded.
     pixel_expectations:
       - color: "FF0000"
-        min_pixels: 50
-        description: "Catfish scene red accents present (pal-7 CRAM loaded correctly)"
+        min_pixels: 130
+        description: "Catfish scene red accents (observed 177, 5/5 zero-jitter; iter 127 tightened 50→130)"
 
   # === MINIBOSS TESTS (CRITICAL) ===
   - name: "gargoyle_miniboss"
@@ -291,8 +291,8 @@ tests:
     # as grayscale or some other color).
     pixel_expectations:
       - color: "FF0000"
-        min_pixels: 100
-        description: "Items render with cherry-red (pal 1 CRAM load verified)"
+        min_pixels: 280
+        description: "Items render with cherry-red (observed 361, 5/5 zero-jitter; iter 127 tightened 100→280)"
 
   - name: "metal_ball_mage_soldier"
     savestate: "level1_sara_w_metal_ball_mage_soldier.ss0"
