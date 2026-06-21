@@ -188,6 +188,8 @@ SAMPLE_FRAME_SPIDER = 2400
 # share state with the chained 4-phase test because chaining FFC0=1
 # after the FFBE/FFBF juggling makes A-button projectiles disappear
 # (per iter 80 finding). This standalone Lua only forces FFC0=1.
+# Iter 139: parameterized FFC0 value so we can run multiple standalone
+# tests for each projectile type (FFC0=1 spiral, FFC0=3 turbo).
 LUA_SCRIPT_FFC0 = r"""
 local TITLE = {
     {180, 185, 0x80}, {193, 198, 0x01}, {241, 246, 0x01},
@@ -205,7 +207,7 @@ end)
 callbacks:add("frame", function()
     frame = frame + 1
     if frame >= 1500 then
-        emu:write8(0xFFC0, 0x01)  -- SaraProjectile mode
+        emu:write8(0xFFC0, %d)  -- projectile mode (1=spiral, 2=shield, 3+=turbo)
     end
     if frame == 1800 then
         emu:screenshot("%s")
@@ -221,6 +223,14 @@ EXPECTED_FFC0 = [
     # projectiles render with #0031B5 — 24 pixels stable × 5 fresh
     # runs. sp_addr corruption empirically drops to 0.
     ("0031B5", 10, "SpiralProjectile blue (sp_addr swap, FFC0=1, standalone mGBA run)"),
+]
+
+# Iter 139: FFC0=3 (TurboProjectile, falls through palette_loader's else
+# branch). Renders #FF3900 lava-orange (66 px) + #FF0000 (64 px) stable
+# across 5 fresh runs. Closes iter 83 "tp_addr NOT CAUGHT" coverage gap.
+EXPECTED_FFC0_TURBO = [
+    ("FF3900", 50, "TurboProjectile lava-orange (tp_addr swap, FFC0=3, standalone)"),
+    ("FF0000", 50, "TurboProjectile bright red secondary (tp_addr swap, FFC0=3)"),
 ]
 
 
@@ -331,27 +341,34 @@ def main() -> int:
     # Iter 86: tried parallelizing with the 4-phase run — made it SLOWER
     # (1m30s vs 60s sequential), likely xvfb-run startup contention or
     # CPU sharing. Reverted to sequential.
-    ffc0_screenshot = tmp_dir / "fresh_boot_ffc0.png"
-    if ffc0_screenshot.exists():
-        ffc0_screenshot.unlink()
-    ffc0_lua_path = tmp_dir / "fresh_boot_ffc0.lua"
-    ffc0_lua_path.write_text(LUA_SCRIPT_FFC0 % ffc0_screenshot)
-    print(f"[fresh-boot] Running standalone FFC0=1 invocation...")
-    success_ffc0 = run_mgba(rom_path, ffc0_lua_path)
-    if not success_ffc0:
-        errors.append("FFC0 standalone mGBA execution failed")
-    elif not ffc0_screenshot.exists():
-        errors.append("FFC0 standalone screenshot missing")
-    else:
-        print(f"[fresh-boot] FFC0=1 standalone (f=1800) checks:")
-        for color, min_px, exp_label in EXPECTED_FFC0:
-            count = count_color(ffc0_screenshot, color)
-            marker = "[PASS]" if count >= min_px else "[FAIL]"
-            print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {exp_label}")
-            if count < min_px:
-                errors.append(f"FFC0 #{color}: count {count} < min {min_px}")
+    # Iter 139: added FFC0=3 (TurboProjectile, tp_addr) — closes the
+    # iter-83 "tp_addr NOT CAUGHT" coverage gap.
+    for ffc0_val, expected, label in [
+        (0x01, EXPECTED_FFC0, "FFC0=1 (spiral, sp_addr)"),
+        (0x03, EXPECTED_FFC0_TURBO, "FFC0=3 (turbo, tp_addr)"),
+    ]:
+        screenshot = tmp_dir / f"fresh_boot_ffc0_{ffc0_val:02x}.png"
+        if screenshot.exists():
+            screenshot.unlink()
+        ffc0_lua_path = tmp_dir / f"fresh_boot_ffc0_{ffc0_val:02x}.lua"
+        ffc0_lua_path.write_text(LUA_SCRIPT_FFC0 % (ffc0_val, screenshot))
+        print(f"[fresh-boot] Running standalone {label} invocation...")
+        success_ffc0 = run_mgba(rom_path, ffc0_lua_path)
+        if not success_ffc0:
+            errors.append(f"{label} standalone mGBA execution failed")
+        elif not screenshot.exists():
+            errors.append(f"{label} standalone screenshot missing")
+        else:
+            print(f"[fresh-boot] {label} standalone (f=1800) checks:")
+            for color, min_px, exp_label in expected:
+                count = count_color(screenshot, color)
+                marker = "[PASS]" if count >= min_px else "[FAIL]"
+                print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {exp_label}")
+                if count < min_px:
+                    errors.append(f"{label} #{color}: count {count} < min {min_px}")
+        if not args.keep_artifacts:
+            ffc0_lua_path.unlink(missing_ok=True)
     if not args.keep_artifacts:
-        ffc0_lua_path.unlink(missing_ok=True)
         lua_path.unlink(missing_ok=True)
 
     if errors:
