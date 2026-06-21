@@ -1309,11 +1309,11 @@ tests:
     # OBP branches gets reordered or skipped).
     pixel_expectations:
       - color: "FF0000"
-        min_pixels: 100
-        description: "Catfish/item red dominant (multi-CRAM load)"
+        min_pixels: 220
+        description: "Catfish/item red dominant (observed 273, 5/5 zero-jitter; iter 128 tightened 100→220)"
       - color: "FF7300"
-        min_pixels: 20
-        description: "Arrow orange present"
+        min_pixels: 35
+        description: "Arrow orange (observed 45, 5/5 zero-jitter; iter 128 tightened 20→35)"
 
   # Iter 37: diagonal-arrow-heavy state — Sara primary tiles 0x28-0x2B (alt
   # animation frame from the existing 0x20-0x23 in sara_w_alone). Validates
@@ -1521,11 +1521,11 @@ tests:
     expected_boss_flag: 1
     pixel_expectations:
       - color: "4A0800"
-        min_pixels: 100
-        description: "Gargoyle dark-magenta body color present (boss_pal idx 1/2, ~0x4A0800 mGBA-corrected)"
+        min_pixels: 180
+        description: "Gargoyle dark-magenta body (observed 220, 5/5 zero-jitter; iter 128 tightened 100→180)"
       - color: "000063"
-        min_pixels: 50
-        description: "Dark-blue accent present (BG palette in arena)"
+        min_pixels: 110
+        description: "Dark-blue arena BG accent (observed 137, 5/5 zero-jitter; iter 128 tightened 50→110)"
 
   - name: "spider_visual_render"
     savestate: "level1_sara_d_spider_miniboss.ss0"
@@ -1547,14 +1547,14 @@ tests:
     expected_boss_flag: 0
     pixel_expectations:
       - color: "FF0000"
-        min_pixels: 30
-        description: "Bright red jet flame / ship tile (BG palette in SHMUP)"
+        min_pixels: 70
+        description: "Bright red jet flame / ship tile (observed 92, 5/5 zero-jitter; iter 128 tightened 30→70)"
       - color: "000063"
-        min_pixels: 20
-        description: "Dark-blue space background present"
+        min_pixels: 40
+        description: "Dark-blue space background (observed 51, 5/5 zero-jitter; iter 128 tightened 20→40)"
       - color: "000000"
         min_pixels: 10000
-        description: "Black space dominates (>10k of 23040 pixels)"
+        description: "Black space dominates (>10k of 23040 pixels; observed 16879, kept loose for film-grain tolerance)"
 
   - name: "stage1_no_lava_flood"
     # Regression catch: stage 1 must NOT contain pure red (#FF0000) flood
