@@ -112,6 +112,16 @@ callbacks:add("frame", function()
         -- counts can't catch (no enemy sprites use them at fresh-boot center).
         local h = io.open("%s", "w")
         if h then
+            -- Iter 143: also dump OBP-0 (default, no FFC0 swap active)
+            for obp = 0, 0 do
+                for c = 0, 3 do
+                    emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2)
+                    local lo = emu:read8(0xFF6B)
+                    emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2 + 1)
+                    local hi = emu:read8(0xFF6B)
+                    h:write(string.format("OBP%%d.%%d=%%04X\n", obp, c, lo + (hi * 256)))
+                end
+            end
             for obp = 3, 5 do
                 for c = 0, 3 do
                     emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2)
@@ -240,6 +250,20 @@ callbacks:add("frame", function()
     end
     if frame == 1800 then
         emu:screenshot("%s")
+        -- Iter 143: dump OBP-0 CRAM to verify the FFC0-conditional palette
+        -- swap (sp_addr/shp_addr/tp_addr) actually lands in CRAM. Closes
+        -- the iter-83 shp_addr gap (FFC0=2 loads but no sprite uses it).
+        local h = io.open("%s", "w")
+        if h then
+            for c = 0, 3 do
+                emu:write8(0xFF6A, 0x40 + c * 2)
+                local lo = emu:read8(0xFF6B)
+                emu:write8(0xFF6A, 0x40 + c * 2 + 1)
+                local hi = emu:read8(0xFF6B)
+                h:write(string.format("OBP0.%%d=%%04X\n", c, lo + (hi * 256)))
+            end
+            h:close()
+        end
         emu:stop()
     end
 end)
@@ -401,6 +425,10 @@ def main() -> int:
     # OBP-5 idx 1 = 0x2A7C (not bg_experiment fallback 0x02A0) — actual
     # YAML override per penta_palettes_v097.yaml.
     EXPECTED_CRAM = [
+        # Iter 143: OBP-0 default (FFC0=0, no swap active). Closes iter-83
+        # "OBP-0 default NOT CAUGHT" gap.
+        ("OBP0.0", "0000", "OBP-0 idx 0 transparent (default, FFC0=0)"),
+        ("OBP0.1", "7C00", "OBP-0 idx 1 (default — catfish-like)"),
         ("OBP3.0", "7F00", "OBP-3 idx 0 (transparent — actual CRAM value)"),
         ("OBP3.1", "001F", "OBP-3 idx 1 (SaraProjectileAndCrow blue)"),
         ("OBP4.0", "0000", "OBP-4 idx 0 transparent"),
@@ -416,6 +444,15 @@ def main() -> int:
         ("BGP7.0", "7FFF", "BG-pal-7 idx 0 (clone of BG0 white)"),
         ("BGP7.1", "7E94", "BG-pal-7 idx 1 (clone of BG0 lavender)"),
     ]
+
+    # Iter 143: per-FFC0 OBP-0 CRAM expectations. Iter 140 already verified
+    # these values via probe — using observed actual CRAM here.
+    EXPECTED_FFC0_CRAM = {
+        # FFC0=1 (spiral): OBP-0 CRAM = 0000 7FE0 58C0 3000 per iter 140 probe
+        0x01: [("OBP0.1", "7FE0", "spiral idx 1 (sp_addr swap)")],
+        # FFC0=3 (turbo): OBP-0 CRAM = 0000 00FF 58FF 3000 per iter 140 probe
+        0x03: [("OBP0.1", "00FF", "turbo idx 1 (tp_addr swap)")],
+    }
     if cram_log.exists():
         cram_data = {}
         for line in cram_log.read_text().splitlines():
@@ -438,31 +475,59 @@ def main() -> int:
     # CPU sharing. Reverted to sequential.
     # Iter 139: added FFC0=3 (TurboProjectile, tp_addr) — closes the
     # iter-83 "tp_addr NOT CAUGHT" coverage gap.
+    # Iter 143: added FFC0=2 (shield, shp_addr) CRAM-only check + OBP-0
+    # CRAM checks for spiral/turbo. Closes shp_addr gap (pixel-invisible
+    # per iter 140 but CRAM-verifiable).
     for ffc0_val, expected, label in [
         (0x01, EXPECTED_FFC0, "FFC0=1 (spiral, sp_addr)"),
+        (0x02, [], "FFC0=2 (shield, shp_addr — CRAM-only)"),
         (0x03, EXPECTED_FFC0_TURBO, "FFC0=3 (turbo, tp_addr)"),
     ]:
         screenshot = tmp_dir / f"fresh_boot_ffc0_{ffc0_val:02x}.png"
-        if screenshot.exists():
-            screenshot.unlink()
+        ffc0_cram_log = tmp_dir / f"fresh_boot_ffc0_{ffc0_val:02x}_cram.log"
+        for p in (screenshot, ffc0_cram_log):
+            if p.exists():
+                p.unlink()
         ffc0_lua_path = tmp_dir / f"fresh_boot_ffc0_{ffc0_val:02x}.lua"
-        ffc0_lua_path.write_text(LUA_SCRIPT_FFC0 % (ffc0_val, screenshot))
+        ffc0_lua_path.write_text(LUA_SCRIPT_FFC0 % (ffc0_val, screenshot, ffc0_cram_log))
         print(f"[fresh-boot] Running standalone {label} invocation...")
         success_ffc0 = run_mgba(rom_path, ffc0_lua_path)
         if not success_ffc0:
             errors.append(f"{label} standalone mGBA execution failed")
-        elif not screenshot.exists():
+        elif expected and not screenshot.exists():
             errors.append(f"{label} standalone screenshot missing")
         else:
-            print(f"[fresh-boot] {label} standalone (f=1800) checks:")
-            for color, min_px, exp_label in expected:
-                count = count_color(screenshot, color)
-                marker = "[PASS]" if count >= min_px else "[FAIL]"
-                print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {exp_label}")
-                if count < min_px:
-                    errors.append(f"{label} #{color}: count {count} < min {min_px}")
+            if expected:
+                print(f"[fresh-boot] {label} standalone (f=1800) checks:")
+                for color, min_px, exp_label in expected:
+                    count = count_color(screenshot, color)
+                    marker = "[PASS]" if count >= min_px else "[FAIL]"
+                    print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {exp_label}")
+                    if count < min_px:
+                        errors.append(f"{label} #{color}: count {count} < min {min_px}")
+            # Iter 143: also verify OBP-0 CRAM was correctly modified
+            if ffc0_cram_log.exists():
+                ffc0_cram_data = {}
+                for line in ffc0_cram_log.read_text().splitlines():
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        ffc0_cram_data[k.strip()] = v.strip()
+                # Per-FFC0 OBP-0 expected values (observed from iter 140 probe)
+                ffc0_obp0_expected = {
+                    0x01: ("7FE0", "spiral (sp_addr) OBP-0 idx 1"),
+                    0x02: ("03FF", "shield (shp_addr) OBP-0 idx 1 — CLOSES iter-83 gap"),
+                    0x03: ("00FF", "turbo (tp_addr) OBP-0 idx 1"),
+                }
+                if ffc0_val in ffc0_obp0_expected:
+                    exp_val, exp_desc = ffc0_obp0_expected[ffc0_val]
+                    actual = ffc0_cram_data.get("OBP0.1", "MISSING")
+                    marker = "[PASS]" if actual.upper() == exp_val.upper() else "[FAIL]"
+                    print(f"  {marker} OBP0.1 CRAM = {actual} (expected {exp_val}) — {exp_desc}")
+                    if actual.upper() != exp_val.upper():
+                        errors.append(f"{label} OBP0.1 CRAM: got {actual}, expected {exp_val}")
         if not args.keep_artifacts:
             ffc0_lua_path.unlink(missing_ok=True)
+            ffc0_cram_log.unlink(missing_ok=True)
     if not args.keep_artifacts:
         lua_path.unlink(missing_ok=True)
 
