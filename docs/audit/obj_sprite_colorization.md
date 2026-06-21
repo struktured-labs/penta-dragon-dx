@@ -20,6 +20,24 @@ ROM** via `hwoam_recolor` (iter 31, commit 534179f, tag v8.11-obj-slot10-unlock)
     because the base game's STAT IRQ chain timing shifts. Filed for
     multi-iter backport with MiSTer hardware verification.
 
+### 2026-06-21 UPDATE: iter 31 tile-remap doesn't generalize beyond Sara
+User-reported (iter 151) stage 1 gameplay regression in teleport ROM:
+multi-tile 16x16 enemies (e.g. Hornets) show split-palette — top-row OAM
+slot gets one palette and bottom-row gets another. Root cause: iter 31's
+B=10→B=40 raise stamps tile-range-derived palettes across all 40 slots,
+but the tile-remap that accompanied it only covers Sara's tiles (0x10-0x1F).
+Other multi-tile enemies whose tiles cross a tile-range boundary still
+split. Production v3.01 / FIXED.gb has NO hwoam_recolor at all and is
+unaffected. Single-byte patch reverting B=40→B=10 in test ROM
+(`tmp/iter151_user_bug/teleport_b10_test.gb`) restores the old trade-off
+(slots 10+ stay pal0 in dense scenes, but no splits). Awaiting user
+validation as of 2026-06-21. The full fix would either:
+  - Extend the tile-remap to cover every multi-tile enemy's secondary
+    tile range (high-effort, brittle).
+  - Switch hwoam_recolor from per-tile-range to per-OAM-slot palette
+    assignment (would need a different data source than tile ID).
+  - Accept the B=10 trade-off and refuse to backport iter 31 to v3.01.
+
 Items A (tile 0x00-0x01 → OBP0), B (dedicated boss slot), C (tile-scoped
 boss override), D (humanoid sub-types), E (per-scene OBJ palettes) remain
 open candidates. C is the most impactful for ongoing-fight monster color
