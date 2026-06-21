@@ -31,7 +31,7 @@ cd "$REPO_ROOT"
 # Detect whether the ROM-side build files were touched. If not, the regression
 # tests have nothing new to validate — skip to keep the hook fast.
 CHANGED=$(git diff --cached --name-only)
-if ! echo "$CHANGED" | grep -qE 'scripts/(build_v301|build_v296|bg_experiment|create_vblank|run_color|diagnostics/test_fresh_boot|hooks/pre-commit)|tests/color_regression|palettes/.*\.yaml|rom/working/'; then
+if ! echo "$CHANGED" | grep -qE 'scripts/(build_v301|build_v296|bg_experiment|create_vblank|run_color|diagnostics/test_fresh_boot|diagnostics/verify_colorizer_bytes|hooks/pre-commit)|tests/color_regression|palettes/.*\.yaml|rom/working/'; then
   echo "[pre-commit] No build/test/palette changes staged — skipping regression suite."
   exit 0
 fi
