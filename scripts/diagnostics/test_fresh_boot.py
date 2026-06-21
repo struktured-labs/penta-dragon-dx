@@ -358,6 +358,59 @@ EXPECTED_FFBF_SPIDER = [
     ("OBP7.3", "0000", "Spider boss_pal idx 3 (black)"),
 ]
 
+# Iter 147: standalone FFD0=1 (jet form) — closes swj_addr + sdj_addr gaps.
+# When FFD0=1, palette_loader's OBP-1/OBP-2 branches use sdj/swj instead
+# of default SaraDragon/SaraWitch. Partial injection: idx 1/2 swap to jet
+# versions but idx 0/3 may have timing overlap with previous values.
+LUA_SCRIPT_FFD0 = r"""
+local TITLE = {
+    {180, 185, 0x80}, {193, 198, 0x01}, {241, 246, 0x01},
+    {291, 296, 0x01}, {341, 346, 0x08}, {391, 396, 0x01},
+}
+local frame = 0
+callbacks:add("keysRead", function()
+    local keys = 0
+    for _, seq in ipairs(TITLE) do
+        if frame >= seq[1] and frame <= seq[2] then keys = seq[3]; break end
+    end
+    emu:setKeys(keys)
+end)
+callbacks:add("frame", function()
+    frame = frame + 1
+    if frame >= 1500 then
+        emu:write8(0xFFD0, 0x01)  -- jet form
+    end
+    if frame == 1800 then
+        local h = io.open("%s", "w")
+        if h then
+            for obp = 1, 2 do
+                for c = 0, 3 do
+                    emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2)
+                    local lo = emu:read8(0xFF6B)
+                    emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2 + 1)
+                    local hi = emu:read8(0xFF6B)
+                    h:write(string.format("OBP%%d.%%d=%%04X\n", obp, c, lo + (hi * 256)))
+                end
+            end
+            h:close()
+        end
+        emu:stop()
+    end
+end)
+"""
+
+# Observed CRAM after FFD0=1 force:
+#   OBP-1 (SaraDragonJet, sdj_addr): 0000 7FE0 01C0 7F00
+#   OBP-2 (SaraWitchJet, swj_addr): 0000 7C1F 5817 0810
+# sdj ROM source: 0000 7FE0 4EC0 2D80 — idx 1 matches (7FE0)
+# swj ROM source: 0000 7C1F 5817 3010 — idx 1/2 match (7C1F, 5817)
+# Test catches corruption of those matching indices.
+EXPECTED_FFD0_JET = [
+    ("OBP1.1", "7FE0", "sdj idx 1 (SaraDragonJet — matches ROM) — CLOSES iter-83 gap"),
+    ("OBP2.1", "7C1F", "swj idx 1 (SaraWitchJet — matches ROM) — CLOSES iter-83 gap"),
+    ("OBP2.2", "5817", "swj idx 2 (SaraWitchJet — matches ROM)"),
+]
+
 # Iter 139: FFC0=3 (TurboProjectile, falls through palette_loader's else
 # branch). Renders #FF3900 lava-orange (66 px) + #FF0000 (64 px) stable
 # across 5 fresh runs. Closes iter 83 "tp_addr NOT CAUGHT" coverage gap.
@@ -664,6 +717,35 @@ def main() -> int:
         if not args.keep_artifacts:
             ffbf_lua_path.unlink(missing_ok=True)
             ffbf_cram_log.unlink(missing_ok=True)
+
+    # Iter 147: standalone FFD0=1 (jet form) — closes swj_addr + sdj_addr gaps.
+    ffd0_cram_log = tmp_dir / "fresh_boot_ffd0_cram.log"
+    if ffd0_cram_log.exists():
+        ffd0_cram_log.unlink()
+    ffd0_lua_path = tmp_dir / "fresh_boot_ffd0.lua"
+    ffd0_lua_path.write_text(LUA_SCRIPT_FFD0 % ffd0_cram_log)
+    print(f"[fresh-boot] Running standalone FFD0=1 (jet form, swj/sdj) invocation...")
+    success_ffd0 = run_mgba(rom_path, ffd0_lua_path)
+    if not success_ffd0:
+        errors.append("FFD0=1 jet standalone mGBA execution failed")
+    elif not ffd0_cram_log.exists():
+        errors.append("FFD0=1 jet standalone CRAM log missing")
+    else:
+        ffd0_cram_data = {}
+        for line in ffd0_cram_log.read_text().splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                ffd0_cram_data[k.strip()] = v.strip()
+        print(f"[fresh-boot] FFD0=1 jet form CRAM checks at f=1800:")
+        for key, exp_val, exp_label in EXPECTED_FFD0_JET:
+            actual = ffd0_cram_data.get(key, "MISSING")
+            marker = "[PASS]" if actual.upper() == exp_val.upper() else "[FAIL]"
+            print(f"  {marker} {key} = {actual} (expected {exp_val}) — {exp_label}")
+            if actual.upper() != exp_val.upper():
+                errors.append(f"FFD0=1 jet {key}: got {actual}, expected {exp_val}")
+    if not args.keep_artifacts:
+        ffd0_lua_path.unlink(missing_ok=True)
+        ffd0_cram_log.unlink(missing_ok=True)
 
     if not args.keep_artifacts:
         lua_path.unlink(missing_ok=True)
