@@ -245,11 +245,11 @@ tests:
     # the Sara-W variant (different cold-boot path, same colorize chain).
     pixel_expectations:
       - color: "FF7300"
-        min_pixels: 50
-        description: "Spider vivid-orange body (Sara-W variant)"
+        min_pixels: 90
+        description: "Spider vivid-orange body (Sara-W variant; observed 116, 5/5 zero-jitter; iter 129 tightened 50→90)"
       - color: "7B00F7"
-        min_pixels: 100
-        description: "Spider purple accent present"
+        min_pixels: 130
+        description: "Spider purple accent (observed 169, 5/5 zero-jitter; iter 129 tightened 100→130)"
 
   - name: "spider_miniboss_sara_d"
     savestate: "level1_sara_d_spider_miniboss.ss0"
@@ -268,8 +268,8 @@ tests:
     # — OBP 1 (SaraDragon) should be untouched.
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 20
-        description: "SaraDragon green stays loaded in FFBF=2 spider mode (boss_pal injection only touches OBP 7)"
+        min_pixels: 40
+        description: "SaraDragon green stays loaded in FFBF=2 spider mode (observed 50, 5/5 zero-jitter; iter 129 tightened 20→40)"
 
   # === MIXED ENEMY TESTS ===
   - name: "orc_with_items"
@@ -325,8 +325,8 @@ tests:
     # Floor at 20 (well below the observed 54).
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 20
-        description: "SaraDragon mid-green (#00A500) actually rendered at f=68 (consistent 54 across 5 runs)"
+        min_pixels: 42
+        description: "SaraDragon mid-green (#00A500) rendered at f=68 (observed 54, 5/5 zero-jitter; iter 129 tightened 20→42)"
 
   - name: "jet_form_secret_stage"
     savestate: "level1_sara_w_in_jet_form_secret_stage.ss0"
@@ -1226,11 +1226,11 @@ tests:
     # peach observed 39 = OK at 15 already).
     pixel_expectations:
       - color: "FF42A5"
-        min_pixels: 30
-        description: "SaraWitch pink-red (#FF42A5) actually rendered at f=68"
+        min_pixels: 48
+        description: "SaraWitch pink-red (#FF42A5) at f=68 (observed 60, 5/5 zero-jitter; iter 129 tightened 30→48)"
       - color: "F7AD5A"
-        min_pixels: 15
-        description: "SaraWitch peach (#F7AD5A) actually rendered at f=68"
+        min_pixels: 30
+        description: "SaraWitch peach (#F7AD5A) at f=68 (observed 39, 5/5 zero-jitter; iter 129 tightened 15→30)"
 
   # Iter 33: 2 more from iter-32 sweep — Sara D variants and Sara W
   # transient/powerup states. The dragon_powerup_item_crow combo exercises
