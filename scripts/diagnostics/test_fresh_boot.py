@@ -233,6 +233,27 @@ EXPECTED_FFC0_TURBO = [
     ("FF0000", 50, "TurboProjectile bright red secondary (tp_addr swap, FFC0=3)"),
 ]
 
+# Iter 140: FFC0=2 (Shield, shp_addr) probe finding — partial gap:
+#
+# CRAM probe confirms shp_addr IS being loaded correctly when FFC0=2:
+#   FFC0=0: OBP-0 CRAM = 0000 7C00 58FF 3000 (default)
+#   FFC0=1: OBP-0 CRAM = 0000 7FE0 58C0 3000 (spiral)
+#   FFC0=2: OBP-0 CRAM = 0000 03FF 58BF 3000 (shield idx 1=yellow!)
+#   FFC0=3: OBP-0 CRAM = 0000 00FF 58FF 3000 (turbo)
+#
+# But the rendered screenshot at f=1800 with FFC0=2 shows NO yellow
+# pixels — because Shield projectile sprites don't appear in the
+# auto-play scenario (only 2 OBP-0 sprites visible, both off-screen
+# or fragments at corners). The Shield rendering chain requires
+# Sara to have picked up a Shield item to actually spawn shield
+# projectiles, which doesn't happen in the auto-play test.
+#
+# So shp_addr ROM-source corruption WOULD be caught by a CRAM-level
+# guard (OBP-0 idx 1 = 0x03FF for shield), but NOT by pixel-counting.
+# The test_fresh_boot framework only does pixel counts. Adding a
+# CRAM-check capability would require extending the framework.
+# Filed; not done this iter.
+
 
 def run_mgba(rom_path: Path, lua_path: Path, timeout: int = 90) -> bool:
     cmd = [
