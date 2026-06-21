@@ -107,6 +107,22 @@ callbacks:add("frame", function()
     -- Phase 1: Sara Witch screenshot at f=%d (gameplay reached, palettes loaded)
     if frame == %d then
         emu:screenshot("%s")
+        -- Iter 141: also dump OBP-3/4/5 CRAM at phase 1 (before any FFBE/FFBF
+        -- forcing). Catches ROM-source corruption of these palettes that pixel
+        -- counts can't catch (no enemy sprites use them at fresh-boot center).
+        local h = io.open("%s", "w")
+        if h then
+            for obp = 3, 5 do
+                for c = 0, 3 do
+                    emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2)
+                    local lo = emu:read8(0xFF6B)
+                    emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2 + 1)
+                    local hi = emu:read8(0xFF6B)
+                    h:write(string.format("OBP%%d.%%d=%%04X\n", obp, c, lo + (hi * 256)))
+                end
+            end
+            h:close()
+        end
     end
     -- Phase 2: force FFBE=1 (Sara Dragon). cond_pal hashes FFBE so this
     -- triggers a cache miss → palette_loader reloads OBP 1 from ROM.
@@ -319,12 +335,13 @@ def main() -> int:
     sd_screenshot = tmp_dir / "fresh_boot_sd.png"
     garg_screenshot = tmp_dir / "fresh_boot_garg.png"
     spider_screenshot = tmp_dir / "fresh_boot_spider.png"
-    for p in (sw_screenshot, sd_screenshot, garg_screenshot, spider_screenshot):
+    cram_log = tmp_dir / "fresh_boot_cram.log"
+    for p in (sw_screenshot, sd_screenshot, garg_screenshot, spider_screenshot, cram_log):
         if p.exists():
             p.unlink()
     lua_path.write_text(LUA_SCRIPT % (
         SAMPLE_FRAME_SW,                                      # Phase 1 comment
-        SAMPLE_FRAME_SW, sw_screenshot,                       # SW screenshot
+        SAMPLE_FRAME_SW, sw_screenshot, cram_log,             # SW screenshot + CRAM log
         FFBE_FORCE_START, FFBF1_FORCE_START,                  # Phase 2 range
         SAMPLE_FRAME_SD, sd_screenshot,                       # SD screenshot
         FFBF1_FORCE_START, FFBF2_FORCE_START,                 # Phase 3 range
@@ -357,6 +374,42 @@ def main() -> int:
             print(f"  {marker} #{color} = {count} pixels (>= {min_px}) — {exp_label}")
             if count < min_px:
                 errors.append(f"{label.split('(')[0].strip()} #{color}: count {count} < min {min_px}")
+
+    # Iter 141: CRAM checks at phase 1 (f=1500). Catches ROM-source corruption
+    # of OBP-3/4/5 (SaraProjectileAndCrow, Hornets, OrcGround) that pixel
+    # counts can't catch (no enemy sprites use them in the fresh-boot center).
+    # CRAM expectations use ACTUAL observed values from the live ROM
+    # (not the bg_experiment.py fallback values, which differ — the
+    # YAML palettes override them at build time).
+    #
+    # OBP-3 idx 0 = 0x7F00 (not 0x0000) — observed in live CRAM. Palette
+    # loader writes a non-zero value at idx 0 even though OBJ idx 0 is
+    # always treated as transparent during rendering.
+    # OBP-5 idx 1 = 0x2A7C (not bg_experiment fallback 0x02A0) — actual
+    # YAML override per penta_palettes_v097.yaml.
+    EXPECTED_CRAM = [
+        ("OBP3.0", "7F00", "OBP-3 idx 0 (transparent — actual CRAM value)"),
+        ("OBP3.1", "001F", "OBP-3 idx 1 (SaraProjectileAndCrow blue)"),
+        ("OBP4.0", "0000", "OBP-4 idx 0 transparent"),
+        ("OBP4.1", "03FF", "OBP-4 idx 1 yellow (Hornets)"),
+        ("OBP5.0", "0000", "OBP-5 idx 0 transparent"),
+        ("OBP5.1", "2A7C", "OBP-5 idx 1 (OrcGround — YAML override)"),
+    ]
+    if cram_log.exists():
+        cram_data = {}
+        for line in cram_log.read_text().splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                cram_data[k.strip()] = v.strip()
+        print(f"[fresh-boot] CRAM checks at f={SAMPLE_FRAME_SW} (catches OBP-3/4/5 ROM-source corruption):")
+        for key, expected_hex, label in EXPECTED_CRAM:
+            actual = cram_data.get(key, "MISSING")
+            marker = "[PASS]" if actual.upper() == expected_hex.upper() else "[FAIL]"
+            print(f"  {marker} {key} = {actual} (expected {expected_hex}) — {label}")
+            if actual.upper() != expected_hex.upper():
+                errors.append(f"CRAM {key}: got {actual}, expected {expected_hex}")
+    else:
+        errors.append("CRAM log not generated")
 
     # Iter 82: standalone FFC0=1 run for OBP-0/sp_addr coverage.
     # Iter 86: tried parallelizing with the 4-phase run — made it SLOWER
