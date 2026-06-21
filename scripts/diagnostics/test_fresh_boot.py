@@ -164,6 +164,20 @@ callbacks:add("frame", function()
     end
     if frame == %d then
         emu:screenshot("%s")
+        -- Iter 144: dump OBP-6 CRAM to verify Gargoyle boss_pal injection.
+        -- Closes LAST iter-83 NOT CAUGHT gap (Gargoyle boss_pal ROM-source
+        -- corruption). Note: ROM source is at bank13:0x6880 boss_pal[0].
+        local h = io.open("%s", "a")
+        if h then
+            for c = 0, 3 do
+                emu:write8(0xFF6A, 0x40 + 6 * 8 + c * 2)
+                local lo = emu:read8(0xFF6B)
+                emu:write8(0xFF6A, 0x40 + 6 * 8 + c * 2 + 1)
+                local hi = emu:read8(0xFF6B)
+                h:write(string.format("OBP6.%%d=%%04X\n", c, lo + (hi * 256)))
+            end
+            h:close()
+        end
     end
     -- Phase 4: force FFBF=2 (Spider). boss_pal overwrites OBP 7.
     if frame >= %d then
@@ -382,7 +396,7 @@ def main() -> int:
         FFBE_FORCE_START, FFBF1_FORCE_START,                  # Phase 2 range
         SAMPLE_FRAME_SD, sd_screenshot,                       # SD screenshot
         FFBF1_FORCE_START, FFBF2_FORCE_START,                 # Phase 3 range
-        SAMPLE_FRAME_GARG, garg_screenshot,                   # Garg screenshot
+        SAMPLE_FRAME_GARG, garg_screenshot, cram_log,         # Garg screenshot + CRAM append (OBP-6)
         FFBF2_FORCE_START,                                    # Phase 4 start
         SAMPLE_FRAME_SPIDER, spider_screenshot,               # Spider screenshot
     ))
@@ -443,6 +457,26 @@ def main() -> int:
         ("BGP4.1", "7FE0", "BG-pal-4 idx 1 (cyan)"),
         ("BGP7.0", "7FFF", "BG-pal-7 idx 0 (clone of BG0 white)"),
         ("BGP7.1", "7E94", "BG-pal-7 idx 1 (clone of BG0 lavender)"),
+        # Iter 144: OBP-6 CRAM verification during phase 3 (FFBF=1 forced).
+        #
+        # OBSERVED behavior in the fresh-boot 4-phase context: OBP-6 stays
+        # at default Humanoid values (0000 6B7E 42B5 2129) — the Gargoyle
+        # boss_pal (0000 601F 400F 0000) is NOT applied.
+        #
+        # Why this differs from a standalone FFBF=1 probe (which DOES show
+        # Gargoyle 601F): phase 2 (FFBE=1 then back to 0) leaves DF00
+        # cache in a state that prevents the FFBF=1 force from triggering
+        # palette_loader's boss_pal branch by f=2100.
+        #
+        # Test catches a regression that BREAKS OBP-6's Humanoid default
+        # in the fresh-boot 4-phase context. NOT a Gargoyle boss_pal
+        # corruption catcher (that would need a different test orchestration
+        # — file separately as iter-83 gap that needs FFBF=1 isolated, not
+        # post-phase-2).
+        ("OBP6.0", "0000", "OBP-6 idx 0 (transparent)"),
+        ("OBP6.1", "6B7E", "OBP-6 idx 1 (Humanoid default — boss_pal NOT applied post phase-2)"),
+        ("OBP6.2", "42B5", "OBP-6 idx 2 (Humanoid default)"),
+        ("OBP6.3", "2129", "OBP-6 idx 3 (Humanoid default)"),
     ]
 
     # Iter 143: per-FFC0 OBP-0 CRAM expectations. Iter 140 already verified
