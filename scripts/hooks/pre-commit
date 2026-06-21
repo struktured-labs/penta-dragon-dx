@@ -315,6 +315,11 @@ TESTS=(
   # Together with FFBA=4 (4308) and FFBA=6 (8232) tests, covers 3 distinct
   # per-FFBA CRAM modification flavors at the death cinematic.
   death_cinematic_ffba1_colorized
+  # Iter 132: FFBA=2 (stage 3) death — MAXIMUM cyan (6144 px, double the
+  # others). Stage 3's purple BG-pal-2 use may bleed into death CRAM,
+  # producing the extra cyan. 4-way coverage of death CRAM per FFBA:
+  # FFBA=1 max red, FFBA=2 max cyan, FFBA=4 min, FFBA=6 middle.
+  death_cinematic_ffba2_colorized
   # Iter 117: counterpart to splash_stage7_native_dispatch — same
   # D880=0x18 scene byte but with FFBA=00 (stage 1). Verifies the
   # splash dispatch correctly renders STAGE 01 in lavender (NOT lava

@@ -1916,3 +1916,24 @@ tests:
       - color: "00C6FF"
         min_pixels: 2700
         description: "FFBA=1 death cyan (observed 3264, 5/5 zero-jitter)"
+
+  # Iter 132: FFBA=2 (stage 3) death — DOUBLE cyan compared to other FFBA
+  # variants! Stage 3's purple BG-pal-2 use may bleed into death cinematic
+  # CRAM, doubling the cyan rendering.
+  # All 4 death variants now have distinct render fingerprints:
+  #   FFBA=1: 18602 red, 3264 cyan (MAX red)
+  #   FFBA=2: 15978 red, 6144 cyan (MAX cyan, double the others)
+  #   FFBA=4:  4308 red, 3264 cyan
+  #   FFBA=6:  8232 red, 3191 cyan
+  - name: "death_cinematic_ffba2_colorized"
+    savestate: "death_cinematic_ffba2_native.ss0"
+    description: "Death cinematic at FFBA=2 (stage 3) — MAXIMUM cyan across all FFBA death variants (double the others)"
+    frames: 172
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 12000
+        description: "FFBA=2 death red (observed 15978, 5/5 zero-jitter)"
+      - color: "00C6FF"
+        min_pixels: 5000
+        description: "FFBA=2 death cyan DOUBLE other variants (observed 6144, 5/5 zero-jitter)"
