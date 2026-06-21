@@ -1,12 +1,14 @@
 # Color Regression Tests
 
-Snapshot of the regression suite as of iter 137 (2026-06-21).
+Snapshot of the regression suite as of iter 145 (2026-06-21).
 
 ## Quick stats
 - **114 tests** across 70 with pixel guards, 45 with bg_table assertions, 48 with OAM assertions
 - **110 pixel guards** total, all clustered at 1.22-1.36x ratio (max sensitivity per iter 137 sweep)
-- Run via `scripts/hooks/pre-commit` (parallel, ~60-90s with up to 12 workers)
+- **42 fresh-boot guards** (iter 145): 12 pixel + 30 CRAM-level (iter 141 added CRAM infrastructure)
+- Run via `scripts/hooks/pre-commit` (parallel, ~3min with up to 12 workers + 6 sequential fresh-boot mGBA invocations)
 - Single-test invocation: `uv run python scripts/run_color_regression.py --rom rom/working/penta_dragon_dx_teleport.gb --test <name>`
+- Fresh-boot only: `uv run python scripts/diagnostics/test_fresh_boot.py`
 
 ## Test categories
 
@@ -72,3 +74,29 @@ If any fail, commit is blocked. Override via `git commit --no-verify` only when 
 ```
 
 Then add the test name to `scripts/hooks/pre-commit` TESTS array. Verify single-test passes before committing.
+
+## Fresh-boot CRAM infrastructure (iter 141-145)
+
+Adversarial coverage gaps that pixel-counting can't catch (no enemy sprite uses
+the palette in the test scene) are covered by CRAM-level checks in
+`scripts/diagnostics/test_fresh_boot.py`:
+
+```python
+EXPECTED_CRAM = [
+    ("OBP3.1", "001F", "OBP-3 idx 1 (SaraProjectileAndCrow blue)"),
+    # ...
+]
+```
+
+The Lua probe dumps OBP/BGP CRAM values to a log file via FF6A/FF6B reads,
+and Python parses + asserts against expected hex strings.
+
+### CRAM coverage by FFC0/FFBF state
+- **Phase 1 (FFC0=0)**: OBP-0/3/4/5 defaults + BG-pal-3/4/7
+- **FFC0=1 standalone**: OBP-0 = sp_addr (spiral)
+- **FFC0=2 standalone**: OBP-0 = shp_addr (shield) — CRAM-only, no sprite renders
+- **FFC0=3 standalone**: OBP-0 = tp_addr (turbo)
+- **FFBF=1 standalone**: OBP-6 = Gargoyle boss_pal
+- **FFBF=2 standalone**: OBP-7 = Spider boss_pal
+
+iter-83 NOT CAUGHT sweep status: **fully closed** as of iter 145.
