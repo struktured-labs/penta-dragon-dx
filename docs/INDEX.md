@@ -153,3 +153,42 @@ In `reverse_engineering/notes/`:
   - `scripts/probes/verify_phantom_d887.py`
   - `scripts/probes/verify_miniboss_color.py`
 - v3.00 fallback: `rom/working/penta_dragon_dx_FIXED.gb` (MiSTer-deployed until v3.01 hardware-verified)
+
+## Audits (specific issues + fix verification)
+
+System-level / cross-cutting:
+- [`audit/full_correctness_audit_2026-06-14.md`](audit/full_correctness_audit_2026-06-14.md)
+  — static analysis of v3.01 + teleport builds: dead code, fragile spots,
+  build correctness. Useful checklist before refactors.
+- [`audit/v301_vs_teleport_baseline.md`](audit/v301_vs_teleport_baseline.md)
+  — hook pass-rate baseline (iter 162: v3.01 49/114 vs teleport 114/114,
+  0 real bugs across both).
+- [`audit/teleport_performance_audit.md`](audit/teleport_performance_audit.md)
+  — per-VBlank cycle budget; iter 31 hwoam_recolor adds ~6000T.
+
+OBJ / sprite colorization:
+- [`audit/obj_sprite_colorization.md`](audit/obj_sprite_colorization.md)
+  — full inventory of 8 OBJ palettes, tile-range assignment, items A-E
+  open candidates. iter 154 measurement: hwoam_recolor B=10 regresses
+  5 tests (not iter 31's claimed 6).
+- [`audit/obj_enemy_color_race.md`](audit/obj_enemy_color_race.md)
+  — DMA-race darkness fix history; v3.01 backport pending hardware verify.
+- [`audit/oam_read_timing.md`](audit/oam_read_timing.md) — mGBA Lua
+  OAM-read drift (resolved iter 18 via `emu:readRange`); Sara slot-1
+  alternation in boss fights still open.
+
+BG / scene colorization:
+- [`audit/hazard_tile_colorization.md`](audit/hazard_tile_colorization.md)
+  — spikes/lava routing per stage; iters 107-111 documented.
+- [`audit/stage2_lava.md`](audit/stage2_lava.md) — lava tile IDs per
+  stage + override mechanism.
+- [`audit/title_screen_and_menu.md`](audit/title_screen_and_menu.md)
+  — A-H / I-Z color bleed RESOLVED.
+- [`audit/cutscenes_intro_ending.md`](audit/cutscenes_intro_ending.md)
+  — intro (D880=0x1B = colorized; 0x1C menu NOT) + ending (NOT colorized;
+  BLOCKED on ending savestate).
+- [`audit/levelselect_score_bleed.md`](audit/levelselect_score_bleed.md)
+  — STAGE NN bleed FIXED commit 2582e85; verified end-to-end iter 157.
+- [`audit/boss_verification_checklist.md`](audit/boss_verification_checklist.md)
+  — all 9 arenas zero flicker; iter 161 corrected "FLAT mono" labels
+  (all multi-pal per ARENA_TILE_PAL).
