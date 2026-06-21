@@ -1,5 +1,18 @@
 # v3.01 production vs teleport — hook test baseline
 
+## 2026-06-21 UPDATE (iter 162): full 114-test matrix
+
+  **v3.01:    49/114 pass (43%)**
+  **teleport: 114/114 pass (100%)**
+  **Both failing: 0** (no "real bugs", only documented gaps).
+
+v3.01's absolute pass count rose vs iter 46 (49 vs 42) — the 49 new
+tests added since iter 46 are predominantly teleport-specific (per-arena
+content, per-frame overrides). v3.01 still passes the entire core
+dispatch/scene-table suite; gaps are all in the "teleport-only-feature"
+category. 0 "both failing" means no test exposes a regression present
+in both ROMs.
+
 ## 2026-06-19 UPDATE (iter 46): full 65-test matrix with corrected regex
 
   **v3.01:    42/65 pass (65%)**
