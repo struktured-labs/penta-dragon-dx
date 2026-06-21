@@ -1838,6 +1838,31 @@ tests:
   # NO lava override, so STAGE 01 letters render in dungeon lavender,
   # not lava red. Together with splash_stage7 this verifies the splash
   # dispatch's FFBA-conditional rendering.
+  # Iter 135: native banner savestate (D880=0x1B), captured during the
+  # natural title-sequence cycle (no input needed — game loops through
+  # banner state). Complements banner_bg_table_palettes which uses
+  # force_d880 against sara_d_alone. This native capture exercises the
+  # cold-boot DA00 copy + inline-hook (0x42A7) tilemap colorization path
+  # with the REAL banner state, not framework manipulation.
+  - name: "banner_native_dispatch"
+    savestate: "banner_native_d880_1b.ss0"
+    description: "Native D880=0x1B title banner — verifies banner bg_table dispatch + inline-hook colorization works on real captured state"
+    check_boss_flag: false
+    bg_table_expectations:
+      - tile_range: [0x80, 0x80]
+        palette: 3
+        description: "Tile 0x80 → pal 3 (banner_override monster-name glyphs)"
+      - tile_range: [0xE0, 0xE0]
+        palette: 6
+        description: "Tile 0xE0 → pal 6 (banner_override PENTA DRAGON letters)"
+    pixel_expectations:
+      - color: "A5A5FF"
+        min_pixels: 480
+        description: "Banner partial render lavender (observed 600 at f=68, 5/5 zero-jitter)"
+      - color: "00C6FF"
+        min_pixels: 160
+        description: "Banner JAM logo cyan (observed 208 at f=68, 5/5 zero-jitter)"
+
   - name: "splash_stage1_native"
     savestate: "splash_stage1_d880_18.ss0"
     description: "Native D880=0x18 (STAGE 01 splash, FFBA=00) — lavender render (NOT lava, opposite of splash_stage7)"

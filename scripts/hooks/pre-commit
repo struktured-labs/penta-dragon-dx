@@ -334,6 +334,12 @@ TESTS=(
   # into stage 1. The MAX=0 #FF3900 guard makes regressions in the
   # FFBA guard immediately visible.
   splash_stage1_native
+  # Iter 135: native banner savestate (D880=0x1B) captured during
+  # natural title cycle. Complements banner_bg_table_palettes which
+  # uses force_d880. The native capture exercises the inline-hook
+  # (0x42A7) colorization with real banner state, including the
+  # banner-specific bg_table values (tile 0x80→pal 3, 0xE0→pal 6).
+  banner_native_dispatch
   # Iter 118: FIRST pixel test asserting on BG-pal-2 (purple) colors.
   # iter 83's adversarial coverage listed BG-pal-2 as "NOT CAUGHT" —
   # no existing test could detect BG-pal-2 ROM-source corruption.
