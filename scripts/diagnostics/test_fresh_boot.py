@@ -121,6 +121,19 @@ callbacks:add("frame", function()
                     h:write(string.format("OBP%%d.%%d=%%04X\n", obp, c, lo + (hi * 256)))
                 end
             end
+            -- Iter 142: also dump BG palette CRAM for pal 3/4/7 (iter-83 gaps).
+            -- BG-pal-2/5/6 already partially covered by pixel guards.
+            for bgp = 3, 7 do
+                if bgp ~= 5 and bgp ~= 6 then
+                    for c = 0, 3 do
+                        emu:write8(0xFF68, bgp * 8 + c * 2)
+                        local lo = emu:read8(0xFF69)
+                        emu:write8(0xFF68, bgp * 8 + c * 2 + 1)
+                        local hi = emu:read8(0xFF69)
+                        h:write(string.format("BGP%%d.%%d=%%04X\n", bgp, c, lo + (hi * 256)))
+                    end
+                end
+            end
             h:close()
         end
     end
@@ -394,6 +407,14 @@ def main() -> int:
         ("OBP4.1", "03FF", "OBP-4 idx 1 yellow (Hornets)"),
         ("OBP5.0", "0000", "OBP-5 idx 0 transparent"),
         ("OBP5.1", "2A7C", "OBP-5 idx 1 (OrcGround — YAML override)"),
+        # Iter 142: BG-pal-3/4/7 ROM-source corruption — pixel-invisible
+        # in fresh-boot scene but CRAM check catches it.
+        ("BGP3.0", "7FFF", "BG-pal-3 idx 0 (white)"),
+        ("BGP3.1", "03E0", "BG-pal-3 idx 1 (green)"),
+        ("BGP4.0", "7FFF", "BG-pal-4 idx 0 (white)"),
+        ("BGP4.1", "7FE0", "BG-pal-4 idx 1 (cyan)"),
+        ("BGP7.0", "7FFF", "BG-pal-7 idx 0 (clone of BG0 white)"),
+        ("BGP7.1", "7E94", "BG-pal-7 idx 1 (clone of BG0 lavender)"),
     ]
     if cram_log.exists():
         cram_data = {}
