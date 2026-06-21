@@ -311,6 +311,10 @@ TESTS=(
   # Confirms per-FFBA CRAM modification differs (separate from lava
   # override) and catches stage-5-specific CRAM regression.
   death_cinematic_ffba4_colorized
+  # Iter 131: FFBA=1 (stage 2) death — MAXIMUM red flood (18602 px).
+  # Together with FFBA=4 (4308) and FFBA=6 (8232) tests, covers 3 distinct
+  # per-FFBA CRAM modification flavors at the death cinematic.
+  death_cinematic_ffba1_colorized
   # Iter 117: counterpart to splash_stage7_native_dispatch — same
   # D880=0x18 scene byte but with FFBA=00 (stage 1). Verifies the
   # splash dispatch correctly renders STAGE 01 in lavender (NOT lava

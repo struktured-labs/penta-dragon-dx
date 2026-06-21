@@ -1895,3 +1895,24 @@ tests:
       - color: "00C6FF"
         min_pixels: 2700
         description: "FFBA=4 death cyan (observed 3264, 5/5 zero-jitter) — similar to FFBA=6's cyan"
+
+  # Iter 131: FFBA=1 (stage 2) death — MAXIMUM red flood (18602 #FF3900,
+  # 81% of screen). Different from both FFBA=4 (4308) and FFBA=6 (8232).
+  # Each FFBA value gets a different CRAM modification + tilemap layout
+  # resulting in distinct render counts:
+  #   FFBA=1 (stage 2): 18602 red, 3264 cyan
+  #   FFBA=4 (stage 5):  4308 red, 3264 cyan
+  #   FFBA=6 (stage 7):  8232 red, 3191 cyan
+  # All 3 tests catch per-FFBA CRAM regressions distinct from each other.
+  - name: "death_cinematic_ffba1_colorized"
+    savestate: "death_cinematic_ffba1_native.ss0"
+    description: "Death cinematic at FFBA=1 (stage 2) — MAXIMUM red flood across all FFBA death variants"
+    frames: 172
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 15000
+        description: "FFBA=1 death MASSIVE red (observed 18602, 5/5 zero-jitter)"
+      - color: "00C6FF"
+        min_pixels: 2700
+        description: "FFBA=1 death cyan (observed 3264, 5/5 zero-jitter)"
