@@ -30,13 +30,43 @@ Other multi-tile enemies whose tiles cross a tile-range boundary still
 split. Production v3.01 / FIXED.gb has NO hwoam_recolor at all and is
 unaffected. Single-byte patch reverting B=40→B=10 in test ROM
 (`tmp/iter151_user_bug/teleport_b10_test.gb`) restores the old trade-off
-(slots 10+ stay pal0 in dense scenes, but no splits). Awaiting user
-validation as of 2026-06-21. The full fix would either:
+but is NOT strictly better — it just trades one visual wrongness for
+another.
+
+### 2026-06-21 UPDATE (iter 154): B=10 actual regression scope MEASURED
+Ran 12 representative hook tests against the B=10 patched ROM:
+- FAIL (5): orc, soldier, orc_with_items, catfish, moth
+- PASS (7): hornets, crow, mage, sara_w_alone, sara_d_alone,
+  spider_miniboss_sara_d, dragon_powerup
+
+Note: iter 31's claimed 6-test list partially WRONG —
+`spider_miniboss_sara_d` and `dragon_powerup` actually PASS on B=10
+(they don't depend on slots 10+ coverage). `moth` is a NEW failure
+not in iter 31's docs.
+
+For the 5 failing tests, B=10 makes enemies render as the WRONG palette
+(pal 4 / pal 0), not as "uncolored grayscale" as the iter 31 doc implied.
+Example: orc at slot 14/15 tile 0x52/0x53 expects pal 5 (green/brown);
+on B=10 it renders as pal 4 (Hornet orange) — visibly wrong color.
+
+**So B=10 vs B=40 is not strictly better — both have visual bugs:**
+- B=40 (current teleport): multi-tile enemies in slots 10+ that cross
+  tile-range boundaries render as split-palette
+- B=10: enemies in slots 10+ render as wrong palette (the post-DMA
+  recolor's fallback for uncovered slots, which depends on which prior
+  pass last wrote that slot)
+
+A clean fix would need to either:
   - Extend the tile-remap to cover every multi-tile enemy's secondary
-    tile range (high-effort, brittle).
+    tile range so B=40 doesn't split anything (requires per-enemy
+    tile-layout reverse-engineering; brittle).
   - Switch hwoam_recolor from per-tile-range to per-OAM-slot palette
-    assignment (would need a different data source than tile ID).
-  - Accept the B=10 trade-off and refuse to backport iter 31 to v3.01.
+    assignment, deriving palette from a context other than tile ID
+    (e.g. an OAM-slot→enemy-type table populated by gameplay logic —
+    significantly larger architectural change).
+  - Stick with v3.01 / FIXED.gb for production play (no hwoam_recolor
+    at all; the "DMA race" enemy darkness is the original game's
+    behavior and visible only briefly).
 
 Items A (tile 0x00-0x01 → OBP0), B (dedicated boss slot), C (tile-scoped
 boss override), D (humanoid sub-types), E (per-scene OBJ palettes) remain
