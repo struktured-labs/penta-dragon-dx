@@ -1937,3 +1937,42 @@ tests:
       - color: "00C6FF"
         min_pixels: 5000
         description: "FFBA=2 death cyan DOUBLE other variants (observed 6144, 5/5 zero-jitter)"
+
+  # Iter 133: complete the death matrix — captured FFBA=3 (stage 4) +
+  # FFBA=5 (stage 6) via 10-minute long-timeout parallel probes
+  # (these stages take longer for Sara to die naturally).
+  #
+  # Full death matrix complete (6 of 6 reachable FFBA variants):
+  #   FFBA=1 (stage 2): 18602r, 3264cy
+  #   FFBA=2 (stage 3): 15978r, 6144cy (MAX cyan)
+  #   FFBA=3 (stage 4): 19050r, 3072cy (MAX red — slight edge over FFBA=1)
+  #   FFBA=4 (stage 5):  4308r, 3264cy (MIN red)
+  #   FFBA=5 (stage 6): 17265r, 4729cy
+  #   FFBA=6 (stage 7):  8232r, 3191cy
+  # FFBA=0 (stage 1) not reachable via death cycle within 5min — Sara
+  # survives too long in stage 1 entry corridor.
+  - name: "death_cinematic_ffba3_colorized"
+    savestate: "death_cinematic_ffba3_native.ss0"
+    description: "Death cinematic at FFBA=3 (stage 4) — MAX red across all FFBA death variants (19050 px)"
+    frames: 172
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 15000
+        description: "FFBA=3 death MAX red (observed 19050, 5/5 zero-jitter)"
+      - color: "00C6FF"
+        min_pixels: 2500
+        description: "FFBA=3 death cyan (observed 3072, 5/5 zero-jitter)"
+
+  - name: "death_cinematic_ffba5_colorized"
+    savestate: "death_cinematic_ffba5_native.ss0"
+    description: "Death cinematic at FFBA=5 (stage 6) — intermediate red + intermediate cyan"
+    frames: 172
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 14000
+        description: "FFBA=5 death red (observed 17265, 5/5 zero-jitter)"
+      - color: "00C6FF"
+        min_pixels: 3800
+        description: "FFBA=5 death cyan (observed 4729, 5/5 zero-jitter)"

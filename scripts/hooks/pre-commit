@@ -320,6 +320,13 @@ TESTS=(
   # producing the extra cyan. 4-way coverage of death CRAM per FFBA:
   # FFBA=1 max red, FFBA=2 max cyan, FFBA=4 min, FFBA=6 middle.
   death_cinematic_ffba2_colorized
+  # Iter 133: completed death matrix — FFBA=3 (stage 4) + FFBA=5 (stage 6)
+  # captured via 10-min long-timeout parallel probes. Death matrix now
+  # has 6 of 6 reachable FFBA variants (FFBA=0 stage 1 unreachable —
+  # Sara survives the entry corridor too long to die in 5min).
+  # FFBA=3 has MAX red (19050) beating FFBA=1's 18602 by a margin.
+  death_cinematic_ffba3_colorized
+  death_cinematic_ffba5_colorized
   # Iter 117: counterpart to splash_stage7_native_dispatch — same
   # D880=0x18 scene byte but with FFBA=00 (stage 1). Verifies the
   # splash dispatch correctly renders STAGE 01 in lavender (NOT lava
