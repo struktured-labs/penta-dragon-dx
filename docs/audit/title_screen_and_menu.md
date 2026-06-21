@@ -348,3 +348,36 @@ force all font glyphs to a single palette:
   repoint 0x3B10), and optionally `_bg_table()` font-range override.
 - `palettes/penta_palettes_v097.yaml` — optional dedicated title-text palette.
 - (No new VRAM tiles needed; the uppercase font is already loaded.)
+
+## 10. ADDENDUM (2026-06-21, iter 126): title menu cursor missing — NOT a regression
+
+User reported cursor missing from the "OPENING START / GAME START" menu.
+Investigation:
+
+- **Confirmed cursor missing** in the visible render across many frames
+  (sampled f=1000-7000 in increments)
+- **OAM dump at title menu** (D880=0x1C): zero visible sprites
+- **BG tilemap at title menu**, col 3 of rows 7, 9 (left of OPENING START
+  and GAME START): all 0x00 (blank tile), no cursor tile written
+- **Same behavior in original ROM** (`rom/Penta Dragon (J).gb`): also
+  zero OAM sprites at D880=0x1C, no cursor tile in tilemap
+- **Teleport vs v3.01 timing identical**: menu duration 1577 vs 1573
+  frames — not a recent regression
+
+**Conclusion**: the cursor is genuinely missing from the title menu, but
+this is **original game behavior**. PENTA DRAGON DX's title menu doesn't
+draw a visible cursor — selection is implicit (default to first option,
+UP/DOWN cycles silently). Common in 1992-era Japanese GB titles.
+
+The cursor handler at `0x3BF6` does exist (handles UP/DOWN/A input
+edges + dispatches to GAME START / OPENING START actions), but it
+doesn't draw a visual cursor tile. This is a design choice, not a bug
+in our DX work.
+
+**If a visible cursor is desired**: it would require ROM-side work to
+add a cursor-draw routine in the cursor loop's main body (write a
+chosen tile to the active-selection row's left column when the menu
+is rendered). Filed as a future feature request, not a bug.
+
+Probes used: `tmp/probe_title_cursor.lua`, `tmp/probe_at_f1000.lua`,
+`tmp/probe_dump_tilemap.lua` (all deleted post-investigation).
