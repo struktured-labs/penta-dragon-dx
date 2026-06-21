@@ -96,6 +96,47 @@ ITER39_V301_CHECKS = [
 # value once we've identified the ROM.
 ITER40_TABLE_HI_OFFSET = 13 * 0x4000 + (0x6D1D - 0x4000)
 
+# Iter 2582e85 — level-select bleed fix. TELEPORT ONLY (v3.01 production
+# left unpatched; verify the original 0x7393 target survives). The fix
+# redirects bank1:0x3B47's JP NZ from 0x7393 to 0xDB28 (WRAM stub), and
+# stages the stub bytes at bank13:0x53C2. Iter 157 verified end-to-end.
+ITER_2582E85_TELEPORT_CHECKS = [
+    (
+        0x3B48,
+        0x28,
+        "iter 2582e85: bank1:0x3B48 JP NZ low byte = 0x28 (target 0xDB28 WRAM stub)",
+    ),
+    (
+        0x3B49,
+        0xDB,
+        "iter 2582e85: bank1:0x3B49 JP NZ high byte = 0xDB",
+    ),
+    (
+        13 * 0x4000 + (0x53C2 - 0x4000),
+        0xE5,
+        "iter 2582e85: stub source at bank13:0x53C2 starts with 0xE5 (PUSH HL)",
+    ),
+    (
+        13 * 0x4000 + (0x53C3 - 0x4000),
+        0xC5,
+        "iter 2582e85: stub source at bank13:0x53C3 = 0xC5 (PUSH BC)",
+    ),
+]
+
+# v3.01 sanity: the JP NZ should still point to 0x7393 (unpatched).
+ITER_2582E85_V301_CHECKS = [
+    (
+        0x3B48,
+        0x93,
+        "v3.01 sanity: bank1:0x3B48 JP NZ low byte = 0x93 (unpatched, target 0x7393)",
+    ),
+    (
+        0x3B49,
+        0x73,
+        "v3.01 sanity: bank1:0x3B49 JP NZ high byte = 0x73",
+    ),
+]
+
 
 def identify_rom(rom: bytes) -> str:
     """Sniff which build this ROM is. Returns "v301", "teleport", or "unknown"."""
@@ -128,12 +169,14 @@ def main() -> int:
     checks = list(iter31_for_kind) + list(ITER40_OPCODE_CHECKS)
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
+        checks.extend(ITER_2582E85_V301_CHECKS)
         checks.append((
             ITER40_TABLE_HI_OFFSET,
             0x70,
             "iter 40 (v301): bg_sweep LD B operand at 0x6D1D = 0x70 (bg_table_hi from bank13:0x7000)",
         ))
     elif kind == "teleport":
+        checks.extend(ITER_2582E85_TELEPORT_CHECKS)
         checks.append((
             ITER40_TABLE_HI_OFFSET,
             0xDA,
