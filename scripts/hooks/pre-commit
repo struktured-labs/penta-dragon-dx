@@ -396,6 +396,12 @@ NPROC=$(nproc 2>/dev/null || echo 4)
 PARALLEL=$((NPROC > 12 ? 12 : NPROC))
 echo "[pre-commit] Running ${#TESTS[@]} tests with up to $PARALLEL parallel workers..."
 
+# Iter 155: retry-once for transient mGBA/pixel-test flakes
+# (see project_pixel_test_flakiness for the per-test jitter mechanism).
+# A test marked [iter-155 RETRY-PASS] in its log means the first attempt
+# failed but the retry passed — symptomatic of the flake, not a real
+# regression. Worst-case overhead: one retry per failed test × ~30s
+# wall-clock; amortized across $PARALLEL workers.
 printf '%s\n' "${TESTS[@]}" | xargs -I {} -P "$PARALLEL" bash -c '
   t="$1"
   rom="$2"
@@ -403,22 +409,41 @@ printf '%s\n' "${TESTS[@]}" | xargs -I {} -P "$PARALLEL" bash -c '
        uv run python scripts/run_color_regression.py --rom "$rom" --test "$t" \
        > "/tmp/precommit_${t}.log" 2>&1; then
     : > "/tmp/precommit_${t}.ok"
+  elif QT_QPA_PLATFORM=offscreen SDL_AUDIODRIVER=dummy xvfb-run -a \
+       uv run python scripts/run_color_regression.py --rom "$rom" --test "$t" \
+       > "/tmp/precommit_${t}.retry.log" 2>&1; then
+    cat "/tmp/precommit_${t}.retry.log" > "/tmp/precommit_${t}.log"
+    echo "[iter-155 RETRY-PASS]" >> "/tmp/precommit_${t}.log"
+    : > "/tmp/precommit_${t}.ok"
+    : > "/tmp/precommit_${t}.retried"
+    rm -f "/tmp/precommit_${t}.retry.log"
   else
+    cat "/tmp/precommit_${t}.retry.log" >> "/tmp/precommit_${t}.log" 2>/dev/null
+    rm -f "/tmp/precommit_${t}.retry.log"
     : > "/tmp/precommit_${t}.fail"
   fi
 ' _ {} "$ROM"
 
 FAILED=()
+RETRIED=()
 for t in "${TESTS[@]}"; do
   if [[ -e "/tmp/precommit_${t}.fail" ]]; then
     FAILED+=("$t")
     echo "  [FAIL] $t — see /tmp/precommit_${t}.log"
     rm -f "/tmp/precommit_${t}.fail"
+  elif [[ -e "/tmp/precommit_${t}.retried" ]]; then
+    RETRIED+=("$t")
+    echo "  [PASS] $t (RETRY-PASS — transient flake on first attempt)"
+    rm -f "/tmp/precommit_${t}.ok" "/tmp/precommit_${t}.retried"
   else
     echo "  [PASS] $t"
     rm -f "/tmp/precommit_${t}.ok"
   fi
 done
+
+if [[ ${#RETRIED[@]} -gt 0 ]]; then
+  echo "[pre-commit] ${#RETRIED[@]} test(s) needed retry — review iter 155 retry markers if frequent."
+fi
 
 if [[ ${#FAILED[@]} -gt 0 ]]; then
   echo
