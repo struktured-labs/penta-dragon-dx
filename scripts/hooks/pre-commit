@@ -18,6 +18,12 @@
 # expanded to the full suite.
 
 set -e
+# Iter 152: pipefail makes the fresh-boot `python ... | tail -8` check
+# actually propagate python's exit code. Without it, tail always exits 0,
+# so the `if ! ...` branch never fired and fresh-boot failures silently
+# allowed commits through (caught when iter 150's commit landed despite
+# "[fresh-boot] 2 expectation(s) failed.").
+set -o pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
