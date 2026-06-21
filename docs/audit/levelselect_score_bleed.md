@@ -59,6 +59,34 @@ testing; reproducing it here needs the SRAM populated. **Filed as a
 future iter task** — see `tmp/probe_lvlsel_bleed.lua` for the cold-boot
 probe scaffold.
 
+### 2026-06-21 UPDATE (iter 156): populated-SRAM probe attempted
+Created `tmp/iter156_lvlsel/test_slot0.sav` (8 KB) with slot 0 populated
+per `reverse_engineering/notes/gap_sram_checkpoint_layout.md`
+(validity 0x01, FFBA=0/FFBD=1 = stage 1 room 1, HP=23). Ran
+`probe_levelselect2.lua` with PICK=0 and DCFD-force. Level-select
+rendered (D880=0x00, FFC1=0 at f=215+); SCORESCREEN dump at f=231
+shows the BG-attr distribution is mostly pal 1 (not pal 0 as the
+stub's clear should produce); only one tile (0x73 in r11) reads back
+as pal 0. Visually the rendered screen looks uniform blue — likely a
+CRAM coincidence where pal 0 and pal 1 happen to be similar at this
+scene rather than evidence the stub cleared.
+
+Open questions a future iter should resolve:
+- Whether DCFD-force via Lua actually exercises the 0x3B47 → 0xDB28
+  patch path (the level-select might be reached via a DIFFERENT
+  entry when DCFD is force-poked vs. set from SRAM bytes).
+- Whether the stub bytes are present at WRAM 0xDB28 at run time
+  (the cold-boot copy depends on the teleport routine running first).
+- Whether something re-stamps pal 1 attrs between the stub's clear
+  and the renderer's sample point.
+
+To convert this into a real catch-the-bleed test, the probe needs
+to (a) read 0xDB28 bytes mid-run to confirm stub is present, (b)
+add a sentinel write at stub entry so the test can prove it ran,
+and (c) construct an SRAM whose checkpoint data forces a scene
+where pal 0 and pal 1 CRAM diverge enough that bleed would be
+visible (rather than masked by similar palette colors).
+
 ### Free space inventory (iter 94 verification, 2026-06-20)
 Beyond bank 13, **bank 1 also has free space** that wasn't in the
 original audit:
