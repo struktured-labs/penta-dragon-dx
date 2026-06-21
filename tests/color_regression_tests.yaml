@@ -1865,7 +1865,7 @@ tests:
   # render stays colorized. Frames=172 to sample at f=180 (target+8).
   - name: "death_cinematic_game_over_colorized"
     savestate: "death_cinematic_native.ss0"
-    description: "Death cinematic (D880=0x17) — GAME OVER text colorized in red+cyan (iter 115 found the audit's 'not colorized' claim was WRONG)"
+    description: "Death cinematic (D880=0x17, FFBA=6) — GAME OVER text colorized in red+cyan (iter 115 found the audit's 'not colorized' claim was WRONG)"
     frames: 172
     check_boss_flag: false
     pixel_expectations:
@@ -1875,3 +1875,23 @@ tests:
       - color: "00C6FF"
         min_pixels: 2500
         description: "Death cinematic cyan accents (#00C6FF, observed 3191 at f=180)"
+
+  # Iter 130: counterpart death cinematic at FFBA=4 (stage 5). Renders
+  # DIFFERENT from FFBA=6 death: red dominant is 4308 (vs 8232 for FFBA=6)
+  # but cyan is similar (3264 vs 3191). The render layout differs visibly
+  # — more cyan-prominent GAME OVER per iter 125 visual probe.
+  # Catches: per-FFBA CRAM modification regressions in the death scene
+  # specifically (separate from the lava override which is also FFBA-
+  # conditional but operates on bg_table not CRAM).
+  - name: "death_cinematic_ffba4_colorized"
+    savestate: "death_cinematic_ffba4_native.ss0"
+    description: "Death cinematic at FFBA=4 (stage 5) — counterpart to FFBA=6 death, different CRAM modification produces different red/cyan ratio"
+    frames: 172
+    check_boss_flag: false
+    pixel_expectations:
+      - color: "FF3900"
+        min_pixels: 3600
+        description: "FFBA=4 death red (observed 4308, 5/5 zero-jitter) — about half of FFBA=6 death's red"
+      - color: "00C6FF"
+        min_pixels: 2700
+        description: "FFBA=4 death cyan (observed 3264, 5/5 zero-jitter) — similar to FFBA=6's cyan"
