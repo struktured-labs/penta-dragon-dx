@@ -1206,8 +1206,8 @@ tests:
     # transiently flip during teleport sequence).
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 20
-        description: "SaraDragon green stays loaded during teleport-tile rendering"
+        min_pixels: 30
+        description: "SaraDragon green stays loaded during teleport-tile rendering (observed 38, 3/3 stable; iter 136 tightened 20→30)"
 
   - name: "sara_w_dual_enemies_with_arrows"
     savestate: "level1_sara_w_2orcs_one_flickering_fat_arrow_bidirectioal_array_half_diagnol_arrow_random_item.ss0"
@@ -1247,8 +1247,8 @@ tests:
     # (Sara D + metal-ball enemy vs. Sara D alone).
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 20
-        description: "SaraDragon green renders with metal-ball enemy onscreen"
+        min_pixels: 30
+        description: "SaraDragon green renders with metal-ball enemy onscreen (observed 38, 3/3 stable; iter 136 tightened 20→30)"
 
   - name: "sara_w_dragon_powerup_with_crow"
     savestate: "level1_sara_w_dragon_powerup_item_crow.ss0"
@@ -1434,21 +1434,14 @@ tests:
       # a partial-corruption case where the count drops to single digits
       # without going all the way to 0.
       - color: "FF42A5"
-        min_pixels: 15
-        description: "SaraWitch pink-red (OBP 2 idx 1 = 0x511F) present"
+        min_pixels: 20
+        description: "SaraWitch pink-red (observed 26, 3/3 stable; iter 136 tightened 15→20)"
       - color: "F7AD5A"
-        min_pixels: 15
-        description: "SaraWitch peach (OBP 2 idx 2 = 0x2EBE) present"
-      # Iter 70: adversarial-test finding — palette_loader's BG palette
-      # write path (FF68/FF69, runs FIRST in cond_pal) is the only
-      # one that empirically lands cleanly under the corruption probe.
-      # 6855 pixels of #A5A5B5 (Dungeon BG idx 1 light teal, 0x7E94
-      # mGBA-corrected) appear stably across 5 fresh runs. Floor at
-      # 4000. Catches BG-CRAM regressions (corrupted BG pal 0 source
-      # would flip these pixels to whatever color the corruption is).
+        min_pixels: 16
+        description: "SaraWitch peach (observed 21, 3/3 stable; iter 136 tightened 15→16)"
       - color: "A5A5B5"
-        min_pixels: 4000
-        description: "Dungeon BG light-teal — guards BG palette CRAM load path"
+        min_pixels: 5500
+        description: "Dungeon BG light-teal (observed 6855, 3/3 stable; iter 136 tightened 4000→5500)"
 
   - name: "sara_d_green_render"
     # Iter 73 audit: this test is largely a no-op for ROM-source
@@ -1471,8 +1464,8 @@ tests:
     # stable across 5 runs, leaving 1.7x headroom.
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 15
-        description: "Some #00A500 green still rendered (smoke check, not a real SaraDragon guard)"
+        min_pixels: 20
+        description: "Some #00A500 green still rendered (observed 25, 3/3 stable; iter 136 tightened 15→20)"
 
   # Iter 71 abandoned experiment: a "sara_d_green_force_invalidate" test
   # using force_df00: 0xFF every frame was tried as a SaraDragon
@@ -1507,11 +1500,11 @@ tests:
     # sara_w_pink_render (stable at 26/21 across 5 fresh runs).
     pixel_expectations:
       - color: "FF42A5"
-        min_pixels: 15
-        description: "Sara W pink-red (#FF42A5) after force_df1f=0 unblocks cond_pal"
+        min_pixels: 20
+        description: "Sara W pink-red (observed 26, 3/3 stable; iter 136 tightened 15→20)"
       - color: "F7AD5A"
-        min_pixels: 15
-        description: "Sara W peach (#F7AD5A) after force_df1f=0 unblocks cond_pal"
+        min_pixels: 16
+        description: "Sara W peach (observed 21, 3/3 stable; iter 136 tightened 15→16)"
 
   - name: "gargoyle_visual_render"
     savestate: "level1_sara_w_gargoyle_mini_boss.ss0"
