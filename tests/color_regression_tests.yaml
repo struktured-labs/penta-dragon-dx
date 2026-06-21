@@ -175,11 +175,11 @@ tests:
     # tiles.
     pixel_expectations:
       - color: "DEC6FF"
-        min_pixels: 5000
-        description: "Mage BG pale lavender dominates"
+        min_pixels: 7300
+        description: "Mage BG pale lavender (observed 9112, 5/5 zero-jitter; iter 134 tightened 5000→7300)"
       - color: "8484C6"
-        min_pixels: 4000
-        description: "Mage BG blue-purple secondary"
+        min_pixels: 6500
+        description: "Mage BG blue-purple secondary (observed 8191, 5/5 zero-jitter; iter 134 tightened 4000→6500)"
 
   - name: "catfish"
     savestate: "level1_cat_fish_moth_spike_hazard_orb_item.ss0"
@@ -349,8 +349,8 @@ tests:
     # Iter 90: tightened min from 25 to 50 (observed 108 stable × 3 runs).
     pixel_expectations:
       - color: "00A500"
-        min_pixels: 50
-        description: "SaraDragon green (#00A500) actually rendered at f=68"
+        min_pixels: 85
+        description: "SaraDragon green (#00A500) at f=68 (observed 108, 5/5 zero-jitter; iter 134 tightened 50→85)"
 
   - name: "spiral_power_active"
     savestate: "level1_sara_w_spiral_power_active.ss0"
@@ -405,11 +405,11 @@ tests:
     # table for D880=0x1B (it'd flip the dominant rendered colors).
     pixel_expectations:
       - color: "A5A5FF"
-        min_pixels: 5000
-        description: "Banner-routed lavender dominant (#A5A5FF, banner pal map on dungeon CRAM)"
+        min_pixels: 6400
+        description: "Banner-routed lavender (observed 8004, 5/5 zero-jitter; iter 134 tightened 5000→6400)"
       - color: "52527B"
-        min_pixels: 2000
-        description: "Banner-routed dark-blue secondary (#52527B)"
+        min_pixels: 3300
+        description: "Banner-routed dark-blue (observed 4204, 5/5 zero-jitter; iter 134 tightened 2000→3300)"
 
   - name: "cutscene_bg_table_palettes"
     savestate: "level1_sara_d_alone.ss0"
@@ -1170,15 +1170,14 @@ tests:
     # splash instead, BG would lose the SHMUP space-station palette).
     pixel_expectations:
       - color: "52527B"
-        min_pixels: 800
-        description: "SHMUP dark-blue space station BG present"
+        min_pixels: 1500
+        description: "SHMUP dark-blue space station BG (observed 1872, 5/5 zero-jitter; iter 134 tightened 800→1500)"
       - color: "A5A5FF"
-        min_pixels: 800
-        description: "SHMUP lavender accents present"
-      # Iter 90: tightened min from 30 to 70 (observed 132 stable × 3 runs).
+        min_pixels: 1300
+        description: "SHMUP lavender accents (observed 1659, 5/5 zero-jitter; iter 134 tightened 800→1300)"
       - color: "FF3100"
-        min_pixels: 70
-        description: "SHMUP red flame/ship tile present"
+        min_pixels: 100
+        description: "SHMUP red flame/ship tile (observed 132, 5/5 zero-jitter; iter 90 30→70; iter 134 70→100)"
 
   # Iter 32: more sweep-discovered tests for unique scene combinations.
   - name: "sara_w_in_spider_miniboss_live"
@@ -1534,11 +1533,11 @@ tests:
     expected_boss_flag: 2
     pixel_expectations:
       - color: "FF7300"
-        min_pixels: 50
-        description: "Spider vivid-orange body (boss_pal idx 2 = 0x00BF mGBA-corrected)"
+        min_pixels: 85
+        description: "Spider vivid-orange body (observed 110, 5/5 zero-jitter; iter 134 tightened 50→85)"
       - color: "7B00F7"
-        min_pixels: 100
-        description: "Spider/arena purple accent present"
+        min_pixels: 130
+        description: "Spider/arena purple accent (observed 171, 5/5 zero-jitter; iter 134 tightened 100→130)"
 
   - name: "jet_form_visual_render"
     savestate: "level1_sara_w_in_jet_form_secret_stage.ss0"
