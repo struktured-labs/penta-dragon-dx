@@ -727,8 +727,8 @@ tests:
     # dominant red).
     pixel_expectations:
       - color: "FF0000"
-        min_pixels: 8000
-        description: "Riff arena dominant red present (scene_detect routes 0x0D correctly)"
+        min_pixels: 10000
+        description: "Riff arena dominant red (observed 12595, 3/3 stable; iter 137 tightened 8000→10000)"
 
   - name: "crystal_dragon_arena_content"
     savestate: "level1_sara_d_alone.ss0"
@@ -756,8 +756,8 @@ tests:
     # 4594 #FF0000 pixels (stable across 5 fresh runs). Floor at 3000.
     pixel_expectations:
       - color: "FF0000"
-        min_pixels: 3000
-        description: "Cameo arena red render (scene_detect routes 0x0F correctly)"
+        min_pixels: 3700
+        description: "Cameo arena red render (observed 4594, 3/3 stable; iter 137 tightened 3000→3700)"
 
   - name: "ted_arena_content"
     savestate: "level1_sara_d_alone.ss0"
@@ -772,8 +772,8 @@ tests:
     # 7115 #FF0000 pixels (stable × 5 fresh runs). Floor at 5000.
     pixel_expectations:
       - color: "FF0000"
-        min_pixels: 5000
-        description: "Ted arena red render (scene_detect routes 0x10 correctly)"
+        min_pixels: 5700
+        description: "Ted arena red render (observed 7115, 3/3 stable; iter 137 tightened 5000→5700)"
 
   - name: "troop_arena_content"
     savestate: "level1_sara_d_alone.ss0"
@@ -1545,8 +1545,8 @@ tests:
         min_pixels: 40
         description: "Dark-blue space background (observed 51, 5/5 zero-jitter; iter 128 tightened 20→40)"
       - color: "000000"
-        min_pixels: 10000
-        description: "Black space dominates (>10k of 23040 pixels; observed 16879, kept loose for film-grain tolerance)"
+        min_pixels: 13500
+        description: "Black space dominates (observed 16879, 3/3 stable; iter 137 tightened 10000→13500)"
 
   - name: "stage1_no_lava_flood"
     # Regression catch: stage 1 must NOT contain pure red (#FF0000) flood
