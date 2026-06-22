@@ -70,10 +70,33 @@ If any fail, commit is blocked. Override via `git commit --no-verify` only when 
   pixel_expectations:      # rendered screenshot checks (optional)
     - color: "FF42A5"
       min_pixels: 18       # ~80% of observed; verify 5/5 stable first
+      tolerance: 0         # per-channel RGB tolerance (default 0 = exact)
       description: "..."
 ```
 
 Then add the test name to `scripts/hooks/pre-commit` TESTS array. Verify single-test passes before committing.
+
+### When to use `tolerance` (iter 166-170 sweep, 2026-06-21)
+
+mGBA's CGB color-correction state can diverge between teleport and v3.01
+runs of the same savestate. Same raw 0x03E0 palette byte may render as
+`#00A500` on one ROM and `#00FF00 + #007300` on the other (see
+`project_pixel_test_flakiness` iter 165 finding). When a pixel check
+fails on v3.01 with nearby-but-not-exact RGB hits, `tolerance=80-90`
+matches the close color variants while still rejecting unrelated colors
+(red/blue/etc. have channel diffs >> 80).
+
+Use tolerance when:
+- v3.01 fails the check with 0 pixels but renders nearby-shade pixels
+  (e.g. expects #00A500, has #00FF00).
+- The "nearby" shade is within ±80-90 per channel (mGBA correction
+  divergence typically falls in this range).
+
+Do NOT use tolerance when:
+- v3.01 renders 0 pixels of ANY similar color (true functional gap,
+  needs hwoam_recolor backport or per-arena table port).
+- The check is at low min_pixels (≤20) — tolerance there admits too
+  much noise.
 
 ## Fresh-boot CRAM infrastructure (iter 141-145)
 
