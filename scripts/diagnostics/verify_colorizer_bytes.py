@@ -106,6 +106,24 @@ ITER39_V301_CHECKS = [
 # value once we've identified the ROM.
 ITER40_TABLE_HI_OFFSET = 13 * 0x4000 + (0x6D1D - 0x4000)
 
+# Iter 211 — palette-source bytes for SaraWitch OBP-2 (the iconic pink-red).
+# Both ROMs share obj_data at bank13:0x6840+. OBP-2 starts at 0x6850 with
+# 00 00 (idx 0) BE 2E (idx 1 = 0x2EBE peach) 1F 51 (idx 2 = 0x511F pink-red)
+# 42 08 (idx 3 = 0x0842 black). The iter 70 adversarial probe confirmed
+# corrupting these bytes flows through palette_loader to the rendered
+# screen and is detected by sara_w_pink_render. These byte locks add
+# pre-test catch (the verifier fires before any mGBA test does).
+ITER_211_SHARED_OBJ_PAL_CHECKS = [
+    (13 * 0x4000 + (0x6852 - 0x4000), 0xBE,
+     "iter 211: OBP-2 idx 1 (SaraWitch peach) low byte at bank13:0x6852 = 0xBE (0x2EBE)"),
+    (13 * 0x4000 + (0x6853 - 0x4000), 0x2E,
+     "iter 211: OBP-2 idx 1 (SaraWitch peach) high byte at bank13:0x6853 = 0x2E"),
+    (13 * 0x4000 + (0x6854 - 0x4000), 0x1F,
+     "iter 211: OBP-2 idx 2 (SaraWitch pink-red) low byte at bank13:0x6854 = 0x1F (0x511F)"),
+    (13 * 0x4000 + (0x6855 - 0x4000), 0x51,
+     "iter 211: OBP-2 idx 2 (SaraWitch pink-red) high byte at bank13:0x6855 = 0x51"),
+]
+
 # Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
 # cond_pal @ bank13:0x6C90 reads DF02 sentinel (cold-boot palette init guard).
 # shadow_main @ bank13:0x69D0 starts the OBJ-shadow-colorizer (push regs +
@@ -265,7 +283,8 @@ def main() -> int:
     checks = (list(iter31_for_kind) + list(ITER40_OPCODE_CHECKS)
               + list(ITER_207_SHARED_COLORIZE_CHECKS)
               + list(ITER_209_SHARED_VBLANK_HOOK_CHECKS)
-              + list(ITER_210_SHARED_PALETTE_CHECKS))
+              + list(ITER_210_SHARED_PALETTE_CHECKS)
+              + list(ITER_211_SHARED_OBJ_PAL_CHECKS))
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
