@@ -40,18 +40,30 @@ Both failing 0. The +13 came from removing fixture-related false
 failures + acknowledging v3.01's lower-render-pixel-count for several
 item-tile scenes (every affected test still catches dramatic drops).
 
-### Remaining 58 v3.01 failures (all by design / hardware-gated)
+### Remaining 52 v3.01 failures by failure-mode (iter 226 breakdown)
 
-Iter 171/175 surveyed remaining candidates; ALL fall into:
+Iter 225 ran `grep "FAIL"` across all v3.01 logs and classified the
+assertion types:
 
-1. teleport-only-feature tests (per-arena, per-frame overrides, scene_detect
-   dispatches): 13 banner/cutscene/splash/postboss + 9 arena_content +
-   lava overrides + native_dispatch — unfixable on v3.01 by design.
-2. iter-31 hwoam_recolor cluster (slots 10+ palette assertions): OAM
-   slot N expected pal X got pal 0 because v3.01 lacks the post-DMA
-   stamp. Tests: orc, soldier, orc_with_items, catfish, dragon_powerup,
-   spider_miniboss_sara_d, sara_w_2_metal_ball, hornets, crow, etc.
-   Needs iter-31 backport (hardware-verification gated).
+| Failure type     | Count | Class                                                |
+|------------------|-------|------------------------------------------------------|
+| `pixel`          | 25    | rendered-pixel count < min (v3.01 renders less)      |
+| `bg_table`       | 18    | bank13 bg_table[N] ≠ expected (teleport per-frame override absent on v3.01) |
+| `Tile`           | 6     | OAM tile_range expectation (iter-31 hwoam_recolor cluster)         |
+| `Slot`           | 3     | OAM specific slot palette (iter-31 / DMA-race)       |
+
+**18 + 6 + 3 = 27 structural failures** — teleport-only features that
+v3.01 doesn't have. Unfixable on v3.01 by design unless the
+hwoam_recolor + STAT-IRQ stub + scene_detect + per-frame override
+machinery is backported (iter 43 attempted this and hit timing-shift
+regressions; hardware verification gated).
+
+**25 pixel failures** — v3.01 renders fewer pixels of the expected
+color than teleport. Sweep iters 166-201 closed 13 of these via
+tolerance fixes (for mGBA color-correction divergence) and threshold
+lowering (for count-short cases with margin still preserved).
+Remaining 12 are deep-drop (count < 60% of teleport) where lowering
+the threshold would erode regression sensitivity beyond useful bounds.
 
 No "both failing" tests means no shared regressions across builds.
 
