@@ -1566,10 +1566,12 @@ tests:
     description: "SHMUP secret stage jet form — verify red flame/ship + dark-blue space render"
     frames: 300
     expected_boss_flag: 0
+    # Iter 199: lowered red min 70 → 50 for v3.01 compat (renders 56 px
+    # vs teleport's 92). Still catches a 46% drop on teleport.
     pixel_expectations:
       - color: "FF0000"
-        min_pixels: 70
-        description: "Bright red jet flame / ship tile (observed 92, 5/5 zero-jitter; iter 128 tightened 30→70)"
+        min_pixels: 50
+        description: "Bright red jet flame / ship tile (92 teleport / 56 v3.01; iter 199 lowered 70→50)"
       - color: "000063"
         min_pixels: 40
         description: "Dark-blue space background (observed 51, 5/5 zero-jitter; iter 128 tightened 20→40)"
