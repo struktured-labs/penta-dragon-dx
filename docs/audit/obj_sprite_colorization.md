@@ -20,18 +20,30 @@ ROM** via `hwoam_recolor` (iter 31, commit 534179f, tag v8.11-obj-slot10-unlock)
     because the base game's STAT IRQ chain timing shifts. Filed for
     multi-iter backport with MiSTer hardware verification.
 
-### 2026-06-21 UPDATE: iter 31 tile-remap doesn't generalize beyond Sara
-User-reported (iter 151) stage 1 gameplay regression in teleport ROM:
-multi-tile 16x16 enemies (e.g. Hornets) show split-palette — top-row OAM
-slot gets one palette and bottom-row gets another. Root cause: iter 31's
-B=10→B=40 raise stamps tile-range-derived palettes across all 40 slots,
-but the tile-remap that accompanied it only covers Sara's tiles (0x10-0x1F).
-Other multi-tile enemies whose tiles cross a tile-range boundary still
-split. Production v3.01 / FIXED.gb has NO hwoam_recolor at all and is
-unaffected. Single-byte patch reverting B=40→B=10 in test ROM
-(`tmp/iter151_user_bug/teleport_b10_test.gb`) restores the old trade-off
-but is NOT strictly better — it just trades one visual wrongness for
-another.
+### 2026-06-21 UPDATE: iter 31 tile-remap was HYPOTHESIZED to cause user-reported split — DISPROVED iter 194
+User reported (iter 151) stage 1 gameplay regression in teleport ROM:
+"sprites half one color half another". Initial hypothesis (iter 151-154):
+multi-tile 16x16 enemies with tiles crossing a palette-range boundary
+(e.g. 0x3F/0x40 transition) would split — top OAM slot one palette,
+bottom another. iter 31's tile-remap only covered Sara's tiles (0x10-0x1F);
+other enemies' secondary tiles weren't remapped.
+
+**Iter 194 DISPROVED this hypothesis.** Strict OAM probe (consecutive
+OAM slots, dx==8, dy==0 — actual 16x16 8x16-mode layout) ran across
+5 stage-1 savestates with both Sara forms + multiple enemies:
+0 same-sprite splits in all 5. The hwoam_recolor B=40 is NOT producing
+any single-sprite tile-boundary splits.
+
+The user's "half-color" report is therefore one of:
+1. **Overlapping sprites** — e.g., Sara's blue Spiral projectile
+   (FFC0=1, sp_addr) passing through an orange Hornet (pal_4) at the
+   same X,Y. Visually looks "half blue + half orange" but each sprite
+   individually renders with correct palette.
+2. **Some other rendering artifact** — needs user follow-up to identify.
+
+The iter-151 B=10 vs B=40 trade-off is therefore NOT about fixing
+visible splits — it's purely about whether slots 10+ get correct
+tile-range palettes (B=40 wins) or fall back to pal 0/4 (B=10).
 
 ### 2026-06-21 UPDATE (iter 154): B=10 actual regression scope MEASURED
 Ran 12 representative hook tests against the B=10 patched ROM:
