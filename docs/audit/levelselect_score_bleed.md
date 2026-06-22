@@ -47,17 +47,11 @@ The stub source is in `scripts/build_v301_teleport.py:build_levelsel_attr_clear_
 at ROM `bank13:0x53C2` (34 bytes). Verified live at WRAM `0xDB28`
 across f=100/300/500 — bytes match the build script output.
 
-### Verification status
-The fix is **deployed and the WRAM bytes are correct**, but a true
-end-to-end "screenshot the bleed gone" verification still requires
-populated SRAM with actual checkpoint data (to render the full
-"STAGE 01 STAGE LOAD ◆ TOP 3 …" screen). The current
-`rom/Penta Dragon (J).sav` is empty (all 0xFF), so headless probes
-land on a simpler stage-select grid rather than the full bleed-prone
-screen. The author of commit 2582e85 confirmed the fix in their own
-testing; reproducing it here needs the SRAM populated. **Filed as a
-future iter task** — see `tmp/probe_lvlsel_bleed.lua` for the cold-boot
-probe scaffold.
+### Verification status (resolved iter 156-157)
+The fix is **deployed and the WRAM bytes are correct**. As of
+iter 156-157 the end-to-end verification is also complete — see the
+2026-06-21 update below + iter 158's byte locks in
+`verify_colorizer_bytes.py`. Original "filed for future" task closed.
 
 ### 2026-06-21 UPDATE (iter 156-157): VERIFIED working end-to-end
 
