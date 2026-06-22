@@ -106,6 +106,33 @@ ITER39_V301_CHECKS = [
 # value once we've identified the ROM.
 ITER40_TABLE_HI_OFFSET = 13 * 0x4000 + (0x6D1D - 0x4000)
 
+# Iter 206 — pin the lava_override + banner_override entry signatures.
+# Both routines start with a D880 dispatch check and live in teleport-only
+# regions. Catches any future change that moves the entry point or alters
+# the gate value.
+ITER_206_TELEPORT_OVERRIDE_CHECKS = [
+    (
+        13 * 0x4000 + (0x7E00 - 0x4000),
+        0xFA,
+        "iter 206: lava_override entry at bank13:0x7E00 = 0xFA (LD A,[D880])",
+    ),
+    (
+        13 * 0x4000 + (0x7E01 - 0x4000),
+        0x80,
+        "iter 206: lava_override entry at bank13:0x7E01 = 0x80 (low byte of D880)",
+    ),
+    (
+        13 * 0x4000 + (0x7F70 - 0x4000),
+        0xFA,
+        "iter 206: banner_override entry at bank13:0x7F70 = 0xFA (LD A,[D880])",
+    ),
+    (
+        13 * 0x4000 + (0x7F74 - 0x4000),
+        0x1B,
+        "iter 206: banner_override D880 gate value at bank13:0x7F74 = 0x1B (title banner scene)",
+    ),
+]
+
 # Iter 2582e85 — level-select bleed fix. TELEPORT ONLY (v3.01 production
 # left unpatched; verify the original 0x7393 target survives). The fix
 # redirects bank1:0x3B47's JP NZ from 0x7393 to 0xDB28 (WRAM stub), and
@@ -193,6 +220,7 @@ def main() -> int:
         ))
     elif kind == "teleport":
         checks.extend(ITER_2582E85_TELEPORT_CHECKS)
+        checks.extend(ITER_206_TELEPORT_OVERRIDE_CHECKS)
         checks.append((
             ITER40_TABLE_HI_OFFSET,
             0xDA,
