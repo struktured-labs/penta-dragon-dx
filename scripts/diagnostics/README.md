@@ -31,3 +31,24 @@ entering/leaving the gate), bands track the boss through its bob, background
 clean (no shared-tile bleed, no stray bands). This is the algorithm to port to
 the ROM (build the attr buffer relative to live boss min-row, blit every frame
 via GDMA / VRAM write in the arena's free VBlank budget).
+
+## Recent diagnostic additions (iter 156-160)
+
+These probes are used for ROM/test infrastructure investigation, not
+arena alternation.
+
+- `probe_oam_split_candidates.lua` (iter 160) — dumps OAM at f=300
+  and flags slot pairs whose tiles cross the OBJ colorizer's tile-range
+  buckets. Used to investigate whether the user-reported "half-color
+  sprite" bug (iter 151) was actually a single-sprite tile-boundary
+  split. Across 6 stage-1 savestates: no clean same-sprite splits
+  found — false positives are dx≤8 dy≤16 overlapping distinct sprites
+  (e.g. Sara projectile + Hornet). Filter strictly to dx==8 dy==0 for
+  true same-sprite splits.
+
+- `probe_levelselect2.lua` (iter 156-157) — drives the level-select
+  bleed-fix verification: forces DCFD=1 + A-button auto-input, dumps
+  the bleed-prone "STAGE NN / TOP 3" screen + its attr histogram.
+  Used with `tmp/iter156_lvlsel/test_slot0.sav` (populated SRAM
+  fixture) to verify iter 2582e85's stub clears all VBK=1 attrs by
+  f=300+.
