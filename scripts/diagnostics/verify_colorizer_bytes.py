@@ -214,6 +214,19 @@ ITER_207_SHARED_COLORIZE_CHECKS = [
 # Both routines start with a D880 dispatch check and live in teleport-only
 # regions. Catches any future change that moves the entry point or alters
 # the gate value.
+# Iter 216 — inline hook entry signature (shared v3.01+teleport).
+# bank1:0x42A5 is the live entry point used by both the title banner
+# (bank1:0x3AD8 CALL 0x42A5) and ending-path buffer flush (bank1:0x43BA).
+# Bytes: 0x26 0x98 0x2E 0x00 = LD H,0x98; LD L,0x00. The audit
+# (cutscenes_intro_ending.md §1) corrected an earlier doc that said
+# 0x42A6 RET; the actual entry is at 0x42A5 with LD H,0x98 opcode.
+ITER_216_SHARED_INLINE_HOOK_CHECKS = [
+    (0x42A5, 0x26,
+     "iter 216: inline hook entry at bank1:0x42A5 = 0x26 (LD H, n8 opcode)"),
+    (0x42A6, 0x98,
+     "iter 216: inline hook entry at bank1:0x42A6 = 0x98 (LD H, 0x98 — VRAM tilemap high byte)"),
+]
+
 # Iter 215 — scene_detect entry signature (teleport-only).
 # bank13:0x6FB0 = `FA 80 D8 21 0D DF BE C8`: LD A,[D880]; LD HL,DF0D;
 # CP [HL]; RET Z (fast-path early-out when scene byte unchanged).
@@ -338,7 +351,8 @@ def main() -> int:
               + list(ITER_209_SHARED_VBLANK_HOOK_CHECKS)
               + list(ITER_210_SHARED_PALETTE_CHECKS)
               + list(ITER_211_SHARED_OBJ_PAL_CHECKS)
-              + list(ITER_215_SHARED_CGB_FLAG_CHECKS))
+              + list(ITER_215_SHARED_CGB_FLAG_CHECKS)
+              + list(ITER_216_SHARED_INLINE_HOOK_CHECKS))
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
