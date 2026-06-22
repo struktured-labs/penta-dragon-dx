@@ -224,6 +224,18 @@ ITER_217_SHARED_BG_TABLE_CHECKS = [
      "iter 217: bg_table[0x80] (font/items tile) → pal 1 at bank13:0x7080 = 0x01"),
     (13 * 0x4000 + (0x70E0 - 0x4000), 0x00,
      "iter 217: bg_table[0xE0] (banner-letter tile baseline) → pal 0 at bank13:0x70E0 = 0x00"),
+    # Iter 218: hazard (spikes) + wall-corner tile entries. All routed to
+    # pal 6 (metallic) per iter 16's dungeon_table_spikes_metallic test.
+    # The 2026-05-23 orange regression was tile-0x47 mapping to pal 1; this
+    # check pins the post-fix pal 6 assignment.
+    (13 * 0x4000 + (0x702A - 0x4000), 0x06,
+     "iter 218: bg_table[0x2A] (spike tile) → pal 6 metallic at bank13:0x702A"),
+    (13 * 0x4000 + (0x702E - 0x4000), 0x06,
+     "iter 218: bg_table[0x2E] (spike tile) → pal 6 metallic at bank13:0x702E"),
+    (13 * 0x4000 + (0x7047 - 0x4000), 0x06,
+     "iter 218: bg_table[0x47] (wall corner) → pal 6 metallic at bank13:0x7047"),
+    (13 * 0x4000 + (0x7057 - 0x4000), 0x06,
+     "iter 218: bg_table[0x57] (wall corner) → pal 6 metallic at bank13:0x7057"),
 ]
 
 # Iter 216 — inline hook entry signature (shared v3.01+teleport).
