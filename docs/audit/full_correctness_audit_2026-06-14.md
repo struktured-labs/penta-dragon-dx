@@ -331,11 +331,15 @@ pinned checkpoints; needs user audit before `git rm --cached`).
    0xDF10-0xDF2F buffer. Currently safe via fire-frame RET + 60-frame DF1F skip-gate,
    but invariant is brittle on slower hardware / longer arena init. Relocate the 4
    bytes below 0xDF10 if the teleport build is ever shared/promoted. Not in prod.
-4. **(Cosmetic)** Stale comments: teleport docstring says DF1E/0xDB00 but code uses
-   DF0E; "GDMA" filename/logs are a misnomer (attr_comp+GDMA dead). Fix comments.
-5. **(Git hygiene)** Delete/relocate 13 untracked scratch scripts; delete empty
-   package-lock.json; gitignore live_palettes.txt + *.ram/*.sav; git rm --cached the
-   mutating SRAM files (flag pre-existing tracked .ram/.sav to user).
+4. **(Cosmetic — RESOLVED iter 178)** Stale comments: teleport docstring said DF1E
+   but code uses DF0E. Fixed in iter 178 (3 stale references updated, ROM rebuilds
+   byte-identical). "GDMA" filename misnomer noted but not renamed (would churn
+   git history; not worth the disruption).
+5. **(Git hygiene — RESOLVED iter 179)** `.gitignore` updated to ignore
+   `/package-lock.json`, `rom/working/*.txt`, `rom/working/*.ram`, and global
+   `*.ram`. Tracked `rom/*.sav` files left alone (audit advised against bulk
+   removal — some may be intentional pinned checkpoints; needs user decision
+   before `git rm --cached`).
 
 No correctness regressions found in either build. Both ROMs assemble with all
 internal asserts passing (overflow guards, inline-hook entry-point check, arena slot
