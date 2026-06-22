@@ -953,10 +953,13 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W with rock item visible"
+    # Iter 170: tolerance=80 — v3.01 splits the 186 red pixels into 132
+    # #FF0000 + 54 #FF3900; tol=80 includes both as "red-ish".
     pixel_expectations:
       - color: "FF0000"
         min_pixels: 150
-        description: "Sara W red accents with rock item (observed 186, 5/5 runs)"
+        tolerance: 80
+        description: "Sara W red accents with rock item (tol=80 for v3.01 compat; iter 170)"
 
   - name: "sara_w_flash_item"
     savestate: "level1_sara_w_flash_item.ss0"
@@ -1200,10 +1203,14 @@ tests:
       - slots: [0, 1, 2, 3]
         palette: 2
         description: "Sara W during spider miniboss — proves iter 31 fix covers spider scene"
+    # Iter 170: tolerance=80 for v3.01 compat (renders #FF0000 + #FF2900
+     # blend); also raises the spider_miniboss_sara_w live-render check
+     # past the v3.01 mGBA color-correction split.
     pixel_expectations:
       - color: "FF0000"
         min_pixels: 130
-        description: "Sara W red accents in live spider miniboss (observed 162, 5/5 runs)"
+        tolerance: 80
+        description: "Sara W red accents in live spider miniboss (tol=80 for v3.01 compat; iter 170)"
 
   - name: "sara_d_teleport_tile"
     savestate: "level1_sara_d_teleport_tile.ss0"
