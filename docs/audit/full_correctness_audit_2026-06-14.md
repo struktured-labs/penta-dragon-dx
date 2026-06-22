@@ -299,7 +299,7 @@ is pre-existing tech debt, not introduced by this branch — flag for the user b
 not bulk-remove without confirmation (some `rom/versions/*.sav` may be intentional
 pinned checkpoints).
 
-### .gitignore additions recommended
+### .gitignore additions recommended — RESOLVED iter 179
 
 ```
 package-lock.json
@@ -307,6 +307,13 @@ rom/working/*.txt
 *.ram
 # (optionally) rom/*.sav  with  !rom/versions/*.sav  if those are intentional
 ```
+
+**Iter 179 (2026-06-22):** added `/package-lock.json`, `rom/working/*.txt`,
+`rom/working/*.ram`, and a global `*.ram` to .gitignore. Verified
+post-update git status no longer shows live_palettes.txt, the .ram files,
+or package-lock.json as untracked. Did NOT touch the tracked `rom/*.sav`
+files (audit advised against bulk-removal — some may be intentional
+pinned checkpoints; needs user audit before `git rm --cached`).
 
 ---
 

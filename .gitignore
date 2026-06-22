@@ -49,6 +49,19 @@ rl/saves/user_demo/*.sav
 rom/working/*.png
 rom/working/*.sav
 rom/working/*.ss*
+rom/working/*.ram
+
+# Auto-generated palette dumps (live_palette_editor.py)
+rom/working/*.txt
+
+# Emulator SRAM files (battery saves, mutated every play session)
+# Audit 2026-06-14 §5 recommended ignoring globally; tracked ones in
+# rom/*.sav should be audited separately for intentionality.
+*.ram
+
+# Empty npm lockfile that an MCP/node tool keeps regenerating —
+# this repo is Python (uv/pyproject.toml).
+/package-lock.json
 
 # Letta agent workspace
 .letta/
