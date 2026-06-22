@@ -13,16 +13,17 @@
 -- dy EXACTLY 0 (the typical 8x16-mode horizontal split).
 --
 -- Usage:
---   xvfb-run -a mgba-qt ROM -t SAVESTATE.ss0 --script \
---     scripts/diagnostics/probe_oam_split_candidates.lua -l 0
--- Output path: edit OUTPUT_LOG sentinel before running.
+--   OUT=tmp/oam_split.log xvfb-run -a mgba-qt ROM -t SAVESTATE.ss0 \
+--     --script scripts/diagnostics/probe_oam_split_candidates.lua -l 0
+-- (defaults to /tmp/oam_split.log if OUT env var unset)
 
 -- Dump OAM at f=300 + report adjacent-slot tile ranges (potential split spots)
+local OUT = os.getenv("OUT") or "/tmp/oam_split.log"
 local frame = 0
 callbacks:add("frame", function()
     frame = frame + 1
     if frame == 300 then
-        local h = io.open("OUTPUT_LOG", "w")
+        local h = io.open(OUT, "w")
         if h then
             h:write("OAM dump at f=300:\n")
             h:write("slot |  X  |  Y  | tile | attr | pal\n")
