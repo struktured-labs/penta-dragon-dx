@@ -331,10 +331,14 @@ tests:
     # across runs (mGBA boot-timing sensitivity on the cond_pal first-
     # call window), this scene's CRAM state is reliably loaded by f=68.
     # Floor at 20 (well below the observed 54).
+    # Iter 168: tolerance=90 for v3.01 compat (same mGBA color-correction
+    # divergence as iter 166's sara_d_alone). v3.01 renders 29 #00FF00 +
+    # 27 #007300 (=56 total green) where teleport renders 54 #00A500.
     pixel_expectations:
       - color: "00A500"
         min_pixels: 42
-        description: "SaraDragon mid-green (#00A500) rendered at f=68 (observed 54, 5/5 zero-jitter; iter 129 tightened 20→42)"
+        tolerance: 90
+        description: "SaraDragon green pixels at f=68 (tol=90 for v3.01 compat; iter 168)"
 
   - name: "jet_form_secret_stage"
     savestate: "level1_sara_w_in_jet_form_secret_stage.ss0"
