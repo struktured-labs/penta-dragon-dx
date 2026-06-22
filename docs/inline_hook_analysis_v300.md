@@ -108,7 +108,7 @@
 256-byte minimal mapping (matches v2.99):
 - pal0 (default): 157 tile IDs
 - pal1 (items 0x88-0xDF): 88 tile IDs
-- pal5 (hazards 0x2A-0x2E, 0x3A-0x3D, 0x47, 0x57): 11 tile IDs
+- pal6 (hazards 0x2A-0x2E, 0x3A-0x3D, 0x47, 0x57): 11 tile IDs (per iter 16; iter 218 byte-locked)
 
 ### bg_sweep retained as safety net
 

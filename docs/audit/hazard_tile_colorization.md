@@ -374,8 +374,10 @@ spike room (FFBD=03/07, the `cat_fish_moth_spike_hazard` scene) to confirm.
   (Part B option 3): extend `build_scene_detect` (lines 165-227) with an
   FFBA branch + a new dungeon-lava table page; verify free-page placement
   vs `POSMAP_DATA_ADDR` (line 59).
-- (Housekeeping) fix stale `0x47/0x57 = pal5` claims in
+- (Housekeeping — RESOLVED iter 222) stale `0x47/0x57 = pal5` claims in
   `docs/inline_tile_attr_copy.md:124` and `docs/inline_hook_analysis_v300.md:111`.
+  Both updated to pal 6 (metallic) per iter 16's dungeon_table_spikes_metallic
+  + iter 218's ROM byte locks.
 - (Optional) `tmp/bg_dumps/analyze.py:204-218` generator if regenerating the
   table from dumps.
 
