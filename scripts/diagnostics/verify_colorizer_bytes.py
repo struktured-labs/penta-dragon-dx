@@ -106,6 +106,18 @@ ITER39_V301_CHECKS = [
 # value once we've identified the ROM.
 ITER40_TABLE_HI_OFFSET = 13 * 0x4000 + (0x6D1D - 0x4000)
 
+# Iter 208 — STAT IRQ vector. Teleport redirects to WRAM 0xDB50 (the
+# iter 10 STAT-IRQ WRAM stub that re-stamps slot-1 attr from FFBE).
+# v3.01 keeps the original 0x0853 target (unpatched).
+ITER_208_STAT_IRQ_TELEPORT_CHECKS = [
+    (0x0049, 0x50, "iter 208 (teleport): STAT IRQ JP low at 0x0049 = 0x50 (WRAM 0xDB50)"),
+    (0x004A, 0xDB, "iter 208 (teleport): STAT IRQ JP high at 0x004A = 0xDB"),
+]
+ITER_208_STAT_IRQ_V301_CHECKS = [
+    (0x0049, 0x53, "iter 208 (v3.01): STAT IRQ JP low at 0x0049 = 0x53 (original 0x0853)"),
+    (0x004A, 0x08, "iter 208 (v3.01): STAT IRQ JP high at 0x004A = 0x08"),
+]
+
 # Iter 207 — colorize handler entry signature. Shared by v3.01 and teleport
 # (both use the same handler at bank13:0x6E00). Bytes: F0 4F F5 AF E0 4F
 # = LDH A,[FF4F]; PUSH AF; XOR A; LDH [FF4F],A (VBK save + zero — entry
@@ -230,6 +242,7 @@ def main() -> int:
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
+        checks.extend(ITER_208_STAT_IRQ_V301_CHECKS)
         checks.append((
             ITER40_TABLE_HI_OFFSET,
             0x70,
@@ -238,6 +251,7 @@ def main() -> int:
     elif kind == "teleport":
         checks.extend(ITER_2582E85_TELEPORT_CHECKS)
         checks.extend(ITER_206_TELEPORT_OVERRIDE_CHECKS)
+        checks.extend(ITER_208_STAT_IRQ_TELEPORT_CHECKS)
         checks.append((
             ITER40_TABLE_HI_OFFSET,
             0xDA,
