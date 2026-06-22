@@ -14,7 +14,7 @@ execute the teleport AFTER the RETI, from a WRAM landing pad.
 
 Architecture:
   1. Cold-boot once: copy the ~37-byte landing pad code from bank 13 ROM
-     to WRAM 0xDB00 (which is executable on CGB). Sentinel: DF1E = 0x5A.
+     to WRAM 0xDB00 (which is executable on CGB). Sentinel: DF0E = 0x5A.
   2. Teleport routine (called every VBlank from our hook): detect combo,
      debounce, cycle boss counter, set FFBA/FFBF. Then modify the stack:
        - Read the CPU-pushed PC at SP+14 (main-loop return), save to DF20/21.
@@ -28,8 +28,10 @@ Architecture:
      CALLs 0x1A2B (proven safe in main-loop context). If 0x1A2B returns,
      restore IE and JP the saved main-loop PC.
 
-WRAM allocation (DF1E-DF22):
-  DF1E — landing pad copy sentinel (0x5A = copied)
+WRAM allocation (DF0E + DF20-DF22):
+  DF0E — landing pad / stub copy sentinel (0x5A = copied);
+         shared across landing-pad, levelsel-stub, and STAT-stub
+         copy blocks so the cold-boot section runs once.
   DF20/21 — saved main-loop PC low/high (for the JP back)
   DF22 — saved IE
 """
@@ -735,8 +737,9 @@ def build_teleport_routine() -> bytes:
     c.extend([0xCD, CUTSCENE_OVERRIDE_ADDR & 0xFF, (CUTSCENE_OVERRIDE_ADDR >> 8) & 0xFF])
 
     # ---- One-shot: ensure landing pad is copied to WRAM 0xDB00 ----
-    # Check sentinel DF1E
-    c.extend([0xFA, 0x0E, 0xDF])          # LD A, [DF1E]
+    # Check sentinel DF0E (iter 178: was stale "DF1E" comment; bytes
+    # have always been DF0E — see also lines 756/767/780).
+    c.extend([0xFA, 0x0E, 0xDF])          # LD A, [DF0E]
     c.extend([0xFE, 0x5A])                # CP 0x5A
     j_copy_done = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z, copy_done

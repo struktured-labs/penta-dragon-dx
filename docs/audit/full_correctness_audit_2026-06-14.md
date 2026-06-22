@@ -227,14 +227,18 @@ enforced by the fire-frame RET + the DF1F skip-gate.
   CLAUDE.md's rule. Cost: 4 single-byte address edits in `build_teleport_routine`.
   Low effort, eliminates the only structural fragility found.
 
-### Note on stale comments (cosmetic, not a bug)
+### Note on stale comments (cosmetic, not a bug) — RESOLVED iter 178
 
 `build_v301_teleport.py` docstring (lines 31-35) and the build_landing_pad/
-build_teleport_routine comments reference **DF1E** as the sentinel and **0xDB00** as
+build_teleport_routine comments referenced **DF1E** as the sentinel and **0xDB00** as
 the landing pad, but the emitted code uses **DF0E** (verified: copy-sentinel read at
-0x6E83 = `FA 0E DF`, write at 0x6E9A = `EA 0E DF`). The docstring is stale relative
-to the flicker-fix relocation. Recommend updating the comments to DF0E to avoid
-misleading future edits. The code is correct; only the comments lie.
+0x6E83 = `FA 0E DF`, write at 0x6E9A = `EA 0E DF`).
+
+**Iter 178 (2026-06-22):** updated the stale docstring + inline comments to
+DF0E. ROM rebuilds byte-identical (sha256 dff74a5f) — no functional change,
+only documentation accuracy. The "landing pad / stub copy sentinel" semantic
+also clarified: DF0E is shared across landing-pad, levelsel-stub, and STAT-stub
+copy blocks so the cold-boot section runs once.
 
 ---
 
