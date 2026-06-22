@@ -122,6 +122,16 @@ ITER_211_SHARED_OBJ_PAL_CHECKS = [
      "iter 211: OBP-2 idx 2 (SaraWitch pink-red) low byte at bank13:0x6854 = 0x1F (0x511F)"),
     (13 * 0x4000 + (0x6855 - 0x4000), 0x51,
      "iter 211: OBP-2 idx 2 (SaraWitch pink-red) high byte at bank13:0x6855 = 0x51"),
+    # Iter 212: SaraDragon (OBP-1) primary + secondary greens. Both ROMs
+    # share obj_data, so these are valid checks across both.
+    (13 * 0x4000 + (0x684A - 0x4000), 0xE0,
+     "iter 212: OBP-1 idx 1 (SaraDragon bright green) low at bank13:0x684A = 0xE0 (0x03E0)"),
+    (13 * 0x4000 + (0x684B - 0x4000), 0x03,
+     "iter 212: OBP-1 idx 1 (SaraDragon bright green) high at bank13:0x684B = 0x03"),
+    (13 * 0x4000 + (0x684C - 0x4000), 0xC0,
+     "iter 212: OBP-1 idx 2 (SaraDragon mid green) low at bank13:0x684C = 0xC0 (0x01C0)"),
+    (13 * 0x4000 + (0x684D - 0x4000), 0x01,
+     "iter 212: OBP-1 idx 2 (SaraDragon mid green) high at bank13:0x684D = 0x01"),
 ]
 
 # Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
