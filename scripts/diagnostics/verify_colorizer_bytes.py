@@ -106,6 +106,21 @@ ITER39_V301_CHECKS = [
 # value once we've identified the ROM.
 ITER40_TABLE_HI_OFFSET = 13 * 0x4000 + (0x6D1D - 0x4000)
 
+# Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
+# cond_pal @ bank13:0x6C90 reads DF02 sentinel (cold-boot palette init guard).
+# shadow_main @ bank13:0x69D0 starts the OBJ-shadow-colorizer (push regs +
+# LDH A,[FFBE] for Sara form dispatch).
+ITER_210_SHARED_PALETTE_CHECKS = [
+    (13 * 0x4000 + (0x6C90 - 0x4000), 0xFA,
+     "iter 210: cond_pal entry at bank13:0x6C90 = 0xFA (LD A,[DF02] sentinel check)"),
+    (13 * 0x4000 + (0x6C91 - 0x4000), 0x02,
+     "iter 210: cond_pal DF02 sentinel low byte at bank13:0x6C91 = 0x02"),
+    (13 * 0x4000 + (0x69D0 - 0x4000), 0xF5,
+     "iter 210: shadow_main entry at bank13:0x69D0 = 0xF5 (PUSH AF)"),
+    (13 * 0x4000 + (0x69D4 - 0x4000), 0xF0,
+     "iter 210: shadow_main FFBE read at bank13:0x69D4 = 0xF0 (LDH A,[FFBE])"),
+]
+
 # Iter 209 — safe-switching VBlank hook at bank0:0x0824. Same entry in
 # both ROMs: `F0 99 F5 3E 0D E0 70` = LDH A,[FF99]; PUSH AF; LD A,0x0D;
 # LDH [FF70],A — saves FF99 then maps WRAM bank 13 before calling the
@@ -249,7 +264,8 @@ def main() -> int:
     ]
     checks = (list(iter31_for_kind) + list(ITER40_OPCODE_CHECKS)
               + list(ITER_207_SHARED_COLORIZE_CHECKS)
-              + list(ITER_209_SHARED_VBLANK_HOOK_CHECKS))
+              + list(ITER_209_SHARED_VBLANK_HOOK_CHECKS)
+              + list(ITER_210_SHARED_PALETTE_CHECKS))
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
