@@ -106,6 +106,15 @@ ITER39_V301_CHECKS = [
 # value once we've identified the ROM.
 ITER40_TABLE_HI_OFFSET = 13 * 0x4000 + (0x6D1D - 0x4000)
 
+# Iter 209 — safe-switching VBlank hook at bank0:0x0824. Same entry in
+# both ROMs: `F0 99 F5 3E 0D E0 70` = LDH A,[FF99]; PUSH AF; LD A,0x0D;
+# LDH [FF70],A — saves FF99 then maps WRAM bank 13 before calling the
+# wrapper. Catches any change to the hook entry layout.
+ITER_209_SHARED_VBLANK_HOOK_CHECKS = [
+    (0x0824, 0xF0, "iter 209: VBlank hook entry at 0x0824 = 0xF0 (LDH A,[FF99])"),
+    (0x0825, 0x99, "iter 209: VBlank hook entry at 0x0825 = 0x99 (FF99 low byte)"),
+]
+
 # Iter 208 — STAT IRQ vector. Teleport redirects to WRAM 0xDB50 (the
 # iter 10 STAT-IRQ WRAM stub that re-stamps slot-1 attr from FFBE).
 # v3.01 keeps the original 0x0853 target (unpatched).
@@ -238,7 +247,9 @@ def main() -> int:
     iter31_for_kind = ITER31_CHECKS if kind == "teleport" else [
         c for c in ITER31_CHECKS if c[0] not in hwoam_offsets
     ]
-    checks = list(iter31_for_kind) + list(ITER40_OPCODE_CHECKS) + list(ITER_207_SHARED_COLORIZE_CHECKS)
+    checks = (list(iter31_for_kind) + list(ITER40_OPCODE_CHECKS)
+              + list(ITER_207_SHARED_COLORIZE_CHECKS)
+              + list(ITER_209_SHARED_VBLANK_HOOK_CHECKS))
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
