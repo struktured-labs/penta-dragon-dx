@@ -50,6 +50,13 @@ with pal 0 (white BG, invisible) in v3.01.
 `_bg_table`. The deployed v3.01 ROM's bg_table at 0x37000-0x370FF
 now byte-for-byte matches v3.00.
 
+**Iter 16 (2026-06-14) follow-up:** the hazard tile mappings were
+LATER moved from pal 5 → pal 6 (metallic) because pal 5 reads as
+fire/lava and the user wanted metallic spikes. Current v3.01
+bg_table has tiles 0x2A-0x2E, 0x3A-0x3D, 0x47, 0x57 = pal 6
+(byte-locked at iter 218). See
+`docs/audit/hazard_tile_colorization.md` for full history.
+
 **Verification**:
 - Pure title screen (no inputs) at f400 in mGBA: full YANOMAN logo,
   "OPENING START / GAME START" menu, "©1992 YANOMAN / ©1992 JAPAN
