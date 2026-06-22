@@ -132,6 +132,17 @@ ITER_211_SHARED_OBJ_PAL_CHECKS = [
      "iter 212: OBP-1 idx 2 (SaraDragon mid green) low at bank13:0x684C = 0xC0 (0x01C0)"),
     (13 * 0x4000 + (0x684D - 0x4000), 0x01,
      "iter 212: OBP-1 idx 2 (SaraDragon mid green) high at bank13:0x684D = 0x01"),
+    # Iter 214: BG palette source bytes — Dungeon (pal 0) + Items/font (pal 1).
+    # bg_data shares bank13:0x6800+. Locks the iconic Dungeon-lavender +
+    # cherry-red item color sources. Both ROMs share this block.
+    (13 * 0x4000 + (0x6802 - 0x4000), 0x94,
+     "iter 214: BG-pal-0 idx 1 (Dungeon lavender) low at bank13:0x6802 = 0x94 (0x7E94)"),
+    (13 * 0x4000 + (0x6803 - 0x4000), 0x7E,
+     "iter 214: BG-pal-0 idx 1 (Dungeon lavender) high at bank13:0x6803 = 0x7E"),
+    (13 * 0x4000 + (0x680A - 0x4000), 0x1F,
+     "iter 214: BG-pal-1 idx 1 (Items cherry red) low at bank13:0x680A = 0x1F (0x001F)"),
+    (13 * 0x4000 + (0x680B - 0x4000), 0x00,
+     "iter 214: BG-pal-1 idx 1 (Items cherry red) high at bank13:0x680B = 0x00"),
     # Iter 213: boss_pal source bytes — Gargoyle + Spider signature colors.
     # Both ROMs share obj_data including boss_pal at bank13:0x6880. Per iter
     # 145, Gargoyle boss_pal[0] idx 1 = 0x601F (renders dark magenta), and
