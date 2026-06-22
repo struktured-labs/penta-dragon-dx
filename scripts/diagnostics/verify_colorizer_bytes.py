@@ -132,6 +132,18 @@ ITER_211_SHARED_OBJ_PAL_CHECKS = [
      "iter 212: OBP-1 idx 2 (SaraDragon mid green) low at bank13:0x684C = 0xC0 (0x01C0)"),
     (13 * 0x4000 + (0x684D - 0x4000), 0x01,
      "iter 212: OBP-1 idx 2 (SaraDragon mid green) high at bank13:0x684D = 0x01"),
+    # Iter 213: boss_pal source bytes — Gargoyle + Spider signature colors.
+    # Both ROMs share obj_data including boss_pal at bank13:0x6880. Per iter
+    # 145, Gargoyle boss_pal[0] idx 1 = 0x601F (renders dark magenta), and
+    # Spider boss_pal[1] idx 2 = 0x00BF (the orange spider-body catcher).
+    (13 * 0x4000 + (0x6882 - 0x4000), 0x1F,
+     "iter 213: Gargoyle boss_pal[0] idx 1 low at bank13:0x6882 = 0x1F (0x601F)"),
+    (13 * 0x4000 + (0x6883 - 0x4000), 0x60,
+     "iter 213: Gargoyle boss_pal[0] idx 1 high at bank13:0x6883 = 0x60"),
+    (13 * 0x4000 + (0x688C - 0x4000), 0xBF,
+     "iter 213: Spider boss_pal[1] idx 2 low at bank13:0x688C = 0xBF (0x00BF orange catcher)"),
+    (13 * 0x4000 + (0x688D - 0x4000), 0x00,
+     "iter 213: Spider boss_pal[1] idx 2 high at bank13:0x688D = 0x00"),
 ]
 
 # Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
