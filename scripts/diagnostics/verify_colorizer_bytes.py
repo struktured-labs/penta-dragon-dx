@@ -214,6 +214,18 @@ ITER_207_SHARED_COLORIZE_CHECKS = [
 # Both routines start with a D880 dispatch check and live in teleport-only
 # regions. Catches any future change that moves the entry point or alters
 # the gate value.
+# Iter 217 — dungeon bg_table content (shared). bank13:0x7000 holds the
+# 256-byte tile→palette dungeon table. Key entries:
+# - 0x7080 = 0x01 (font/items tile 0x80 → pal 1 red — iter 16 verified)
+# - 0x70E0 = 0x00 (banner letter tile 0xE0 → pal 0; only banner_override
+#   re-routes to pal 4 in D880=0x1B scene)
+ITER_217_SHARED_BG_TABLE_CHECKS = [
+    (13 * 0x4000 + (0x7080 - 0x4000), 0x01,
+     "iter 217: bg_table[0x80] (font/items tile) → pal 1 at bank13:0x7080 = 0x01"),
+    (13 * 0x4000 + (0x70E0 - 0x4000), 0x00,
+     "iter 217: bg_table[0xE0] (banner-letter tile baseline) → pal 0 at bank13:0x70E0 = 0x00"),
+]
+
 # Iter 216 — inline hook entry signature (shared v3.01+teleport).
 # bank1:0x42A5 is the live entry point used by both the title banner
 # (bank1:0x3AD8 CALL 0x42A5) and ending-path buffer flush (bank1:0x43BA).
@@ -352,7 +364,8 @@ def main() -> int:
               + list(ITER_210_SHARED_PALETTE_CHECKS)
               + list(ITER_211_SHARED_OBJ_PAL_CHECKS)
               + list(ITER_215_SHARED_CGB_FLAG_CHECKS)
-              + list(ITER_216_SHARED_INLINE_HOOK_CHECKS))
+              + list(ITER_216_SHARED_INLINE_HOOK_CHECKS)
+              + list(ITER_217_SHARED_BG_TABLE_CHECKS))
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
