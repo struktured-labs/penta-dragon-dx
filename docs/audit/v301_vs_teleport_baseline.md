@@ -13,6 +13,26 @@ dispatch/scene-table suite; gaps are all in the "teleport-only-feature"
 category. 0 "both failing" means no test exposes a regression present
 in both ROMs.
 
+### Iter 166-170: tolerance-fix sweep → v3.01 49/114 → 55/114
+
+Applied per-channel `tolerance` parameter to 5 pixel tests where v3.01
+renders the same logical color slightly differently from teleport (due
+to mGBA CGB color-correction state divergence between runs — see
+project_pixel_test_flakiness iter 165 finding). Verified both ROMs
+pass each affected single-test invocation.
+
+- iter 166: sara_d_alone (tol=90 on green)
+- iter 167: sara_d_green_render (tol=90 on green)
+- iter 168: sara_d_hornet_or_moth (tol=90 on green)
+- iter 169: sara_w_pink_render BG-pal-0 (tol=80 on light-teal)
+- iter 170: sara_w_rock_item + sara_w_in_spider_miniboss_live
+  (tol=80 on red — covers #FF0000 + nearby #FF2900/#FF3900)
+
+Iter 171 surveyed 12 more candidates; rest have functional rendering
+differences (red count short with NO nearby reds, true v3.01 gaps that
+need iter-31 hwoam_recolor backport to fix). Diminishing returns
+confirmed; sweep paused.
+
 ## 2026-06-19 UPDATE (iter 46): full 65-test matrix with corrected regex
 
   **v3.01:    42/65 pass (65%)**
