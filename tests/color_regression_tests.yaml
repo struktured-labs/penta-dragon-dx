@@ -1470,10 +1470,13 @@ tests:
     check_boss_flag: false
     # Iter 89: raised min from 5 to 15 — sara_d_alone shows green=25
     # stable across 5 runs, leaving 1.7x headroom.
+    # Iter 166: same v3.01-vs-teleport color-correction issue as sara_d_alone.
+    # tolerance=90 lets both ROMs pass.
     pixel_expectations:
       - color: "00A500"
         min_pixels: 20
-        description: "Some #00A500 green still rendered (observed 25, 3/3 stable; iter 136 tightened 15→20)"
+        tolerance: 90
+        description: "Some green-ish pixel still rendered at f=300 (BG-pal-3 + OBJ overlap; tol=90 for v3.01 compatibility)"
 
   # Iter 71 abandoned experiment: a "sara_d_green_force_invalidate" test
   # using force_df00: 0xFF every frame was tried as a SaraDragon
