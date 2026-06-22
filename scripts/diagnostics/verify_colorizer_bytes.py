@@ -106,6 +106,23 @@ ITER39_V301_CHECKS = [
 # value once we've identified the ROM.
 ITER40_TABLE_HI_OFFSET = 13 * 0x4000 + (0x6D1D - 0x4000)
 
+# Iter 207 — colorize handler entry signature. Shared by v3.01 and teleport
+# (both use the same handler at bank13:0x6E00). Bytes: F0 4F F5 AF E0 4F
+# = LDH A,[FF4F]; PUSH AF; XOR A; LDH [FF4F],A (VBK save + zero — entry
+# pattern of every CGB-safe routine that touches palette/attribute RAM).
+ITER_207_SHARED_COLORIZE_CHECKS = [
+    (
+        13 * 0x4000 + (0x6E00 - 0x4000),
+        0xF0,
+        "iter 207: colorize handler entry at bank13:0x6E00 = 0xF0 (LDH A,[FF4F] VBK save)",
+    ),
+    (
+        13 * 0x4000 + (0x6E01 - 0x4000),
+        0x4F,
+        "iter 207: colorize handler entry at bank13:0x6E01 = 0x4F (FF4F low byte)",
+    ),
+]
+
 # Iter 206 — pin the lava_override + banner_override entry signatures.
 # Both routines start with a D880 dispatch check and live in teleport-only
 # regions. Catches any future change that moves the entry point or alters
@@ -209,7 +226,7 @@ def main() -> int:
     iter31_for_kind = ITER31_CHECKS if kind == "teleport" else [
         c for c in ITER31_CHECKS if c[0] not in hwoam_offsets
     ]
-    checks = list(iter31_for_kind) + list(ITER40_OPCODE_CHECKS)
+    checks = list(iter31_for_kind) + list(ITER40_OPCODE_CHECKS) + list(ITER_207_SHARED_COLORIZE_CHECKS)
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
