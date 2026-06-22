@@ -214,6 +214,26 @@ ITER_207_SHARED_COLORIZE_CHECKS = [
 # Both routines start with a D880 dispatch check and live in teleport-only
 # regions. Catches any future change that moves the entry point or alters
 # the gate value.
+# Iter 215 — scene_detect entry signature (teleport-only).
+# bank13:0x6FB0 = `FA 80 D8 21 0D DF BE C8`: LD A,[D880]; LD HL,DF0D;
+# CP [HL]; RET Z (fast-path early-out when scene byte unchanged).
+ITER_215_TELEPORT_SCENE_DETECT_CHECKS = [
+    (13 * 0x4000 + (0x6FB0 - 0x4000), 0xFA,
+     "iter 215: scene_detect entry at bank13:0x6FB0 = 0xFA (LD A,[D880])"),
+    (13 * 0x4000 + (0x6FB3 - 0x4000), 0x21,
+     "iter 215: scene_detect LD HL opcode at bank13:0x6FB3 = 0x21"),
+    (13 * 0x4000 + (0x6FB4 - 0x4000), 0x0D,
+     "iter 215: scene_detect DF0D cache addr low at bank13:0x6FB4 = 0x0D"),
+    (13 * 0x4000 + (0x6FB5 - 0x4000), 0xDF,
+     "iter 215: scene_detect DF0D cache addr high at bank13:0x6FB5 = 0xDF"),
+]
+
+# Iter 215b — CGB flag at 0x143 (shared, all CGB-capable ROMs must have this).
+ITER_215_SHARED_CGB_FLAG_CHECKS = [
+    (0x0143, 0x80,
+     "iter 215: CGB flag at 0x0143 = 0x80 (CGB+DMG-compatible — game uses CGB palette/attr features)"),
+]
+
 ITER_206_TELEPORT_OVERRIDE_CHECKS = [
     (
         13 * 0x4000 + (0x7E00 - 0x4000),
@@ -317,7 +337,8 @@ def main() -> int:
               + list(ITER_207_SHARED_COLORIZE_CHECKS)
               + list(ITER_209_SHARED_VBLANK_HOOK_CHECKS)
               + list(ITER_210_SHARED_PALETTE_CHECKS)
-              + list(ITER_211_SHARED_OBJ_PAL_CHECKS))
+              + list(ITER_211_SHARED_OBJ_PAL_CHECKS)
+              + list(ITER_215_SHARED_CGB_FLAG_CHECKS))
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
@@ -331,6 +352,7 @@ def main() -> int:
         checks.extend(ITER_2582E85_TELEPORT_CHECKS)
         checks.extend(ITER_206_TELEPORT_OVERRIDE_CHECKS)
         checks.extend(ITER_208_STAT_IRQ_TELEPORT_CHECKS)
+        checks.extend(ITER_215_TELEPORT_SCENE_DETECT_CHECKS)
         checks.append((
             ITER40_TABLE_HI_OFFSET,
             0xDA,
