@@ -1033,17 +1033,15 @@ def main():
     assert SPLASH_TABLE_ADDR + 256 <= POSMAP_PTR_TABLE, \
         f"splash table 0x{SPLASH_TABLE_ADDR + 256:04X} collides with posmap ptr table 0x{POSMAP_PTR_TABLE:04X}"
     off = BANK13 + (SPLASH_TABLE_ADDR - 0x4000)
-    # Iter 234: selective splash table — letter tiles 0x2C-0x7F → pal 1
-    # (cherry red on black, contrast luma 179) instead of pal 0 (pale
-    # blue on black, contrast luma 80 — unreadable per user 2026-06-22).
-    # ULTRACODE workflow agent verified tile range 0x2C-0x7F is the font
-    # range used by all 9 boss/stage splashes (probed splash_stage1_d880_18.ss0).
-    # Non-letter tiles (corners, borders) outside that range stay at pal 0.
-    splash_tbl = bytearray(256)
-    for tid in range(0x2C, 0x80):
-        splash_tbl[tid] = 1
-    rom[off:off + 256] = bytes(splash_tbl)
-    print(f"  splash table: 256 bytes (letters 0x2C-0x7F→pal1) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
+    # Iter 234 attempted: letter tiles 0x2C-0x7F → pal 1 for splash legibility.
+    # REVERTED iter 236: scene_detect's fast-path (RET Z when scene unchanged)
+    # keeps splash_table cached in WRAM 0xDA00 across savestate-captured
+    # transitions, so iter 234's pal-1 letters bleed into stage 6 BG render
+    # (stage6_decorative_pal5 lavender count: 7822 → 5554, FAIL).
+    # Future fix needs scene_detect to always reload on splash→dungeon
+    # transition, OR a different mechanism that doesn't share WRAM 0xDA00.
+    rom[off:off + 256] = bytes(256)   # all pal0 (original)
+    print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
     # Post-DMA HW-OAM recolor (enemies items 3,4,6,11), CALLed from the wrapper.
     hwoam = build_hwoam_recolor()

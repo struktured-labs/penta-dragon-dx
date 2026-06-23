@@ -73,14 +73,10 @@ def _bg_table() -> bytes:
     # use their own tables. Start at 0x80 (was 0x88) to also catch A-H.
     for i in range(0x80, 0xE0):
         table[i] = 1
-    # Iter 233: cursor tile 0x73 → pal 1 (red). User-reported "cursor missing
-    # from initial main menu" (2026-06-22). Per ULTRACODE workflow finding:
-    # cursor IS drawn at row 9 col 4 with tile 0x73 attr=pal 0, but BG pal 0
-    # indices 2+3 are still boot-ROM white on the title screen (palette_loader
-    # for pal 0 hasn't completed before render). Re-tagging to pal 1 makes
-    # the cursor render in red — pal 1 IS fully loaded at f=400 onwards.
-    # Safe: tile 0x73 is not used elsewhere in dungeon BG (verified by probe).
-    table[0x73] = 1
+    # Iter 233 attempted: cursor tile 0x73 → pal 1 (red) for title-cursor
+    # visibility. REVERTED iter 236: investigation showed stage 6 BG also
+    # uses tile 0x73 (lavender dropped 7822 → 5554 = stage6_decorative_pal5
+    # fails). Future fix needs per-scene WRAM 0xDA00 override.
     # Sentinel — was 0xFF historically (palette 7 sentinel for ff_filter).
     # Changed to 0x00 (pal 0): inline tile+attr copy at 0x42A7 looks up
     # bg_table[tile_id] and writes the result as the attr byte. Any
