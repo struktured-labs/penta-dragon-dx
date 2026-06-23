@@ -282,6 +282,72 @@ ITER_217_SHARED_BG_TABLE_CHECKS = [
      "iter 253: bg_table[0xFF] (sentinel terminator) → pal 0 (was 0xFF historically)"),
 ]
 
+
+# iter 254 — extend wall/corner pal-6 locks. Iter 218 covered only
+# 0x47 + 0x57 corners; the build script's _bg_table() also routes
+# 24 other wall/edge/corner tiles to pal 6 (slate gray metallic).
+# All 24 are verified pal 6 in both teleport.gb and v3.01 ROMs.
+# These catch the broader class of "wall-tile color regression" the
+# user reported on 2026-05-23 (0x47/0x57 reverting to pal 5 lava
+# would show as orange wall corners).
+ITER_254_SHARED_WALL_TILE_CHECKS = [
+    # Wall edges (8 tiles)
+    (13 * 0x4000 + (0x7014 - 0x4000), 0x06,
+     "iter 254: bg_table[0x14] (wall edge) → pal 6"),
+    (13 * 0x4000 + (0x7016 - 0x4000), 0x06,
+     "iter 254: bg_table[0x16] (wall edge) → pal 6"),
+    (13 * 0x4000 + (0x7017 - 0x4000), 0x06,
+     "iter 254: bg_table[0x17] (wall edge) → pal 6"),
+    (13 * 0x4000 + (0x7018 - 0x4000), 0x06,
+     "iter 254: bg_table[0x18] (wall edge) → pal 6"),
+    (13 * 0x4000 + (0x7019 - 0x4000), 0x06,
+     "iter 254: bg_table[0x19] (wall edge) → pal 6"),
+    (13 * 0x4000 + (0x701A - 0x4000), 0x06,
+     "iter 254: bg_table[0x1A] (wall edge) → pal 6"),
+    (13 * 0x4000 + (0x701C - 0x4000), 0x06,
+     "iter 254: bg_table[0x1C] (wall edge) → pal 6"),
+    (13 * 0x4000 + (0x701E - 0x4000), 0x06,
+     "iter 254: bg_table[0x1E] (wall edge) → pal 6"),
+    # Wall interiors (7 tiles)
+    (13 * 0x4000 + (0x7025 - 0x4000), 0x06,
+     "iter 254: bg_table[0x25] (wall interior) → pal 6"),
+    (13 * 0x4000 + (0x7026 - 0x4000), 0x06,
+     "iter 254: bg_table[0x26] (wall interior) → pal 6"),
+    (13 * 0x4000 + (0x7034 - 0x4000), 0x06,
+     "iter 254: bg_table[0x34] (wall interior) → pal 6"),
+    (13 * 0x4000 + (0x7035 - 0x4000), 0x06,
+     "iter 254: bg_table[0x35] (wall interior) → pal 6"),
+    (13 * 0x4000 + (0x7036 - 0x4000), 0x06,
+     "iter 254: bg_table[0x36] (wall interior) → pal 6"),
+    (13 * 0x4000 + (0x7037 - 0x4000), 0x06,
+     "iter 254: bg_table[0x37] (wall interior) → pal 6"),
+    (13 * 0x4000 + (0x7038 - 0x4000), 0x06,
+     "iter 254: bg_table[0x38] (wall interior) → pal 6"),
+    # Corner / doorway tiles (11 — excludes 0x47 + 0x57 already locked by iter 218)
+    (13 * 0x4000 + (0x7041 - 0x4000), 0x06,
+     "iter 254: bg_table[0x41] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7042 - 0x4000), 0x06,
+     "iter 254: bg_table[0x42] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7044 - 0x4000), 0x06,
+     "iter 254: bg_table[0x44] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7045 - 0x4000), 0x06,
+     "iter 254: bg_table[0x45] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7046 - 0x4000), 0x06,
+     "iter 254: bg_table[0x46] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7048 - 0x4000), 0x06,
+     "iter 254: bg_table[0x48] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7049 - 0x4000), 0x06,
+     "iter 254: bg_table[0x49] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7054 - 0x4000), 0x06,
+     "iter 254: bg_table[0x54] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7055 - 0x4000), 0x06,
+     "iter 254: bg_table[0x55] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7056 - 0x4000), 0x06,
+     "iter 254: bg_table[0x56] (corner) → pal 6"),
+    (13 * 0x4000 + (0x7059 - 0x4000), 0x06,
+     "iter 254: bg_table[0x59] (corner) → pal 6"),
+]
+
 # Iter 216 — inline hook entry signature (shared v3.01+teleport).
 # bank1:0x42A5 is the live entry point used by both the title banner
 # (bank1:0x3AD8 CALL 0x42A5) and ending-path buffer flush (bank1:0x43BA).
@@ -421,7 +487,8 @@ def main() -> int:
               + list(ITER_211_SHARED_OBJ_PAL_CHECKS)
               + list(ITER_215_SHARED_CGB_FLAG_CHECKS)
               + list(ITER_216_SHARED_INLINE_HOOK_CHECKS)
-              + list(ITER_217_SHARED_BG_TABLE_CHECKS))
+              + list(ITER_217_SHARED_BG_TABLE_CHECKS)
+              + list(ITER_254_SHARED_WALL_TILE_CHECKS))
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
