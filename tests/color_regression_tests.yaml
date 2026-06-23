@@ -441,13 +441,22 @@ tests:
 
   - name: "splash_bg_table_all_pal0"
     savestate: "level1_sara_d_alone.ss0"
-    description: "D880=0x18 splash: scene_detect loaded all-pal0 SPLASH_TABLE"
+    description: "D880=0x18 splash: scene_detect loaded SPLASH_TABLE — pal0 baseline, letter tiles 0x2C-0x7F → pal1 (iter 234 legibility fix)"
     force_d880: 0x18
     check_boss_flag: false
     bg_table_expectations:
-      - tile_range: [0x01, 0xFF]
+      # Iter 234: tiles 0x2C-0x7F now map to pal 1 (red) for splash-letter
+      # legibility. Split the original [0x01, 0xFF] check into 3 ranges to
+      # match the new selective table.
+      - tile_range: [0x01, 0x2B]
         palette: 0
-        description: "SPLASH_TABLE is all-pal0 — no red flood possible from this scene"
+        description: "SPLASH_TABLE pre-letter range stays pal 0"
+      - tile_range: [0x2C, 0x7F]
+        palette: 1
+        description: "SPLASH_TABLE letter range → pal 1 (iter 234 legibility fix)"
+      - tile_range: [0x80, 0xFF]
+        palette: 0
+        description: "SPLASH_TABLE post-letter range stays pal 0"
 
   - name: "postboss_reload_bg_table_all_pal0"
     savestate: "level1_sara_d_alone.ss0"
