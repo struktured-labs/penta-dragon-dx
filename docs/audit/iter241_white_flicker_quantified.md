@@ -76,6 +76,46 @@ can use it to validate any candidate hwoam_recolor improvements.
 - Probe gives us a reliable signal for any future fix attempt:
   - "Run probe → if slot 2 ATTR changes drop from 121 to <5, fix works."
 
+## iter 242 — comparative validation on FIXED.gb
+Ran the probe on `rom/working/penta_dragon_dx_FIXED.gb` (v3.01 deployed
+to MiSTer, which per memory has no hwoam_recolor or equivalent stamp)
+loaded from the SAME `stage1_entry_pink_renders.ss0` savestate.
+
+| ROM | slot 0 changes | slot 2 changes | LCDC bit 3 toggles |
+|---|---|---|---|
+| `penta_dragon_dx_teleport.gb` | 32 | **121** | 68 |
+| `penta_dragon_dx_FIXED.gb` (v3.01) | **0** | **0** | 82 |
+
+Definitive proof: the OAM ATTR race is exclusive to teleport.gb.
+FIXED.gb shows zero per-slot ATTR alternation on the same savestate.
+
+Caveat: savestates are ROM-specific (different banking, different
+WRAM contents on full boot). Loading teleport's savestate on FIXED.gb
+restores the WRAM scene state but the ROM-source OAM bytes differ
+between the two ROMs. The LCDC bit 3 delta (82 vs 68) is small enough
+to attribute to natural scroll-position variance from the WRAM restore.
+
+The valid conclusion: **whatever FIXED.gb does (or doesn't do) with
+post-DMA OAM, teleport.gb's hwoam_recolor is creating a race the
+reference doesn't have**.
+
+## Two candidate fix paths
+**A. Patch ROM-source OAM bytes so no stamping is needed.**
+Locate the OAM source in teleport.gb's ROM space (the bytes DMA'd
+each VBlank). If Sara tiles 24-27 have pal-bit set to 4 there, that's
+the wrong source. Patch to 2. Eliminates need for hwoam_recolor. Risk:
+hard to find without tracing; ROM-source OAM might be in BC-loaded
+code paths shared with other entities.
+
+**B. Move hwoam_recolor's CALL position later in the teleport routine.**
+Current call is before/during DMA window. If we move it after DMA
+completes, the stamp wins the race. Risk: same VBlank-budget tightness
+that broke iter 235/238/240. Need careful T-state accounting.
+
+Recommendation for next iter: trace the DMA window vs hwoam_recolor's
+CALL position in `build_v301_teleport.py` to assess feasibility of
+path B before attempting it.
+
 ## What this does NOT solve
 - The bug itself remains (no code change committed).
 - The fix likely needs hwoam_recolor to run AFTER the game's OAM DMA
