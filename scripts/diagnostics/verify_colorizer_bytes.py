@@ -510,6 +510,28 @@ ITER_216_SHARED_INLINE_HOOK_CHECKS = [
      "iter 216: inline hook entry at bank1:0x42A6 = 0x98 (LD H, 0x98 — VRAM tilemap high byte)"),
 ]
 
+
+# Iter 271 — Game Boy header bytes (shared, all ROM builds). Locks
+# cart type, ROM size, RAM size, destination region, old licensee, and
+# version. Iter 215b already locks the CGB flag at 0x0143. These extras
+# catch a class of build-script regression that produces a fundamentally
+# different cart (e.g., bumped to a different MBC type or ROM-size class)
+# which would still build but fail to boot or behave unpredictably.
+ITER_271_SHARED_HEADER_CHECKS = [
+    (0x0147, 0x03,
+     "iter 271: cart type at 0x0147 = 0x03 (MBC1+RAM+BATTERY)"),
+    (0x0148, 0x03,
+     "iter 271: ROM size at 0x0148 = 0x03 (256 KiB = 16 banks)"),
+    (0x0149, 0x02,
+     "iter 271: RAM size at 0x0149 = 0x02 (8 KiB SRAM)"),
+    (0x014A, 0x00,
+     "iter 271: destination at 0x014A = 0x00 (Japan)"),
+    (0x014B, 0x1A,
+     "iter 271: old licensee at 0x014B = 0x1A (Yanoman)"),
+    (0x014C, 0x00,
+     "iter 271: ROM version at 0x014C = 0x00"),
+]
+
 # Iter 215 — scene_detect entry signature (teleport-only).
 # bank13:0x6FB0 = `FA 80 D8 21 0D DF BE C8`: LD A,[D880]; LD HL,DF0D;
 # CP [HL]; RET Z (fast-path early-out when scene byte unchanged).
@@ -637,7 +659,8 @@ def main() -> int:
               + list(ITER_215_SHARED_CGB_FLAG_CHECKS)
               + list(ITER_216_SHARED_INLINE_HOOK_CHECKS)
               + list(ITER_217_SHARED_BG_TABLE_CHECKS)
-              + list(ITER_254_SHARED_WALL_TILE_CHECKS))
+              + list(ITER_254_SHARED_WALL_TILE_CHECKS)
+              + list(ITER_271_SHARED_HEADER_CHECKS))
     if kind == "v301":
         checks.extend(ITER39_V301_CHECKS)
         checks.extend(ITER_2582E85_V301_CHECKS)
