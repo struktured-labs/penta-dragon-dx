@@ -36,9 +36,11 @@ fi
 echo
 echo "Fresh-boot expectations:"
 PHASE_CRAM=$(grep -cE '^\s+\("[BO][BG]P[0-9]\.' scripts/diagnostics/test_fresh_boot.py)
-PHASE_PIX=$(grep -cE '"[0-9A-Fa-f]{6}".*min_pixels?|EXPECTED.*\[' scripts/diagnostics/test_fresh_boot.py)
+# Iter 275: more precise pixel-tuple count (4 phases: SW/SD/GARG/SPIDER)
+PHASE_PIX=$(grep -cE '^\s+\("[0-9A-Fa-f]{6}",\s*[0-9]+,' scripts/diagnostics/test_fresh_boot.py)
+PHASE_PER=$(grep -cE '^EXPECTED_[A-Z]+\s*=\s*\[' scripts/diagnostics/test_fresh_boot.py)
 echo "  CRAM checks:   $PHASE_CRAM"
-echo "  pixel checks:  ~$PHASE_PIX (rough — includes per-phase)"
+echo "  pixel checks:  $PHASE_PIX (across $PHASE_PER phase-expectation lists)"
 
 echo
 echo "Savestate files:"
