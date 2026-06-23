@@ -347,6 +347,15 @@ ITER_210_SHARED_PALETTE_CHECKS = [
 ITER_209_SHARED_VBLANK_HOOK_CHECKS = [
     (0x0824, 0xF0, "iter 209: VBlank hook entry at 0x0824 = 0xF0 (LDH A,[FF99])"),
     (0x0825, 0x99, "iter 209: VBlank hook entry at 0x0825 = 0x99 (FF99 low byte)"),
+    # Iter 273: critical hook control bytes that don't change across
+    # WRAPPER_ADDR relocations. Catches accidental bank-switching errors
+    # or hook misalignment.
+    (0x0828, 0x0D,
+     "iter 273: hook bank-switch operand at 0x0828 = 0x0D (bank 13 = wrapper's bank)"),
+    (0x082E, 0xCD,
+     "iter 273: hook CALL opcode at 0x082E = 0xCD (CALL wrapper)"),
+    (0x0837, 0xC9,
+     "iter 273: hook RET at 0x0837 = 0xC9 (final RET to caller)"),
 ]
 
 # Iter 208 — STAT IRQ vector. Teleport redirects to WRAM 0xDB50 (the
