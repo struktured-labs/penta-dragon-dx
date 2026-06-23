@@ -198,6 +198,35 @@ ITER_211_SHARED_OBJ_PAL_CHECKS = [
      "iter 256: BG-pal-6 idx 1 (Gargoyle background light-pink) low at bank13:0x6832 = 0x7B (0x6F7B)"),
     (13 * 0x4000 + (0x6833 - 0x4000), 0x6F,
      "iter 256: BG-pal-6 idx 1 (Gargoyle background light-pink) high at bank13:0x6833 = 0x6F"),
+    # Iter 257: OBJ palettes 0, 3, 4, 5, 6, 7 idx-1 source byte locks
+    # (iter 211/212 covered OBP-1/2). All 6 verified identical in
+    # teleport.gb + v3.01. OBP-0 is dynamically replaced by palette_loader
+    # for Sara-projectile / powerup colors but the BASE source bytes
+    # are still validated here.
+    (13 * 0x4000 + (0x6842 - 0x4000), 0x00,
+     "iter 257: OBP-0 idx 1 (EnemyProjectile blue) low at bank13:0x6842 = 0x00 (0x7C00)"),
+    (13 * 0x4000 + (0x6843 - 0x4000), 0x7C,
+     "iter 257: OBP-0 idx 1 (EnemyProjectile blue) high at bank13:0x6843 = 0x7C"),
+    (13 * 0x4000 + (0x685A - 0x4000), 0x1F,
+     "iter 257: OBP-3 idx 1 (Crow dark-blue) low at bank13:0x685A = 0x1F (0x001F)"),
+    (13 * 0x4000 + (0x685B - 0x4000), 0x00,
+     "iter 257: OBP-3 idx 1 (Crow dark-blue) high at bank13:0x685B = 0x00"),
+    (13 * 0x4000 + (0x6862 - 0x4000), 0xFF,
+     "iter 257: OBP-4 idx 1 (Hornet yellow) low at bank13:0x6862 = 0xFF (0x03FF)"),
+    (13 * 0x4000 + (0x6863 - 0x4000), 0x03,
+     "iter 257: OBP-4 idx 1 (Hornet yellow) high at bank13:0x6863 = 0x03"),
+    (13 * 0x4000 + (0x686A - 0x4000), 0x7C,
+     "iter 257: OBP-5 idx 1 (Orc green) low at bank13:0x686A = 0x7C (0x2A7C)"),
+    (13 * 0x4000 + (0x686B - 0x4000), 0x2A,
+     "iter 257: OBP-5 idx 1 (Orc green) high at bank13:0x686B = 0x2A"),
+    (13 * 0x4000 + (0x6872 - 0x4000), 0x7E,
+     "iter 257: OBP-6 idx 1 (Humanoid purple) low at bank13:0x6872 = 0x7E (0x6B7E)"),
+    (13 * 0x4000 + (0x6873 - 0x4000), 0x6B,
+     "iter 257: OBP-6 idx 1 (Humanoid purple) high at bank13:0x6873 = 0x6B"),
+    (13 * 0x4000 + (0x687A - 0x4000), 0xE0,
+     "iter 257: OBP-7 idx 1 (Special cyan baseline) low at bank13:0x687A = 0xE0 (0x7FE0)"),
+    (13 * 0x4000 + (0x687B - 0x4000), 0x7F,
+     "iter 257: OBP-7 idx 1 (Special cyan baseline) high at bank13:0x687B = 0x7F"),
 ]
 
 # Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
