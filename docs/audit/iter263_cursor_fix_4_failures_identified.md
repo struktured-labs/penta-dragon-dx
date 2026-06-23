@@ -84,3 +84,44 @@ unworkable in its current form.
   modify without breaking pixel-count thresholds
 
 The cursor bug remains UNRESOLVED but now has measurable constraints.
+
+## iter 264 follow-up: per-frame recovery analysis
+
+Re-probed each of the 4 failures at f=68/120/200/300 with the cursor
+fix applied. Two classes of failure emerged:
+
+| Test | f=68 | f=120 | f=200 | f=300 | Class |
+|---|---|---|---|---|---|
+| `orc` (#0000B5) | 8 | 8 | 14 | 41 | RECOVERS by f=300 |
+| `spiral_power_active` (#0000B5) | 0 | 0 | 0 | **66** | RECOVERS by f=300 |
+| `sara_w_dual_enemies_with_arrows` (#FF42A5) | 0 | 0 | 0 | **0** | PERMANENT |
+| `spider_miniboss_sara_d` (#00A500) | 37 | 37 | 37 | **25** | PERMANENT (gets worse) |
+
+**Recovers (2 tests)**: orc + spiral_power_active. Both show the
+projectile/enemy renderer "catching up" by frame 300. If their tests
+sampled at f=300 instead of f=68, they'd pass with the cursor fix.
+Specifically: orc would pass (41 >= 16), spiral would pass (66 >= 35).
+
+**Permanent (2 tests)**: sara_w_dual + spider_miniboss_sara_d. These
+tests measure CRAM palette colors (Sara W pink at #FF42A5, Sara D
+green at #00A500). The +36T timing shift PERMANENTLY breaks the
+CRAM-load sequence for these savestates — no recovery at later
+frames.
+
+The split shows the cursor fix has TWO orthogonal impacts:
+1. Sprite/OAM RENDER timing — recoverable as colorize chain catches up
+2. CRAM/palette LOAD timing — non-recoverable when palette_loader's
+   write misses its LCD-mode window
+
+A cursor fix that lands cleanly needs to either:
+- Avoid the scene_detect post-copy path entirely (different code path)
+- Add NO T-state cost to scene_detect's post-copy
+- Move the cursor write to a context that doesn't interact with
+  palette_loader's CRAM-write timing (e.g., STAT IRQ during HBlank,
+  or a one-time cold-boot init outside the per-frame chain)
+
+The cleanest remaining option appears to be **STAT IRQ stub extension**:
+the WRAM stub at 0xDB50 runs during HBlank (NOT VBlank), so adding a
+0xDA73=1 write conditional on D880=0x1C there wouldn't impact the
+VBlank colorize chain. But the 36-byte budget cap (iter 235) would
+need extension. Future iter to attempt this approach.
