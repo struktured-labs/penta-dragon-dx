@@ -297,6 +297,32 @@ ITER_211_SHARED_OBJ_PAL_CHECKS = [
      "iter 259: boss_pal[3] idx 1 low at bank13:0x689A = 0x94 (0x7F94)"),
     (13 * 0x4000 + (0x689B - 0x4000), 0x7F,
      "iter 259: boss_pal[3] idx 1 high at bank13:0x689B = 0x7F"),
+    # Iter 260: OBJ colorizer CP-threshold immediates. These define which
+    # tile-ID ranges map to which palette. Corrupting any threshold byte
+    # shifts entire monster-type palette assignments. Iter 31 locked the
+    # 0x06 opcode at 0x6A10 (LD B), but the immediate 0x0A and the CP
+    # thresholds were unprotected. All 10 verified identical across
+    # teleport.gb + v3.01.
+    (13 * 0x4000 + (0x6A11 - 0x4000), 0x0A,
+     "iter 260: colorizer LD B,10 immediate (shadow-pass cap) at bank13:0x6A11"),
+    (13 * 0x4000 + (0x6A1A - 0x4000), 0x30,
+     "iter 260: colorizer CP 0x30 (low-tile vs boss-tile dispatch) at bank13:0x6A1A"),
+    (13 * 0x4000 + (0x6A23 - 0x4000), 0x40,
+     "iter 260: colorizer CP 0x40 (pal_3 threshold) at bank13:0x6A23"),
+    (13 * 0x4000 + (0x6A27 - 0x4000), 0x50,
+     "iter 260: colorizer CP 0x50 (pal_4 threshold) at bank13:0x6A27"),
+    (13 * 0x4000 + (0x6A2B - 0x4000), 0x60,
+     "iter 260: colorizer CP 0x60 (pal_5 threshold) at bank13:0x6A2B"),
+    (13 * 0x4000 + (0x6A2F - 0x4000), 0x70,
+     "iter 260: colorizer CP 0x70 (pal_6 threshold) at bank13:0x6A2F"),
+    (13 * 0x4000 + (0x6A33 - 0x4000), 0x80,
+     "iter 260: colorizer CP 0x80 (pal_7 threshold) at bank13:0x6A33"),
+    (13 * 0x4000 + (0x6A3B - 0x4000), 0x20,
+     "iter 260: colorizer CP 0x20 (sara_palette tile >= 0x20) at bank13:0x6A3B"),
+    (13 * 0x4000 + (0x6A3F - 0x4000), 0x10,
+     "iter 260: colorizer CP 0x10 (sara_palette extended >= 0x10, iter-31 add) at bank13:0x6A3F"),
+    (13 * 0x4000 + (0x6A43 - 0x4000), 0x02,
+     "iter 260: colorizer CP 0x02 (low-low tile branch) at bank13:0x6A43"),
 ]
 
 # Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
