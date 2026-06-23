@@ -162,6 +162,12 @@ Teleport's marginal cost over base is small (~330T); the whole-program cost is d
      code's actual layout — audit description was slightly off). v3.01 wrapper went 58 → 46 bytes,
      saved 6 × 12T = **72T/VBlank**. Verified via `probe_v301_boots.lua` that v3.01 still boots
      cleanly through 300 frames; teleport ROM unaffected (wrapper rewritten by build_v301_teleport).
+   - **TELEPORT IS NOT TRIM-COMPATIBLE (iter 229 ULTRACODE attempt + revert):** Applied the same
+     8 → 3 trim to teleport's wrapper at lines 1193-1200 (5 reads removed, F0 00 count dropped
+     10 → 5). ROM rebuilt clean but the pre-commit hook FAILED 13 regression tests. Reverted.
+     Likely the teleport wrapper's different surrounding code (push order, joypad-result store
+     timing, post-joypad CALL chain) interacts with input matrix settle differently than
+     v3.01's. Filed as not-a-trivial-port; needs per-test diagnosis if pursued again.
 2. **Fuse bg_sweep Phase 1+2 into one pass.** Currently: read 32 tile IDs to DF10 (Phase1), then
    re-read DF10 and table-lookup back into DF10 (Phase2), then read DF10 and write attrs (Phase3).
    The inline hook already does the fused `[BC]` lookup in one pass; bg_sweep can do
