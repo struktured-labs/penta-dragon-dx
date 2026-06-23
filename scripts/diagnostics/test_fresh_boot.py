@@ -131,10 +131,13 @@ callbacks:add("frame", function()
                     h:write(string.format("OBP%%d.%%d=%%04X\n", obp, c, lo + (hi * 256)))
                 end
             end
-            -- Iter 142: also dump BG palette CRAM for pal 3/4/7 (iter-83 gaps).
-            -- BG-pal-2/5/6 already partially covered by pixel guards.
-            for bgp = 3, 7 do
-                if bgp ~= 5 and bgp ~= 6 then
+            -- Iter 142: dump BG palette CRAM for pal 3/4/7 (iter-83 gaps).
+            -- Iter 268: extended to include BGP-0/1/5/6 (gameplay palettes
+            -- covered indirectly via pixel tests, but direct CRAM is faster).
+            -- BGP-2 left out: runtime CRAM differs from ROM source (0x7F1F
+            -- vs 0x7E1F, likely mGBA CGB color-correction); not a signal.
+            for bgp = 0, 7 do
+                if bgp ~= 2 then
                     for c = 0, 3 do
                         emu:write8(0xFF68, bgp * 8 + c * 2)
                         local lo = emu:read8(0xFF69)
@@ -588,6 +591,22 @@ def main() -> int:
         ("BGP7.1", "7E94", "BG-pal-7 idx 1 (clone of BG0 lavender)"),
         # Iter 262: BG-pal-7 idx 2 (clones BG0 idx 2 = Dungeon dark blue-purple).
         ("BGP7.2", "3D4A", "BG-pal-7 idx 2 (clone of BG0 dark blue-purple — matches ROM)"),
+        # Iter 268: extend runtime CRAM coverage to remaining gameplay BG
+        # palettes (BGP-0/1/5/6). Pixel tests cover these indirectly (e.g.,
+        # A5A5B5 dungeon pixel test catches BGP-0 corruption), but direct
+        # CRAM checks are faster + catch ROM-source vs runtime-loader
+        # divergence. BGP-2 omitted: runtime CRAM reads 0x7F1F vs ROM source
+        # 0x7E1F (1-bit difference, likely mGBA CGB color-correction; not a
+        # corruption signal). Iter 268's probe_bgp_runtime.lua captured all
+        # 8 BG palettes; only the 8 here match source verbatim.
+        ("BGP0.1", "7E94", "BG-pal-0 idx 1 (Dungeon lavender — matches ROM)"),
+        ("BGP0.2", "3D4A", "BG-pal-0 idx 2 (Dungeon dark blue-purple — matches ROM)"),
+        ("BGP1.1", "001F", "BG-pal-1 idx 1 (Items cherry red — matches ROM)"),
+        ("BGP1.2", "0012", "BG-pal-1 idx 2 (Items mid-red — matches ROM)"),
+        ("BGP5.1", "03FF", "BG-pal-5 idx 1 (Ground/lava yellow — matches ROM)"),
+        ("BGP5.2", "001F", "BG-pal-5 idx 2 (Ground/lava red — matches ROM)"),
+        ("BGP6.1", "6F7B", "BG-pal-6 idx 1 (Gargoyle bg light-pink — matches ROM)"),
+        ("BGP6.2", "2D4A", "BG-pal-6 idx 2 (Gargoyle bg mid-pink — matches ROM)"),
         # Iter 144: OBP-6 CRAM verification during phase 3 (FFBF=1 forced).
         #
         # OBSERVED behavior in the fresh-boot 4-phase context: OBP-6 stays
