@@ -379,6 +379,11 @@ TESTS=(
   # select reach) doesn't have the DF1F issue so Sara W pink renders
   # immediately. Provides early-frame OBP-2 CRAM verification.
   sara_w_stage1_pink_at_f68
+  # Iter 249: Sara W facing 2 soldier humanoids in dungeon. Fills coverage
+  # gap (previously-untested savestate level1_sara_w_2_soldier.ss0).
+  # Asserts slot 0-3 = pal 2 (Sara W) AND slot 8-11 = pal 6 (soldier
+  # humanoid). 5/5 stable on teleport.gb.
+  sara_w_2_soldier
 )
 # Iter 19: parallelize the suite (xargs -P) and switch to a deterministic
 # post-hoc summary via .ok/.fail markers.

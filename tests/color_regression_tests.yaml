@@ -1778,6 +1778,25 @@ tests:
         min_pixels: 14
         description: "Sara W peach at f=68 (observed 19, 5/5 zero-jitter)"
 
+  # Iter 249: promotes the previously-untested level1_sara_w_2_soldier
+  # savestate. Iter 249 inspection showed at f=68 a clean state with
+  # Sara W (tiles 0x24-0x27 at slots 0-3 = pal 2) AND 2 soldiers (tiles
+  # 0x68-0x6B at slots 8-11 = pal 6 humanoid). Distinct from the
+  # existing sara_w_pulsing_bg_with_enemies test (which uses different
+  # soldier-spawn savestate). Fills a coverage gap for "Sara W in
+  # dungeon facing 2 humanoids" scenario.
+  - name: "sara_w_2_soldier"
+    savestate: "level1_sara_w_2_soldier.ss0"
+    description: "D880=0x02 Sara W with 2 soldier humanoids — verifies Sara W pal-2 + soldier pal-6 assignment hold at f=68."
+    expected_boss_flag: 0
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W tiles 0x24-0x27 → pal 2 (witch)"
+      - slots: [8, 9, 10, 11]
+        palette: 6
+        description: "Soldier tiles 0x68-0x6B → pal 6 (humanoid)"
+
   # Iter 121: stage 6 (FFBA=5 non-lava-stage) live gameplay test.
   # Surprising finding: stage 6 IS using pal 5 (orange/red) for some
   # decorative tiles (diagonal-striped walls), even though it's NOT a
