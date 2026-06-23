@@ -1797,6 +1797,24 @@ tests:
         palette: 6
         description: "Soldier tiles 0x68-0x6B → pal 6 (humanoid)"
 
+  # Iter 250: Sara WITCH (FFBE=0) in spider mini-boss arena. Complements
+  # existing spider_miniboss_sara_d (Sara DRAGON variant). Distinct
+  # coverage: catches regressions where the Sara form (FFBE) is
+  # misinterpreted by hwoam_recolor's D register setup. Sara W body
+  # uses tiles 0x2C-0x2F (alt-anim variant, different from the
+  # 0x20-0x23 used elsewhere). 5/5 stable on teleport.gb.
+  - name: "spider_miniboss_sara_w"
+    savestate: "v2.26_level1_sara_w_spider_mini_boss.ss0"
+    description: "D880=0x0A Spider mini-boss arena with Sara WITCH form (FFBE=0) — companion to spider_miniboss_sara_d."
+    expected_boss_flag: 2
+    expectations:
+      - slots: [0, 1, 2, 3]
+        palette: 2
+        description: "Sara W tiles 0x2C-0x2F (alt-anim) → pal 2 (witch)"
+      - slots: [4, 5, 6, 7, 8, 9, 10, 11]
+        palette: 7
+        description: "Spider tiles 0x60-0x67 → pal 7 (Spider boss mode)"
+
   # Iter 121: stage 6 (FFBA=5 non-lava-stage) live gameplay test.
   # Surprising finding: stage 6 IS using pal 5 (orange/red) for some
   # decorative tiles (diagonal-striped walls), even though it's NOT a
