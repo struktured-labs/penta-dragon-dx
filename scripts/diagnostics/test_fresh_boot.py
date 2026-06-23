@@ -568,14 +568,26 @@ def main() -> int:
         ("OBP4.1", "03FF", "OBP-4 idx 1 yellow (Hornets)"),
         ("OBP5.0", "0000", "OBP-5 idx 0 transparent"),
         ("OBP5.1", "2A7C", "OBP-5 idx 1 (OrcGround — YAML override)"),
+        # Iter 262: extend OBP-3/4/5 to idx 2 (secondary tone). Verified
+        # runtime CRAM matches ROM source bytes (locked by iter 257/258).
+        # Catches ROM-source corruption that idx 1 alone misses.
+        ("OBP3.2", "0017", "OBP-3 idx 2 (Crow secondary dark-blue — matches ROM)"),
+        ("OBP4.2", "01FF", "OBP-4 idx 2 (Hornet orange — matches ROM)"),
+        ("OBP5.2", "1574", "OBP-5 idx 2 (Orc mid-green — matches ROM)"),
         # Iter 142: BG-pal-3/4/7 ROM-source corruption — pixel-invisible
         # in fresh-boot scene but CRAM check catches it.
         ("BGP3.0", "7FFF", "BG-pal-3 idx 0 (white)"),
         ("BGP3.1", "03E0", "BG-pal-3 idx 1 (green)"),
+        # Iter 262: BG-pal-3 idx 2 (Crow background dark-green).
+        ("BGP3.2", "0160", "BG-pal-3 idx 2 (Crow background dark-green — matches ROM)"),
         ("BGP4.0", "7FFF", "BG-pal-4 idx 0 (white)"),
         ("BGP4.1", "7FE0", "BG-pal-4 idx 1 (cyan)"),
+        # Iter 262: BG-pal-4 idx 2 (Hornet background mid-cyan).
+        ("BGP4.2", "3D80", "BG-pal-4 idx 2 (Hornet background mid-cyan — matches ROM)"),
         ("BGP7.0", "7FFF", "BG-pal-7 idx 0 (clone of BG0 white)"),
         ("BGP7.1", "7E94", "BG-pal-7 idx 1 (clone of BG0 lavender)"),
+        # Iter 262: BG-pal-7 idx 2 (clones BG0 idx 2 = Dungeon dark blue-purple).
+        ("BGP7.2", "3D4A", "BG-pal-7 idx 2 (clone of BG0 dark blue-purple — matches ROM)"),
         # Iter 144: OBP-6 CRAM verification during phase 3 (FFBF=1 forced).
         #
         # OBSERVED behavior in the fresh-boot 4-phase context: OBP-6 stays
