@@ -1,8 +1,27 @@
 """Verify the installed colorizer / perf-trim bytes haven't drifted.
 
-Locks in critical iter-31 (OBJ slot-10+ unlock) + iter-39 (joypad trim) +
-iter-40 (bg_sweep Phase 1+2 fusion) bytes that the live OAM regression suite
-either doesn't cover or only covers transiently.
+Locks in critical bytes across the colorize chain so any drift is caught
+in the pre-commit hook BEFORE the slower mGBA tests run.
+
+Coverage (iter 31, 39, 40, 158, 205-218):
+  - Iter 31:       hwoam_recolor entry + LD B + tile remap + colorizer LD B
+  - Iter 39 (v301): wrapper joypad direction-read trim (9 → 3)
+  - Iter 40:       bg_sweep fused-loop opcodes + bg_table_hi (per-ROM)
+  - Iter 158:      level-select bleed stub bytes + JP NZ target (per-ROM)
+  - Iter 205:      hwoam_recolor entry signature (D880 scope gate)
+  - Iter 206:      lava_override + banner_override entry signatures (teleport)
+  - Iter 207:      colorize handler entry (FF4F VBK save)
+  - Iter 208:      STAT IRQ vector (JP target per-ROM)
+  - Iter 209:      VBlank hook entry (FF99 bank shadow read)
+  - Iter 210:      cond_pal entry (DF02 sentinel) + shadow_main entry (FFBE)
+  - Iter 211:      OBP-2 SaraWitch idx 1+2 source palette bytes
+  - Iter 212:      OBP-1 SaraDragon idx 1+2 source palette bytes
+  - Iter 213:      boss_pal Gargoyle + Spider signature colors
+  - Iter 214:      BG-pal-0 Dungeon + BG-pal-1 Items source bytes
+  - Iter 215:      scene_detect entry (teleport) + CGB flag at 0x143
+  - Iter 216:      inline hook entry signature (bank1:0x42A5)
+  - Iter 217:      dungeon bg_table[0x80] + [0xE0] entries
+  - Iter 218:      bg_table hazard tiles (0x2A, 0x2E, 0x47, 0x57) → pal 6
 
 The teleport ROM and the v3.01 production ROM have different byte layouts at
 some sites (teleport re-patches the wrapper and bg_sweep). We auto-detect
