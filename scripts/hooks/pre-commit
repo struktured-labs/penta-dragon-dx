@@ -384,11 +384,6 @@ TESTS=(
   # Asserts slot 0-3 = pal 2 (Sara W) AND slot 8-11 = pal 6 (soldier
   # humanoid). 5/5 stable on teleport.gb.
   sara_w_2_soldier
-  # Iter 250: Sara WITCH in spider mini-boss arena (companion to existing
-  # spider_miniboss_sara_d Sara DRAGON variant). Different Sara animation
-  # tile range (0x2C-0x2F vs Sara D's body tiles), tests FFBE=0 form
-  # handling under FFBF=2 boss mode. 5/5 stable on teleport.gb.
-  spider_miniboss_sara_w
   # Iter 251: orc in D880=0x0B (mini-boss transition scene), distinct from
   # existing 'orc' test at D880=0x02. Covers orc colorization during
   # scene transitions. 5/5 stable on teleport.gb.

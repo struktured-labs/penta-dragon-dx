@@ -56,6 +56,18 @@ def main() -> int:
         for t in missing:
             print(f"          - {t}")
         return 1
+    # Iter 255: catch duplicate hook entries (iter 250 silently
+    # re-added spider_miniboss_sara_w which already existed since
+    # iter 32 — the existence-only check passed because the dup
+    # name is still present in YAML).
+    from collections import Counter
+    hook_counts = Counter(hook_tests)
+    dups = [t for t, c in hook_counts.items() if c > 1]
+    if dups:
+        print(f"  [FAIL] hook has {len(dups)} duplicate test name(s):")
+        for t in dups:
+            print(f"          - {t} (listed {hook_counts[t]}x)")
+        return 1
     yaml_only = sorted(yaml_names - set(hook_tests))
     print(f"  [PASS] all {len(hook_tests)} hook tests exist in YAML "
           f"({len(yaml_names)} YAML tests total)")
