@@ -227,6 +227,31 @@ ITER_211_SHARED_OBJ_PAL_CHECKS = [
      "iter 257: OBP-7 idx 1 (Special cyan baseline) low at bank13:0x687A = 0xE0 (0x7FE0)"),
     (13 * 0x4000 + (0x687B - 0x4000), 0x7F,
      "iter 257: OBP-7 idx 1 (Special cyan baseline) high at bank13:0x687B = 0x7F"),
+    # Iter 258: extend OBJ palettes 3-7 to idx-2 source bytes. Iter 211/212
+    # covered OBP-1/2 idx 1+2; iter 257 covered OBP-3/4/5/6/7 idx 1.
+    # This adds idx 2 (secondary tone) for the remaining 5 palettes
+    # — catches partial-palette source corruption that single-byte shifts
+    # to idx 2 wouldn't fix via idx-1 catchers.
+    (13 * 0x4000 + (0x685C - 0x4000), 0x17,
+     "iter 258: OBP-3 idx 2 (Crow secondary dark-blue) low at bank13:0x685C = 0x17 (0x0017)"),
+    (13 * 0x4000 + (0x685D - 0x4000), 0x00,
+     "iter 258: OBP-3 idx 2 (Crow secondary dark-blue) high at bank13:0x685D = 0x00"),
+    (13 * 0x4000 + (0x6864 - 0x4000), 0xFF,
+     "iter 258: OBP-4 idx 2 (Hornet orange) low at bank13:0x6864 = 0xFF (0x01FF)"),
+    (13 * 0x4000 + (0x6865 - 0x4000), 0x01,
+     "iter 258: OBP-4 idx 2 (Hornet orange) high at bank13:0x6865 = 0x01"),
+    (13 * 0x4000 + (0x686C - 0x4000), 0x74,
+     "iter 258: OBP-5 idx 2 (Orc mid-green) low at bank13:0x686C = 0x74 (0x1574)"),
+    (13 * 0x4000 + (0x686D - 0x4000), 0x15,
+     "iter 258: OBP-5 idx 2 (Orc mid-green) high at bank13:0x686D = 0x15"),
+    (13 * 0x4000 + (0x6874 - 0x4000), 0xB5,
+     "iter 258: OBP-6 idx 2 (Humanoid dark purple) low at bank13:0x6874 = 0xB5 (0x42B5)"),
+    (13 * 0x4000 + (0x6875 - 0x4000), 0x42,
+     "iter 258: OBP-6 idx 2 (Humanoid dark purple) high at bank13:0x6875 = 0x42"),
+    (13 * 0x4000 + (0x687C - 0x4000), 0xC0,
+     "iter 258: OBP-7 idx 2 (Special mid-cyan baseline) low at bank13:0x687C = 0xC0 (0x3CC0)"),
+    (13 * 0x4000 + (0x687D - 0x4000), 0x3C,
+     "iter 258: OBP-7 idx 2 (Special mid-cyan baseline) high at bank13:0x687D = 0x3C"),
 ]
 
 # Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
