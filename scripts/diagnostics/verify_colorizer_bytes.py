@@ -252,6 +252,51 @@ ITER_211_SHARED_OBJ_PAL_CHECKS = [
      "iter 258: OBP-7 idx 2 (Special mid-cyan baseline) low at bank13:0x687C = 0xC0 (0x3CC0)"),
     (13 * 0x4000 + (0x687D - 0x4000), 0x3C,
      "iter 258: OBP-7 idx 2 (Special mid-cyan baseline) high at bank13:0x687D = 0x3C"),
+    # Iter 259: BG-pal idx 2 source bytes (secondary tone). Iter 214/256
+    # locked idx 1 for all 7 BG palettes. This extends to idx 2 (14 bytes).
+    (13 * 0x4000 + (0x6804 - 0x4000), 0x4A,
+     "iter 259: BG-pal-0 idx 2 (Dungeon dark blue-purple) low at bank13:0x6804 = 0x4A (0x3D4A)"),
+    (13 * 0x4000 + (0x6805 - 0x4000), 0x3D,
+     "iter 259: BG-pal-0 idx 2 (Dungeon dark blue-purple) high at bank13:0x6805 = 0x3D"),
+    (13 * 0x4000 + (0x680C - 0x4000), 0x12,
+     "iter 259: BG-pal-1 idx 2 (Items mid-red) low at bank13:0x680C = 0x12 (0x0012)"),
+    (13 * 0x4000 + (0x680D - 0x4000), 0x00,
+     "iter 259: BG-pal-1 idx 2 (Items mid-red) high at bank13:0x680D = 0x00"),
+    (13 * 0x4000 + (0x6814 - 0x4000), 0x07,
+     "iter 259: BG-pal-2 idx 2 (stage-3 dark-purple) low at bank13:0x6814 = 0x07 (0x3807)"),
+    (13 * 0x4000 + (0x6815 - 0x4000), 0x38,
+     "iter 259: BG-pal-2 idx 2 (stage-3 dark-purple) high at bank13:0x6815 = 0x38"),
+    (13 * 0x4000 + (0x681C - 0x4000), 0x60,
+     "iter 259: BG-pal-3 idx 2 (Crow bg dark-green) low at bank13:0x681C = 0x60 (0x0160)"),
+    (13 * 0x4000 + (0x681D - 0x4000), 0x01,
+     "iter 259: BG-pal-3 idx 2 (Crow bg dark-green) high at bank13:0x681D = 0x01"),
+    (13 * 0x4000 + (0x6824 - 0x4000), 0x80,
+     "iter 259: BG-pal-4 idx 2 (Hornet bg mid-cyan) low at bank13:0x6824 = 0x80 (0x3D80)"),
+    (13 * 0x4000 + (0x6825 - 0x4000), 0x3D,
+     "iter 259: BG-pal-4 idx 2 (Hornet bg mid-cyan) high at bank13:0x6825 = 0x3D"),
+    (13 * 0x4000 + (0x682C - 0x4000), 0x1F,
+     "iter 259: BG-pal-5 idx 2 (Ground/lava red) low at bank13:0x682C = 0x1F (0x001F)"),
+    (13 * 0x4000 + (0x682D - 0x4000), 0x00,
+     "iter 259: BG-pal-5 idx 2 (Ground/lava red) high at bank13:0x682D = 0x00"),
+    (13 * 0x4000 + (0x6834 - 0x4000), 0x4A,
+     "iter 259: BG-pal-6 idx 2 (Gargoyle bg mid-pink) low at bank13:0x6834 = 0x4A (0x2D4A)"),
+    (13 * 0x4000 + (0x6835 - 0x4000), 0x2D,
+     "iter 259: BG-pal-6 idx 2 (Gargoyle bg mid-pink) high at bank13:0x6835 = 0x2D"),
+    # Iter 259: boss_pal[2] + [3] (beyond Gargoyle/Spider) — iter 213 locked
+    # entries [0]+[1] only. Both ROMs share boss_pal table at bank13:0x6880.
+    # boss_pal[2] = 0CBF/0859/040F — distinct from any standard OBP.
+    # boss_pal[3] = 7F94/668A/4940 — distinct from any standard OBP.
+    # Suggests these are reserved for boss palette injection in scenes
+    # we haven't fully audited yet (e.g., later mini-bosses, stage bosses
+    # with custom OBJ palette swaps).
+    (13 * 0x4000 + (0x6892 - 0x4000), 0xBF,
+     "iter 259: boss_pal[2] idx 1 low at bank13:0x6892 = 0xBF (0x0CBF)"),
+    (13 * 0x4000 + (0x6893 - 0x4000), 0x0C,
+     "iter 259: boss_pal[2] idx 1 high at bank13:0x6893 = 0x0C"),
+    (13 * 0x4000 + (0x689A - 0x4000), 0x94,
+     "iter 259: boss_pal[3] idx 1 low at bank13:0x689A = 0x94 (0x7F94)"),
+    (13 * 0x4000 + (0x689B - 0x4000), 0x7F,
+     "iter 259: boss_pal[3] idx 1 high at bank13:0x689B = 0x7F"),
 ]
 
 # Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
