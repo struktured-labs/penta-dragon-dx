@@ -508,6 +508,19 @@ ITER_216_SHARED_INLINE_HOOK_CHECKS = [
      "iter 216: inline hook entry at bank1:0x42A5 = 0x26 (LD H, n8 opcode)"),
     (0x42A6, 0x98,
      "iter 216: inline hook entry at bank1:0x42A6 = 0x98 (LD H, 0x98 — VRAM tilemap high byte)"),
+    # Iter 272: critical inline-hook control bytes that drive the colorize
+    # loop's tile-write count + IRQ-disable guard. Without these locked, a
+    # build-script regression could change loop count or remove the
+    # interrupt guard, causing partial-row corruption or silent VRAM
+    # access during mode 3.
+    (0x42AD, 0x18,
+     "iter 272: inline hook LD A, 0x18 (24 tile-groups per pass) at bank1:0x42AD"),
+    (0x42B0, 0x06,
+     "iter 272: inline hook LD C, 0x06 (6 rows per pass) at bank1:0x42B0"),
+    (0x42B1, 0xF3,
+     "iter 272: inline hook DI (interrupt disable guard for VRAM access) at bank1:0x42B1"),
+    (0x42CC, 0xFB,
+     "iter 272: inline hook EI (re-enable interrupts at end of pass) at bank1:0x42CC"),
 ]
 
 
