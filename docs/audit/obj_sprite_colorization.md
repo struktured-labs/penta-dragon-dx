@@ -45,7 +45,32 @@ The iter-151 B=10 vs B=40 trade-off is therefore NOT about fixing
 visible splits — it's purely about whether slots 10+ get correct
 tile-range palettes (B=40 wins) or fall back to pal 0/4 (B=10).
 
-### 2026-06-21 UPDATE (iter 154): B=10 actual regression scope MEASURED
+### 2026-06-22 UPDATE (iter 235 FAILED): STAT IRQ stub extension broke 50 tests
+
+ULTRACODE workflow agent (iter 229) recommended extending the iter-10
+STAT IRQ stub to stamp slots 0+1+2 instead of just slot 1, to fix
+the user-reported half-orange Sara DRAGON in stage 1. The agent's
+probe confirmed slots 0+2 of Sara Dragon alternate between attr=0x01
+(correct) and 0x04 (Hornet orange) every ~28 frames.
+
+Iter 235 implemented the extension via HL-pointer loop within the
+36-byte STAT_STUB_MAX budget (final stub: 29 bytes). ROM rebuilt
+clean. Pre-commit hook FAILED 50 regression tests.
+
+Root cause of failure: slots 0+2 in OTHER scenes (mini-bosses, stage
+transitions, jet form, etc.) hold tiles that legitimately use
+non-Sara palettes. iter-10's slot-1-only stamp survives because
+slot 1 is consistently Sara's right-half tile across all scenes; but
+slots 0+2 are NOT consistently Sara. Forcing them to FFBE-derived
+palette corrupts the correct attrs in every non-Sara scene.
+
+The half-orange Sara fix needs different approach:
+- Add a scene gate (e.g., FFC1=1 + D880<0x0C dungeon only)
+- OR identify the game's slot 0+2 attr-writer and patch it directly
+- OR use a per-slot decision based on the current tile ID at HL+(-3)
+
+All require more careful analysis than a single-iter autonomous fix.
+Filed for future investigation.
 Ran 12 representative hook tests against the B=10 patched ROM:
 - FAIL (5): orc, soldier, orc_with_items, catfish, moth
 - PASS (7): hornets, crow, mage, sara_w_alone, sara_d_alone,
