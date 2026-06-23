@@ -112,7 +112,10 @@ callbacks:add("frame", function()
         -- counts can't catch (no enemy sprites use them at fresh-boot center).
         local h = io.open("%s", "w")
         if h then
-            -- Iter 143: also dump OBP-0 (default, no FFC0 swap active)
+            -- Iter 143: dump OBP-0 (default, no FFC0 swap active)
+            -- Iter 269: extended to OBP-2 (SaraWitch idx 3 coverage) — was
+            -- skipped because pixel tests cover SaraWitch indirectly, but
+            -- the idx 3 darkest-tone byte deserves direct verification.
             for obp = 0, 0 do
                 for c = 0, 3 do
                     emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2)
@@ -122,7 +125,7 @@ callbacks:add("frame", function()
                     h:write(string.format("OBP%%d.%%d=%%04X\n", obp, c, lo + (hi * 256)))
                 end
             end
-            for obp = 3, 5 do
+            for obp = 2, 5 do
                 for c = 0, 3 do
                     emu:write8(0xFF6A, 0x40 + obp * 8 + c * 2)
                     local lo = emu:read8(0xFF6B)
@@ -607,6 +610,16 @@ def main() -> int:
         ("BGP5.2", "001F", "BG-pal-5 idx 2 (Ground/lava red — matches ROM)"),
         ("BGP6.1", "6F7B", "BG-pal-6 idx 1 (Gargoyle bg light-pink — matches ROM)"),
         ("BGP6.2", "2D4A", "BG-pal-6 idx 2 (Gargoyle bg mid-pink — matches ROM)"),
+        # Iter 269: extend OBP coverage to idx 3 (darkest tone, NOT 0x0000
+        # for these palettes). Verified via probe_obp_idx3.lua that runtime
+        # CRAM matches ROM source for OBP-0/2/3/5. OBP-1.3 differs (jet form
+        # override), OBP-4.3 differs (0x00FF vs source 0x0094, palette_loader
+        # writes different value), OBP-6/7.3 already covered in boss-phase
+        # checks below.
+        ("OBP0.3", "3000", "OBP-0 idx 3 (EnemyProjectile dark base — matches ROM)"),
+        ("OBP2.3", "0842", "OBP-2 idx 3 (SaraWitch darkest — matches ROM)"),
+        ("OBP3.3", "000F", "OBP-3 idx 3 (Crow very-dark-blue — matches ROM)"),
+        ("OBP5.3", "0CAC", "OBP-5 idx 3 (Orc dark-orange — matches ROM)"),
         # Iter 144: OBP-6 CRAM verification during phase 3 (FFBF=1 forced).
         #
         # OBSERVED behavior in the fresh-boot 4-phase context: OBP-6 stays
