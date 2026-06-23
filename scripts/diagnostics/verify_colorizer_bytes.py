@@ -174,6 +174,30 @@ ITER_211_SHARED_OBJ_PAL_CHECKS = [
      "iter 213: Spider boss_pal[1] idx 2 low at bank13:0x688C = 0xBF (0x00BF orange catcher)"),
     (13 * 0x4000 + (0x688D - 0x4000), 0x00,
      "iter 213: Spider boss_pal[1] idx 2 high at bank13:0x688D = 0x00"),
+    # Iter 256: extend BG-pal-{2,3,4,5,6} idx-1 source byte locks (iter 214
+    # only locked BGP0 + BGP1). All 5 verified identical in teleport.gb +
+    # v3.01. Catches ROM-source corruption that fresh-boot CRAM checks
+    # would also catch but at much higher runtime cost.
+    (13 * 0x4000 + (0x6812 - 0x4000), 0x1F,
+     "iter 256: BG-pal-2 idx 1 (stage-3 purple) low at bank13:0x6812 = 0x1F (0x7E1F)"),
+    (13 * 0x4000 + (0x6813 - 0x4000), 0x7E,
+     "iter 256: BG-pal-2 idx 1 (stage-3 purple) high at bank13:0x6813 = 0x7E"),
+    (13 * 0x4000 + (0x681A - 0x4000), 0xE0,
+     "iter 256: BG-pal-3 idx 1 (Crow background green) low at bank13:0x681A = 0xE0 (0x03E0)"),
+    (13 * 0x4000 + (0x681B - 0x4000), 0x03,
+     "iter 256: BG-pal-3 idx 1 (Crow background green) high at bank13:0x681B = 0x03"),
+    (13 * 0x4000 + (0x6822 - 0x4000), 0xE0,
+     "iter 256: BG-pal-4 idx 1 (Hornets background cyan) low at bank13:0x6822 = 0xE0 (0x7FE0)"),
+    (13 * 0x4000 + (0x6823 - 0x4000), 0x7F,
+     "iter 256: BG-pal-4 idx 1 (Hornets background cyan) high at bank13:0x6823 = 0x7F"),
+    (13 * 0x4000 + (0x682A - 0x4000), 0xFF,
+     "iter 256: BG-pal-5 idx 1 (Ground/lava yellow-orange) low at bank13:0x682A = 0xFF (0x03FF)"),
+    (13 * 0x4000 + (0x682B - 0x4000), 0x03,
+     "iter 256: BG-pal-5 idx 1 (Ground/lava yellow-orange) high at bank13:0x682B = 0x03"),
+    (13 * 0x4000 + (0x6832 - 0x4000), 0x7B,
+     "iter 256: BG-pal-6 idx 1 (Gargoyle background light-pink) low at bank13:0x6832 = 0x7B (0x6F7B)"),
+    (13 * 0x4000 + (0x6833 - 0x4000), 0x6F,
+     "iter 256: BG-pal-6 idx 1 (Gargoyle background light-pink) high at bank13:0x6833 = 0x6F"),
 ]
 
 # Iter 210 — cond_pal + shadow_main entry signatures (shared v3.01+teleport).
