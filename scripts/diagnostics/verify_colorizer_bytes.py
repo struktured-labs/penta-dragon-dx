@@ -595,6 +595,20 @@ ITER_206_TELEPORT_OVERRIDE_CHECKS = [
         0x1B,
         "iter 206: banner_override D880 gate value at bank13:0x7F74 = 0x1B (title banner scene)",
     ),
+    # Iter 274: cutscene_override entry + gate. Iter 206 covered lava +
+    # banner but missed cutscene_override at bank13:0x7FB0. Same pattern:
+    # LD A,[D880]; CP 0x15; RET NZ; (then WRAM patch). 0x15 is the
+    # boss-defeated cutscene scene byte.
+    (
+        13 * 0x4000 + (0x7FB0 - 0x4000),
+        0xFA,
+        "iter 274: cutscene_override entry at bank13:0x7FB0 = 0xFA (LD A,[D880])",
+    ),
+    (
+        13 * 0x4000 + (0x7FB4 - 0x4000),
+        0x15,
+        "iter 274: cutscene_override D880 gate at bank13:0x7FB4 = 0x15 (boss-defeated scene)",
+    ),
 ]
 
 # Iter 2582e85 — level-select bleed fix. TELEPORT ONLY (v3.01 production
