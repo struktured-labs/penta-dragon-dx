@@ -34,15 +34,18 @@ def main() -> int:
             if m:
                 hook_tests.append(m.group(1))
 
-    # Pull names from the YAML.
+    # Pull names from the YAML + their associated savestates for existence
+    # verification.
     yaml_doc = yaml.safe_load(yaml_path.read_text())
     yaml_names: set[str] = set()
+    yaml_savestates: dict[str, str] = {}
     # YAML structure: list of sections, each with `tests:` list. Walk
     # recursively to handle either flat or nested structures.
     def walk(node):
         if isinstance(node, dict):
             if "name" in node and "savestate" in node:
                 yaml_names.add(node["name"])
+                yaml_savestates[node["name"]] = node["savestate"]
             for v in node.values():
                 walk(v)
         elif isinstance(node, list):
@@ -55,6 +58,21 @@ def main() -> int:
         print(f"  [FAIL] hook references {len(missing)} tests not present in YAML:")
         for t in missing:
             print(f"          - {t}")
+        return 1
+    # Iter 266: verify hook-referenced savestates exist on disk. Catches
+    # a class of regression where a test's savestate file is deleted or
+    # renamed but the YAML / hook reference isn't updated. Without this,
+    # the test would only fail after mGBA invocation (5+ min into the hook).
+    savestate_dir = repo / "save_states_for_claude"
+    missing_savestates: list[tuple[str, str]] = []
+    for t in hook_tests:
+        ss = yaml_savestates.get(t)
+        if ss and not (savestate_dir / ss).exists():
+            missing_savestates.append((t, ss))
+    if missing_savestates:
+        print(f"  [FAIL] {len(missing_savestates)} hook test(s) reference missing savestate files:")
+        for t, ss in missing_savestates:
+            print(f"          - {t} -> {ss}")
         return 1
     # Iter 255: catch duplicate hook entries (iter 250 silently
     # re-added spider_miniboss_sara_w which already existed since
