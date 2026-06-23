@@ -39,12 +39,17 @@ def main() -> int:
     yaml_doc = yaml.safe_load(yaml_path.read_text())
     yaml_names: set[str] = set()
     yaml_savestates: dict[str, str] = {}
+    # Iter 267: also track raw name occurrences to catch YAML-side
+    # duplicates (the iter 250 bug was hook-side but YAML-side dupes
+    # would silently merge here since yaml_names is a set).
+    yaml_name_occurrences: list[str] = []
     # YAML structure: list of sections, each with `tests:` list. Walk
     # recursively to handle either flat or nested structures.
     def walk(node):
         if isinstance(node, dict):
             if "name" in node and "savestate" in node:
                 yaml_names.add(node["name"])
+                yaml_name_occurrences.append(node["name"])
                 yaml_savestates[node["name"]] = node["savestate"]
             for v in node.values():
                 walk(v)
@@ -52,6 +57,15 @@ def main() -> int:
             for item in node:
                 walk(item)
     walk(yaml_doc)
+    # Iter 267: check YAML name uniqueness.
+    from collections import Counter
+    yaml_counts = Counter(yaml_name_occurrences)
+    yaml_dups = [n for n, c in yaml_counts.items() if c > 1]
+    if yaml_dups:
+        print(f"  [FAIL] YAML has {len(yaml_dups)} duplicate test name(s):")
+        for t in yaml_dups:
+            print(f"          - {t} (defined {yaml_counts[t]}x)")
+        return 1
 
     missing = [t for t in hook_tests if t not in yaml_names]
     if missing:
@@ -78,7 +92,6 @@ def main() -> int:
     # re-added spider_miniboss_sara_w which already existed since
     # iter 32 — the existence-only check passed because the dup
     # name is still present in YAML).
-    from collections import Counter
     hook_counts = Counter(hook_tests)
     dups = [t for t, c in hook_counts.items() if c > 1]
     if dups:
