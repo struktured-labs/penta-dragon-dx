@@ -255,6 +255,31 @@ ITER_217_SHARED_BG_TABLE_CHECKS = [
      "iter 218: bg_table[0x47] (wall corner) → pal 6 metallic at bank13:0x7047"),
     (13 * 0x4000 + (0x7057 - 0x4000), 0x06,
      "iter 218: bg_table[0x57] (wall corner) → pal 6 metallic at bank13:0x7057"),
+    # Iter 253: extend coverage of the spike-cylinder group + sentinel.
+    # Per build_v301_gdma.py:_bg_table the spike cylinder tiles are
+    # {0x2A,0x2B,0x2C,0x2D,0x2E,0x3A,0x3B,0x3C,0x3D} — iter 218 locked
+    # 0x2A,0x2E only. Lock the remaining 7 to catch partial-revert
+    # corruption (e.g. someone bumping 0x2B to pal 5 lava-style).
+    (13 * 0x4000 + (0x702B - 0x4000), 0x06,
+     "iter 253: bg_table[0x2B] (spike tile) → pal 6 metallic"),
+    (13 * 0x4000 + (0x702C - 0x4000), 0x06,
+     "iter 253: bg_table[0x2C] (spike tile) → pal 6 metallic"),
+    (13 * 0x4000 + (0x702D - 0x4000), 0x06,
+     "iter 253: bg_table[0x2D] (spike tile) → pal 6 metallic"),
+    (13 * 0x4000 + (0x703A - 0x4000), 0x06,
+     "iter 253: bg_table[0x3A] (spike tile) → pal 6 metallic"),
+    (13 * 0x4000 + (0x703B - 0x4000), 0x06,
+     "iter 253: bg_table[0x3B] (spike tile) → pal 6 metallic"),
+    (13 * 0x4000 + (0x703C - 0x4000), 0x06,
+     "iter 253: bg_table[0x3C] (spike tile) → pal 6 metallic"),
+    (13 * 0x4000 + (0x703D - 0x4000), 0x06,
+     "iter 253: bg_table[0x3D] (spike tile) → pal 6 metallic"),
+    # Sentinel: bg_table[0xFF] = 0x00 (pal 0). Was 0xFF historically
+    # (palette 7 sentinel for ff_filter). Iter 233's bg_table[0x73]=1
+    # cursor-fix attempt corrupted stage 6 — sentinels in this table
+    # are easy to revert accidentally. Lock the 0xFF terminator.
+    (13 * 0x4000 + (0x70FF - 0x4000), 0x00,
+     "iter 253: bg_table[0xFF] (sentinel terminator) → pal 0 (was 0xFF historically)"),
 ]
 
 # Iter 216 — inline hook entry signature (shared v3.01+teleport).
