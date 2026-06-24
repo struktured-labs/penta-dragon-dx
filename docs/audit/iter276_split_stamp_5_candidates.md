@@ -91,6 +91,51 @@ teleport_routine + colorize chain are core functionality).
 4. **Accept partial-fix candidate E + lower 3 test thresholds** —
    user has explicitly rejected this ("no compromises").
 
+## Additional candidates explored (iter 276 round 2)
+
+### F. shrink LATE hwoam_recolor B=40 → B=16
+- Theory: ~720T saved would let hwoam_recolor finish in writable-OAM
+  window, eliminating Sara race without adding wrapper work.
+- Sara race: NO improvement (slot 2: 122 — essentially unchanged).
+- Also new race on slot 1, 3, 4-7, 14 (new 10-change patterns).
+- Reverted: race is NOT VBlank-budget-bound; saving cycles doesn't
+  help. The race is from the game's main-loop OAM source code that
+  the wrapper can't intercept.
+
+### G. STAT IRQ stub: stamp slot 2 instead of slot 1
+- Theory: existing 0xDB50 stub already fires on STAT IRQ; just
+  retarget from slot 1 to slot 2. No size/timing change.
+- Sara race: NO improvement (slot 2: 120 — essentially unchanged).
+- Cause discovered: probe_stat_irq_rate.lua shows FF41 = 0xC1 →
+  STAT IRQ only fires on LYC=LY match (LYC=0). That's once per
+  frame at LY=0 (transitioning from VBlank to mode 2). The stub's
+  slot-2 write lands during mode 2 (OAM scan, locked). Silently
+  fails. Confirms the existing slot-1 stamp also fails for same
+  reason — its 4 stable changes come from elsewhere, not the stub.
+
+## Final position (iter 276)
+
+The half-orange Sara race is NOT fixable without major surgery.
+The race source is NOT in the VBlank wrapper. It's in the GAME's
+main-loop OAM source code, which writes pal-4 to slot 2's shadow
+OAM at high frequency. Our hwoam_recolor stamps the HW OAM but
+shadow keeps overwriting via DMA.
+
+The genuine fix paths:
+1. PATCH the game's main-loop OAM source code to write pal-2 (deep RE)
+2. INTERCEPT the DMA shadow→HW copy and fix attrs in-flight (hardware-impossible)
+3. EXTEND iter 31's tile-0x10-0x1F → sara_palette REMAP into the BC
+   table that the colorize chain references. If the BC lookup already
+   uses sara_palette for tile 0x27, the issue is the source bytes
+   in shadow OAM. (Probably already done — needs verification.)
+4. REPROGRAM LYC to fire STAT IRQ at the END of OAM scan (mode 2 →
+   mode 3 transition), positioning a slot-2 stamp in writable HBlank.
+   Conflicts with parallax-scroll's LYC programming.
+
+None of these fit in autonomous-loop iters. Each requires careful
+RE + risk evaluation + multi-attempt verification. Filed for future
+user-driven manual work.
+
 ## Honest summary for user
 
 The half-orange Sara race CAN be fixed but every fix attempted breaks
