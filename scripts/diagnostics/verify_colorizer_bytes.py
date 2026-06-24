@@ -38,20 +38,21 @@ from pathlib import Path
 # Iter 31 — shared OBJ colorizer + post-DMA hwoam_recolor. Same bytes in
 # both v3.01 and teleport ROMs.
 ITER31_CHECKS = [
+    # Iter 278e: hwoam_recolor relocated from 0x7F40 to 0x6B27 (same 43-byte routine).
     (
-        13 * 0x4000 + (0x7F40 - 0x4000),
+        13 * 0x4000 + (0x6B27 - 0x4000),
         0xFA,
-        "iter 31: hwoam_recolor entry at bank13:0x7F40 = 0xFA (LD A,[D880] — D880 scope gate)",
+        "iter 278e: hwoam_recolor entry at bank13:0x6B27 = 0xFA (LD A,[D880] — D880 scope gate)",
     ),
     (
-        13 * 0x4000 + (0x7F41 - 0x4000),
+        13 * 0x4000 + (0x6B28 - 0x4000),
         0x80,
-        "iter 31: hwoam_recolor entry at bank13:0x7F41 = 0x80 (low byte of D880)",
+        "iter 278e: hwoam_recolor entry at bank13:0x6B28 = 0x80 (low byte of D880)",
     ),
     (
-        13 * 0x4000 + (0x7F67 - 0x4000),
+        13 * 0x4000 + (0x6B4E - 0x4000),
         0x28,
-        "iter 31: hwoam_recolor LD B operand at bank13:0x7F67 (40 slots — raised from 10)",
+        "iter 278e: hwoam_recolor LD B operand at bank13:0x6B4E = 0x28 (40 slots, shifted from 0x7F67)",
     ),
     (
         13 * 0x4000 + (0x6A41 - 0x4000),
@@ -677,12 +678,11 @@ def main() -> int:
     # iter 31's hwoam_recolor lives only in teleport (v3.01 production lacks
     # it — iter 43 verified backport regresses Sara timing). Skip those
     # checks on v3.01.
-    # hwoam_recolor lives ONLY in teleport (3 checks: 0x7F40, 0x7F41, 0x7F67).
-    # Skip them all on v3.01.
+    # Iter 278e: hwoam_recolor relocated from 0x7F40 to 0x6B27.
     hwoam_offsets = {
-        13 * 0x4000 + (0x7F40 - 0x4000),
-        13 * 0x4000 + (0x7F41 - 0x4000),
-        13 * 0x4000 + (0x7F67 - 0x4000),
+        13 * 0x4000 + (0x6B27 - 0x4000),
+        13 * 0x4000 + (0x6B28 - 0x4000),
+        13 * 0x4000 + (0x6B4E - 0x4000),
     }
     iter31_for_kind = ITER31_CHECKS if kind == "teleport" else [
         c for c in ITER31_CHECKS if c[0] not in hwoam_offsets

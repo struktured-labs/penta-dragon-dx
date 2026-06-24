@@ -151,7 +151,7 @@ SPLASH_TABLE_ADDR = 0x7E40
 # palette bits of HW OAM (0xFE00) by tile range, reusing the existing colorizer
 # at 0x6A10. mGBA-verified only; VBlank-budget/hardware risk -> teleport build
 # (opt-in branch) only. See docs/audit/obj_enemy_color_race.md.
-HWOAM_RECOLOR_ADDR = 0x7F40       # free bank-13 space after the splash table
+HWOAM_RECOLOR_ADDR = 0x6B27       # iter 278e: pure relocation test (same 49-byte routine at new addr)
 # Banner colorize override (showcase, D880=0x1B). Per-monster preview is
 # infeasible (the cycled names are a shared font, no monster sprites), so this
 # just gives the title banner intentional colors: "PENTA DRAGON" art (0xE0-0xFF)
@@ -1054,17 +1054,16 @@ def main():
     print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
     # Post-DMA HW-OAM recolor (enemies items 3,4,6,11), CALLed from the wrapper.
+    # Iter 278e: relocated to 0x6B27 (217 bytes free) — pure address change.
     hwoam = build_hwoam_recolor()
-    assert SPLASH_TABLE_ADDR + 256 <= HWOAM_RECOLOR_ADDR, "splash table overruns hwoam recolor"
-    assert HWOAM_RECOLOR_ADDR + len(hwoam) <= POSMAP_PTR_TABLE, \
-        f"hwoam recolor 0x{HWOAM_RECOLOR_ADDR + len(hwoam):04X} overruns posmap ptr table 0x{POSMAP_PTR_TABLE:04X}"
+    assert HWOAM_RECOLOR_ADDR + len(hwoam) < 0x6C00, \
+        f"hwoam recolor 0x{HWOAM_RECOLOR_ADDR + len(hwoam):04X} overruns 0x6C00 free region"
     off = BANK13 + (HWOAM_RECOLOR_ADDR - 0x4000)
     rom[off:off + len(hwoam)] = hwoam
     print(f"  hwoam recolor: {len(hwoam)} bytes at bank13:0x{HWOAM_RECOLOR_ADDR:04X}")
 
     # Banner colorize override (showcase, D880=0x1B), CALLed from teleport routine.
     banner = build_banner_override()
-    assert HWOAM_RECOLOR_ADDR + len(hwoam) <= BANNER_OVERRIDE_ADDR, "hwoam overruns banner override"
     assert BANNER_OVERRIDE_ADDR + len(banner) <= POSMAP_PTR_TABLE, \
         f"banner override 0x{BANNER_OVERRIDE_ADDR + len(banner):04X} overruns posmap ptr table 0x{POSMAP_PTR_TABLE:04X}"
     off = BANK13 + (BANNER_OVERRIDE_ADDR - 0x4000)
