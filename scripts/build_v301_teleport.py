@@ -568,6 +568,16 @@ def build_hwoam_recolor() -> bytes:
     # HW OAM AFTER the DMA, so the shadow-side race documented in iter 29
     # no longer matters. mGBA-verified; MiSTer hardware verification gated
     # on this commit.
+    #
+    # Iter 277 ATTEMPTED B=20 (slot 2 race 113→23, 80% reduction of half-
+    # orange Sara visible in dungeon gameplay). REVERTED because B=20
+    # introduces 4 fresh-boot CRAM regressions: Sara jet form (OBP-2.1=2EBE
+    # vs expected 7C1F, OBP-2.2=511F vs 5817), Gargoyle (OBP-6.1=601F vs
+    # 607E), Spider (OBP-7.1=001F vs 00E0). Mechanism: hwoam_recolor's
+    # shorter runtime changes when cond_pal/palette_loader fire relative
+    # to LCD STAT-mode transitions, breaking palette write+modify
+    # sequencing. See docs/audit/iter277_b_sweep_attempted_reverted.md
+    # for B-sweep findings + the trade-off analysis.
     c.extend([0x06, 0x28])                 # LD B, 40
     loop_start = OBJ_COLORIZER_ADDR + 2    # after the colorizer's LD B,n
     c.extend([0xC3, loop_start & 0xFF, (loop_start >> 8) & 0xFF])  # JP colorizer loop_start
