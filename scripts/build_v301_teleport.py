@@ -947,6 +947,17 @@ def main():
     rom[0x4EA5:0x4EA5 + len(title_list)] = title_list
     print(f"  title: PENTA DRAGON DX header + STRUKTURED LABS ({len(title_list)}/126 bytes @0x4EA5)")
 
+    # Iter 278l: cursor tile fix — 1-byte ROM patch.
+    # Cursor handler at 0x3C52 writes tile 0x73 to tilemap when UP/DOWN pressed.
+    # Tile 0x73 in dungeon table = pal-0 (white on white = invisible).
+    # Change to tile 0x80 which dungeon table routes to pal-1 (red, visible).
+    # User must press UP/DOWN once at title menu to trigger the draw.
+    # Per iter 217: dungeon bg_table[0x80] = pal 1 (verified).
+    assert rom[0x3C58:0x3C5A] == bytes([0x3E, 0x73]), \
+        f"cursor LD A,0x73 site shifted: got {rom[0x3C58:0x3C5A].hex()}"
+    rom[0x3C59] = 0x80  # tile 0x73 → tile 0x80 (red in dungeon table)
+    print(f"  cursor tile patch: 0x3C59 = 0x73 → 0x80 (renders pal-1 red on UP/DOWN press)")
+
     # 2. Write the landing pad source bytes in bank13 ROM at LANDING_PAD_ROM_ADDR
     lp = build_landing_pad()
     print(f"  landing pad source: {len(lp)} bytes at bank13:0x{LANDING_PAD_ROM_ADDR:04X}")
