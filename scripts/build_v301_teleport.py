@@ -1062,11 +1062,18 @@ def main():
     # Future fix needs scene_detect to always reload on splash→dungeon
     # transition, OR a different mechanism that doesn't share WRAM 0xDA00.
     rom[off:off + 256] = bytes(256)   # all pal0 (original)
-    # Iter 278m attempted splash_table[0xCA..0xFF] = pal-1 for stage intro
-    # brightening. Probe revealed "STAGE 01" letters use tiles 0x30-0x7F
-    # (not 0xCA+), so patch had no visible effect. Reverted. iter 234's
-    # broader [0x2C..0x80] range was the only working range but breaks
-    # stage 6 lavender via WRAM 0xDA00 savestate cache leak.
+    # Iter 278p: re-try stage intro brightening. Per 2026-06-26 probe,
+    # stage6 savestate has DUNGEON table (not splash) in WRAM 0xDA00, so
+    # the iter 234 leak mechanism (savestate-captured splash bytes) may
+    # not apply to current test corpus. Patch letter tiles to pal-1 (red)
+    # which renders bright on splash CRAM.
+    # "STAGE 01" letters use tiles {30, 31, 40, 4A, 4B, 50-55, 58, 5A, 5B,
+    #  6D-6F, 7D-7F} per iter 278m probe. Patch the union.
+    STAGE_INTRO_LETTERS = [0x30, 0x31, 0x40, 0x4A, 0x4B, 0x50, 0x51, 0x52,
+                           0x53, 0x54, 0x55, 0x58, 0x5A, 0x5B, 0x6D, 0x6E,
+                           0x6F, 0x7D, 0x7E, 0x7F]
+    for tile in STAGE_INTRO_LETTERS:
+        rom[off + tile] = 0x01  # pal-1 (red on splash CRAM)
     print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
     # Post-DMA HW-OAM recolor (enemies items 3,4,6,11), CALLed from the wrapper.

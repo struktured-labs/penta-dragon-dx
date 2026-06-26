@@ -441,13 +441,61 @@ tests:
 
   - name: "splash_bg_table_all_pal0"
     savestate: "level1_sara_d_alone.ss0"
-    description: "D880=0x18 splash: scene_detect loaded all-pal0 SPLASH_TABLE (iter 234 letter remap REVERTED iter 236 due to WRAM 0xDA00 cache leak into stage 6 BG)"
+    description: "D880=0x18 splash: SPLASH_TABLE mostly pal-0 but iter 278p brightens STAGE-intro letter tiles 0x30,0x31,0x40,0x4A,0x4B,0x50-0x55,0x58,0x5A,0x5B,0x6D-0x6F,0x7D-0x7F to pal-1 for legibility"
     force_d880: 0x18
     check_boss_flag: false
     bg_table_expectations:
-      - tile_range: [0x01, 0xFF]
+      - tile_range: [0x01, 0x2F]
         palette: 0
-        description: "SPLASH_TABLE is all-pal0 — no red flood possible from this scene"
+        description: "Pre-letter range stays pal-0"
+      - tile_range: [0x32, 0x3F]
+        palette: 0
+        description: "Between letter tiles 0x32-0x3F stays pal-0"
+      - tile_range: [0x41, 0x49]
+        palette: 0
+        description: "Between letter tiles 0x41-0x49 stays pal-0"
+      - tile_range: [0x4C, 0x4F]
+        palette: 0
+        description: "Between letter tiles 0x4C-0x4F stays pal-0"
+      - tile_range: [0x56, 0x57]
+        palette: 0
+        description: "Between letter tiles 0x56-0x57 stays pal-0"
+      - tile_range: [0x59, 0x59]
+        palette: 0
+        description: "Between letter tiles 0x59 stays pal-0"
+      - tile_range: [0x5C, 0x6C]
+        palette: 0
+        description: "Between letter tiles 0x5C-0x6C stays pal-0"
+      - tile_range: [0x70, 0x7C]
+        palette: 0
+        description: "Between letter tiles 0x70-0x7C stays pal-0"
+      - tile_range: [0x80, 0xFF]
+        palette: 0
+        description: "Post-letter range stays pal-0 (no red flood from 0x80-0xDF)"
+      - tile_range: [0x30, 0x31]
+        palette: 1
+        description: "iter 278p: letter tiles 0x30-0x31 → pal-1"
+      - tile_range: [0x40, 0x40]
+        palette: 1
+        description: "iter 278p: letter tile 0x40 → pal-1"
+      - tile_range: [0x4A, 0x4B]
+        palette: 1
+        description: "iter 278p: letter tiles 0x4A-0x4B → pal-1"
+      - tile_range: [0x50, 0x55]
+        palette: 1
+        description: "iter 278p: letter tiles 0x50-0x55 → pal-1"
+      - tile_range: [0x58, 0x58]
+        palette: 1
+        description: "iter 278p: letter tile 0x58 → pal-1"
+      - tile_range: [0x5A, 0x5B]
+        palette: 1
+        description: "iter 278p: letter tiles 0x5A-0x5B → pal-1"
+      - tile_range: [0x6D, 0x6F]
+        palette: 1
+        description: "iter 278p: letter tiles 0x6D-0x6F → pal-1"
+      - tile_range: [0x7D, 0x7F]
+        palette: 1
+        description: "iter 278p: letter tiles 0x7D-0x7F → pal-1"
 
   - name: "postboss_reload_bg_table_all_pal0"
     savestate: "level1_sara_d_alone.ss0"
