@@ -1062,6 +1062,11 @@ def main():
     # Future fix needs scene_detect to always reload on splash→dungeon
     # transition, OR a different mechanism that doesn't share WRAM 0xDA00.
     rom[off:off + 256] = bytes(256)   # all pal0 (original)
+    # Iter 278m attempted splash_table[0xCA..0xFF] = pal-1 for stage intro
+    # brightening. Probe revealed "STAGE 01" letters use tiles 0x30-0x7F
+    # (not 0xCA+), so patch had no visible effect. Reverted. iter 234's
+    # broader [0x2C..0x80] range was the only working range but breaks
+    # stage 6 lavender via WRAM 0xDA00 savestate cache leak.
     print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
     # Post-DMA HW-OAM recolor (enemies items 3,4,6,11), CALLed from the wrapper.
