@@ -17,11 +17,9 @@ OBJS = $(SRCS:%.c=$(OBJDIR)/%.o)
 
 # GBDK / SDCC flags
 LCCFLAGS  = -Wa-l -Wl-m -Wl-j
-LCCFLAGS += -Wl-yt0x1B          # MBC5 + RAM + BATTERY
-LCCFLAGS += -Wl-yo32            # 32 ROM banks (512KB) — bumps up as needed
-LCCFLAGS += -Wl-ya4             # 4 SRAM banks (32KB)
-LCCFLAGS += -Wl-b_HOME=0x0200
-LCCFLAGS += -Wl-b_CODE=0x0400
+LCCFLAGS += -Wm-yt0x1B          # MBC5 + RAM + BATTERY (set via makebin header byte)
+LCCFLAGS += -Wm-yo32            # 32 ROM banks (512KB) — bumps up as needed
+LCCFLAGS += -Wm-ya4             # 4 SRAM banks (32KB)
 LCCFLAGS += -Wm-yC              # CGB only (Quintra is GBC-native)
 LCCFLAGS += -I$(SRCDIR) -I$(GENDIR)
 
