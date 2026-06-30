@@ -1,0 +1,13 @@
+[package]
+name        = "quintra-game-content"
+version.workspace     = true
+edition.workspace     = true
+rust-version.workspace = true
+license.workspace     = true
+description = "Quintra game content — hand-authored classes/items/enemies/biomes/rooms"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+quintra-content = { workspace = true }

@@ -35,16 +35,11 @@ dirs:
 # In bootstrap mode (Phase 1) the codegen may be absent — emit a stub header
 # so SDCC doesn't error on missing includes.
 gen:
-	@if [ -f tools/Cargo.toml ]; then \
-		(cd tools && cargo build --release -p quintra-codegen 2>/dev/null) || true; \
+	@cargo build --release -p quintra-codegen 2>&1 | grep -E 'error|warning' || true
+	@if [ ! -x target/release/quintra-codegen ]; then \
+		echo "[gen] FATAL: codegen failed to build"; exit 1; \
 	fi
-	@if [ -x tools/target/release/quintra-codegen ]; then \
-		tools/target/release/quintra-codegen --content content --out $(GENDIR); \
-	else \
-		echo "[gen] codegen not yet built — emitting bootstrap stubs"; \
-		mkdir -p $(GENDIR); \
-		echo '// Auto-generated bootstrap stub' > $(GENDIR)/content_stubs.h; \
-	fi
+	@target/release/quintra-codegen --content content --out $(GENDIR)
 
 # Compile each .c under any subdir of src/
 $(OBJDIR)/%.o: %.c
@@ -62,7 +57,7 @@ cleangen:
 	rm -rf $(GENDIR)/*
 
 cleanall: clean cleangen
-	@if [ -f tools/Cargo.toml ]; then cd tools && cargo clean; fi
+	cargo clean
 
 # Headless test (build + boot + screenshots)
 test: all

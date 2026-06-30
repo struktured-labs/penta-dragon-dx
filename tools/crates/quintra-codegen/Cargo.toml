@@ -11,6 +11,7 @@ name = "quintra-codegen"
 path = "src/main.rs"
 
 [dependencies]
-quintra-content = { workspace = true }
-anyhow          = { workspace = true }
-clap            = { workspace = true }
+quintra-content      = { workspace = true }
+quintra-game-content = { workspace = true }
+anyhow               = { workspace = true }
+clap                 = { workspace = true }

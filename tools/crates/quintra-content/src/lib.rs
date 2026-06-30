@@ -23,7 +23,7 @@ pub mod biome;
 pub mod room;
 pub mod registry;
 
-pub use class::Class;
+pub use class::{Class, FormTheme};
 pub use item::{Item, ItemKind, Rarity};
 pub use enemy::{Enemy, EnemyStats, AiScriptId, ShotPattern};
 pub use biome::Biome;

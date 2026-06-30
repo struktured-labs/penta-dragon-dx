@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "content",
+    "tools/crates/quintra-content",
+    "tools/crates/quintra-codegen",
+    "tools/crates/quintra-assets",
+    "tools/crates/quintra-procgen",
+    "tools/crates/quintra-mgba",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/struktured/penta-dragon-remake"
+
+[workspace.dependencies]
+quintra-content      = { path = "tools/crates/quintra-content" }
+quintra-codegen      = { path = "tools/crates/quintra-codegen" }
+quintra-procgen      = { path = "tools/crates/quintra-procgen" }
+quintra-game-content = { path = "content" }
+
+# Common 3rd-party
+anyhow      = "1"
+thiserror   = "1"
+clap        = { version = "4", features = ["derive"] }
+serde       = { version = "1", features = ["derive"] }
+ron         = "0.8"
+image       = { version = "=0.25.5", default-features = false, features = ["png"] }
+
+[profile.release]
+opt-level = 3
+lto       = "thin"
