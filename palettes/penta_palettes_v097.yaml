@@ -13,8 +13,10 @@
 # STAGE DETECTION (v0.98) - Address 0xFFD0
 # ============================================
 # stage_flag=0x00: Level 1 (main dungeon) -> BG palette 0 (Dungeon)
-# stage_flag=0x01: Bonus stage (jet/spaceship) -> BG palette 7 (BG7)
-#                  + Use jet form OBJ palettes (SaraWitchJet, SaraDragonJet)
+# stage_flag=0x01: Bonus stage (jet/spaceship) -> uses jet OBJ palettes
+#                  (SaraWitchJet, SaraDragonJet). BG palette 7 promise from
+#                  earlier docs is OBSOLETE — bg_data BGP7 is overridden to
+#                  BGP0 in build_v301_gdma.py:417 to hide stale CGB attrs.
 # stage_flag=0x02-0x04: Levels 2-5 (not yet implemented)
 #
 # ============================================
@@ -34,25 +36,36 @@
 #   boss_flag=7: Knight boss -> Palette 6
 #   boss_flag=8: Angela (secret boss) -> Palette 7
 #
-# Normal mode tile ranges (VERIFIED via gameplay):
-#   0x00-0x07: Sara W projectiles (tile 0x01) -> Palette 3 (red, shared with Crow)
-#   0x08-0x0F: Enemy projectiles (tile 0x0F) -> Palette 0 (blue)
-#   0x10-0x1F: Effects/explosions -> Palette 0
-#   0x30-0x3F: Crow/flying -> Palette 3 (shared with Sara W projectiles)
-#   0x40-0x4F: Hornets/flying -> Palette 4
-#   0x50-0x5F: Ground (orc) -> Palette 5
-#   0x60-0x6F: Humanoid (soldier/moth/mage) -> Palette 6
-#   0x70-0x7F: Special (catfish) -> Palette 3
+# Normal mode tile ranges (VERIFIED against create_tile_based_colorizer asm
+# in scripts/bg_experiment.py; YAML source at palettes/bg_tile_categories.yaml
+# under `obj_colorizer:`):
+#   tile < 0x02            -> pal_3 (Sara W projectile + tile 0x01)
+#   0x02 <= tile < 0x10    -> pal_0 (effects / enemy projectile tile 0x0F)
+#   0x10 <= tile < 0x20    -> sara_palette (D reg supplied by caller; iter 31)
+#   0x20 <= tile < 0x30    -> sara_palette (D reg supplied by caller)
+#   0x30 <= tile < 0x40    -> pal_3 (when E==0, no boss override; e.g. Crow)
+#   0x40 <= tile < 0x50    -> pal_3 (matches CP-cascade first match)
+#   0x50 <= tile < 0x60    -> pal_4 (Hornets)
+#   0x60 <= tile < 0x70    -> pal_5 (Orc/Ground)
+#   0x70 <= tile < 0x80    -> pal_6 (Humanoid)
+#   0x80 <= tile           -> pal_4 (default high-tile route; iter 278r revert)
+# Boss override: any tile >= 0x30 with E (boss_palette reg) non-zero routes
+# straight to boss_palette regardless of the cascade above.
 
 # ============================================
 # BACKGROUND PALETTES (8 palettes, 4 colors each)
 # ============================================
 # v0.98: Multiple BG palettes for distinct areas
 #
-# Palette 0: Main floor tiles (blue castle stone)
-# Palette 1: Items/pickups (gold/yellow glow)
-# Palette 2: Walls/void (darker blue-gray)
-# Palette 3-7: Reserved for other levels/areas
+# Palette 0: Main floor / void / structural transitions  (Dungeon — used)
+# Palette 1: Items/pickups + title/menu uppercase font (BG1 — used)
+# Palette 2: BG2 — LOADED into CRAM, not selected by bg_table (decorative slot)
+# Palette 3: BG3 — LOADED into CRAM, not selected by bg_table
+# Palette 4: BG4 — LOADED into CRAM, not selected by bg_table
+# Palette 5: BG5 — RESERVED for stage-2 LAVA path (live colorizer)
+# Palette 6: Walls + spike cylinders (slate/gunmetal metallic ramp) — used
+# Palette 7: BG7 — bg_data overridden at build time to BGP0 colors (hides stale
+#            CGB boot-ROM attrs). See build_v301_gdma.py:417.
 #
 # BGR555 color reference:
 #   0x7F1B = Light sky blue
@@ -109,17 +122,16 @@ bg_palettes:
 # ============================================
 
 obj_palettes:
-  # Palette 0 - ENEMY PROJECTILES (tile 0x0F) + Effects
-  # This palette colors enemy-fired projectiles (blue by default)
+  # Palette 0 - ENEMY PROJECTILES (tile 0x0F)
+  # Used for enemy-fired projectiles (blue by default). The "+ Effects"
+  # promise from earlier docs has been struck — tile 0x10-0x1F now routes
+  # to sara_palette (iter 31), not pal_0.
   EnemyProjectile:
     colors: ["0000", "7C00", "5800", "3000"]  # Trans, Bright blue, Medium blue, Dark blue
 
-  # NOTE: SaraProjectileDragon is loaded dynamically into Palette 0 when Sara D is active
-  # This makes enemy projectiles green when playing as Sara D
-  SaraProjectileDragon:
-    colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Bright green, Dark green, Black
-
   # Palette 1 - SARA D (Dragon form - green/black)
+  # (Iter 278x: removed orphaned `SaraProjectileDragon` entry — no production
+  #  consumer loaded it. Historical use in create_vblank_colorizer_v229/v230 only.)
   SaraDragon:
     colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Bright green, Dark green, Black
 

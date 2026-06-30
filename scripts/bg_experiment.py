@@ -47,31 +47,43 @@ def load_palettes_from_yaml(yaml_path: Path) -> dict:
             result.extend([val & 0xFF, (val >> 8) & 0xFF])
         return bytes(result)
 
+    # Iter 278y (2026-06-30): replace silent fallbacks with explicit KeyError.
+    # The YAML is the canonical source per /goal; missing keys are spec bugs,
+    # not safety nets to paper over. The old fallbacks (especially slot 0 =
+    # SaraWitchJet-magenta copy) would silently corrupt CRAM if a YAML key
+    # got renamed — a class of bug the iter 278w/x refactor explicitly aims
+    # to eliminate.
+    def _require(section: dict, key: str, what: str) -> list:
+        entry = section.get(key)
+        if entry is None or 'colors' not in entry:
+            raise KeyError(
+                f"{what}: missing palette '{key}' in YAML. "
+                f"Edit palettes/penta_palettes_v097.yaml to add it, or "
+                f"verify the key name matches the build's expectation."
+            )
+        return entry['colors']
+
     bg_keys = ['Dungeon', 'BG1', 'BG2', 'BG3', 'BG4', 'BG5', 'BG6', 'BG7']
     bg_data = bytearray()
+    bg_palettes = data.get('bg_palettes', {})
     for key in bg_keys:
-        if key in data.get('bg_palettes', {}):
-            bg_data.extend(pal_to_bytes(data['bg_palettes'][key]['colors']))
-        else:
-            bg_data.extend(pal_to_bytes(["7FFF", "5294", "2108", "0000"]))
+        bg_data.extend(pal_to_bytes(_require(bg_palettes, key, 'bg_palettes')))
 
-    obj_key_map = {
-        0: ('EnemyProjectile', ["0000", "7C1F", "5817", "3010"]),
-        1: ('SaraDragon', ["0000", "03E0", "01C0", "0000"]),
-        2: ('SaraWitch', ["0000", "2EBE", "511F", "0842"]),
-        3: ('SaraProjectileAndCrow', ["0000", "001F", "0017", "000F"]),
-        4: ('Hornets', ["0000", "03FF", "00DF", "0000"]),
-        5: ('OrcGround', ["0000", "02A0", "0160", "0000"]),
-        6: ('Humanoid', ["0000", "7C1F", "4C0F", "0000"]),
-        7: ('Catfish', ["0000", "7FE0", "3CC0", "0000"]),
-    }
+    # OBJ palette slots 0-7. Names ordered to match the OAM palette index.
+    obj_keys = [
+        'EnemyProjectile',       # 0
+        'SaraDragon',            # 1
+        'SaraWitch',             # 2
+        'SaraProjectileAndCrow', # 3
+        'Hornets',               # 4
+        'OrcGround',             # 5
+        'Humanoid',               # 6
+        'Catfish',               # 7
+    ]
     obj_data = bytearray()
-    for i in range(8):
-        key, fallback = obj_key_map[i]
-        if key in data.get('obj_palettes', {}):
-            obj_data.extend(pal_to_bytes(data['obj_palettes'][key]['colors']))
-        else:
-            obj_data.extend(pal_to_bytes(fallback))
+    obj_palettes = data.get('obj_palettes', {})
+    for key in obj_keys:
+        obj_data.extend(pal_to_bytes(_require(obj_palettes, key, 'obj_palettes')))
 
     # FFBF 1-2 = mini-bosses (mid-level), 3-8 = bosses (major/end-of-level)
     boss_keys = ['Gargoyle', 'Spider', 'Boss3_Crimson', 'Boss4_Ice',
@@ -80,20 +92,22 @@ def load_palettes_from_yaml(yaml_path: Path) -> dict:
     boss_palette_table = bytearray()
     boss_slot_table = bytearray()
     for key in boss_keys:
-        entry = boss_data.get(key, {})
-        colors = entry.get('colors', ["0000", "7FFF", "5294", "2108"])
-        slot = entry.get('slot', 6)
-        boss_palette_table.extend(pal_to_bytes(colors))
-        boss_slot_table.append(slot)
+        entry = boss_data.get(key)
+        if entry is None or 'colors' not in entry or 'slot' not in entry:
+            raise KeyError(
+                f"boss_palettes: missing or incomplete entry '{key}' in YAML "
+                f"(needs both 'colors' and 'slot')."
+            )
+        boss_palette_table.extend(pal_to_bytes(entry['colors']))
+        boss_slot_table.append(entry['slot'])
 
-    jet_data = data.get('obj_palettes', {})
-    sara_witch_jet = pal_to_bytes(jet_data.get('SaraWitchJet', {}).get('colors', ["0000", "7C1F", "5817", "3010"]))
-    sara_dragon_jet = pal_to_bytes(jet_data.get('SaraDragonJet', {}).get('colors', ["0000", "7FE0", "4EC0", "2D80"]))
+    sara_witch_jet = pal_to_bytes(_require(obj_palettes, 'SaraWitchJet', 'obj_palettes (jet)'))
+    sara_dragon_jet = pal_to_bytes(_require(obj_palettes, 'SaraDragonJet', 'obj_palettes (jet)'))
 
     powerup_data = data.get('powerup_palettes', {})
-    spiral_proj = pal_to_bytes(powerup_data.get('SpiralProjectile', {}).get('colors', ["0000", "7FE0", "5EC0", "3E80"]))
-    shield_proj = pal_to_bytes(powerup_data.get('ShieldProjectile', {}).get('colors', ["0000", "03FF", "02BF", "019F"]))
-    turbo_proj = pal_to_bytes(powerup_data.get('TurboProjectile', {}).get('colors', ["0000", "00FF", "00BF", "005F"]))
+    spiral_proj = pal_to_bytes(_require(powerup_data, 'SpiralProjectile', 'powerup_palettes'))
+    shield_proj = pal_to_bytes(_require(powerup_data, 'ShieldProjectile', 'powerup_palettes'))
+    turbo_proj = pal_to_bytes(_require(powerup_data, 'TurboProjectile', 'powerup_palettes'))
 
     return {
         'bg_data': bytes(bg_data), 'obj_data': bytes(obj_data),
