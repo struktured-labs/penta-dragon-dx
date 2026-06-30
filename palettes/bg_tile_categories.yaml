@@ -1,26 +1,155 @@
 # Penta Dragon DX - Background Tile Category Mapping
-# Generated from analysis of Level 1 savestates
 #
-# Purpose: Map BG tiles to categories for O(1) colorization
-# Instead of scanning all tiles, hook the game's tile write routine
-# and apply palette based on tile ID category.
+# Iter 278w (2026-06-30): refactored to be the SINGLE SOURCE OF TRUTH for
+# build_v301_gdma.py:_bg_table(). The `bg_table:` section below is loaded
+# by `_load_bg_table_yaml()` at build time and produces the exact 256-byte
+# table baked into the ROM at bank13:0x7000.
+#
+# To change BG tile coloring: edit `bg_table.categories` here, then run
+# `uv run python scripts/build_v301_gdma.py` and `scripts/build_v301_teleport.py`.
+# The diagnostic at `scripts/diagnostics/verify_yaml_drives_bg_table.py`
+# verifies the loader matches the frozen golden bytes (regression guard).
+#
+# The pre-iter-278w `categories:` block at the bottom is RETAINED for
+# historical category names (floor/void/walls/etc.) used elsewhere in
+# the codebase. It is documentation only — the bg_table palette assignment
+# is now driven by `bg_table:` below, not `categories:`.
 
 # ==============================================
-# TILE CATEGORIES - Level 1 Dungeon Theme
+# CANONICAL bg_table — bank13:0x7000 source of truth
 # ==============================================
-#
-# The game uses 2x2 tile blocks for most elements.
-# Items follow a pattern: base, base+1, base+16, base+17
-#
-# Recommended BG Palette Assignment:
-#   Palette 0: Floor/platforms (blue-white dungeon)
-#   Palette 1: Items (gold/yellow - makes them pop!)
-#   Palette 2: Walls/structure (darker blue-gray)
-#   Palette 3: Hazards (red/orange warning)
-#   Palette 4: Decorative (purple/magenta)
-#   Palette 5: Nature/organic (green)
-#   Palette 6: Water/ice (cyan)
-#   Palette 7: Special/secret (deep blue)
+bg_table:
+  default_palette: 0
+  size: 256
+
+  # Palette legend (what each pal index renders as on the dungeon scene)
+  legend:
+    0: "default / floor / void / structural transitions"
+    1: "items + title/menu uppercase font (0x80-0xDF unified red)"
+    5: "RESERVED for stage-2 LAVA path (not used in dungeon bg_table)"
+    6: "walls + spike cylinders (slate/gunmetal metallic ramp)"
+    7: "RESERVED — was deep-blue secret-stage intent; build override sets pal 7 CRAM to pal 0 colors to hide stale CGB boot-ROM attrs"
+
+  categories:
+    - name: wall_edge
+      palette: 6
+      description: "Wall edge tiles, slate-gray metallic ramp."
+      tiles: [0x14, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1C, 0x1E]
+
+    - name: wall_interior
+      palette: 6
+      description: "Wall interior fill tiles, same slate-gray ramp."
+      tiles: [0x25, 0x26, 0x34, 0x35, 0x36, 0x37, 0x38]
+
+    - name: corner_doorway
+      palette: 6
+      description: |
+        Wall corners and doorway framing. 0x47/0x57 INCLUDED here
+        (NOT in hazard list) because wall-corner artifacts are more
+        visible than wall-colored spikes (regression 2026-05-23 chose
+        pal 6 for these dual-use tiles).
+      tiles: [0x41, 0x42, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+              0x54, 0x55, 0x56, 0x57, 0x59]
+
+    - name: hazard_spike_cylinder
+      palette: 6
+      description: |
+        Rotating spike cylinders. Metallic slate/gunmetal (7FFF/6F7B/2D4A),
+        formerly pal 5 (washed-out lava look). Pal 5 reserved for stage-2
+        LAVA. Excludes 0x47/0x57 — handled as wall corners.
+      tiles: [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]
+
+    - name: items_and_font
+      palette: 1
+      description: |
+        Item pickups + title/menu uppercase font. 0x80-0x99 = letters A..Z
+        (font); 0x88-0xDF = item pickups. Block starts at 0x80 (was 0x88)
+        so all title/menu text is uniform red instead of A-H(black)/I-Z(red)
+        two-tone. Safe because tiles 0x80-0x9F never appear as dungeon BG
+        tiles (font/letters only); arenas use their own tables.
+      tile_range: [0x80, 0xDF]  # inclusive
+
+    - name: sentinel_reset
+      palette: 0
+      description: |
+        Historical pal-7 sentinel slot. Explicitly cleared to pal 0 in v3.01
+        because the inline tile+attr copy at 0x42A7 writes bg_table[tile_id]
+        as the attr byte; tile 0xFF with attr 0xFF would paint pal-7 splotch.
+      tiles: [0xFF]
+
+  notes:
+    - "Iter 233 attempted: tile 0x73 → pal 1 (cursor red). REVERTED iter 236: stage 6 BG also uses 0x73 (lavender stage6_decorative_pal5 regressed). Needs per-scene WRAM 0xDA00 override."
+    - "Pal 5 (red/yellow) deliberately UNUSED in bg_table; reserved for stage-2 LAVA via separate path."
+    - "Pal 7 deliberately UNUSED in bg_table; bg_data BGP7 CRAM bytes are overridden to BGP0 (Dungeon) in build_v301_gdma.py:417 to hide stale CGB boot-ROM attrs."
+
+# ==============================================
+# CANONICAL obj_colorizer — bank13:0x6A10 (production base)
+# ==============================================
+# Iter 278x (2026-06-30): YAML source-of-truth for the OBJ tile-based
+# colorizer (`create_tile_based_colorizer` in scripts/bg_experiment.py).
+# Schema follows Audit 3's 12-step recipe. ORDER below is byte-significant
+# (matches the asm cascade exactly). Loader =
+# `create_tile_based_colorizer_from_yaml()`; regression guard =
+# `scripts/diagnostics/verify_yaml_drives_obj_colorizer.py`.
+obj_colorizer:
+  oam_slots: 0x28           # LD B, n   (loop iteration count = 40 shadow slots;
+                            # build_v301_gdma.py patches colorizer[1] to 0x0A
+                            # at write time for the shipped, hardware-verified
+                            # VBlank-safe cap)
+  apply_mask: 0xF8          # post-lookup attr mask: keep upper bits, OR new pal
+  skip_when_tile_zero: true # tile==0 → skip 4-byte stride, no palette write
+
+  # Tile threshold splitting low vs high cascade
+  split_threshold: 0x30
+
+  high_phase:
+    # When tile >= 0x30. If E (boss override byte) is non-zero, force boss_palette.
+    boss_override: true
+    # CP-against-threshold cascade (in source order; first match wins).
+    # JR C means "jump if tile < threshold".
+    ranges:
+      - { lt: 0x40, route: pal_3 }
+      - { lt: 0x50, route: pal_4 }
+      - { lt: 0x60, route: pal_5 }
+      - { lt: 0x70, route: pal_6 }
+      - { lt: 0x80, route: pal_7 }
+    # Fallthrough when no range matches (tile >= 0x80).
+    # Iter 278r (reverted 2026-06-30): default routed to sara_palette to fix
+    # orange-Sara race; broke 10 enemy tests (tile 0x80+ used by enemy sprites).
+    default_route: pal_4_literal
+
+  low_phase:
+    # When tile < 0x30. JR NC means "jump if tile >= threshold".
+    # Order matters: top-down, first true branch taken.
+    ranges:
+      - { ge: 0x20, route: sara_palette }
+      # Iter 31: tile 0x10-0x1F = Sara secondary body. Route to sara_palette
+      # so iter-31 hwoam_recolor B=40 raise doesn't paint slots 10-11 pal 4
+      # (Sara half-orange).
+      - { ge: 0x10, route: sara_palette }
+      - { lt: 0x02, route: pal_3 }
+    default_route: pal_0_xor   # XOR A → pal 0 for tiles 0x02..0x0F
+
+  # Route bodies — emitted at fixed labels referenced by the cascades above.
+  # ORDER preserved verbatim (byte-significant: forward-JR offsets depend on it).
+  routes:
+    - { name: pal_3,         kind: literal, value: 0x03 }
+    - { name: pal_4,         kind: literal, value: 0x04 }
+    - { name: pal_5,         kind: literal, value: 0x05 }
+    - { name: pal_6,         kind: literal, value: 0x06 }
+    - { name: pal_7,         kind: literal, value: 0x07 }
+    - { name: sara_palette,  kind: reg_d  }     # LD A, D (caller-supplied)
+    - { name: boss_palette,  kind: reg_e, fallthrough_to_apply: true }
+    # Synthetic routes used only as default_route names (resolved at codegen):
+    #   pal_4_literal → inline `LD A,4; JR apply_palette`
+    #   pal_0_xor     → inline `XOR A;  JR apply_palette`
+
+# ==============================================
+# HISTORICAL TILE CATEGORIES (documentation only)
+# ==============================================
+# This block was the original aspirational design doc. It does NOT drive
+# the build — bg_table above is canonical. Keep for category-name reference
+# only; per-category palette assignments here are stale.
 
 categories:
   # -----------------------------------------

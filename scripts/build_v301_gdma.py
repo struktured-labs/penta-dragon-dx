@@ -19,12 +19,16 @@ Palette mapping (bg_table):
   - pal7 overridden to pal0 colors (hides stale CGB boot-ROM attrs)
 """
 import sys
+from functools import lru_cache
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from bg_experiment import (
     load_palettes_from_yaml, create_tile_based_colorizer,
+    create_tile_based_colorizer_from_yaml,
     create_shadow_colorizer_main, create_palette_loader,
     create_tile_to_palette_subroutine,
 )
@@ -32,58 +36,48 @@ from create_vblank_colorizer_v288 import create_conditional_palette_cached
 from build_v296_phantomsafe import create_bg_sweep_viewport_gated
 
 
+_BG_TABLE_YAML = (
+    Path(__file__).resolve().parent.parent / "palettes" / "bg_tile_categories.yaml"
+)
+
+
+@lru_cache(maxsize=1)
+def _load_bg_table_yaml() -> bytes:
+    """Load the 256-byte bg_table from palettes/bg_tile_categories.yaml.
+
+    Iter 278w (2026-06-30): YAML is now the single source of truth for the
+    dungeon tile→palette mapping. Edit `bg_table.categories` in the YAML
+    to change colors; the byte-identity verifier at
+    `scripts/diagnostics/verify_yaml_drives_bg_table.py` will catch
+    accidental drift from the frozen golden ROM bytes.
+    """
+    with _BG_TABLE_YAML.open() as f:
+        doc = yaml.safe_load(f)
+    spec = doc["bg_table"]
+    size = int(spec.get("size", 256))
+    default_pal = int(spec.get("default_palette", 0)) & 0x07
+    table = bytearray([default_pal] * size)
+    for cat in spec["categories"]:
+        pal = int(cat["palette"]) & 0x07
+        if "tiles" in cat:
+            for t in cat["tiles"]:
+                table[int(t)] = pal
+        if "tile_range" in cat:
+            lo, hi = cat["tile_range"]
+            for t in range(int(lo), int(hi) + 1):
+                table[int(t)] = pal
+    assert len(table) == size, f"bg_table size mismatch: {len(table)} != {size}"
+    return bytes(table)
+
+
 def _bg_table() -> bytes:
     """Tile-to-palette lookup table (256 bytes, one per tile ID).
 
-    Tile-ID assignments derived from multi-room tilemap context
-    analysis. Pal-5 (red hazard) entries restored for spike cylinders
-    only; tiles 0x47/0x57 are dual-use (wall corners + thrusting
-    spikes) and we choose pal-6 (wall) because the orange/red
-    artifacts on wall corners are MORE visible than wall-color spikes.
-
-    User-reported regression 2026-05-23: 0x47/0x57 = pal 5 caused
-    orange wall-corner artifacts (matched v3.00 byte but visible
-    regression). Reverted to pal 6 to avoid wall-corner artifacts.
+    Iter 278w (2026-06-30): refactored to read from palettes/bg_tile_categories.yaml.
+    Signature preserved for call-site compatibility. Source of truth is the YAML
+    under the `bg_table:` key. See _load_bg_table_yaml() for the loader.
     """
-    table = bytearray(256)
-    # Wall edge tiles → pal 6 (slate gray)
-    for i in [0x14, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1C, 0x1E]:
-        table[i] = 6
-    # Wall interior tiles → pal 6
-    for i in [0x25, 0x26, 0x34, 0x35, 0x36, 0x37, 0x38]:
-        table[i] = 6
-    # Corner/doorway tiles → pal 6. 0x47 and 0x57 INCLUDED here
-    # (NOT in hazard list) because their wall-corner use is more
-    # visible than their thrusting-spike use.
-    for i in [0x41, 0x42, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
-              0x54, 0x55, 0x56, 0x57, 0x59]:
-        table[i] = 6
-    # Hazards: rotating spike cylinders → pal 6 (METALLIC slate/gunmetal,
-    # 7FFF/6F7B/2D4A). Was pal 5 (white/yellow/red) which read washed-out and
-    # lava-ish; user wants a metallic look. pal 6 is the existing metal ramp
-    # (shared with walls, but spikes are shape-distinct rotating cylinders).
-    # pal 5 stays free for stage-2 LAVA. (0x47/0x57 excluded — wall corners.)
-    for i in [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]:
-        table[i] = 6
-    # Items + FONT. Tiles 0x80-0x99 are the title/menu uppercase font (A=0x80..
-    # Z=0x99); 0x88-0xDF are item pickups. Both -> pal 1 so ALL title/menu text
-    # is one uniform color (red) instead of the A-H(pal0=black)/I-Z(pal1=red)
-    # two-tone split. Verified safe: tiles 0x80-0x9F never appear as dungeon BG
-    # tiles (they're font/letters only), so the dungeon is unaffected; arenas
-    # use their own tables. Start at 0x80 (was 0x88) to also catch A-H.
-    for i in range(0x80, 0xE0):
-        table[i] = 1
-    # Iter 233 attempted: cursor tile 0x73 → pal 1 (red) for title-cursor
-    # visibility. REVERTED iter 236: investigation showed stage 6 BG also
-    # uses tile 0x73 (lavender dropped 7822 → 5554 = stage6_decorative_pal5
-    # fails). Future fix needs per-scene WRAM 0xDA00 override.
-    # Sentinel — was 0xFF historically (palette 7 sentinel for ff_filter).
-    # Changed to 0x00 (pal 0): inline tile+attr copy at 0x42A7 looks up
-    # bg_table[tile_id] and writes the result as the attr byte. Any
-    # tile-ID 0xFF the game writes would have attr=0xFF=pal 7 splotch.
-    # The sentinel role is no longer needed in v3.01.
-    table[0xFF] = 0x00
-    return bytes(table)
+    return _load_bg_table_yaml()
 
 
 BG_TABLE_BYTES = _bg_table()
@@ -457,7 +451,11 @@ def build_v301():
         swj_addr, sdj_addr, sp_addr, shp_addr, tp_addr))
     w(shadow_main_addr, create_shadow_colorizer_main(colorizer_addr, boss_slot_addr))
 
-    colorizer = bytearray(create_tile_based_colorizer(colorizer_addr))
+    # Iter 278x (2026-06-30): switched to YAML-driven loader. Byte-identity
+    # verified by scripts/diagnostics/verify_yaml_drives_obj_colorizer.py
+    # across addrs 0x4000, 0x6B27, 0x6A10 and against the golden bin at
+    # palettes/golden/obj_colorizer_v301_0x6A10.bin.
+    colorizer = bytearray(create_tile_based_colorizer_from_yaml(colorizer_addr))
     # OAM scan cap (LD B,n at colorizer entry). Kept at 0x0A=10 (the shipped,
     # hardware-verified VBlank-safe value). Raising it to 0x28=40 (full OAM
     # coverage) was TESTED for the black-enemy issue (items 3,4,6,11) but did NOT

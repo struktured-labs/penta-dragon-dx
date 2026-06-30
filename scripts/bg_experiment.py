@@ -104,6 +104,148 @@ def load_palettes_from_yaml(yaml_path: Path) -> dict:
     }
 
 
+_OBJ_COLORIZER_YAML = (
+    Path(__file__).resolve().parent.parent / "palettes" / "bg_tile_categories.yaml"
+)
+
+
+def _load_obj_colorizer_spec(yaml_path: Path = None) -> dict:
+    """Load the obj_colorizer spec block from palettes/bg_tile_categories.yaml."""
+    path = Path(yaml_path) if yaml_path else _OBJ_COLORIZER_YAML
+    with path.open() as f:
+        doc = yaml.safe_load(f)
+    spec = doc.get("obj_colorizer")
+    if spec is None:
+        raise KeyError("obj_colorizer: block missing from " + str(path))
+    return spec
+
+
+def create_tile_based_colorizer_from_yaml(
+    colorizer_base_addr: int, yaml_path: Path = None
+) -> bytes:
+    """YAML-driven equivalent of create_tile_based_colorizer.
+
+    Iter 278x (2026-06-30): the OBJ colorizer dispatch is now declared in
+    `palettes/bg_tile_categories.yaml` under `obj_colorizer:`. This emits the
+    exact same byte sequence as `create_tile_based_colorizer` (verified by
+    `scripts/diagnostics/verify_yaml_drives_obj_colorizer.py`).
+    """
+    spec = _load_obj_colorizer_spec(yaml_path)
+    code = bytearray()
+    labels: dict = {}
+    forward_jumps: list = []
+
+    def emit(opcodes):
+        code.extend(opcodes if isinstance(opcodes, (list, bytes, bytearray)) else [opcodes])
+
+    def emit_jr(opcode, target_label):
+        code.append(opcode)
+        forward_jumps.append((len(code), target_label))
+        code.append(0x00)
+
+    oam_slots = int(spec["oam_slots"]) & 0xFF
+    apply_mask = int(spec["apply_mask"]) & 0xFF
+    split_threshold = int(spec["split_threshold"]) & 0xFF
+
+    emit([0x06, oam_slots])                  # LD B, oam_slots
+    labels["loop_start"] = len(code)
+    emit([0x2B, 0x7E, 0x23])                 # DEC HL; LD A,[HL]; INC HL
+    emit([0xB7])                             # OR A
+    if spec.get("skip_when_tile_zero", True):
+        emit_jr(0x28, "skip_sprite")         # JR Z, skip_sprite
+    emit([0x4F])                             # LD C, A (save tile)
+    emit([0xFE, split_threshold])            # CP split_threshold
+    emit_jr(0x38, "low_tiles")               # JR C, low_tiles
+
+    # --- HIGH PHASE ---
+    high = spec["high_phase"]
+    if high.get("boss_override", False):
+        emit([0x7B, 0xB7])                   # LD A,E; OR A
+        emit_jr(0x20, "boss_palette")        # JR NZ, boss_palette
+    emit([0x79])                             # LD A,C (restore tile)
+    for entry in high["ranges"]:
+        thr = int(entry["lt"]) & 0xFF
+        emit([0xFE, thr])                    # CP thr
+        emit_jr(0x38, entry["route"])        # JR C, route
+    default_route = high["default_route"]
+    if default_route == "pal_4_literal":
+        emit([0x3E, 0x04])                   # LD A, 4
+        emit_jr(0x18, "apply_palette")
+    elif default_route == "pal_0_xor":
+        emit([0xAF])                         # XOR A
+        emit_jr(0x18, "apply_palette")
+    else:
+        # generic named route fallthrough: JR to route
+        emit_jr(0x18, default_route)
+
+    # --- LOW PHASE ---
+    labels["low_tiles"] = len(code)
+    low = spec["low_phase"]
+    for entry in low["ranges"]:
+        if "ge" in entry:
+            thr = int(entry["ge"]) & 0xFF
+            emit([0xFE, thr])                # CP thr
+            emit_jr(0x30, entry["route"])    # JR NC, route
+        elif "lt" in entry:
+            thr = int(entry["lt"]) & 0xFF
+            emit([0xFE, thr])                # CP thr
+            emit_jr(0x38, entry["route"])    # JR C, route
+        else:
+            raise KeyError(
+                "low_phase range must have 'ge' or 'lt': " + repr(entry)
+            )
+    low_default = low["default_route"]
+    if low_default == "pal_0_xor":
+        emit([0xAF])                         # XOR A
+        emit_jr(0x18, "apply_palette")
+    elif low_default == "pal_4_literal":
+        emit([0x3E, 0x04])
+        emit_jr(0x18, "apply_palette")
+    else:
+        emit_jr(0x18, low_default)
+
+    # --- ROUTE BODIES (order matters; offsets depend on emission order) ---
+    routes = spec["routes"]
+    last_idx = len(routes) - 1
+    for idx, route in enumerate(routes):
+        labels[route["name"]] = len(code)
+        kind = route["kind"]
+        if kind == "literal":
+            emit([0x3E, int(route["value"]) & 0xFF])  # LD A, value
+        elif kind == "reg_d":
+            emit(0x7A)                       # LD A, D
+        elif kind == "reg_e":
+            emit(0x7B)                       # LD A, E
+        else:
+            raise KeyError("unknown route kind: " + str(kind))
+        is_last = idx == last_idx
+        # Last route falls through to apply_palette; others must JR there.
+        # The spec marks the last route with fallthrough_to_apply for clarity.
+        if not is_last:
+            emit_jr(0x18, "apply_palette")
+        elif not route.get("fallthrough_to_apply", False):
+            emit_jr(0x18, "apply_palette")
+
+    # --- APPLY PALETTE + SKIP SPRITE + LOOP TAIL ---
+    labels["apply_palette"] = len(code)
+    emit([0x4F, 0x7E, 0xE6, apply_mask, 0xB1, 0x77])
+    labels["skip_sprite"] = len(code)
+    emit([0x23, 0x23, 0x23, 0x23, 0x05])
+    loop_abs = colorizer_base_addr + labels["loop_start"]
+    emit([0xC2, loop_abs & 0xFF, (loop_abs >> 8) & 0xFF])
+    emit([0xC9])
+
+    # patch forward JRs
+    for pos, label in forward_jumps:
+        if label not in labels:
+            raise KeyError("unresolved label: " + label)
+        offset = labels[label] - (pos + 1)
+        if not (-128 <= offset <= 127):
+            raise ValueError(f"JR offset out of range for {label}: {offset}")
+        code[pos] = offset & 0xFF
+    return bytes(code)
+
+
 def create_tile_based_colorizer(colorizer_base_addr: int) -> bytes:
     """Optimized tile-based OBJ colorizer (FROZEN)."""
     code = bytearray()
