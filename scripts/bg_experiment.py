@@ -134,6 +134,10 @@ def create_tile_based_colorizer(colorizer_base_addr: int) -> bytes:
     emit([0xFE, 0x60]); emit_jr(0x38, 'pal_5')
     emit([0xFE, 0x70]); emit_jr(0x38, 'pal_6')
     emit([0xFE, 0x80]); emit_jr(0x38, 'pal_7')
+    # Iter 278r (reverted 2026-06-30): the change `[0x7A, 0x00]` (LD A,D; NOP)
+    # routed high-tile default to sara_palette to fix orange-Sara race. Broke
+    # 10 enemy tests (stage4_live_render, crow, orc, etc.) because tile 0x80+
+    # is legitimately used by enemy sprites. Restored original pal_4 default.
     emit([0x3E, 0x04]); emit_jr(0x18, 'apply_palette')
 
     labels['low_tiles'] = len(code)

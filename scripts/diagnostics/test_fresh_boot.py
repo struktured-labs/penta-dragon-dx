@@ -457,7 +457,10 @@ def run_mgba(rom_path: Path, lua_path: Path, timeout: int = 90) -> bool:
     ]
     env = os.environ.copy()
     env["SDL_AUDIODRIVER"] = "dummy"
-    env["QT_QPA_PLATFORM"] = "offscreen"
+    # NOTE: do NOT set QT_QPA_PLATFORM=offscreen — it breaks mGBA's
+    # screenshot path in this env (xvfb-run + Qt offscreen platform
+    # conflict yields "X connection broken" → exit 1, no screenshots).
+    # Plain xvfb-run alone works correctly.
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=timeout + 10, env=env)
         return result.returncode in (0, 124)
@@ -476,7 +479,10 @@ def start_mgba(rom_path: Path, lua_path: Path, timeout: int = 90) -> subprocess.
     ]
     env = os.environ.copy()
     env["SDL_AUDIODRIVER"] = "dummy"
-    env["QT_QPA_PLATFORM"] = "offscreen"
+    # NOTE: do NOT set QT_QPA_PLATFORM=offscreen — it breaks mGBA's
+    # screenshot path in this env (xvfb-run + Qt offscreen platform
+    # conflict yields "X connection broken" → exit 1, no screenshots).
+    # Plain xvfb-run alone works correctly.
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
 
 
