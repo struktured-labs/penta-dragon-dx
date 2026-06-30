@@ -10,7 +10,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Lineage:** this project pivoted from being a Penta Dragon DX clone (now under `archive/penta-dragon-dx/`) to a Penta-inspired-but-original game. The Penta-clone effort is preserved for reference but is not built or shipped.
 
-**Current Status:** v0.2.0 — Phase 1 scaffolding complete. Boots in CGB mode, displays a colored background. Rust tooling workspace builds cleanly.
+**Current Status:** v0.3.0 — playable proof of concept. ROM boots → TITLE
+(pulsing) → CLASS_SELECT (5 classes, distinct stats) → procgen rooms with
+1-4 random enemies → boss room at depth 5 (Stone Sentinel, sealed doors) →
+VICTORY or GAMEOVER screen → back to title. HUD shows hearts + coins via
+WINDOW layer. Combat: 8-way auto-aim B-button fire, AABB collision, iframes,
+pickup drops (heart/coin). 5 classes / 15 items / 5 enemies / 1 biome —
+all defined as typed Rust content compiled into C tables at build time.
 
 ### Toolchain
 

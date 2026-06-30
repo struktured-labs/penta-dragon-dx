@@ -44,9 +44,9 @@ mod tests {
     #[test]
     fn registry_counts() {
         let r = registry();
-        assert_eq!(r.n_classes(),        1);
-        assert_eq!(r.n_items(),          2);
-        assert_eq!(r.n_enemies(),        2);   // Crawler + Sentinel
+        assert_eq!(r.n_classes(),        5);   // Wolfkin/Sauran/Corvin/Picsean/Vespine
+        assert_eq!(r.n_items(),         15);   // 5 weapons + 5 actives + 5 passives
+        assert_eq!(r.n_enemies(),        5);   // Crawler+Sentinel+Hornet+Skeleton+Orc
         assert_eq!(r.n_biomes(),         1);
         assert_eq!(r.n_room_templates(), 1);
     }

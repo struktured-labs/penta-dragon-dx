@@ -44,6 +44,10 @@ check() {
 echo "[smoke] results in $OUT_DIR/"
 check 01_title                400
 check 02_class_select         400
+check 02b_sauran              400
+check 02c_corvin              400
+check 02d_picsean             400
+check 02e_vespine             400
 check 03_room0_enter          400
 check 04_room1                400
 check 05_room2                400

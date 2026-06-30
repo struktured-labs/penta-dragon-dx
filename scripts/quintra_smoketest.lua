@@ -58,6 +58,13 @@ end
 -- Boot
 tick(120); shot("01_title")
 tap(KEY_START); tick(40); shot("02_class_select")
+
+-- Cycle through all 5 classes to confirm cursor + stats update
+tap(KEY_DOWN); tick(15); shot("02b_sauran")
+tap(KEY_DOWN); tick(15); shot("02c_corvin")
+tap(KEY_DOWN); tick(15); shot("02d_picsean")
+tap(KEY_DOWN); tick(15); shot("02e_vespine")
+tap(KEY_DOWN); tick(15)  -- wraps back to Wolfkin
 tap(KEY_A); tick(40); shot("03_room0_enter")
 
 -- Walk through 5 doors to reach boss room (run_state.room_counter == 5)

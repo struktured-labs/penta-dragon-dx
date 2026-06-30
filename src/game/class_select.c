@@ -31,7 +31,7 @@ static void render(void) {
         u8 i;
         for (i = 0; i < N_CLASSES; ++i) {
             const class_def_t *c = &classes[i];
-            gotoxy(2, (u8)(4 + (i << 1)));
+            gotoxy(2, (u8)(3 + i));
             if (i == class_select_cursor) printf("> ");
             else                          printf("  ");
             printf("%s", c->name);
@@ -40,9 +40,9 @@ static void render(void) {
 
     {
         const class_def_t *c = &classes[class_select_cursor];
-        gotoxy(1, 12); printf("HP %u  MP %u",
+        gotoxy(1, 11); printf("HP %u  MP %u",
             (u16)c->base_stats.hp_max, (u16)c->base_stats.mp_max);
-        gotoxy(1, 13); printf("AT %u  DF %u  SP %u",
+        gotoxy(1, 12); printf("AT %u  DF %u  SP %u",
             (u16)c->base_stats.atk, (u16)c->base_stats.def, (u16)c->base_stats.spd);
     }
 
