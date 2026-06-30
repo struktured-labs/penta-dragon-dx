@@ -79,9 +79,9 @@ class PaletteSpec:
             spec.bg.append(palette_to_bytes(colors))
         # Build override: BGP7 ← BGP0 (Dungeon) per build_v301_gdma.py:417
         # ("hide stale CGB boot-ROM attrs"). YAML BG7 definition is dead.
-        # Encoding this so oracle matches actual ROM bytes; if you want to
-        # catch this drift again, remove the line and the diff will fire.
-        spec.bg[7] = spec.bg[0]
+        # NOTE: 2026-06-30 user-requested YAML-vs-game drift hunt — leave
+        # this commented to surface the BG7 override as a real drift case.
+        # spec.bg[7] = spec.bg[0]
 
         # OBJ: 8 palettes (slot index → key)
         obj_key_map = {
