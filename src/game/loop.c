@@ -6,6 +6,9 @@
 #include "game/loop.h"
 #include "game/title.h"
 #include "game/scratch.h"
+#include "game/class_select.h"
+#include "game/run_init.h"
+#include "game/room.h"
 
 screen_id_t loop_current_screen = SCREEN_BOOT;
 u16         loop_frame_counter  = 0;
@@ -14,10 +17,10 @@ u16         loop_frame_counter  = 0;
 const screen_t screens[SCREEN_COUNT] = {
     [SCREEN_BOOT]         = { 0, 0, 0, 0 },
     [SCREEN_TITLE]        = { title_enter,   title_exit,   title_tick,   title_draw   },
-    [SCREEN_CLASS_SELECT] = { 0, 0, 0, 0 },   // Phase 4
-    [SCREEN_RUN_INIT]     = { 0, 0, 0, 0 },   // Phase 4
+    [SCREEN_CLASS_SELECT] = { class_select_enter, class_select_exit, class_select_tick, class_select_draw },
+    [SCREEN_RUN_INIT]     = { run_init_enter,     run_init_exit,     run_init_tick,     run_init_draw     },
     [SCREEN_PROCGEN]      = { 0, 0, 0, 0 },
-    [SCREEN_ROOM]         = { 0, 0, 0, 0 },
+    [SCREEN_ROOM]         = { room_enter,         room_exit,         room_tick,         room_draw         },
     [SCREEN_REST_ROOM]    = { 0, 0, 0, 0 },
     [SCREEN_BOSS]         = { 0, 0, 0, 0 },
     [SCREEN_INVENTORY]    = { 0, 0, 0, 0 },

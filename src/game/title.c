@@ -66,9 +66,8 @@ void title_exit(void) {
 
 screen_id_t title_tick(u8 keys, u8 pressed) {
     keys;
-    if (pressed & J_START) {
-        return SCREEN_SCRATCH;   // Phase 3 destination; Phase 4 will route to CLASS_SELECT
-    }
+    if (pressed & J_START)  return SCREEN_CLASS_SELECT;
+    if (pressed & J_SELECT) return SCREEN_SCRATCH;  // debug screen access
     return SCREEN_SELF;
 }
 

@@ -61,3 +61,6 @@ setenv.sh
 *.swp
 *.swo
 .DS_Store
+
+# Claude harness local state
+.claude/scheduled_tasks.lock
