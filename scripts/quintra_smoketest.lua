@@ -1,6 +1,6 @@
--- Quintra Phase 5 smoke test.
--- Boots → TITLE → CLASS_SELECT → ROOM → walk around → fire in 4 directions
--- → screenshot at each stage → exit.
+-- Quintra Phase 7 smoke test.
+-- Boots → TITLE → CLASS_SELECT → ROOM → walk → fire → walk through door
+-- → screenshot at each transition → exit.
 
 local OUT_DIR = os.getenv("QUINTRA_OUT_DIR") or "/tmp/quintra-smoketest"
 
@@ -37,37 +37,35 @@ tick(120); shot("01_title")
 -- TITLE → CLASS_SELECT
 tap(KEY_START); tick(40); shot("02_class_select")
 
--- CLASS_SELECT → RUN_INIT → ROOM
-tap(KEY_A); tick(40); shot("03_room_enter")
+-- CLASS_SELECT → RUN_INIT → ROOM 0
+tap(KEY_A); tick(40); shot("03_room0_enter")
 
--- Movement
-press(KEY_LEFT, 24); shot("04_room_left")
-press(KEY_DOWN, 24); shot("05_room_down")
-press(KEY_RIGHT, 24); shot("06_room_right")
+-- Walk south, into the bottom door
+press(KEY_DOWN, 90); shot("04_room0_at_S_door")
 
--- Wall push (UP held 80 frames)
-press(KEY_UP, 80); shot("07_room_wall_push")
+-- Should have transitioned to room 1 now
+tick(30); shot("05_room1_enter")
 
--- Re-center and fire in 4 directions
--- Walk back down to center
-press(KEY_DOWN, 30)
-press(KEY_RIGHT, 10)
-shot("08_pre_fire")
+-- Walk further south into another door
+press(KEY_DOWN, 90); shot("06_room2_enter")
 
--- Fire B right
-press(KEY_B + KEY_RIGHT, 6)
-tick(8); shot("09_fire_right")
+-- East door
+press(KEY_RIGHT, 90); shot("07_room3_enter")
 
--- Fire B up
-press(KEY_B + KEY_UP, 6)
-tick(8); shot("10_fire_up")
+-- North door
+press(KEY_UP, 90); shot("08_room4_enter")
 
--- Spray for a while + try to hit enemies
-emu:setKeys(KEY_B + KEY_LEFT); tick(40); emu:setKeys(0); tick(20)
-shot("11_after_spray")
+-- Fire test in this room
+press(KEY_B + KEY_RIGHT, 6); tick(8); shot("09_fire_in_room4")
 
--- Wait and screenshot final state (enemies may have wandered, projectiles cleared)
-tick(60); shot("12_after_settle")
+-- Spray + walk to engage enemies
+emu:setKeys(KEY_B + KEY_LEFT); tick(60); emu:setKeys(0); tick(20)
+shot("10_after_spray")
+
+tick(60); shot("11_after_settle")
+
+-- Return to TITLE via START
+press(KEY_START, 4); tick(40); shot("12_back_to_title")
 
 console:log("SMOKETEST DONE")
 emu.frontend:quit()

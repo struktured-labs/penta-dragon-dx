@@ -12,8 +12,10 @@
 #include "game/enemy_ai.h"
 #include "game/loop.h"
 #include "game/player.h"
+#include "game/procgen.h"
 #include "game/projectile.h"
 #include "game/room.h"
+#include "game/run_state.h"
 #include "render/hud.h"
 #include "render/palette.h"
 #include "render/tiles.h"
@@ -166,48 +168,20 @@ void room_enter(void) {
     tiles_load_combat_sprites();
     tiles_load_pickup_sprites();
 
-    build_default_room();
-    draw_room_tilemap();
-
     hud_init();
     hud_show();
 
-    // Player sprite
+    // Player sprite tile + CGB OBJ palette 1
     set_sprite_tile(0, SPR_PLAYER);
-    set_sprite_prop(0, 0x01);          // CGB OBJ palette 1
-
-    // Player starts at center
-    player.x = FIX8((ROOM_W / 2) * 8);
-    player.y = FIX8((ROOM_H / 2) * 8);
-    player.facing       = FACE_S;
-    player.iframes      = 0;
+    set_sprite_prop(0, 0x01);
+    player.facing        = FACE_S;
+    player.iframes       = 0;
     player.fire_cooldown = 0;
+
+    // Procgen builds the tilemap + spawns enemies + positions player
+    procgen_generate_current_room();
+    draw_room_tilemap();
     place_player_sprite();
-
-    // Spawn entities
-    entity_init_all();
-
-    // Phase 5: spawn 3 enemies at fixed positions. Phase 7 will use
-    // room template's spawn_slots filtered by biome.enemy_pool.
-    {
-        const enemy_def_t *crawler = &enemies[0];
-        // Re-palette: enemies[0] palette field references OBJ palette index
-        // but we want crawler_palette → assign palette 3 dynamically.
-        crawler;       // value not actually used; spawned via fixed crawler id
-        enemy_spawn(0, 5,  4);
-        enemy_spawn(0, 15, 5);
-        enemy_spawn(0, 10, 13);
-        // Re-tag entity palettes to point to OBJ palette 3 (CGB OBJ pal bits)
-        {
-            u8 i;
-            for (i = 0; i < MAX_ENTITIES; ++i) {
-                if ((entities[i].flags & EF_ACTIVE)
-                    && entities[i].type == ENT_ENEMY) {
-                    entities[i].palette = 0x03;
-                }
-            }
-        }
-    }
 
     SHOW_SPRITES;
     SHOW_BKG;
@@ -277,6 +251,35 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
     if (combat_resolve()) {
         // Player died — Phase 5: return to TITLE. Phase 9 = GAMEOVER.
         return SCREEN_TITLE;
+    }
+
+    // ---- Door detection: if player stands on a door, advance to next room
+    {
+        i16 px = FIX8_TO_INT(player.x) + 4;
+        i16 py = FIX8_TO_INT(player.y) + 4;
+        u8 tx = (u8)(px >> 3);
+        u8 ty = (u8)(py >> 3);
+        if (tx < ROOM_W && ty < ROOM_H && room_tilemap[ty][tx] == BGT_DOOR) {
+            // Determine which door
+            u8 dir = DIR_NONE;
+            if      (ty == 0)              dir = DIR_N;
+            else if (ty == ROOM_H - 1)     dir = DIR_S;
+            else if (tx == 0)              dir = DIR_W;
+            else if (tx == ROOM_W - 1)     dir = DIR_E;
+
+            if (dir != DIR_NONE) {
+                run_state.room_counter++;
+                run_state.entered_from = dir;
+                // Regenerate room in-place (skip full screen exit/enter)
+                DISPLAY_OFF;
+                procgen_generate_current_room();
+                draw_room_tilemap();
+                place_player_sprite();
+                hud_redraw_all();
+                DISPLAY_ON;
+                return SCREEN_SELF;
+            }
+        }
     }
 
     // ---- START returns to TITLE (Phase 5 testing)
