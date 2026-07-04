@@ -20,8 +20,8 @@ static u8 hitbox_h(const entity_t *e) { return  e->hitbox       & 0x0F; }
 void entity_init_all(void) {
     u8 i;
     memset(entities, 0, sizeof(entities));
-    // Park entity sprites off-screen (slots 4..35)
-    for (i = 4; i < 4 + MAX_ENTITIES; ++i) {
+    // Park entity sprites (slots 4..35) + boss metasprite overlay (36..39)
+    for (i = 4; i < 40; ++i) {
         move_sprite(i, 0, 0);
     }
 }
@@ -110,9 +110,29 @@ void fx_update(entity_t *e, u8 idx) {
 
 void entity_draw_all(void) {
     u8 i;
+    u8 boss_drawn = 0;
     for (i = 0; i < MAX_ENTITIES; ++i) {
         if (!(entities[i].flags & EF_ACTIVE)) {
-            // Already hidden by entity_kill — nothing to do.
+            continue;
+        }
+        // Boss (enemy content id 1) renders as a full 16x16 metasprite on
+        // the reserved OAM slots 36-39; its own entity slot stays hidden.
+        if (entities[i].type == ENT_ENEMY && entities[i].ai_data[0] == 1) {
+            u8 sx = (u8)(FIX8_TO_INT(entities[i].x) + 8);
+            u8 sy = (u8)(FIX8_TO_INT(entities[i].y) + 16);
+            u8 pal = entities[i].palette;
+            move_sprite(entities[i].oam_slot, 0, 0);
+            set_sprite_tile(36, entities[i].sprite_tile);
+            set_sprite_tile(37, (u8)(entities[i].sprite_tile + 1));
+            set_sprite_tile(38, (u8)(entities[i].sprite_tile + 2));
+            set_sprite_tile(39, (u8)(entities[i].sprite_tile + 3));
+            set_sprite_prop(36, pal); set_sprite_prop(37, pal);
+            set_sprite_prop(38, pal); set_sprite_prop(39, pal);
+            move_sprite(36, sx,         sy);
+            move_sprite(37, (u8)(sx+8), sy);
+            move_sprite(38, sx,         (u8)(sy+8));
+            move_sprite(39, (u8)(sx+8), (u8)(sy+8));
+            boss_drawn = 1;
             continue;
         }
         set_sprite_tile(entities[i].oam_slot, entities[i].sprite_tile);
@@ -120,5 +140,9 @@ void entity_draw_all(void) {
         move_sprite(entities[i].oam_slot,
             (u8)(FIX8_TO_INT(entities[i].x) + 8),
             (u8)(FIX8_TO_INT(entities[i].y) + 16));
+    }
+    if (!boss_drawn) {
+        move_sprite(36, 0, 0); move_sprite(37, 0, 0);
+        move_sprite(38, 0, 0); move_sprite(39, 0, 0);
     }
 }

@@ -55,5 +55,14 @@ void projectile_update(entity_t *e, u8 idx) {
             entity_kill(idx);
             return;
         }
+        // Solid tiles (pillars, crystals, walls) stop bullets
+        {
+            u8 t = room_tile_at_px(px + 4, py + 4);
+            if (t == BGT_WALL || t == BGT_PILLAR || t == BGT_CRYSTAL) {
+                fx_spawn(SPR_FX_IMPACT, 2, px, py, 4);
+                entity_kill(idx);
+                return;
+            }
+        }
     }
 }

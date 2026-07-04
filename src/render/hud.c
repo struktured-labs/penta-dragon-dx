@@ -3,6 +3,7 @@
 
 #include "core/types.h"
 #include "game/player.h"
+#include "game/run_state.h"
 #include "render/hud.h"
 #include "render/palette.h"
 #include "render/tiles.h"
@@ -39,9 +40,13 @@ void hud_init(void) {
         VBK_REG = 0;
     }
 
-    // Position window at top (WY=0). WX=7 = window x=0 (CGB quirk).
-    WY_REG = 0;
+    // Bottom-strip HUD: the GB window extends to the bottom-right of the
+    // frame from wherever it starts, so a top-row HUD would occlude the
+    // whole playfield (the Phase-6..13 "blank room" bug). WY=136 shows
+    // only the last 8 scanlines. WX=7 = window x=0.
+    WY_REG = 136;
     WX_REG = 7;
+    LCDC_REG |= 0x40;   // WIN map = 0x9C00 (match set_win_tiles target)
 
     hud_redraw_all();
 }
@@ -84,7 +89,19 @@ void hud_redraw_coins(void) {
     set_win_tiles(15, 0, 4, 1, row);
 }
 
+void hud_redraw_depth(void) {
+    // Room depth as 2 digits, centered-ish (cols 8-9). Boss lives at depth 5.
+    u8 row[2];
+    u8 d = run_state.room_counter;
+    if (d > 99) d = 99;
+    row[0] = (u8)(HUD_DIGIT_0 + (d / 10));
+    row[1] = (u8)(HUD_DIGIT_0 + (d % 10));
+    VBK_REG = 0;
+    set_win_tiles(8, 0, 2, 1, row);
+}
+
 void hud_redraw_all(void) {
     hud_redraw_hp();
     hud_redraw_coins();
+    hud_redraw_depth();
 }

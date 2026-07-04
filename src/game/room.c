@@ -25,12 +25,32 @@ u8 room_tilemap[ROOM_H][ROOM_W];
 
 #define SPEED_SCALE 32   // each spd unit = 32/256 px = 0.125 px/tick
 
-// Biome palette for room — cave-y blue-grey
-static const u16 room_bg_palette[4] = {
-    BGR555( 0,  0,  4),
-    BGR555( 5,  6, 12),
-    BGR555(12, 14, 22),
-    BGR555(22, 24, 28),
+// Crystal Caverns BG palettes — floor kept bright so the play area reads,
+// walls clearly darker (sprite/value-band separation), crystals glow,
+// doors gold. One CGB palette per tile family via VRAM bank-1 attributes.
+static const u16 pal_floor[4] = {
+    BGR555( 4,  3,  6),    // 0: grout / shadow
+    BGR555(11, 10, 15),    // 1: mid stone
+    BGR555(17, 16, 22),    // 2: light stone (floor base)
+    BGR555(23, 22, 28),    // 3: highlight glint
+};
+static const u16 pal_wall[4] = {
+    BGR555( 1,  1,  3),    // 0: deep shadow
+    BGR555( 5,  5, 11),    // 1: mortar
+    BGR555( 9, 10, 17),    // 2: brick
+    BGR555(16, 18, 26),    // 3: top edge highlight
+};
+static const u16 pal_crystal[4] = {
+    BGR555( 2,  0,  5),    // 0: dark nook
+    BGR555(16,  5, 22),    // 1: deep magenta
+    BGR555(10, 22, 29),    // 2: bright cyan
+    BGR555(31, 30, 31),    // 3: white sparkle
+};
+static const u16 pal_door[4] = {
+    BGR555( 1,  1,  2),    // 0: dark passage
+    BGR555(10,  7,  2),    // 1: bronze shadow
+    BGR555(18, 13,  3),    // 2: gold mid
+    BGR555(28, 21,  6),    // 3: bright gold
 };
 
 // Player (Wolfkin) palette
@@ -81,24 +101,7 @@ static const u16 coin_palette[4] = {
     BGR555(31, 31, 14),
 };
 
-static void build_default_room(void) {
-    u8 x, y;
-    for (y = 0; y < ROOM_H; ++y) {
-        for (x = 0; x < ROOM_W; ++x) {
-            if (y == 0 || y == ROOM_H - 1 || x == 0 || x == ROOM_W - 1) {
-                room_tilemap[y][x] = BGT_WALL;
-            } else {
-                room_tilemap[y][x] = BGT_FLOOR;
-            }
-        }
-    }
-    room_tilemap[0][ROOM_W / 2]            = BGT_DOOR;
-    room_tilemap[ROOM_H - 1][ROOM_W / 2]   = BGT_DOOR;
-    room_tilemap[ROOM_H / 2][0]            = BGT_DOOR;
-    room_tilemap[ROOM_H / 2][ROOM_W - 1]   = BGT_DOOR;
-}
-
-static u8 tile_at(i16 px, i16 py) {
+u8 room_tile_at_px(i16 px, i16 py) {
     if (px < 0 || py < 0) return BGT_WALL;
     {
         u8 tx = (u8)(px >> 3);
@@ -108,16 +111,39 @@ static u8 tile_at(i16 px, i16 py) {
     }
 }
 
+u8 room_tile_walkable(u8 t) {
+    return (t == BGT_FLOOR || t == BGT_FLOOR2 || t == BGT_FLOOR3
+         || t == BGT_RUBBLE || t == BGT_DOOR);
+}
+
 static u8 is_walkable_at(i16 px, i16 py) {
-    u8 t = tile_at(px, py);
-    return (t == BGT_FLOOR || t == BGT_DOOR);
+    return room_tile_walkable(room_tile_at_px(px, py));
+}
+
+// CGB palette attribute per tile id
+static u8 attr_for_tile(u8 t) {
+    switch (t) {
+        case BGT_WALL:
+        case BGT_PILLAR:  return BGPAL_WALL;
+        case BGT_CRYSTAL: return BGPAL_CRYSTAL;
+        case BGT_DOOR:    return BGPAL_DOOR;
+        default:          return BGPAL_FLOOR;
+    }
 }
 
 static void draw_room_tilemap(void) {
-    u8 y;
+    u8 x, y;
+    u8 attr_row[ROOM_W];
     for (y = 0; y < ROOM_H; ++y) {
+        // Tile indices (VRAM bank 0)
+        VBK_REG = 0;
         set_bkg_tiles(0, y, ROOM_W, 1, room_tilemap[y]);
+        // Palette attributes (VRAM bank 1)
+        for (x = 0; x < ROOM_W; ++x) attr_row[x] = attr_for_tile(room_tilemap[y][x]);
+        VBK_REG = 1;
+        set_bkg_tiles(0, y, ROOM_W, 1, attr_row);
     }
+    VBK_REG = 0;
 }
 
 static void place_player_sprite(void) {
@@ -170,7 +196,10 @@ static u8 facing_to_dir8(u8 facing) {
 void room_enter(void) {
     DISPLAY_OFF;
 
-    palette_bg_load(0, room_bg_palette);
+    palette_bg_load(BGPAL_FLOOR,   pal_floor);
+    palette_bg_load(BGPAL_WALL,    pal_wall);
+    palette_bg_load(BGPAL_CRYSTAL, pal_crystal);
+    palette_bg_load(BGPAL_DOOR,    pal_door);
     palette_obj_load(1, player_palette);
     palette_obj_load(2, bullet_palette);
     palette_obj_load(3, crawler_palette);
@@ -179,6 +208,7 @@ void room_enter(void) {
     palette_obj_load(6, sentinel_palette);
 
     tiles_load_room_bg();
+    tiles_load_dungeon_bg();              // authored dungeon tileset (overrides placeholders)
     tiles_load_player_sprite();           // legacy single-tile fallback
     tiles_load_combat_sprites();
     tiles_load_pickup_sprites();
@@ -212,6 +242,7 @@ void room_enter(void) {
     draw_room_tilemap();
     place_player_sprite();
 
+
     SHOW_SPRITES;
     SHOW_BKG;
     DISPLAY_ON;
@@ -224,30 +255,44 @@ void room_exit(void) {
 }
 
 screen_id_t room_tick(u8 keys, u8 pressed) {
-    // ---- Movement: 1 px/frame, i16 positions
+    // ---- Movement: SPD-scaled sub-pixel accumulator.
+    // acc += spd; each 5 accumulated = 1 px step. spd 5 = 1.0 px/f,
+    // Sauran 4 = 0.8, Wolfkin 6 = 1.2, Vespine 7 = 1.4.
     {
-        ppos_t nx = player.x;
-        ppos_t ny = player.y;
         u8 moved = 0;
+        i8 dx = 0, dy = 0;
+        u8 steps;
 
-        if (keys & J_LEFT)  { nx -= 1; player.facing = FACE_W; moved = 1; }
-        if (keys & J_RIGHT) { nx += 1; player.facing = FACE_E; moved = 1; }
-        if (keys & J_UP)    { ny -= 1; player.facing = FACE_N; moved = 1; }
-        if (keys & J_DOWN)  { ny += 1; player.facing = FACE_S; moved = 1; }
+        if (keys & J_LEFT)  { dx = -1; player.facing = FACE_W; moved = 1; }
+        if (keys & J_RIGHT) { dx = +1; player.facing = FACE_E; moved = 1; }
+        if (keys & J_UP)    { dy = -1; player.facing = FACE_N; moved = 1; }
+        if (keys & J_DOWN)  { dy = +1; player.facing = FACE_S; moved = 1; }
 
-        // X axis
-        if (is_walkable_at(nx + 1, player.y + 1)
-            && is_walkable_at(nx + 6, player.y + 1)
-            && is_walkable_at(nx + 1, player.y + 6)
-            && is_walkable_at(nx + 6, player.y + 6)) {
-            player.x = nx;
+        if (moved) {
+            player.move_acc = (u8)(player.move_acc + player.spd);
         }
-        // Y axis
-        if (is_walkable_at(player.x + 1, ny + 1)
-            && is_walkable_at(player.x + 6, ny + 1)
-            && is_walkable_at(player.x + 1, ny + 6)
-            && is_walkable_at(player.x + 6, ny + 6)) {
-            player.y = ny;
+        steps = 0;
+        while (player.move_acc >= 5) { player.move_acc -= 5; steps++; }
+
+        while (steps--) {
+            if (dx) {
+                ppos_t nx = (ppos_t)(player.x + dx);
+                if (is_walkable_at(nx + 1, player.y + 1)
+                    && is_walkable_at(nx + 6, player.y + 1)
+                    && is_walkable_at(nx + 1, player.y + 6)
+                    && is_walkable_at(nx + 6, player.y + 6)) {
+                    player.x = nx;
+                }
+            }
+            if (dy) {
+                ppos_t ny = (ppos_t)(player.y + dy);
+                if (is_walkable_at(player.x + 1, ny + 1)
+                    && is_walkable_at(player.x + 6, ny + 1)
+                    && is_walkable_at(player.x + 1, ny + 6)
+                    && is_walkable_at(player.x + 6, ny + 6)) {
+                    player.y = ny;
+                }
+            }
         }
 
         if (moved) {

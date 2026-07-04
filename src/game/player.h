@@ -30,6 +30,7 @@ typedef struct {
     u8     active_charge;
     u8     starter_weapon;
     u8     fire_cooldown;                // ticks until next shot allowed
+    u8     move_acc;                     // sub-pixel movement accumulator (5 = 1px)
     u8     inventory[INVENTORY_SLOTS];   // item id LSBs; 0xFF = empty
     u8     score_lo, score_hi;           // 16-bit score
 } player_state_t;

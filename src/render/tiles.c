@@ -212,3 +212,15 @@ void tiles_load_fx_sprites(void) {
     set_sprite_data(SPR_FX_MUZZLE, 1, sprite_fx_muzzle);
     set_sprite_data(SPR_FX_IMPACT, 1, sprite_fx_impact);
 }
+
+void tiles_load_dungeon_bg(void) {
+    // Replace the flat placeholder tiles with the authored dungeon set
+    set_bkg_data(BGT_FLOOR,   1, bgt_floor_plain);
+    set_bkg_data(BGT_WALL,    1, bgt_wall_brick);
+    set_bkg_data(BGT_DOOR,    1, bgt_door_frame);
+    set_bkg_data(BGT_FLOOR2,  1, bgt_floor_crack);
+    set_bkg_data(BGT_FLOOR3,  1, bgt_floor_pebble);
+    set_bkg_data(BGT_PILLAR,  1, bgt_pillar);
+    set_bkg_data(BGT_CRYSTAL, 1, bgt_crystal);
+    set_bkg_data(BGT_RUBBLE,  1, bgt_rubble);
+}

@@ -27,4 +27,14 @@ extern const u8 sprite_fx_impact[16];
 // 16x16 boss metasprite
 extern const u8 sprite_boss_sentinel[64];
 
+// 8x8 dungeon BG tiles
+extern const u8 bgt_floor_plain[16];
+extern const u8 bgt_floor_crack[16];
+extern const u8 bgt_floor_pebble[16];
+extern const u8 bgt_wall_brick[16];
+extern const u8 bgt_door_frame[16];
+extern const u8 bgt_pillar[16];
+extern const u8 bgt_crystal[16];
+extern const u8 bgt_rubble[16];
+
 #endif

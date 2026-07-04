@@ -7,9 +7,9 @@
 
 // BG tile slots
 #define BGT_VOID   0
-#define BGT_FLOOR  1
-#define BGT_WALL   2
-#define BGT_DOOR   3
+#define BGT_FLOOR  1     // plain stone (bright)
+#define BGT_WALL   2     // brick face
+#define BGT_DOOR   3     // gold door frame
 
 // HUD tile slots (BG tile data, rendered via WINDOW layer)
 #define HUD_HEART_FULL  4
@@ -18,6 +18,19 @@
 #define HUD_COIN        7
 #define HUD_BLANK       8
 #define HUD_DIGIT_0     9    // ...9..18 = digits 0..9
+
+// Dungeon tile slots (after HUD block)
+#define BGT_FLOOR2  19   // cracked floor variant
+#define BGT_FLOOR3  20   // pebbled floor variant
+#define BGT_PILLAR  21   // solid obstacle
+#define BGT_CRYSTAL 22   // solid glowing obstacle
+#define BGT_RUBBLE  23   // walkable decoration
+
+// CGB BG palette slot per tile kind (written to VRAM bank 1 attributes)
+#define BGPAL_FLOOR   0
+#define BGPAL_WALL    1
+#define BGPAL_CRYSTAL 2
+#define BGPAL_DOOR    3
 
 // OBJ tile slots — 5 classes × 4 tiles each (metasprite) + 4 enemies + 4 boss tiles + pickups + bullet
 #define SPR_CLASS_BASE     0     // 5 classes × 4 tiles = 0..19
@@ -64,5 +77,6 @@ void tiles_load_all_class_sprites(void);   // loads 5 classes × 4 tiles = 20 OB
 void tiles_load_all_enemy_sprites(void);   // 4 enemy tiles
 void tiles_load_boss_metasprite(void);     // 16x16 boss (4 tiles at SPR_BOSS..+3)
 void tiles_load_fx_sprites(void);          // bullet (2 frames), muzzle, impact
+void tiles_load_dungeon_bg(void);          // dungeon tileset (replaces flat placeholders)
 
 #endif

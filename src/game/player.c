@@ -21,6 +21,7 @@ void player_clear(void) {
     player.active_charge  = 0;
     player.starter_weapon = 0xFF;
     player.fire_cooldown  = 0;
+    player.move_acc       = 0;
     for (i = 0; i < INVENTORY_SLOTS; ++i) player.inventory[i] = 0xFF;
     player.score_lo = player.score_hi = 0;
 }
