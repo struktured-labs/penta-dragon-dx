@@ -13,8 +13,10 @@ enum {
     DIR_NONE = 0xFF,
 };
 
-#define BOSS_EVERY_N_ROOMS 5   // a boss guards every 5th room
-#define BOSSES_TO_WIN      3   // defeat this many to clear the run
+#define ROOMS_PER_STAGE    6   // a large stage boss guards every 6th room
+#define BOSS_EVERY_N_ROOMS ROOMS_PER_STAGE   // (legacy alias)
+#define BOSSES_TO_WIN      9   // 9 stages -> 9 large bosses to clear the run
+#define MINIBOSS_EVERY     3   // rooms 3,9,15... (that aren't stage-boss rooms)
 
 typedef struct {
     u8  biome_id;            // current biome

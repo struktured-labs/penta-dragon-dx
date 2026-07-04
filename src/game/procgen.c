@@ -17,6 +17,20 @@ u32 procgen_room_seed(u32 run_seed, u8 biome_id, u8 room_counter) {
     return run_seed ^ ((u32)biome_id << 16) ^ ((u32)room_counter * 0x9E3779B9UL);
 }
 
+// Large boss OBJ tile per stage. Wave B gives each of the 9 stages a distinct
+// 32x32 sprite; for now every stage's boss uses the Colossus metasprite.
+u8 boss_sprite_for_stage(u8 stage) {
+    stage;
+    return SPR_BOSS_BIG;
+}
+
+// The boss always draws on OBJ palette slot 6; room_enter loads a stage-tinted
+// palette into that slot so each stage's boss has its own colour.
+u8 boss_palette_for_stage(u8 stage) {
+    stage;
+    return 0x06;
+}
+
 // Sample an enemy from the biome's enemy_pool using cumulative weights.
 static u8 pick_enemy_from_biome(const biome_def_t *bio) {
     u16 total = 0;
@@ -180,31 +194,53 @@ void procgen_generate_current_room(void) {
     }
 
     {
+        u8 is_miniboss = (!is_boss_room && (run_state.room_counter % ROOMS_PER_STAGE) == 3) ? 1 : 0;
+        u8 is_shop     = (!is_boss_room && !is_miniboss
+                          && (run_state.room_counter % ROOMS_PER_STAGE) == 4) ? 1 : 0;
+
         if (is_boss_room) {
-            u8 is_final = (run_state.bosses_beaten == (BOSSES_TO_WIN - 1)) ? 1 : 0;
+            // EVERY stage ends with a LARGE (32x32) boss. Per-stage sprite is
+            // wired in Wave B; for now all use the Colossus metasprite. HP and
+            // damage scale with the stage.
+            u8 stage = run_state.bosses_beaten;
             *(volatile u8*)0xFFFC = 0xBB;
             {
-                u8 idx = is_final
-                    ? enemy_spawn(1, (ROOM_W / 2) - 2, (ROOM_H / 2) - 2)   // 32x32 centered
-                    : enemy_spawn(1, (ROOM_W / 2) - 1, (ROOM_H / 2) - 1);
+                u8 idx = enemy_spawn(1, (ROOM_W / 2) - 2, (ROOM_H / 2) - 2);
                 if (idx != 0xFF) {
-                    // Later bosses hit harder + have more HP
+                    entities[idx].sprite_tile = boss_sprite_for_stage(stage);
+                    entities[idx].palette     = boss_palette_for_stage(stage);
+                    entities[idx].hitbox      = (15 << 4) | 15;
+                    entities[idx].ai_data[3]  = 1;              // giant flag
                     entities[idx].hp = (u8)(entities[idx].hp
-                        + (u8)(run_state.bosses_beaten * 30));
+                        + 40 + (u8)(stage * 22));
                     entities[idx].damage = (u8)(entities[idx].damage
-                        + run_state.bosses_beaten);
-                    if (is_final) {
-                        entities[idx].sprite_tile = SPR_BOSS_BIG;   // 32x32 colossus
-                        entities[idx].hitbox      = (15 << 4) | 15; // ~full 30px box
-                        entities[idx].ai_data[3]  = 1;              // giant flag
-                        entities[idx].hp = (u8)(entities[idx].hp + 40);  // even beefier
-                    } else {
-                        entities[idx].sprite_tile = SPR_BOSS;
-                        entities[idx].hitbox      = (14 << 4) | 14;
-                    }
+                        + 1 + (stage >> 1));
                 }
             }
-        } else if ((run_state.room_counter % 7) == 3) {
+        } else if (is_miniboss) {
+            // MINI-BOSS: a beefed 16x16 Sentinel + a small escort. Tougher than
+            // a normal room, a step below the stage boss.
+            u8 stage = run_state.bosses_beaten;
+            *(volatile u8*)0xFFFC = 0x00;
+            {
+                u8 idx = enemy_spawn(1, (ROOM_W / 2) - 1, 3);
+                if (idx != 0xFF) {
+                    entities[idx].sprite_tile = SPR_BOSS;
+                    entities[idx].palette     = 0x06;
+                    entities[idx].hitbox      = (14 << 4) | 14;
+                    entities[idx].hp = (u8)(entities[idx].hp + (u8)(stage * 12));
+                }
+            }
+            // two escorts drawn from the stage roster
+            {
+                u8 e;
+                for (e = 0; e < 2; ++e) {
+                    u8 eid = (stage >= 2) ? ((rng_next_u8() & 1) ? 4 : 5)
+                                          : ((rng_next_u8() & 1) ? 2 : 3);
+                    enemy_spawn(eid, (u8)(4 + e * 11), (u8)(ROOM_H - 4));
+                }
+            }
+        } else if (is_shop) {
             // MERCHANT room: three wares, no enemies. Walk into a ware
             // with enough coins to buy (heart 10 / stat item 25 / +2 max HP 40).
             *(volatile u8*)0xFFFC = 0x00;

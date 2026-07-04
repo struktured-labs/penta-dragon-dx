@@ -123,7 +123,9 @@ void music_play_caverns(void) {
 
 void music_play_stage(u8 stage) {
     load_wave();
-    switch (stage) {
+    // 9 stages rotate across the 3 exploration themes so consecutive stages
+    // always sound different (caverns / ember / void).
+    switch (stage % 3) {
         case 1:  cur_melody = s1_melody; cur_bass = s1_bass; frames_per_row = 7; break;
         case 2:  cur_melody = s2_melody; cur_bass = s2_bass; frames_per_row = 9; break;
         default: cur_melody = melody;    cur_bass = bassline; frames_per_row = 8; break;

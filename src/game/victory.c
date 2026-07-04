@@ -33,9 +33,9 @@ void victory_enter(void) {
     cls();
 
     gotoxy(6, 3);  printf("VICTORY!");
-    gotoxy(2, 6);  printf("3 sentinels");
-    gotoxy(2, 7);  printf("felled. depths");
-    gotoxy(2, 8);  printf("cleansed!");
+    gotoxy(2, 6);  printf("9 colossi");
+    gotoxy(2, 7);  printf("felled. all");
+    gotoxy(2, 8);  printf("9 depths freed!");
 
     gotoxy(2, 11); printf("rooms   %u", (u16)run_state.room_counter);
     gotoxy(2, 12); printf("kills   %u", (u16)run_state.enemies_killed);
