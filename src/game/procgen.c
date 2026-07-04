@@ -187,6 +187,36 @@ void procgen_generate_current_room(void) {
                 entities[idx].damage = (u8)(entities[idx].damage
                     + run_state.bosses_beaten);
             }
+        } else if ((run_state.room_counter % 7) == 3) {
+            // MERCHANT room: three wares, no enemies. Walk into a ware
+            // with enough coins to buy (heart 10 / stat item 25 / +2 max HP 40).
+            *(volatile u8*)0xFFFC = 0x00;
+            {
+                u8 s0 = pickup_spawn(PICKUP_SHOP, FIX8(56),  FIX8(64));
+                u8 s1 = pickup_spawn(PICKUP_SHOP, FIX8(80),  FIX8(64));
+                u8 s2 = pickup_spawn(PICKUP_SHOP, FIX8(104), FIX8(64));
+                if (s0 != 0xFF) {
+                    entities[s0].ai_data[0] = PICKUP_SHOP;
+                    entities[s0].ai_data[1] = WARE_HEART;
+                    entities[s0].ai_data[2] = 10;
+                    entities[s0].sprite_tile = SPR_HEART;
+                    entities[s0].palette = 0x04;
+                }
+                if (s1 != 0xFF) {
+                    entities[s1].ai_data[0] = PICKUP_SHOP;
+                    entities[s1].ai_data[1] = WARE_ITEM;
+                    entities[s1].ai_data[2] = 25;
+                    entities[s1].sprite_tile = SPR_ITEM_ORB;
+                    entities[s1].palette = 0x05;
+                }
+                if (s2 != 0xFF) {
+                    entities[s2].ai_data[0] = PICKUP_SHOP;
+                    entities[s2].ai_data[1] = WARE_BIG;
+                    entities[s2].ai_data[2] = 40;
+                    entities[s2].sprite_tile = SPR_ITEM_ORB;
+                    entities[s2].palette = 0x04;
+                }
+            }
         } else {
             *(volatile u8*)0xFFFC = 0x00;
             // Enemy count scales with depth (1-4 early, up to 6 deep)

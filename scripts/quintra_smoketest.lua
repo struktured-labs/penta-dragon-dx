@@ -76,7 +76,7 @@ walk_through_door(KEY_DOWN);  shot("08_BOSS_room")
 
 -- After 5 walks, player ends up at bottom of boss room (walked into south wall).
 -- Boss is at center (y=72). Player at ~y=128. Fire UP at boss.
-hold(KEY_B + KEY_UP, 200)
+hold(KEY_A + KEY_UP, 200)
 shot("09_boss_under_fire")
 
 tick(30)
@@ -84,7 +84,7 @@ shot("10_boss_mid_fight")
 
 -- Long sustained assault — boss has 50 HP, 2 dmg/shot, fire every 12 ticks
 -- ~16 shots / 200 frames = ~32 damage. Two presses to finish (66 dmg total).
-hold(KEY_B + KEY_UP, 400)
+hold(KEY_A + KEY_UP, 400)
 tick(60)
 shot("11_after_long_assault")
 

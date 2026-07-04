@@ -6,6 +6,7 @@
 #include "core/types.h"
 
 void music_play_caverns(void);
+void music_play_boss(void);
 void music_stop(void);
 void music_tick(void);        // call once per frame
 

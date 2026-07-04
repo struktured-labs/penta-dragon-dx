@@ -4,9 +4,10 @@
 #include "core/types.h"
 #include "game/entity.h"
 
-// Spawn a player projectile at player.x/y in (dx,dy) direction (8-dir deltas).
-// Returns entity index or 0xFF if no slot.
-u8   projectile_spawn_player(i8 dx, i8 dy);
+// Spawn a player projectile at player.x/y in (dx,dy) direction (8-dir deltas)
+// with explicit damage + ProjectileKind (PROJ_* from generated enums.h) —
+// kind shapes speed/range/pierce so each class weapon feels distinct.
+u8   projectile_spawn_player(i8 dx, i8 dy, u8 damage, u8 kind);
 
 // Enemy-owned projectile from (px,py) toward direction (dx,dy), 2 px/tick.
 u8   projectile_spawn_enemy(i16 px, i16 py, i8 dx, i8 dy, u8 damage);

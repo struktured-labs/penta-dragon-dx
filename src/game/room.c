@@ -326,8 +326,13 @@ void room_enter(void) {
     place_player_sprite();
 
     secret_door_x = secret_door_y = 0xFF;
-    music_play_caverns();
-    if (*(volatile u8*)0xFFFC == 0xBB) sfx_play(SFX_ROAR);   // boss room entry
+    player.active_charge = 0;
+    if (*(volatile u8*)0xFFFC == 0xBB) {
+        music_play_boss();
+        sfx_play(SFX_ROAR);
+    } else {
+        music_play_caverns();
+    }
 
 
     SHOW_SPRITES;
@@ -395,14 +400,64 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
         }
     }
 
-    // ---- Fire (B press / hold) — rapid Penta-style auto-fire
-    if ((keys & J_B) && player.fire_cooldown == 0) {
-        u8 dir = input_to_dir8(keys);
-        if (dir == 0xFF) dir = facing_to_dir8(player.facing);
-        projectile_spawn_player(dir8_dx[dir], dir8_dy[dir]);
-        player.fire_cooldown = 6;    // 10 shots/sec — rapid
+    // ---- Weapon 1 (A, hold = auto-fire): class starter weapon.
+    // Stats come from the generated items[] entry: fire_rate halved for
+    // Penta rapidity, damage = weapon base + half ATK, kind = projectile.
+    {
+        const item_def_t *w =
+            &items[player.starter_weapon < N_ITEMS ? player.starter_weapon : 0];
+        if ((keys & J_A) && player.fire_cooldown == 0) {
+            u8 dir = input_to_dir8(keys);
+            u8 dmg = (u8)(w->p1 + (player.atk >> 1));
+            if (dir == 0xFF) dir = facing_to_dir8(player.facing);
+            projectile_spawn_player(dir8_dx[dir], dir8_dy[dir], dmg, w->p2);
+            player.fire_cooldown = (u8)(w->p0 >> 1);
+        }
+        if (player.fire_cooldown > 0) player.fire_cooldown--;
+
+        // ---- Weapon 2 (B, edge): class signature move, ~2.3s cooldown
+        if ((pressed & J_B) && player.active_charge == 0) {
+            u8 dir = input_to_dir8(keys);
+            u8 dmg = (u8)(w->p1 + 1 + (player.atk >> 1));
+            u8 d;
+            if (dir == 0xFF) dir = facing_to_dir8(player.facing);
+            switch (player.class_id) {
+                case 0:   // Wolfkin HOWL: 8-way spike ring
+                    for (d = 0; d < 8; ++d) {
+                        projectile_spawn_player(dir8_dx[d], dir8_dy[d], dmg, PROJ_SPIKE);
+                    }
+                    break;
+                case 1:   // Sauran STONESKIN: 1.5s of iframes
+                    player.iframes = 90;
+                    break;
+                case 2:   // Corvin MURDER: 3-way shuriken spread
+                    projectile_spawn_player(dir8_dx[dir], dir8_dy[dir], dmg, PROJ_SHURIKEN);
+                    projectile_spawn_player(dir8_dx[(u8)((dir + 1) & 7)],
+                        dir8_dy[(u8)((dir + 1) & 7)], dmg, PROJ_SHURIKEN);
+                    projectile_spawn_player(dir8_dx[(u8)((dir + 7) & 7)],
+                        dir8_dy[(u8)((dir + 7) & 7)], dmg, PROJ_SHURIKEN);
+                    break;
+                case 3:   // Picsean TIDAL WAVE: 3-lane bubble wall
+                    projectile_spawn_player(dir8_dx[dir], dir8_dy[dir], dmg, PROJ_BUBBLE);
+                    projectile_spawn_player(dir8_dx[(u8)((dir + 2) & 7)],
+                        dir8_dy[(u8)((dir + 2) & 7)], dmg, PROJ_BUBBLE);
+                    projectile_spawn_player(dir8_dx[(u8)((dir + 6) & 7)],
+                        dir8_dy[(u8)((dir + 6) & 7)], dmg, PROJ_BUBBLE);
+                    break;
+                default:  // Vespine SWARM: 4-stinger fan burst
+                    projectile_spawn_player(dir8_dx[dir], dir8_dy[dir], dmg, PROJ_SPIKE);
+                    projectile_spawn_player(dir8_dx[dir], dir8_dy[dir], dmg, PROJ_BULLET);
+                    projectile_spawn_player(dir8_dx[(u8)((dir + 1) & 7)],
+                        dir8_dy[(u8)((dir + 1) & 7)], dmg, PROJ_BULLET);
+                    projectile_spawn_player(dir8_dx[(u8)((dir + 7) & 7)],
+                        dir8_dy[(u8)((dir + 7) & 7)], dmg, PROJ_BULLET);
+                    break;
+            }
+            sfx_play(SFX_ROAR);
+            player.active_charge = 140;
+        }
+        if (player.active_charge > 0) player.active_charge--;
     }
-    if (player.fire_cooldown > 0) player.fire_cooldown--;
 
     // ---- Entity updates
     entity_update_all(keys, pressed);
@@ -470,7 +525,12 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
                 place_player_sprite();
                 hud_redraw_all();
                 DISPLAY_ON;
-                if (*(volatile u8*)0xFFFC == 0xBB) sfx_play(SFX_ROAR);
+                if (*(volatile u8*)0xFFFC == 0xBB) {
+                    music_play_boss();
+                    sfx_play(SFX_ROAR);
+                } else {
+                    music_play_caverns();
+                }
                 return SCREEN_SELF;
             }
         }

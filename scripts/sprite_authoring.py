@@ -296,16 +296,17 @@ BGT_RUBBLE = """\
 21122222
 22222222""".splitlines()
 
-# Cracked wall — shoot it to reveal a secret passage (Zelda-1 style)
+# Cracked wall — shoot it to reveal a secret passage (Zelda-1 style).
+# Heavy black fissure + one bright glint so it clearly reads as special.
 BGT_WALL_CRACK = """\
-33333333
-22212021
-22210221
-11101111
-12201222
-12021222
-11101111
-22210221""".splitlines()
+33333303
+22210021
+22200221
+11003111
+12000222
+12030022
+11100011
+22210001""".splitlines()
 
 DUNGEON_TILES = [
     ("floor_plain",  BGT_FLOOR_PLAIN),

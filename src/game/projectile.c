@@ -7,32 +7,41 @@
 #include "game/player.h"
 #include "game/room.h"
 #include "render/tiles.h"
+#include "content.h"
 
-#define PROJECTILE_SPEED  3    // px/tick — slower = more visible, Penta-ish
-#define PROJECTILE_TTL    75   // ~225px range = 1.4 room widths
-#define PROJECTILE_DAMAGE 2
-
-u8 projectile_spawn_player(i8 dx, i8 dy) {
+u8 projectile_spawn_player(i8 dx, i8 dy, u8 damage, u8 kind) {
     u8 idx;
     entity_t *e;
+    u8 speed, ttl, pierce;
     if (dx == 0 && dy == 0) return 0xFF;
+
+    // Kind shapes the projectile's physics:
+    switch (kind) {
+        case PROJ_SPIKE:      // melee slash: fast, very short reach
+            speed = 4; ttl = 12; pierce = 1; break;
+        case PROJ_SHURIKEN:   // pierces 2 enemies
+            speed = 3; ttl = 60; pierce = 2; break;
+        case PROJ_BUBBLE:     // slow drifting, pierces, long-lived
+            speed = 2; ttl = 120; pierce = 2; break;
+        default:              // bullet/bolt baseline
+            speed = 3; ttl = 75; pierce = 1; break;
+    }
+
     idx = entity_spawn(ENT_PROJECTILE);
     if (idx == 0xFF) return 0xFF;
     e = &entities[idx];
     e->flags      |= EF_PLAYER_PROJ;
     e->x           = FIX8((i16)player.x + 2);
     e->y           = FIX8((i16)player.y + 2);
-    e->vx          = (i8)((i16)dx * PROJECTILE_SPEED);
-    e->vy          = (i8)((i16)dy * PROJECTILE_SPEED);
+    e->vx          = (i8)((i16)dx * speed);
+    e->vy          = (i8)((i16)dy * speed);
     e->sprite_tile = SPR_BULLET;
     e->palette     = 2;
-    e->hp          = 1;
-    e->state_timer = PROJECTILE_TTL;
-    e->hitbox      = (7 << 4) | 7;       // 7×7 hitbox — nearly full sprite for reliable hits
-    e->damage      = PROJECTILE_DAMAGE;
-    // ai_data[0] = animation phase (for 2-frame flicker)
+    e->hp          = pierce;
+    e->state_timer = ttl;
+    e->hitbox      = (7 << 4) | 7;
+    e->damage      = damage;
     e->ai_data[0]  = 0;
-    // Muzzle flash — 6-frame FX behind bullet
     fx_spawn(SPR_FX_MUZZLE, 2, (i16)player.x + 2, (i16)player.y + 2, 6);
     sfx_play(SFX_FIRE);
     return idx;

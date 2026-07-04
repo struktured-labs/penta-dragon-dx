@@ -37,9 +37,27 @@ static const u8 tri_wave[16] = {
     0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
 };
 
+// Boss loop — E minor, driving (~144 BPM => 6 frames/row)
+#define N_FS5 1871
+#define N_E6  1943
+static const u16 boss_melody[32] = {
+    N_E5, N_E5, N_G5, N_E5,   N_B5, N_A5, N_G5, N_A5,
+    N_E5, N_E5, N_G5, N_E5,   N_D6, N_B5, N_A5, N_G5,
+    N_E5, N_G5, N_B5, N_E6,   N_D6, N_B5, N_A5, N_G5,
+    N_FS5,N_A5, N_D6, N_A5,   N_B5, N_G5, N_FS5,N_E5,
+};
+#define B_E3  1650
+#define B_B3  1783
+static const u16 boss_bass[8] = {
+    B_E3, B_E3, B_G3, B_G3, B_A3, B_A3, B_E3, B_B3,
+};
+
 static u8 playing;
 static u8 frame_div;
 static u8 row;
+static u8 frames_per_row = 8;
+static const u16 *cur_melody = melody;
+static const u16 *cur_bass   = bassline;
 
 static void load_wave(void) {
     u8 i;
@@ -52,6 +70,19 @@ static void load_wave(void) {
 
 void music_play_caverns(void) {
     load_wave();
+    cur_melody = melody;
+    cur_bass   = bassline;
+    frames_per_row = 8;
+    playing  = 1;
+    frame_div = 0;
+    row      = 0;
+}
+
+void music_play_boss(void) {
+    load_wave();
+    cur_melody = boss_melody;
+    cur_bass   = boss_bass;
+    frames_per_row = 6;      // faster tempo
     playing  = 1;
     frame_div = 0;
     row      = 0;
@@ -65,11 +96,11 @@ void music_stop(void) {
 
 void music_tick(void) {
     if (!playing) return;
-    if (frame_div++ < 8) return;
+    if (frame_div++ < frames_per_row) return;
     frame_div = 0;
 
     {
-        u16 note = melody[row];
+        u16 note = cur_melody[row];
         if (note != REST) {
             NR21_REG = 0x80;               // duty 50%
             NR22_REG = 0x63;               // vol 6, decay 3 — soft pluck
@@ -78,7 +109,7 @@ void music_tick(void) {
         }
     }
     if ((row & 0x03) == 0) {
-        u16 b = bassline[row >> 2];
+        u16 b = cur_bass[row >> 2];
         NR31_REG = 0x00;
         NR32_REG = 0x40;                   // 50% output level
         NR33_REG = (u8)(b & 0xFF);

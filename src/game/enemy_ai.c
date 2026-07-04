@@ -204,11 +204,55 @@ static void shooter_tick(entity_t *e, const enemy_def_t *def) {
     }
 }
 
+// ---------------- Boss: bullet-hell Sentinel -----------------------------
+// Slow chase + ring volleys. Volley cadence tightens with each boss and
+// enrages below half HP. ai_data[1] = volley timer, ai_data[5] = spiral
+// offset, ai_data[6] = max hp (for enrage threshold), set on first tick.
+
+static void boss_tick(entity_t *e) {
+    // Remember starting HP for the enrage check
+    if (e->ai_data[6] == 0) e->ai_data[6] = e->hp;
+
+    // Creep toward the player (1px every 3rd tick)
+    e->state_timer++;
+    if (e->state_timer >= 3) {
+        e->state_timer = 0;
+        {
+            i16 ex = FIX8_TO_INT(e->x);
+            i16 ey = FIX8_TO_INT(e->y);
+            i8 sx = ((i16)player.x > ex) ? 1 : ((i16)player.x < ex) ? -1 : 0;
+            i8 sy = ((i16)player.y > ey) ? 1 : ((i16)player.y < ey) ? -1 : 0;
+            if (sx) enemy_try_step(e, sx, 0);
+            if (sy) enemy_try_step(e, 0, sy);
+        }
+    }
+
+    if (e->ai_data[1] == 0) {
+        // Ring volley: 4 shots, alternating cardinal / diagonal each volley
+        u8 base = (u8)(e->ai_data[5] & 0x01);
+        u8 d;
+        i16 cx = FIX8_TO_INT(e->x) + 4;
+        i16 cy = FIX8_TO_INT(e->y) + 4;
+        for (d = base; d < 8; d = (u8)(d + 2)) {
+            projectile_spawn_enemy(cx, cy, dir8_dx[d], dir8_dy[d], e->damage);
+        }
+        e->ai_data[5]++;
+        {
+            u8 cadence = 70;
+            if (e->hp < (u8)(e->ai_data[6] >> 1)) cadence = 45;  // enrage
+            e->ai_data[1] = cadence;
+        }
+    } else {
+        e->ai_data[1]--;
+    }
+}
+
 // ---------------- Dispatch ----------------------------------------------
 
 void enemy_update(entity_t *e, u8 idx) {
     const enemy_def_t *def = &enemies[e->ai_data[0]];
     idx;
+    if (e->ai_data[0] == 1) { boss_tick(e); return; }   // Sentinel
     switch (def->ai_kind) {
         case AI_CHASER:  chaser_tick(e, def->stats.speed); break;
         case AI_CHARGER: charger_tick(e, def);             break;
