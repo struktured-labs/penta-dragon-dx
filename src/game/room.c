@@ -60,6 +60,14 @@ static const u16 pal_door[4] = {
     BGR555(18, 13,  3),    // 2: gold mid
     BGR555(28, 21,  6),    // 3: bright gold
 };
+// Cracked secret wall — warm amber/orange against the cool blue dungeon so
+// it reads instantly as "shoot me". Deliberately off the wall value band.
+static const u16 pal_crack[4] = {
+    BGR555( 6,  2,  1),    // 0: dark crack shadow
+    BGR555(22, 11,  3),    // 1: amber brick
+    BGR555(30, 18,  4),    // 2: bright orange
+    BGR555(31, 28, 12),    // 3: glowing yellow fissure
+};
 
 // Crawler (enemy) palette — blue, with one accent
 static const u16 crawler_palette[4] = {
@@ -205,8 +213,8 @@ void room_open_secret(u8 tx, u8 ty) {
 static u8 attr_for_tile(u8 t) {
     switch (t) {
         case BGT_WALL:
-        case BGT_WALL_CRACK:
         case BGT_PILLAR:  return BGPAL_WALL;
+        case BGT_WALL_CRACK: return BGPAL_CRACK;   // glowing — obviously special
         case BGT_CRYSTAL: return BGPAL_CRYSTAL;
         case BGT_DOOR:    return BGPAL_DOOR;
         default:          return BGPAL_FLOOR;
@@ -282,6 +290,7 @@ void room_enter(void) {
     palette_bg_load(BGPAL_WALL,    pal_wall);
     palette_bg_load(BGPAL_CRYSTAL, pal_crystal);
     palette_bg_load(BGPAL_DOOR,    pal_door);
+    palette_bg_load(BGPAL_CRACK,   pal_crack);
     palette_obj_load(0, skeleton_palette);
     palette_obj_load(1, class_obj_palettes[player.class_id < 5 ? player.class_id : 0]);
     palette_obj_load(2, bullet_palette);

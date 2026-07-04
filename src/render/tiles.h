@@ -32,6 +32,7 @@
 #define BGPAL_WALL    1
 #define BGPAL_CRYSTAL 2
 #define BGPAL_DOOR    3
+#define BGPAL_CRACK   4     // glowing amber so secret walls stand out
 
 // OBJ tile slots — 5 classes × 4 tiles each (metasprite) + 4 enemies + 4 boss tiles + pickups + bullet
 #define SPR_CLASS_BASE     0     // 5 classes × 4 tiles = 0..19

@@ -127,9 +127,10 @@ void procgen_generate_current_room(void) {
                 }
             }
 
-            // Secret cracked wall — ~3 in 8 rooms hide one somewhere on the
-            // border (never on a door, corner, or the E/W door row).
-            if ((rng_next_u8() & 0x07) < 3) {
+            // Secret cracked wall — ~half of rooms hide one on a border
+            // (never on a door or the E/W door row). Rendered on its own
+            // glowing palette so it's obviously shootable.
+            if ((rng_next_u8() & 0x01) == 0) {
                 u8 side = (u8)(rng_next_u8() & 0x03);
                 u8 pos;
                 if (side == 0) {          // north wall
