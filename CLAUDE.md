@@ -10,13 +10,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Lineage:** this project pivoted from being a Penta Dragon DX clone (now under `archive/penta-dragon-dx/`) to a Penta-inspired-but-original game. The Penta-clone effort is preserved for reference but is not built or shipped.
 
-**Current Status:** v0.3.0 — playable proof of concept. ROM boots → TITLE
-(pulsing) → CLASS_SELECT (5 classes, distinct stats) → procgen rooms with
-1-4 random enemies → boss room at depth 5 (Stone Sentinel, sealed doors) →
-VICTORY or GAMEOVER screen → back to title. HUD shows hearts + coins via
-WINDOW layer. Combat: 8-way auto-aim B-button fire, AABB collision, iframes,
-pickup drops (heart/coin). 5 classes / 15 items / 5 enemies / 1 biome —
-all defined as typed Rust content compiled into C tables at build time.
+**Current Status:** v0.6.0 — 9-stage roguelike, playable end to end. TITLE
+(pulsing + music) → CLASS_SELECT (5 classes, live preview + cursor + SFX) →
+9 stages of 6 rooms each, styled distinctly (Crystal Caverns → Verdant Hollow
+→ Ember Depths → Frost Vault → Toxic Mire → Shadow Keep → Golden Temple →
+Bloodmoon → Void Sanctum). Per stage: normal rooms, a mini-boss (16x16
+Sentinel + escort), a merchant, and a **32x32 large-sprite stage boss** — 9
+distinct bosses (Colossus/Serpent/Maw/Spider/Eye/Reaper/Golem/Hydra/VoidLord).
+Beat all 9 → VICTORY. Combat: A = per-class primary weapon, B = class
+signature move, DEF/LCK/elemental damage, hit-flash + hit-stop + knockback.
+Full audio: per-stage music, boss theme, title/victory/gameover, 8 SFX.
+START = pack/stats screen. Zelda-style shootable cracked walls → treasure
+rooms. 5 classes / 15 items / 6 enemies compiled from typed Rust content.
+
+### Controls
+- D-pad move · A primary weapon · B signature move · START pack screen ·
+  SELECT quick-pause · shoot the glowing amber cracked walls for secrets.
 
 ### Toolchain
 
