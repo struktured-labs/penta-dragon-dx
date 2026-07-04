@@ -3,6 +3,10 @@
 
 #include "core/types.h"
 
+// Frames to freeze the room loop for impact weight (set by combat, ticked
+// down + honored by room_tick).
+extern u8 g_hitstop;
+
 // Called per-frame after entity updates. Resolves:
 //   - player-projectile vs enemy
 //   - enemy vs player (respects iframes)

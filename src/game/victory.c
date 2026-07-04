@@ -6,6 +6,7 @@
 #include <gbdk/font.h>
 #include <stdio.h>
 
+#include "audio/music.h"
 #include "core/types.h"
 #include "game/run_state.h"
 #include "game/victory.h"
@@ -43,6 +44,7 @@ void victory_enter(void) {
     gotoxy(2, 16); printf("PRESS  START");
 
     pulse = 0;
+    music_play_victory();
     SHOW_BKG;
     DISPLAY_ON;
 }

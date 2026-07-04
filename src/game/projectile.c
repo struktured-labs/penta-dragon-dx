@@ -9,6 +9,11 @@
 #include "render/tiles.h"
 #include "content.h"
 
+// Element bitmask stamped onto the next player shot (1=Fire 2=Ice 4=Lit
+// 8=Shadow 16=Poison). Set by the fire code per class/weapon; combat
+// doubles damage when it matches the target's weakness.
+u8 g_shot_element;
+
 u8 projectile_spawn_player(i8 dx, i8 dy, u8 damage, u8 kind) {
     u8 idx;
     entity_t *e;
@@ -41,7 +46,8 @@ u8 projectile_spawn_player(i8 dx, i8 dy, u8 damage, u8 kind) {
     e->state_timer = ttl;
     e->hitbox      = (7 << 4) | 7;
     e->damage      = damage;
-    e->ai_data[0]  = 0;
+    e->ai_data[0]  = 0;              // anim phase
+    e->ai_data[1]  = g_shot_element; // element for weakness bonus
     fx_spawn(SPR_FX_MUZZLE, 2, (i16)player.x + 2, (i16)player.y + 2, 6);
     sfx_play(SFX_FIRE);
     return idx;
@@ -84,26 +90,33 @@ void projectile_update(entity_t *e, u8 idx) {
     {
         i16 px = FIX8_TO_INT(e->x);
         i16 py = FIX8_TO_INT(e->y);
+        // Sample the tile FIRST (clamped into bounds) so a shot that reaches
+        // a north/west border tile still triggers the crack — the old order
+        // despawned on the OOB guard before ever testing the wall, making
+        // ~half of all cracked walls unshootable.
+        i16 sx = px + 4, sy = py + 4;
+        u8 t;
+        if (sx < 0) sx = 0; else if (sx > (ROOM_W * 8 - 1)) sx = ROOM_W * 8 - 1;
+        if (sy < 0) sy = 0; else if (sy > (ROOM_H * 8 - 1)) sy = ROOM_H * 8 - 1;
+        t = room_tile_at_px(sx, sy);
+
+        if (t == BGT_WALL_CRACK && (e->flags & EF_PLAYER_PROJ)) {
+            room_open_secret((u8)(sx >> 3), (u8)(sy >> 3));
+            fx_spawn(SPR_FX_IMPACT, 2, px, py, 8);
+            entity_kill(idx);
+            return;
+        }
+        if (t == BGT_WALL || t == BGT_PILLAR || t == BGT_CRYSTAL
+            || t == BGT_WALL_CRACK) {
+            fx_spawn(SPR_FX_IMPACT, 2, px, py, 4);
+            entity_kill(idx);
+            return;
+        }
+        // Off-screen / past the room edge: despawn
         if (px < 8 || px > (ROOM_W * 8 - 8)
             || py < 8 || py > (ROOM_H * 8 - 8)) {
             entity_kill(idx);
             return;
-        }
-        // Solid tiles stop bullets. Player shots crack open secret walls.
-        {
-            u8 t = room_tile_at_px(px + 4, py + 4);
-            if (t == BGT_WALL_CRACK && (e->flags & EF_PLAYER_PROJ)) {
-                room_open_secret((u8)((px + 4) >> 3), (u8)((py + 4) >> 3));
-                fx_spawn(SPR_FX_IMPACT, 2, px, py, 8);
-                entity_kill(idx);
-                return;
-            }
-            if (t == BGT_WALL || t == BGT_PILLAR || t == BGT_CRYSTAL
-                || t == BGT_WALL_CRACK) {
-                fx_spawn(SPR_FX_IMPACT, 2, px, py, 4);
-                entity_kill(idx);
-                return;
-            }
         }
     }
 }

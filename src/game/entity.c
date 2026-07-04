@@ -135,6 +135,14 @@ void entity_draw_all(void) {
             boss_drawn = 1;
             continue;
         }
+        // Hit-flash: enemies blink out for a couple frames when struck
+        if (entities[i].type == ENT_ENEMY && entities[i].ai_data[7]) {
+            entities[i].ai_data[7]--;
+            if (entities[i].ai_data[7] & 0x01) {
+                move_sprite(entities[i].oam_slot, 0, 0);
+                continue;
+            }
+        }
         set_sprite_tile(entities[i].oam_slot, entities[i].sprite_tile);
         set_sprite_prop(entities[i].oam_slot, entities[i].palette);
         move_sprite(entities[i].oam_slot,

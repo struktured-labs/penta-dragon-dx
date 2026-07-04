@@ -50,15 +50,17 @@ static void place_player_after_entry(void) {
 void procgen_generate_current_room(void) {
     const biome_def_t *bio = &biomes[run_state.biome_id];
     u32 seed = procgen_room_seed(run_state.run_seed, run_state.biome_id, run_state.room_counter);
+    // A boss guards every Nth room until BOSSES_TO_WIN are down. Computed
+    // once at function scope so door-drawing, the secret-room guard, and
+    // enemy spawning all agree (a mismatch here soft-locked boss rooms).
+    u8 is_boss_room = (run_state.room_counter > 0
+        && (run_state.room_counter % BOSS_EVERY_N_ROOMS) == 0
+        && (u8)(run_state.room_counter / BOSS_EVERY_N_ROOMS) > run_state.bosses_beaten) ? 1 : 0;
     rng_seed(seed);
 
     bio;
     {
         u8 x, y;
-        // A boss guards every Nth room until BOSSES_TO_WIN are down.
-        u8 is_boss_room = (run_state.room_counter > 0
-            && (run_state.room_counter % BOSS_EVERY_N_ROOMS) == 0
-            && (u8)(run_state.room_counter / BOSS_EVERY_N_ROOMS) > run_state.bosses_beaten) ? 1 : 0;
 
         // Base: border walls + textured floor (plain / cracked / pebbled mix)
         for (y = 0; y < ROOM_H; ++y) {
@@ -157,24 +159,26 @@ void procgen_generate_current_room(void) {
     *(volatile u8*)0xFFFE = run_state.room_counter;
     *(volatile u8*)0xFFFD = run_state.victory;
 
-    // Secret treasure room: no enemies, loot piled in the middle.
+    // Secret treasure room: no enemies, loot piled in the middle. Always
+    // clear the flag (else it leaks into every future room). Only take the
+    // early-return when this is NOT also a boss room — otherwise the sealed,
+    // door-less boss layout would have no boss to spawn = unrecoverable.
     if (run_state.secret_pending) {
         run_state.secret_pending = 0;
-        *(volatile u8*)0xFFFC = 0x00;
-        pickup_spawn(PICKUP_HEART_HALF, FIX8(72), FIX8(56));
-        pickup_spawn(PICKUP_HEART_HALF, FIX8(88), FIX8(56));
-        pickup_spawn(PICKUP_COIN_5,     FIX8(72), FIX8(72));
-        pickup_spawn(PICKUP_COIN_5,     FIX8(88), FIX8(72));
-        pickup_spawn_item((u8)(10 + rng_range(5)), FIX8(80), FIX8(64));
-        player.iframes = 60;
-        return;
+        if (!is_boss_room) {
+            *(volatile u8*)0xFFFC = 0x00;
+            pickup_spawn(PICKUP_HEART_HALF, FIX8(72), FIX8(56));
+            pickup_spawn(PICKUP_HEART_HALF, FIX8(88), FIX8(56));
+            pickup_spawn(PICKUP_COIN_5,     FIX8(72), FIX8(72));
+            pickup_spawn(PICKUP_COIN_5,     FIX8(88), FIX8(72));
+            pickup_spawn_item((u8)(10 + rng_range(5)), FIX8(80), FIX8(64));
+            player.iframes = 60;
+            return;
+        }
+        // Boss room: fall through to spawn the boss below.
     }
 
     {
-        u8 is_boss_room = (run_state.room_counter > 0
-            && (run_state.room_counter % BOSS_EVERY_N_ROOMS) == 0
-            && (u8)(run_state.room_counter / BOSS_EVERY_N_ROOMS) > run_state.bosses_beaten) ? 1 : 0;
-
         if (is_boss_room) {
             *(volatile u8*)0xFFFC = 0xBB;
             u8 idx = enemy_spawn(1, (ROOM_W / 2) - 1, (ROOM_H / 2) - 1);

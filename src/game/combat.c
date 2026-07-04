@@ -1,6 +1,8 @@
 #include "audio/sfx.h"
+#include "core/rng.h"
 #include "core/types.h"
 #include "game/combat.h"
+#include "game/enemy_ai.h"
 #include "game/entity.h"
 #include "game/pickup.h"
 #include "game/player.h"
@@ -8,13 +10,27 @@
 #include "render/tiles.h"
 #include "content.h"
 
+// Global hit-stop: freezes the room loop for a few frames on impact for weight.
+u8 g_hitstop;
+
+// Knock an enemy 3px along a bullet's travel direction, unless it's too poised
+// (bosses, heavy enemies). Blocked by walls via enemy_try_step.
+static void knockback_enemy(entity_t *e, i8 bvx, i8 bvy, u8 poise) {
+    u8 n;
+    if (poise >= 3) return;                 // heavy: immovable
+    {
+        i8 kx = (bvx > 0) ? 1 : (bvx < 0) ? -1 : 0;
+        i8 ky = (bvy > 0) ? 1 : (bvy < 0) ? -1 : 0;
+        for (n = 0; n < 3; ++n) enemy_try_step(e, kx, ky);
+    }
+}
+
 u8 combat_resolve(void) {
     u8 i, j;
     u8 player_died = 0;
 
     // Tick down per-frame timers
-    if (player.iframes > 0)        player.iframes--;
-    if (player.active_charge > 0)  /* room-based charge stays */;
+    if (player.iframes > 0) player.iframes--;
 
     // 1) Player-projectile -> enemy collisions
     for (i = 0; i < MAX_ENTITIES; ++i) {
@@ -22,24 +38,42 @@ u8 combat_resolve(void) {
         if (entities[i].type   != ENT_PROJECTILE) continue;
         if (!(entities[i].flags & EF_PLAYER_PROJ)) continue;
         for (j = 0; j < MAX_ENTITIES; ++j) {
+            u8 eid, weakness, poise, dmg;
             if (j == i) continue;
             if (!(entities[j].flags & EF_ACTIVE)) continue;
             if (entities[j].type != ENT_ENEMY) continue;
-            if (aabb_overlap_ee(&entities[i], &entities[j])) {
+            if (!aabb_overlap_ee(&entities[i], &entities[j])) continue;
+
+            eid      = entities[j].ai_data[0];
+            weakness = (eid < N_ENEMIES) ? enemies[eid].stats.weakness : 0;
+            poise    = (eid < N_ENEMIES) ? enemies[eid].stats.poise    : 0;
+
+            // Per-hit damage: base + elemental x2 (weapon element in
+            // projectile ai_data[1]) + crit x2 (LCK * 5% chance).
+            dmg = entities[i].damage;
+            if (entities[i].ai_data[1] & weakness) dmg = (u8)(dmg << 1);
+            if (rng_range(100) < (u8)(player.lck * 5)) dmg = (u8)(dmg << 1);
+            if (dmg == 0) dmg = 1;
+
+            {
                 // Apply damage
-                if (entities[j].hp > entities[i].damage) {
-                    entities[j].hp = (u8)(entities[j].hp - entities[i].damage);
+                if (entities[j].hp > dmg) {
+                    entities[j].hp = (u8)(entities[j].hp - dmg);
+                    entities[j].ai_data[7] = 4;    // hit-flash frames
+                    knockback_enemy(&entities[j], entities[i].vx, entities[i].vy, poise);
+                    if (g_hitstop < 1) g_hitstop = 1;
                     sfx_play(SFX_HIT);
                 } else {
                     sfx_play(SFX_DEATH);
+                    if (g_hitstop < 2) g_hitstop = 2;
                     {
-                        u8 eid = entities[j].ai_data[0];
                         if (eid < N_ENEMIES) {
                             u16 s = run_state.score + (u16)enemies[eid].stats.score;
                             run_state.score = s;
                         }
                         run_state.enemies_killed++;
                         if (eid == 1) {
+                            g_hitstop = 8;   // boss kill: big freeze
                             // Boss down: reward burst + unseal, or final victory
                             run_state.bosses_beaten++;
                             if (run_state.bosses_beaten >= BOSSES_TO_WIN) {
@@ -89,9 +123,13 @@ u8 combat_resolve(void) {
             if (!hostile) continue;
             if (aabb_overlap_player(&entities[i])) {
                 u8 was_projectile = (entities[i].type == ENT_PROJECTILE);
-                if (player.hp > entities[i].damage) {
-                    player.hp = (u8)(player.hp - entities[i].damage);
+                // DEF soaks incoming damage (min 1 half-heart gets through)
+                u8 taken = (entities[i].damage > player.def)
+                    ? (u8)(entities[i].damage - player.def) : 1;
+                if (player.hp > taken) {
+                    player.hp = (u8)(player.hp - taken);
                     player.iframes = 30;
+                    g_hitstop = 3;
                     sfx_play(SFX_HURT);
                 } else {
                     player.hp = 0;

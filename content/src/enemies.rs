@@ -67,7 +67,7 @@ pub const ORC: Enemy = Enemy {
     name:       "Orc",
     sprite_set: SPRITE_CRAWLER,
     palette:    OBJ_PAL_CRAWLER,
-    stats: EnemyStats { hp: 10, damage: 2, speed: 48, score: 40, weakness: 0x01, poise: 3 },
+    stats: EnemyStats { hp: 10, damage: 2, speed: 48, score: 40, weakness: 0x11, poise: 3 },  // fire + poison
     ai_script:  AiScriptId::Charger { telegraph_ticks: 30, charge_speed: 96 },
     drop_table: DROP_SMALL_COIN,
     biomes:     &[BIOME_CRYSTAL_CAVERNS],

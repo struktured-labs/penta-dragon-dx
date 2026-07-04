@@ -7,6 +7,7 @@
 #include <gbdk/font.h>
 #include <stdio.h>
 
+#include "audio/music.h"
 #include "core/types.h"
 #include "game/loop.h"
 #include "game/title.h"
@@ -50,12 +51,13 @@ void title_enter(void) {
     printf("THE  ROGUELIKE");
     gotoxy(4, 12);
     printf("PRESS  START");
-    gotoxy(3, 16);
-    printf("v0.3  phase 3");
+    gotoxy(6, 16);
+    printf("v0.4");
 
     pulse_phase         = 0;
     last_palette_color2 = title_palette_steady[2];
 
+    music_play_title();
     SHOW_BKG;
     DISPLAY_ON;
 }
@@ -66,8 +68,7 @@ void title_exit(void) {
 
 screen_id_t title_tick(u8 keys, u8 pressed) {
     keys;
-    if (pressed & J_START)  return SCREEN_CLASS_SELECT;
-    if (pressed & J_SELECT) return SCREEN_SCRATCH;  // debug screen access
+    if (pressed & J_START) { music_stop(); return SCREEN_CLASS_SELECT; }
     return SCREEN_SELF;
 }
 

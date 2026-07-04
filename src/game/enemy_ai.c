@@ -71,7 +71,7 @@ u8 enemy_spawn(u8 enemy_content_id, u8 tile_x, u8 tile_y) {
 
 // Try to move an enemy 1px by (dx,dy); blocked by solid tiles + room bounds.
 // Returns 1 if moved.
-static u8 enemy_try_step(entity_t *e, i8 dx, i8 dy) {
+u8 enemy_try_step(entity_t *e, i8 dx, i8 dy) {
     i16 nx = (i16)(FIX8_TO_INT(e->x) + dx);
     i16 ny = (i16)(FIX8_TO_INT(e->y) + dy);
     if (nx < 8 || nx >= (i16)((ROOM_W - 1) * 8)) return 0;

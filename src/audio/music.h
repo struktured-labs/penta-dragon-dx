@@ -7,6 +7,9 @@
 
 void music_play_caverns(void);
 void music_play_boss(void);
+void music_play_title(void);
+void music_play_victory(void);
+void music_play_gameover(void);
 void music_stop(void);
 void music_tick(void);        // call once per frame
 

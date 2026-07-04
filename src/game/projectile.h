@@ -4,6 +4,9 @@
 #include "core/types.h"
 #include "game/entity.h"
 
+// Element bitmask applied to the next player shot(s).
+extern u8 g_shot_element;
+
 // Spawn a player projectile at player.x/y in (dx,dy) direction (8-dir deltas)
 // with explicit damage + ProjectileKind (PROJ_* from generated enums.h) —
 // kind shapes speed/range/pierce so each class weapon feels distinct.

@@ -6,6 +6,7 @@
 #include <gbdk/font.h>
 #include <stdio.h>
 
+#include "audio/music.h"
 #include "core/types.h"
 #include "game/gameover.h"
 #include "game/run_state.h"
@@ -35,6 +36,7 @@ void gameover_enter(void) {
     gotoxy(2, 9);  printf("score   %u", (u16)run_state.score);
     gotoxy(2, 14); printf("PRESS  START");
 
+    music_play_gameover();
     SHOW_BKG;
     DISPLAY_ON;
 }

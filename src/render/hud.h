@@ -5,7 +5,10 @@
 
 #include "core/types.h"
 
-#define HUD_MAX_HEARTS 5     // 10 half-hearts max for Phase 6
+// 6 hearts = 12 half-hearts, the run's HP cap. Every point of HP is shown,
+// so a hit always visibly registers (fixes the &gt;5-heart misread).
+#define HUD_MAX_HEARTS 6
+#define HP_CAP        12     // half-hearts; enforced on all HP gains
 
 void hud_init(void);          // load tiles + position window + initial draw
 void hud_show(void);          // SHOW_WIN

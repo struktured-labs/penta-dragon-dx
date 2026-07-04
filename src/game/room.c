@@ -11,6 +11,7 @@
 #include "core/rng.h"
 #include "game/combat.h"
 #include "game/entity.h"
+#include "game/entity.h"
 #include "game/enemy_ai.h"
 #include "game/loop.h"
 #include "game/pickup.h"
@@ -204,6 +205,7 @@ void room_open_secret(u8 tx, u8 ty) {
 static u8 attr_for_tile(u8 t) {
     switch (t) {
         case BGT_WALL:
+        case BGT_WALL_CRACK:
         case BGT_PILLAR:  return BGPAL_WALL;
         case BGT_CRYSTAL: return BGPAL_CRYSTAL;
         case BGT_DOOR:    return BGPAL_DOOR;
@@ -355,6 +357,15 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
     }
     if (room_paused) return SCREEN_SELF;
 
+    // ---- Hit-stop: freeze the world a few frames on impact for weight,
+    // but keep drawing so the flash/knockback is visible.
+    if (g_hitstop) {
+        g_hitstop--;
+        place_player_sprite();
+        entity_draw_all();
+        return SCREEN_SELF;
+    }
+
     // ---- Movement: SPD-scaled sub-pixel accumulator.
     // acc += spd; each 5 accumulated = 1 px step. spd 5 = 1.0 px/f,
     // Sauran 4 = 0.8, Wolfkin 6 = 1.2, Vespine 7 = 1.4.
@@ -400,15 +411,20 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
         }
     }
 
-    // ---- Weapon 1 (A, hold = auto-fire): class starter weapon.
-    // Stats come from the generated items[] entry: fire_rate halved for
-    // Penta rapidity, damage = weapon base + half ATK, kind = projectile.
+    // ---- Weapons. Starter comes from the generated items[] entry
+    // (p0=fire_rate, p1=damage, p2=projectile kind). Starter ids 0-4 map
+    // to array indices 0-4 by content authoring; guarded by N_ITEMS.
+    // Per-class elemental identity: Wolfkin fire, Sauran lightning,
+    // Corvin shadow, Picsean ice, Vespine poison (1/4/8/2/16).
     {
+        static const u8 class_element[5] = { 1, 4, 8, 2, 16 };
         const item_def_t *w =
             &items[player.starter_weapon < N_ITEMS ? player.starter_weapon : 0];
+        g_shot_element = class_element[player.class_id < 5 ? player.class_id : 0];
+
         if ((keys & J_A) && player.fire_cooldown == 0) {
             u8 dir = input_to_dir8(keys);
-            u8 dmg = (u8)(w->p1 + (player.atk >> 1));
+            u8 dmg = (u8)(w->p1 + player.atk);   // ATK adds linearly
             if (dir == 0xFF) dir = facing_to_dir8(player.facing);
             projectile_spawn_player(dir8_dx[dir], dir8_dy[dir], dmg, w->p2);
             player.fire_cooldown = (u8)(w->p0 >> 1);
@@ -418,7 +434,7 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
         // ---- Weapon 2 (B, edge): class signature move, ~2.3s cooldown
         if ((pressed & J_B) && player.active_charge == 0) {
             u8 dir = input_to_dir8(keys);
-            u8 dmg = (u8)(w->p1 + 1 + (player.atk >> 1));
+            u8 dmg = (u8)(w->p1 + 1 + player.atk);
             u8 d;
             if (dir == 0xFF) dir = facing_to_dir8(player.facing);
             switch (player.class_id) {
@@ -468,10 +484,12 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
         return SCREEN_GAMEOVER;
     }
 
-    // ---- Boss beaten (non-final): lift the door seal, run continues
+    // ---- Boss beaten (non-final): lift the door seal, run continues,
+    // and the fight music yields back to the exploration theme.
     if (run_state.pending_unseal) {
         run_state.pending_unseal = 0;
         room_unseal_doors();
+        music_play_caverns();
     }
 
     // ---- Final victory: all bosses down

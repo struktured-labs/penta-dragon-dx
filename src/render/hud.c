@@ -55,7 +55,7 @@ void hud_show(void) { SHOW_WIN; }
 void hud_hide(void) { HIDE_WIN; }
 
 void hud_redraw_hp(void) {
-    u8 row[5];
+    u8 row[HUD_MAX_HEARTS];
     u8 hearts_total = player.hp_max;     // half-hearts
     u8 hearts_filled = player.hp;
     u8 i;

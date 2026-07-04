@@ -52,6 +52,33 @@ static const u16 boss_bass[8] = {
     B_E3, B_E3, B_G3, B_G3, B_A3, B_A3, B_E3, B_B3,
 };
 
+// Title — A minor, sparse/haunting (~90 BPM => 10 frames/row)
+static const u16 title_melody[32] = {
+    N_A5, REST, N_C6, REST,   N_E6, REST, N_C6, REST,
+    N_B5, REST, N_G5, REST,   N_A5, REST, REST, REST,
+    N_A5, REST, N_D6, REST,   N_C6, REST, N_A5, REST,
+    N_G5, REST, N_E5, REST,   N_A5, REST, REST, REST,
+};
+static const u16 title_bass[8] = {
+    B_A3, B_A3, B_G3, B_G3, B_C3, B_C3, B_D3, B_A3,
+};
+
+// Victory — bright, ascending (reuses boss tempo)
+static const u16 vic_melody[32] = {
+    N_C5, N_E5, N_G5, N_C6,   N_G5, N_C6, N_E6, N_C6,
+    N_D5, N_G5, N_B5, N_D6,   N_B5, N_D6, N_D6, REST,
+    N_C5, N_E5, N_G5, N_C6,   N_E6, N_C6, N_G5, N_E5,
+    N_C6, N_C6, N_C6, REST,   N_C6, REST, REST, REST,
+};
+
+// Gameover — descending dirge (slow)
+static const u16 go_melody[32] = {
+    N_A5, REST, N_G5, REST,   N_F5, REST, N_E5, REST,
+    N_D5, REST, N_C5, REST,   N_D5, REST, REST, REST,
+    N_A5, REST, N_G5, REST,   N_E5, REST, N_D5, REST,
+    N_C5, REST, N_C5, REST,   REST, REST, REST, REST,
+};
+
 static u8 playing;
 static u8 frame_div;
 static u8 row;
@@ -83,6 +110,36 @@ void music_play_boss(void) {
     cur_melody = boss_melody;
     cur_bass   = boss_bass;
     frames_per_row = 6;      // faster tempo
+    playing  = 1;
+    frame_div = 0;
+    row      = 0;
+}
+
+void music_play_title(void) {
+    load_wave();
+    cur_melody = title_melody;
+    cur_bass   = title_bass;
+    frames_per_row = 10;     // slow, haunting
+    playing  = 1;
+    frame_div = 0;
+    row      = 0;
+}
+
+void music_play_victory(void) {
+    load_wave();
+    cur_melody = vic_melody;
+    cur_bass   = boss_bass;
+    frames_per_row = 6;
+    playing  = 1;
+    frame_div = 0;
+    row      = 0;
+}
+
+void music_play_gameover(void) {
+    load_wave();
+    cur_melody = go_melody;
+    cur_bass   = title_bass;
+    frames_per_row = 12;     // dirge
     playing  = 1;
     frame_div = 0;
     row      = 0;

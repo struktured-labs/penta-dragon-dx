@@ -83,7 +83,7 @@ static void apply_item_effects(u8 item_idx) {
         switch (ef->d0) {
             case STAT_HP:
                 player.hp_max = (u8)(player.hp_max + ef->d1);
-                if (player.hp_max > 24) player.hp_max = 24;
+                if (player.hp_max > HP_CAP) player.hp_max = HP_CAP;
                 player.hp = (u8)(player.hp + ef->d1);
                 if (player.hp > player.hp_max) player.hp = player.hp_max;
                 break;
