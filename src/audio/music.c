@@ -79,6 +79,28 @@ static const u16 go_melody[32] = {
     N_C5, REST, N_C5, REST,   REST, REST, REST, REST,
 };
 
+// Stage 1 — Ember Depths: E-phrygian, urgent (~124 BPM => 7 frames/row)
+static const u16 s1_melody[32] = {
+    N_E5, N_F5, N_E5, N_C5,   N_E5, N_G5, N_F5, N_E5,
+    N_A5, N_G5, N_F5, N_E5,   N_F5, N_E5, N_C5, REST,
+    N_E5, N_F5, N_G5, N_A5,   N_G5, N_F5, N_E5, N_F5,
+    N_C6, N_A5, N_G5, N_F5,   N_E5, N_C5, N_E5, REST,
+};
+static const u16 s1_bass[8] = {
+    B_E3, B_E3, B_C3, B_C3, B_E3, B_G3, B_A3, B_E3,
+};
+
+// Stage 2 — Void Sanctum: A-locrian-ish, ominous (~104 BPM => 9 frames/row)
+static const u16 s2_melody[32] = {
+    N_A5, REST, N_C6, N_A5,   N_G5, REST, N_E5, N_G5,
+    N_F5, REST, N_A5, N_G5,   N_E5, REST, N_D5, REST,
+    N_A5, N_C6, N_D6, N_C6,   N_A5, N_G5, N_E5, N_G5,
+    N_F5, N_E5, N_D5, N_C5,   N_D5, N_E5, REST, REST,
+};
+static const u16 s2_bass[8] = {
+    B_A3, B_A3, B_G3, B_G3, B_C3, B_C3, B_D3, B_A3,
+};
+
 static u8 playing;
 static u8 frame_div;
 static u8 row;
@@ -96,10 +118,16 @@ static void load_wave(void) {
 }
 
 void music_play_caverns(void) {
+    music_play_stage(0);
+}
+
+void music_play_stage(u8 stage) {
     load_wave();
-    cur_melody = melody;
-    cur_bass   = bassline;
-    frames_per_row = 8;
+    switch (stage) {
+        case 1:  cur_melody = s1_melody; cur_bass = s1_bass; frames_per_row = 7; break;
+        case 2:  cur_melody = s2_melody; cur_bass = s2_bass; frames_per_row = 9; break;
+        default: cur_melody = melody;    cur_bass = bassline; frames_per_row = 8; break;
+    }
     playing  = 1;
     frame_div = 0;
     row      = 0;

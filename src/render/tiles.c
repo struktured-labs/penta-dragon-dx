@@ -206,6 +206,10 @@ void tiles_load_boss_metasprite(void) {
     set_sprite_data(SPR_BOSS, 4, sprite_boss_sentinel);
 }
 
+void tiles_load_boss_big(void) {
+    set_sprite_data(SPR_BOSS_BIG, 16, sprite_boss_colossus);
+}
+
 void tiles_load_fx_sprites(void) {
     set_sprite_data(SPR_BULLET,     1, sprite_fx_bullet_a);
     set_sprite_data(SPR_BULLET_B,   1, sprite_fx_bullet_b);

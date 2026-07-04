@@ -181,16 +181,28 @@ void procgen_generate_current_room(void) {
 
     {
         if (is_boss_room) {
+            u8 is_final = (run_state.bosses_beaten == (BOSSES_TO_WIN - 1)) ? 1 : 0;
             *(volatile u8*)0xFFFC = 0xBB;
-            u8 idx = enemy_spawn(1, (ROOM_W / 2) - 1, (ROOM_H / 2) - 1);
-            if (idx != 0xFF) {
-                entities[idx].sprite_tile = SPR_BOSS;
-                entities[idx].hitbox      = (14 << 4) | 14;
-                // Later bosses hit harder + have more HP
-                entities[idx].hp = (u8)(entities[idx].hp
-                    + (u8)(run_state.bosses_beaten * 30));
-                entities[idx].damage = (u8)(entities[idx].damage
-                    + run_state.bosses_beaten);
+            {
+                u8 idx = is_final
+                    ? enemy_spawn(1, (ROOM_W / 2) - 2, (ROOM_H / 2) - 2)   // 32x32 centered
+                    : enemy_spawn(1, (ROOM_W / 2) - 1, (ROOM_H / 2) - 1);
+                if (idx != 0xFF) {
+                    // Later bosses hit harder + have more HP
+                    entities[idx].hp = (u8)(entities[idx].hp
+                        + (u8)(run_state.bosses_beaten * 30));
+                    entities[idx].damage = (u8)(entities[idx].damage
+                        + run_state.bosses_beaten);
+                    if (is_final) {
+                        entities[idx].sprite_tile = SPR_BOSS_BIG;   // 32x32 colossus
+                        entities[idx].hitbox      = (15 << 4) | 15; // ~full 30px box
+                        entities[idx].ai_data[3]  = 1;              // giant flag
+                        entities[idx].hp = (u8)(entities[idx].hp + 40);  // even beefier
+                    } else {
+                        entities[idx].sprite_tile = SPR_BOSS;
+                        entities[idx].hitbox      = (14 << 4) | 14;
+                    }
+                }
             }
         } else if ((run_state.room_counter % 7) == 3) {
             // MERCHANT room: three wares, no enemies. Walk into a ware
@@ -242,6 +254,17 @@ void procgen_generate_current_room(void) {
                 {
                     u8 eid = pick_enemy_from_biome(&biomes[run_state.biome_id]);
                     if (eid == 1) eid = 0;   // boss never spawns in normal rooms
+                    // Stage escalation: deeper stages upgrade weak crawlers
+                    // into tougher foes so the roster visibly hardens.
+                    // stage 1: crawler -> hornet/skeleton; stage 2: -> wisp/orc.
+                    {
+                        u8 stage = run_state.bosses_beaten;
+                        if (eid == 0 && stage >= 1 && (rng_next_u8() & 1)) {
+                            eid = (stage >= 2)
+                                ? ((rng_next_u8() & 1) ? 5 : 4)   // wisp / orc
+                                : ((rng_next_u8() & 1) ? 2 : 3);  // hornet / skeleton
+                        }
+                    }
                     enemy_spawn(eid, tx, ty);
                 }
             }

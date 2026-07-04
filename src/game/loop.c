@@ -11,6 +11,7 @@
 #include "game/room.h"
 #include "game/gameover.h"
 #include "game/victory.h"
+#include "game/inventory.h"
 
 screen_id_t loop_current_screen = SCREEN_BOOT;
 u16         loop_frame_counter  = 0;
@@ -25,7 +26,7 @@ const screen_t screens[SCREEN_COUNT] = {
     [SCREEN_ROOM]         = { room_enter,         room_exit,         room_tick,         room_draw         },
     [SCREEN_REST_ROOM]    = { 0, 0, 0, 0 },
     [SCREEN_BOSS]         = { 0, 0, 0, 0 },
-    [SCREEN_INVENTORY]    = { 0, 0, 0, 0 },
+    [SCREEN_INVENTORY]    = { inventory_enter, inventory_exit, inventory_tick, inventory_draw },
     [SCREEN_DIALOG]       = { 0, 0, 0, 0 },
     [SCREEN_GAMEOVER]     = { gameover_enter, gameover_exit, gameover_tick, gameover_draw },
     [SCREEN_VICTORY]      = { victory_enter,  victory_exit,  victory_tick,  victory_draw  },

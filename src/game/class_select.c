@@ -8,6 +8,7 @@
 #include <gbdk/font.h>
 #include <stdio.h>
 
+#include "audio/sfx.h"
 #include "core/types.h"
 #include "game/class_select.h"
 #include "game/player.h"
@@ -118,18 +119,22 @@ screen_id_t class_select_tick(u8 keys, u8 pressed) {
             class_select_cursor--;
         render();
         update_preview();
+        sfx_play(SFX_HIT);          // soft move blip
     } else if (pressed & J_DOWN) {
         class_select_cursor++;
         if (class_select_cursor >= N_CLASSES) class_select_cursor = 0;
         render();
         update_preview();
+        sfx_play(SFX_HIT);
     }
 
     if (pressed & J_A) {
+        sfx_play(SFX_COIN);         // confirm
         player_init_from_class(class_select_cursor);
         return SCREEN_RUN_INIT;
     }
     if (pressed & J_B) {
+        sfx_play(SFX_HURT);         // cancel
         return SCREEN_TITLE;
     }
     return SCREEN_SELF;

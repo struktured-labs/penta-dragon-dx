@@ -115,23 +115,47 @@ void entity_draw_all(void) {
         if (!(entities[i].flags & EF_ACTIVE)) {
             continue;
         }
-        // Boss (enemy content id 1) renders as a full 16x16 metasprite on
-        // the reserved OAM slots 36-39; its own entity slot stays hidden.
+        // Boss (enemy content id 1). The Sentinel is 16x16 on OAM 36-39;
+        // the final Colossus is 32x32 (4x4 tiles) on OAM 24-39. The entity's
+        // own OAM slot stays hidden either way.
         if (entities[i].type == ENT_ENEMY && entities[i].ai_data[0] == 1) {
             u8 sx = (u8)(FIX8_TO_INT(entities[i].x) + 8);
             u8 sy = (u8)(FIX8_TO_INT(entities[i].y) + 16);
             u8 pal = entities[i].palette;
+            u8 flash = (entities[i].ai_data[7]) ? 1 : 0;
             move_sprite(entities[i].oam_slot, 0, 0);
-            set_sprite_tile(36, entities[i].sprite_tile);
-            set_sprite_tile(37, (u8)(entities[i].sprite_tile + 1));
-            set_sprite_tile(38, (u8)(entities[i].sprite_tile + 2));
-            set_sprite_tile(39, (u8)(entities[i].sprite_tile + 3));
-            set_sprite_prop(36, pal); set_sprite_prop(37, pal);
-            set_sprite_prop(38, pal); set_sprite_prop(39, pal);
-            move_sprite(36, sx,         sy);
-            move_sprite(37, (u8)(sx+8), sy);
-            move_sprite(38, sx,         (u8)(sy+8));
-            move_sprite(39, (u8)(sx+8), (u8)(sy+8));
+            if (flash) entities[i].ai_data[7]--;
+            if (entities[i].ai_data[3]) {
+                // 32x32 Colossus: 16 tiles, row-major 4x4, OAM 24..39
+                u8 r, c, oam = 24, tile = entities[i].sprite_tile;
+                for (r = 0; r < 4; ++r) {
+                    for (c = 0; c < 4; ++c) {
+                        set_sprite_tile(oam, tile);
+                        set_sprite_prop(oam, pal);
+                        if (flash && (entities[i].ai_data[7] & 1))
+                            move_sprite(oam, 0, 0);
+                        else
+                            move_sprite(oam, (u8)(sx + c * 8), (u8)(sy + r * 8));
+                        oam++; tile++;
+                    }
+                }
+            } else {
+                set_sprite_tile(36, entities[i].sprite_tile);
+                set_sprite_tile(37, (u8)(entities[i].sprite_tile + 1));
+                set_sprite_tile(38, (u8)(entities[i].sprite_tile + 2));
+                set_sprite_tile(39, (u8)(entities[i].sprite_tile + 3));
+                set_sprite_prop(36, pal); set_sprite_prop(37, pal);
+                set_sprite_prop(38, pal); set_sprite_prop(39, pal);
+                if (flash && (entities[i].ai_data[7] & 1)) {
+                    move_sprite(36, 0, 0); move_sprite(37, 0, 0);
+                    move_sprite(38, 0, 0); move_sprite(39, 0, 0);
+                } else {
+                    move_sprite(36, sx,         sy);
+                    move_sprite(37, (u8)(sx+8), sy);
+                    move_sprite(38, sx,         (u8)(sy+8));
+                    move_sprite(39, (u8)(sx+8), (u8)(sy+8));
+                }
+            }
             boss_drawn = 1;
             continue;
         }
@@ -150,7 +174,7 @@ void entity_draw_all(void) {
             (u8)(FIX8_TO_INT(entities[i].y) + 16));
     }
     if (!boss_drawn) {
-        move_sprite(36, 0, 0); move_sprite(37, 0, 0);
-        move_sprite(38, 0, 0); move_sprite(39, 0, 0);
+        u8 s;
+        for (s = 24; s < 40; ++s) move_sprite(s, 0, 0);  // clear any boss OAM
     }
 }

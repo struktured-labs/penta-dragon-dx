@@ -29,45 +29,50 @@
 u8 room_tilemap[ROOM_H][ROOM_W];
 
 static u8 room_paused;
+static u8 room_resume_flag;   // set by room_request_resume: skip procgen next enter
 // Secret door opened by shooting a cracked wall this room (0xFF = none)
 static u8 secret_door_x = 0xFF;
 static u8 secret_door_y = 0xFF;
 
-// Crystal Caverns BG palettes — floor kept bright so the play area reads,
-// walls clearly darker (sprite/value-band separation), crystals glow,
-// doors gold. One CGB palette per tile family via VRAM bank-1 attributes.
-static const u16 pal_floor[4] = {
-    BGR555( 4,  3,  6),    // 0: grout / shadow
-    BGR555(11, 10, 15),    // 1: mid stone
-    BGR555(17, 16, 22),    // 2: light stone (floor base)
-    BGR555(23, 22, 28),    // 3: highlight glint
+void room_request_resume(void) { room_resume_flag = 1; }
+
+// Three stage themes, indexed by run_state.bosses_beaten (clamped 0-2).
+// Each defines floor / wall / crystal / door palettes; the crack palette
+// stays amber across stages so the "shoot me" signal is consistent.
+// [stage][floor|wall|crystal|door][color 0-3]
+#define STAGE_COUNT 3
+static const u16 stage_pal[STAGE_COUNT][4][4] = {
+    // Stage 0 — Crystal Caverns (cool blue)
+    {
+        { BGR555( 4, 3, 6), BGR555(11,10,15), BGR555(17,16,22), BGR555(23,22,28) },
+        { BGR555( 1, 1, 3), BGR555( 5, 5,11), BGR555( 9,10,17), BGR555(16,18,26) },
+        { BGR555( 2, 0, 5), BGR555(16, 5,22), BGR555(10,22,29), BGR555(31,30,31) },
+        { BGR555( 1, 1, 2), BGR555(10, 7, 2), BGR555(18,13, 3), BGR555(28,21, 6) },
+    },
+    // Stage 1 — Ember Depths (warm red/orange, molten)
+    {
+        { BGR555( 7, 2, 2), BGR555(16, 7, 5), BGR555(23,12, 7), BGR555(30,20,12) },
+        { BGR555( 3, 0, 0), BGR555(11, 3, 2), BGR555(17, 6, 3), BGR555(26,12, 6) },
+        { BGR555( 5, 1, 0), BGR555(28,10, 2), BGR555(31,22, 4), BGR555(31,31,20) },
+        { BGR555( 2, 1, 0), BGR555(12, 8, 2), BGR555(22,15, 3), BGR555(31,26, 8) },
+    },
+    // Stage 2 — Void Sanctum (deep purple/toxic green, final)
+    {
+        { BGR555( 4, 2, 7), BGR555(10, 6,14), BGR555(15,11,20), BGR555(20,16,26) },
+        { BGR555( 2, 0, 4), BGR555( 7, 2,10), BGR555(11, 5,15), BGR555(18,10,24) },
+        { BGR555( 0, 4, 2), BGR555( 6,22, 8), BGR555(14,31,12), BGR555(28,31,24) },
+        { BGR555( 2, 0, 3), BGR555( 8, 4,10), BGR555(16,10,20), BGR555(26,18,30) },
+    },
 };
-static const u16 pal_wall[4] = {
-    BGR555( 1,  1,  3),    // 0: deep shadow
-    BGR555( 5,  5, 11),    // 1: mortar
-    BGR555( 9, 10, 17),    // 2: brick
-    BGR555(16, 18, 26),    // 3: top edge highlight
-};
-static const u16 pal_crystal[4] = {
-    BGR555( 2,  0,  5),    // 0: dark nook
-    BGR555(16,  5, 22),    // 1: deep magenta
-    BGR555(10, 22, 29),    // 2: bright cyan
-    BGR555(31, 30, 31),    // 3: white sparkle
-};
-static const u16 pal_door[4] = {
-    BGR555( 1,  1,  2),    // 0: dark passage
-    BGR555(10,  7,  2),    // 1: bronze shadow
-    BGR555(18, 13,  3),    // 2: gold mid
-    BGR555(28, 21,  6),    // 3: bright gold
-};
-// Cracked secret wall — warm amber/orange against the cool blue dungeon so
-// it reads instantly as "shoot me". Deliberately off the wall value band.
+// Cracked secret wall — warm amber, constant across stages.
 static const u16 pal_crack[4] = {
-    BGR555( 6,  2,  1),    // 0: dark crack shadow
-    BGR555(22, 11,  3),    // 1: amber brick
-    BGR555(30, 18,  4),    // 2: bright orange
-    BGR555(31, 28, 12),    // 3: glowing yellow fissure
+    BGR555( 6,  2,  1), BGR555(22, 11,  3), BGR555(30, 18,  4), BGR555(31, 28, 12),
 };
+
+static u8 room_stage(void) {
+    u8 s = run_state.bosses_beaten;
+    return (s < STAGE_COUNT) ? s : (STAGE_COUNT - 1);
+}
 
 // Crawler (enemy) palette — blue, with one accent
 static const u16 crawler_palette[4] = {
@@ -153,16 +158,17 @@ static void palette_bg_load_dimmed(u8 slot, const u16 *pal) {
 }
 
 static void room_apply_pause_palettes(u8 dim) {
+    const u16 (*sp)[4] = stage_pal[room_stage()];
     if (dim) {
-        palette_bg_load_dimmed(BGPAL_FLOOR,   pal_floor);
-        palette_bg_load_dimmed(BGPAL_WALL,    pal_wall);
-        palette_bg_load_dimmed(BGPAL_CRYSTAL, pal_crystal);
-        palette_bg_load_dimmed(BGPAL_DOOR,    pal_door);
+        palette_bg_load_dimmed(BGPAL_FLOOR,   sp[0]);
+        palette_bg_load_dimmed(BGPAL_WALL,    sp[1]);
+        palette_bg_load_dimmed(BGPAL_CRYSTAL, sp[2]);
+        palette_bg_load_dimmed(BGPAL_DOOR,    sp[3]);
     } else {
-        palette_bg_load(BGPAL_FLOOR,   pal_floor);
-        palette_bg_load(BGPAL_WALL,    pal_wall);
-        palette_bg_load(BGPAL_CRYSTAL, pal_crystal);
-        palette_bg_load(BGPAL_DOOR,    pal_door);
+        palette_bg_load(BGPAL_FLOOR,   sp[0]);
+        palette_bg_load(BGPAL_WALL,    sp[1]);
+        palette_bg_load(BGPAL_CRYSTAL, sp[2]);
+        palette_bg_load(BGPAL_DOOR,    sp[3]);
     }
 }
 
@@ -286,10 +292,13 @@ static u8 facing_to_dir8(u8 facing) {
 void room_enter(void) {
     DISPLAY_OFF;
 
-    palette_bg_load(BGPAL_FLOOR,   pal_floor);
-    palette_bg_load(BGPAL_WALL,    pal_wall);
-    palette_bg_load(BGPAL_CRYSTAL, pal_crystal);
-    palette_bg_load(BGPAL_DOOR,    pal_door);
+    {
+        const u16 (*sp)[4] = stage_pal[room_stage()];
+        palette_bg_load(BGPAL_FLOOR,   sp[0]);
+        palette_bg_load(BGPAL_WALL,    sp[1]);
+        palette_bg_load(BGPAL_CRYSTAL, sp[2]);
+        palette_bg_load(BGPAL_DOOR,    sp[3]);
+    }
     palette_bg_load(BGPAL_CRACK,   pal_crack);
     palette_obj_load(0, skeleton_palette);
     palette_obj_load(1, class_obj_palettes[player.class_id < 5 ? player.class_id : 0]);
@@ -309,6 +318,7 @@ void room_enter(void) {
     tiles_load_all_class_sprites();       // 5 × 16x16 player metasprites (slots 0..19)
     tiles_load_all_enemy_sprites();       // 4 enemy tiles (slots 20..23)
     tiles_load_boss_metasprite();         // 16x16 boss (slots 24..27)
+    tiles_load_boss_big();                // 32x32 final boss (slots 40..55)
     tiles_load_fx_sprites();              // bullet A/B, muzzle, impact
 
     hud_init();
@@ -327,9 +337,25 @@ void room_enter(void) {
         set_sprite_prop(3, 0x01);
     }
     player.facing        = FACE_S;
-    player.iframes       = 0;
     player.fire_cooldown = 0;
     room_paused          = 0;
+
+    if (room_resume_flag) {
+        // Returning from the pack screen: keep the existing tilemap, entities
+        // and player position — just redraw. Do NOT regenerate or restart music.
+        room_resume_flag = 0;
+        draw_room_tilemap();
+        entity_draw_all();
+        place_player_sprite();
+        if (*(volatile u8*)0xFFFC == 0xBB) music_play_boss();
+        else                              music_play_stage(room_stage());
+        SHOW_SPRITES;
+        SHOW_BKG;
+        DISPLAY_ON;
+        return;
+    }
+
+    player.iframes       = 0;
 
     // Procgen builds the tilemap + spawns enemies + positions player
     procgen_generate_current_room();
@@ -342,7 +368,7 @@ void room_enter(void) {
         music_play_boss();
         sfx_play(SFX_ROAR);
     } else {
-        music_play_caverns();
+        music_play_stage(room_stage());
     }
 
 
@@ -359,8 +385,11 @@ void room_exit(void) {
 }
 
 screen_id_t room_tick(u8 keys, u8 pressed) {
-    // ---- Pause (START toggles; world freezes, palettes dim)
+    // ---- START opens the PACK (stats + items); SELECT quick-pauses (dim).
     if (pressed & J_START) {
+        return SCREEN_INVENTORY;
+    }
+    if (pressed & J_SELECT) {
         room_paused ^= 1;
         room_apply_pause_palettes(room_paused);
     }
@@ -498,7 +527,7 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
     if (run_state.pending_unseal) {
         run_state.pending_unseal = 0;
         room_unseal_doors();
-        music_play_caverns();
+        music_play_stage(room_stage());
     }
 
     // ---- Final victory: all bosses down
@@ -556,7 +585,7 @@ screen_id_t room_tick(u8 keys, u8 pressed) {
                     music_play_boss();
                     sfx_play(SFX_ROAR);
                 } else {
-                    music_play_caverns();
+                    music_play_stage(room_stage());
                 }
                 return SCREEN_SELF;
             }

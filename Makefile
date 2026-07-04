@@ -43,8 +43,13 @@ gen:
 	fi
 	@target/release/quintra-codegen --content content --out $(GENDIR)
 
+# All headers under src/ (+ generated). lcc/SDCC can't emit .d dep files here,
+# so use a coarse dependency: any header change rebuilds every object. Slower
+# but correct — a stale-header build once shipped a wrong constant.
+HDRS = $(shell find $(SRCDIR) -name '*.h' 2>/dev/null)
+
 # Compile each .c under any subdir of src/
-$(OBJDIR)/%.o: %.c
+$(OBJDIR)/%.o: %.c $(HDRS)
 	@mkdir -p $(dir $@)
 	$(LCC) $(LCCFLAGS) -c -o $@ $<
 

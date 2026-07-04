@@ -29,6 +29,9 @@ extern const u8 sprite_fx_item_orb[16];
 // 16x16 boss metasprite
 extern const u8 sprite_boss_sentinel[64];
 
+// 32x32 final boss metasprite (16 tiles, row-major 4x4)
+extern const u8 sprite_boss_colossus[256];
+
 // 8x8 dungeon BG tiles
 extern const u8 bgt_floor_plain[16];
 extern const u8 bgt_floor_crack[16];

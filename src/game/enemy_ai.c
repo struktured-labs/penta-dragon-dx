@@ -228,18 +228,30 @@ static void boss_tick(entity_t *e) {
     }
 
     if (e->ai_data[1] == 0) {
-        // Ring volley: 4 shots, alternating cardinal / diagonal each volley
-        u8 base = (u8)(e->ai_data[5] & 0x01);
+        u8 giant = e->ai_data[3];
+        u8 base  = (u8)(e->ai_data[5] & 0x01);
         u8 d;
-        i16 cx = FIX8_TO_INT(e->x) + 4;
-        i16 cy = FIX8_TO_INT(e->y) + 4;
-        for (d = base; d < 8; d = (u8)(d + 2)) {
-            projectile_spawn_enemy(cx, cy, dir8_dx[d], dir8_dy[d], e->damage);
+        // Colossus fires from its center (32x32); Sentinel from its 16x16.
+        i16 cx = FIX8_TO_INT(e->x) + (giant ? 12 : 4);
+        i16 cy = FIX8_TO_INT(e->y) + (giant ? 12 : 4);
+        if (giant) {
+            // Full 8-way ring every volley + an aimed shot at the player.
+            for (d = 0; d < 8; ++d)
+                projectile_spawn_enemy(cx, cy, dir8_dx[d], dir8_dy[d], e->damage);
+            {
+                i8 sx = ((i16)player.x > cx) ? 1 : ((i16)player.x < cx) ? -1 : 0;
+                i8 sy = ((i16)player.y > cy) ? 1 : ((i16)player.y < cy) ? -1 : 0;
+                projectile_spawn_enemy(cx, cy, sx, sy, e->damage);
+            }
+        } else {
+            // Sentinel: 4 shots, alternating cardinal / diagonal each volley.
+            for (d = base; d < 8; d = (u8)(d + 2))
+                projectile_spawn_enemy(cx, cy, dir8_dx[d], dir8_dy[d], e->damage);
         }
         e->ai_data[5]++;
         {
-            u8 cadence = 70;
-            if (e->hp < (u8)(e->ai_data[6] >> 1)) cadence = 45;  // enrage
+            u8 cadence = giant ? 55 : 70;
+            if (e->hp < (u8)(e->ai_data[6] >> 1)) cadence = (u8)(cadence - 25);  // enrage
             e->ai_data[1] = cadence;
         }
     } else {

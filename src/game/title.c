@@ -8,6 +8,7 @@
 #include <stdio.h>
 
 #include "audio/music.h"
+#include "audio/sfx.h"
 #include "core/types.h"
 #include "game/loop.h"
 #include "game/title.h"
@@ -68,7 +69,7 @@ void title_exit(void) {
 
 screen_id_t title_tick(u8 keys, u8 pressed) {
     keys;
-    if (pressed & J_START) { music_stop(); return SCREEN_CLASS_SELECT; }
+    if (pressed & J_START) { sfx_play(SFX_COIN); music_stop(); return SCREEN_CLASS_SELECT; }
     return SCREEN_SELF;
 }
 

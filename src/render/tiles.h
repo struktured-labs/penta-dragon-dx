@@ -50,6 +50,7 @@
 #define SPR_FX_IMPACT      33
 #define SPR_ENEMY_WISP     34
 #define SPR_ITEM_ORB       35
+#define SPR_BOSS_BIG       40    // 16 tiles: 40..55 (32x32 final boss)
 // Legacy aliases (kept for back-compat with existing code):
 #define SPR_PLAYER         SPR_CLASS_BASE
 #define SPR_ENEMY          SPR_ENEMY_CRAWLER
@@ -80,6 +81,7 @@ void tiles_load_hud(void);
 void tiles_load_all_class_sprites(void);   // loads 5 classes × 4 tiles = 20 OBJ tiles
 void tiles_load_all_enemy_sprites(void);   // 4 enemy tiles
 void tiles_load_boss_metasprite(void);     // 16x16 boss (4 tiles at SPR_BOSS..+3)
+void tiles_load_boss_big(void);            // 32x32 final boss (16 tiles at SPR_BOSS_BIG)
 void tiles_load_fx_sprites(void);          // bullet (2 frames), muzzle, impact
 void tiles_load_dungeon_bg(void);          // dungeon tileset (replaces flat placeholders)
 

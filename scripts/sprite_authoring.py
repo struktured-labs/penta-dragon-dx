@@ -322,6 +322,47 @@ DUNGEON_TILES = [
 ]
 
 
+# 32x32 FINAL boss — the Void Colossus. Generated programmatically so the
+# grid is guaranteed 32x32. A symmetric horned demon-idol: dark body (2),
+# lit rim (1), glowing eyes + maw (3).
+def _make_boss_big():
+    W = H = 32
+    g = [[0] * W for _ in range(H)]
+    cx = 15.5
+    for y in range(H):
+        for x in range(W):
+            dx = abs(x - cx)
+            # Big rounded body: an ovoid torso
+            body = ((x - cx) ** 2) / (13.0 ** 2) + ((y - 17) ** 2) / (13.0 ** 2)
+            if body <= 1.0:
+                g[y][x] = 2                      # dark body
+                # lit rim
+                if body >= 0.82:
+                    g[y][x] = 1
+            # Two horns rising from the top
+            if y < 8 and (abs(dx - (7 - y)) < 1.2):
+                g[y][x] = 1
+            if y < 6 and (abs(dx - (7 - y)) < 0.6):
+                g[y][x] = 3
+    # Two glowing eyes
+    for (ey, ex) in [(14, 10), (14, 21)]:
+        for yy in range(ey - 1, ey + 2):
+            for xx in range(ex - 1, ex + 2):
+                if 0 <= yy < H and 0 <= xx < W and g[yy][xx]:
+                    g[yy][xx] = 3
+    # Glowing jagged maw
+    for xx in range(10, 22):
+        yy = 21 + (xx % 2)
+        if g[yy][xx]:
+            g[yy][xx] = 3
+        if g[yy + 1][xx]:
+            g[yy + 1][xx] = 3
+    ch = {0: ".", 1: "1", 2: "2", 3: "3"}
+    return ["".join(ch[c] for c in row) for row in g]
+
+BOSS_BIG = _make_boss_big()
+
+
 # 16x16 boss (Stone Sentinel)
 BOSS = """\
 ....111111111...
@@ -494,6 +535,11 @@ def emit_all_c():
     grid = parse_grid(BOSS)
     tiles = sprite_to_tiles(grid, 16, 16)
     print(emit_metasprite_c_array("sprite_boss_sentinel", tiles))
+
+    # Final boss (32x32 = 16 tiles, row-major 4x4)
+    grid = parse_grid(BOSS_BIG)
+    tiles = sprite_to_tiles(grid, 32, 32)
+    print(emit_metasprite_c_array("sprite_boss_colossus", tiles))
 
 
 def emit_aseprite_pixels():

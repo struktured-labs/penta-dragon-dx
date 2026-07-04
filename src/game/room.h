@@ -20,6 +20,10 @@ u8 room_tile_walkable(u8 t);
 // A player shot hit a cracked wall: convert it to a secret door.
 void room_open_secret(u8 tx, u8 ty);
 
+// Request that the next room_enter resume the CURRENT room (skip procgen)
+// instead of generating a new one — used when returning from the pack screen.
+void room_request_resume(void);
+
 void        room_enter(void);
 void        room_exit(void);
 screen_id_t room_tick(u8 keys, u8 pressed);
