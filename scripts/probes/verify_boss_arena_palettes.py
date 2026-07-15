@@ -53,15 +53,16 @@ BOSS_NAMES = (
     "Penta_Dragon",
 )
 
-# Known-good title/game-entry schedule used by the project's other PyBoy
-# capture probes.  A short walking phase below enters the first dungeon room.
+# Known-good title/game-entry schedule used by the project's teleport_mechanism_pyboy.py.
+# This is the PROVEN working schedule that navigates past the intro + title screen
+# into active gameplay. Verified by verify_sprite_flicker.py.
 BOOT_INPUTS = (
     (180, 186, "down"),
     (201, 207, "a"),
     (261, 267, "a"),
-    (291, 296, "a"),
-    (341, 346, "start"),
-    (410, 415, "a"),
+    (321, 327, "a"),
+    (381, 387, "start"),
+    (431, 437, "a"),
 )
 
 
@@ -103,9 +104,10 @@ def pulse(pyboy: PyBoy, *buttons: str, frames: int = 8) -> None:
 
 
 def enter_gameplay(pyboy: PyBoy, timeout: int = 1800) -> None:
-    """Skip the title/menu and walk until the gameplay flag is set."""
+    """Skip the title/menu and walk until the gameplay flag is set.
+    Uses the proven teleport_mechanism_pyboy.py schedule (1400 frames)."""
     held: str | None = None
-    for frame in range(1, 451):
+    for frame in range(1, 1400):
         wanted = next(
             (button for start, end, button in BOOT_INPUTS if start <= frame < end),
             None,
@@ -119,23 +121,6 @@ def enter_gameplay(pyboy: PyBoy, timeout: int = 1800) -> None:
         tick(pyboy, 1)
     if held:
         pyboy.button_release(held)
-
-    # Walking is needed on some save-RAM/menu states before FFC1 becomes 1.
-    for frame in range(timeout):
-        if pyboy.memory[FFC1] == 1:
-            break
-        if frame % 40 == 0:
-            pyboy.button_press("right")
-        elif frame % 40 == 8:
-            pyboy.button_release("right")
-        tick(pyboy, 1)
-    pyboy.button_release("right")
-    if pyboy.memory[FFC1] != 1:
-        raise RuntimeError(
-            f"gameplay was not reached: FFC1=0x{pyboy.memory[FFC1]:02X}, "
-            f"D880=0x{pyboy.memory[D880]:02X}"
-        )
-    tick(pyboy, 60)
 
 
 def read_bg_cram(pyboy: PyBoy) -> bytes:
@@ -184,7 +169,7 @@ def dump_capture(
 
 def capture_arena(pyboy: PyBoy, cycle: int, output: Path) -> ArenaResult:
     pulse(pyboy, "select", "start")
-    tick(pyboy, 120)
+    tick(pyboy, 200)  # wait for arena to fully load + debounce to clear
     observed = pyboy.memory[FFBA]
     bg_cram = read_bg_cram(pyboy)
     oam = bytes(pyboy.memory[address] for address in range(OAM_START, OAM_START + OAM_SIZE))
@@ -219,6 +204,7 @@ def run_probe(rom: Path, output: Path) -> bool:
     results: list[ArenaResult] = []
     try:
         enter_gameplay(pyboy)
+        tick(pyboy, 60)
         for cycle in range(ARENA_FIRST, ARENA_LAST + 1):
             results.append(capture_arena(pyboy, cycle, output))
     finally:
