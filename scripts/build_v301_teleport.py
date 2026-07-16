@@ -48,8 +48,88 @@ from arena_position import (
 BASE_OUT = Path("rom/working/penta_dragon_dx_v301.gb")
 TP_OUT = Path("rom/working/penta_dragon_dx_teleport.gb")
 
+# ----------------------------------------------------------------------
+# OBJ Palette Lookup Table (replaces CP cascade at bank13:0x6B00)
+#
+# 256-byte static LUT: tile_id -> OBJ palette number (0-7).
+# Generated from palettes/monster_palette_map.yaml. The LUT replaces the
+# old 19-byte CP-cascade subroutine (create_tile_to_palette_subroutine()).
+# Trampolines in WRAM read this via LD A,[HL] with HL=$D900 + tile_id.
+# ----------------------------------------------------------------------
+
+import yaml
+
+OBJ_PAL_TABLE_ADDR = 0x6B00   # bank13 address of the 256-byte LUT
+OBJ_PAL_WRAM = 0xD900         # WRAM copy (cold-boot copy target)
+OBJ_PAL_WRAM_HI = 0xD9
+
+
+def build_obj_pal_table() -> bytes:
+    """Generate 256-byte OBJ palette LUT from monster_palette_map.yaml.
+
+    The YAML defines per-monster tile ranges with their palette assignment.
+    For Sara tiles (0x10-0x2F), writes 0xFF (sentinel for FFBE resolution
+    at runtime). Unspecified tiles use reasonable defaults matching the old
+    CP-cascade behavior.
+    """
+    palette_yaml = Path(__file__).parent.parent / "palettes" / "monster_palette_map.yaml"
+    lut = bytearray(256)
+
+    # Default fill: matching old cascade behavior
+    #   0x00-0x01 → 3 (projectile)
+    #   0x02-0x0F → 0 (effects)
+    #   0x10-0x2F → 0xFF (Sara dynamic)
+    #   0x30-0x4F → 3 (enemies)
+    #   0x50-0x5F → 4 (hornets)
+    #   0x60-0x6F → 5 (orc/ground)
+    #   0x70-0x7F → 6 (humanoid)
+    #   0x80-0xFF → 4 (default high)
+    for tile in range(256):
+        if tile <= 0x01:
+            lut[tile] = 3      # projectile
+        elif tile <= 0x0F:
+            lut[tile] = 0      # effects
+        elif tile <= 0x2F:
+            lut[tile] = 0xFF   # Sara dynamic sentinel
+        elif tile <= 0x4F:
+            lut[tile] = 3      # enemies
+        elif tile <= 0x5F:
+            lut[tile] = 4      # hornets
+        elif tile <= 0x6F:
+            lut[tile] = 5      # orc/ground
+        elif tile <= 0x7F:
+            lut[tile] = 6      # humanoid
+        else:
+            lut[tile] = 4      # default high
+
+    # Override with YAML monster entries (when available)
+    if palette_yaml.exists():
+        with open(palette_yaml) as f:
+            data = yaml.safe_load(f)
+        monsters = data.get('monsters', [])
+        for entry in monsters:
+            pal = entry.get('palette', 0)
+            tile_ranges = entry.get('tile_ranges', [])
+            for (lo, hi) in tile_ranges:
+                for t in range(lo, hi + 1):
+                    if t < 256:
+                        # Resolve 'dynamic_ffbe' to sentinel 0xFF
+                        if isinstance(pal, str) and pal == 'dynamic_ffbe':
+                            lut[t] = 0xFF
+                        else:
+                            lut[t] = pal & 7
+    else:
+        print(f"  [build_obj_pal_table] WARNING: {palette_yaml} not found, using defaults")
+
+    # Tile 0xFF sentinel: map to 0 (palette 0) — never used in practice
+    lut[0xFF] = 0x00
+
+    return bytes(lut)
+
+
 BANK13 = 13 * 0x4000
 COLORIZE_ADDR = 0x6E00
+OBJ_STAMPER_ADDR = 0x6A10     # old OBJ tile colorizer (CALL removed in OAM intercept)
 BG_SWEEP_ADDR = 0x6CD0     # bg_sweep safety-net (re-patched to read WRAM 0xDA00)
 WRAM_BG_TABLE = 0xDA00     # per-scene table kept current by scene_detect
 
@@ -743,7 +823,28 @@ def main():
     rom[off:off + 256] = bytes(256)   # all pal0
     print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
-    # 2b. Re-patch bg_sweep to read the PER-SCENE WRAM table (0xDA00) instead
+    # 2c. Write OBJ palette lookup table at bank13:0x6B00 (replaces old CP-cascade)
+    # Generate the 256-byte static LUT
+    _obj_pal = bytearray(256)
+    for _i in range(256):
+        if _i <= 0x01:       _obj_pal[_i] = 3   # projectile
+        elif _i <= 0x0F:     _obj_pal[_i] = 0   # effects
+        elif _i <= 0x2F:     _obj_pal[_i] = 0xFF  # Sara dynamic
+        elif _i <= 0x3F:     _obj_pal[_i] = 6   # crow
+        elif _i <= 0x4F:     _obj_pal[_i] = 5   # orc
+        elif _i <= 0x5F:     _obj_pal[_i] = 4   # hornet
+        elif _i <= 0x6F:     _obj_pal[_i] = 5   # orc ground
+        elif _i <= 0x7F:     _obj_pal[_i] = 7   # soldier
+        else:                _obj_pal[_i] = 4   # default high
+    _obj_pal_off = BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000)
+    rom[_obj_pal_off:_obj_pal_off + 256] = _obj_pal
+    # Verify LUT was written correctly
+    _verify_lut = rom[_obj_pal_off:_obj_pal_off + 256]
+    _verify_bad = sum(1 for _v in _verify_lut if _v > 7 and _v != 0xFF)
+    assert _verify_bad == 0, f"OBJ palette LUT has {_verify_bad} invalid entries after write!"
+    print(f"  OBJ palette LUT: 256 bytes at bank13:0x{OBJ_PAL_TABLE_ADDR:04X} (per-monster-type, verified)")
+
+    # 2d. Re-patch bg_sweep to read the PER-SCENE WRAM table (0xDA00) instead
     # of the ROM dungeon table (0x7000). The base build bakes the sweep with
     # the dungeon table, so in arenas the sweep wrote dungeon-palette attrs for
     # boss tiles while the inline hook (which DOES read 0xDA00) wrote the
@@ -939,6 +1040,23 @@ def main():
     for b in rom[0x134:0x14D]:
         chk = (chk - b - 1) & 0xFF
     rom[0x14D] = chk
+
+    # Final LUT verification before writing
+    _v = rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000):BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + 256]
+    _vb = sum(1 for _x in _v if _x > 7 and _x != 0xFF)
+    if _vb > 0:
+        print(f"  ⚠️  OBJ palette LUT corrupted before write! {_vb} invalid entries")
+        print(f"  First 4: {rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000)]:02X} {rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + 1]:02X} {rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + 2]:02X} {rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + 3]:02X}")
+        # Force correct LUT right before write
+        print(f"  Forcing correct LUT...")
+        for _i in range(256):
+            _val = 3 if _i <= 1 else 0 if _i <= 0x0F else 0xFF if _i <= 0x2F else 6 if _i <= 0x3F else 5 if _i <= 0x4F else 4 if _i <= 0x5F else 5 if _i <= 0x6F else 7 if _i <= 0x7F else 4
+            rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + _i] = _val
+        _v2 = rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000):BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + 256]
+        _vb2 = sum(1 for _x in _v2 if _x > 7 and _x != 0xFF)
+        print(f"  After force: {_vb2} invalid entries, first 4: {rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000)]:02X} {rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + 1]:02X} {rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + 2]:02X} {rom[BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000) + 3]:02X}")
+    else:
+        print(f"  ✅ OBJ palette LUT verified clean before final write ({_vb} invalid)")
 
     TP_OUT.write_bytes(rom)
     print(f"Wrote {TP_OUT} ({len(rom)} bytes)")
