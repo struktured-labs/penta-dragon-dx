@@ -925,17 +925,27 @@ def main():
     # [DISABLED: Using standard tile-ID bg_sweep directly for clean background/claws separation]
     patched_sweep = True
 
-    # 2d. INLINE HOOK: keep the base v301's pure tile-only hook (build_v301()
-    # produces a tile-only hook at 0x42A7). DO NOT replace it with the full
-    # tile+attr version — the full version's attr writes fight with bg_sweep's
-    # attrs on the title screen, producing garbled rendering (random black/white/
-    # lavender blocks instead of the correct YANOMAN logo and menu text).
-    # teleport_fixed.gb proved this fix: reverting to tile-only restores the
-    # title screen. See docs/audit/title_garbage_teleport.md.
-    #
-    # [REMOVED: full tile+attr inline hook replaced the pure tile-only version,
-    #  causing title screen corruption.]
-    print(f"  inline hook: keeping base v301's pure tile-only (no attr writes)")
+    # 2d. INLINE HOOK: replace base v301's pure tile-only with the D880-gated
+    # tile+attr version. This is the key fix for item flicker: in the dungeon
+    # (D880=0x02..0x0B), the hook writes full tile+attr (pickup items get pal1
+    # red immediately). On the title screen (D880=0x00/0x01), it writes tile-only
+    # (avoids the animation race between tile phase and attr phase). In boss
+    # arenas (D880=0x0C..0x14), it writes tile-only (position sweep owns attrs).
+    # Splash/banner scenes (D880 >= 0x15) get full tile+attr with the all-pal0
+    # splash table loaded by scene_detect, which is harmless.
+    from build_v301_gdma import create_inline_tile_copy_tileonly
+    inline_code = create_inline_tile_copy_tileonly(
+        arena_neutralize_d880=0x0C,
+        title_gate=0x02)
+    available = 0x436D - 0x42A7 + 1  # 199 bytes
+    assert len(inline_code) <= available, \
+        f"inline tile copy too big: {len(inline_code)} > {available}"
+    rom[0x42A7:0x42A7 + len(inline_code)] = inline_code
+    if len(inline_code) < available:
+        rom[0x42A7 + len(inline_code):0x436E] = bytearray(available - len(inline_code))
+    assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98])
+    print(f"  inline hook: D880-gated tile+attr ({len(inline_code)} bytes, "
+          f"{available - len(inline_code)} free) — dungeon=full, title=tile-only, arena=tile-only")
 
     # 3. Write the teleport routine at bank13:0x6E80, ending with JP COLORIZE
     tp = build_teleport_routine()

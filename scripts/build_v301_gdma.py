@@ -88,21 +88,26 @@ WRAM_BG_TABLE_HI = (WRAM_BG_TABLE >> 8) & 0xFF
 ATTR_BUFFER = 0xD000  # WRAM bank 2 (DA00 alternative tested, made no difference)
 
 
-def create_inline_tile_copy_tileonly(arena_neutralize_d880=None) -> bytes:
-    """Inline tile+attr copy (formerly tile-only; restored v3.00 behavior).
+def create_inline_tile_copy_tileonly(arena_neutralize_d880=None,
+                                      title_gate=None) -> bytes:
+    """Inline tile+attr copy with D880-gated attr writes.
 
     Per group: 4 tile writes (VBK=0) then 4 attr writes (VBK=1) with
     WRAM_BG_TABLE lookup. Single STAT wait per phase. ~vanilla speed
     once optimized.
 
-    Critical for title screen: animated tiles get attrs IMMEDIATELY
-    when written to VRAM (no bg_sweep latency). Without this, real
-    hardware shows partial colorization (white stripes + colored
-    sprite letters) because bg_sweep × 2 can't keep up with title
-    animation cadence.
+    Dispatch (when gates are set):
+      1. D880 < title_gate          -> tile-only (title screen — avoids
+         animation race between tile phase and attr phase)
+      2. D880 < arena_neutralize    -> full tile+attr (dungeon — pickup
+         items get immediate attrs, no palette flicker)
+      3. D880 in [base, base+9)     -> tile-only (arena — position sweep
+         owns the attr plane, tile-ID attrs would fight posmap)
+      4. else                       -> full tile+attr (splash/banner;
+         scene_detect loads all-pal0 table, attrs are harmless)
 
     Replaces 0x42A7..0x436D. H pre-set to 0x98 or 0x9C by entry point.
-    24 rows × 6 groups × 4 tiles = 576 tiles.
+    24 rows x 6 groups x 4 tiles = 576 tiles.
     """
     code = bytearray()
     targets = {}
@@ -135,19 +140,29 @@ def create_inline_tile_copy_tileonly(arena_neutralize_d880=None) -> bytes:
     emit([0x2E, 0x00])               # LD L, 0x00
     emit([0x11, 0xA0, 0xC1])         # LD DE, 0xC1A0 (WRAM tile source)
 
-    # Arena attr-neutralize dispatch (teleport build only). In a boss arena
-    # (D880 in [base, base+9)) jump to a TILE-ONLY copy: there the position
-    # sweep owns the attribute plane, so the hook must NOT write tile-ID attrs
-    # (they fight the fixed posmap between sweep passes -> alternation). On
-    # title/dungeon D880 < base, so JR C is taken immediately (~8T) and the
-    # full tile+attr path runs unchanged.
-    j_tileonly = None
+    # ---- Dispatch: title gate + arena neutralize ----
+    # Both gate the attr phase. When both are set:
+    #   1. D880 < title_gate         -> tile-only (title screen)
+    #   2. D880 < arena_neutralize   -> full tile+attr (dungeon)
+    #   3. D880 in [base, base+9)    -> tile-only (arena)
+    #   4. else                      -> full tile+attr (splash/banner)
+    # When neither is set: simple full tile+attr copy everywhere.
+    j_tileonly = None                # arena dispatch JR patch pos
+    j_tileonly_title = None          # title gate JR patch pos
+
+    # 1. Title gate: D880 < title_gate -> tile-only
+    if title_gate is not None:
+        emit([0xFA, 0x80, 0xD8])     # LD A, [D880]
+        emit([0xFE, title_gate & 0xFF])  # CP title_gate
+        j_tileonly_title = emit_jr_fwd(0x38)  # JR C, tileonly
+
+    # 2. Arena neutralize: D880 in [base, base+9) -> tile-only
     if arena_neutralize_d880 is not None:
         emit([0xFA, 0x80, 0xD8])     # LD A, [D880]
         emit([0xD6, arena_neutralize_d880 & 0xFF])  # SUB base
-        j_full = emit_jr_fwd(0x38)   # JR C, full      (D880 < base)
+        j_full = emit_jr_fwd(0x38)   # JR C, full      (D880 < base = dungeon)
         emit([0xFE, 0x09])           # CP 9
-        j_tileonly = emit_jr_fwd(0x38)  # JR C, tileonly (idx 0..8)
+        j_tileonly = emit_jr_fwd(0x38)  # JR C, tileonly (idx 0..8 = arena)
         patch_jr_fwd(j_full)         # else fall through to full
 
     emit([0x3E, 0x18])               # LD A, 24
@@ -235,11 +250,14 @@ def create_inline_tile_copy_tileonly(arena_neutralize_d880=None) -> bytes:
     patch_jr_fwd(j_done)
     emit([0xC9])                     # RET (full tile+attr path)
 
-    # ---- TILE-ONLY PATH (arena): copy tiles, write NO attrs ----
-    # Same L/E/HL advancement as the full path (per group the full path nets
-    # +4 to L/E, identical to the tile phase here), so addressing matches.
-    if j_tileonly is not None:
-        patch_jr_fwd(j_tileonly)
+    # ---- TILE-ONLY PATH: copy tiles, write NO attrs ----
+    # Both title gate and arena dispatch jump here (at j_tileonly or
+    # j_tileonly_title). Same L/E/HL advancement as full path.
+    if j_tileonly is not None or j_tileonly_title is not None:
+        if j_tileonly is not None:
+            patch_jr_fwd(j_tileonly)
+        if j_tileonly_title is not None:
+            patch_jr_fwd(j_tileonly_title)
         emit([0x3E, 0x18])           # LD A, 24
         emit([0xF5])                 # PUSH AF
         mark('to_row')
