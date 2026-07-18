@@ -1,7 +1,7 @@
 monsters:
   - name: projectile
     tile_ranges: [[0x00, 0x01]]
-    palette: 3
+    palette: 0                  # pal 0 (shared with effects, isolated from weapon-switching)
   - name: effects
     tile_ranges: [[0x02, 0x0F]]
     palette: 0
@@ -10,16 +10,16 @@ monsters:
     palette: dynamic_ffbe         # resolved at runtime from FFBE
   - name: crow
     tile_ranges: [[0x30, 0x3F]]
-    palette: 6
+    palette: 3                   # pal 3 (freed by projectiles moving to pal 0)
   - name: orc
     tile_ranges: [[0x40, 0x4F]]
     palette: 5
   - name: hornet
     tile_ranges: [[0x50, 0x5F]]
     palette: 4
+  - name: orc_ground
+    tile_ranges: [[0x60, 0x6F]]
+    palette: 5
   - name: soldier
     tile_ranges: [[0x70, 0x7F]]
-    palette: 7
-  - name: default_high_tile
-    tile_ranges: [[0x80, 0xFF]]
-    palette: 4
+    palette: 6                   # pal 6 (was pal 7)

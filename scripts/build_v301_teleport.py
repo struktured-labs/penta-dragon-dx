@@ -742,7 +742,7 @@ def main():
         + [0x04, 0x0A] + _txt("GAME    START") + [E]
         + [0x00, 0x0E, 0xC0, E]                                 # (c) glyph
         + [0x00, 0x0F] + JAM + [E]                              # JAPAN ART MEDIA
-        + [0x00, 0x11] + _txt("STRUKTURED LABS") + [E]  # "STRUKTURED LABS" (row 17)
+        + [0x00, 0x11, 0x83, 0x97, 0x00, 0x95, 0xD7, 0xD8, 0xD8, 0x00] + _txt("STRUK LABS") + [E]  # "DX V199 STRUK LABS" (row 17)
     )
     assert len(title_list) <= 125, f"title list {len(title_list)} > 125 (need room for trailing 0x9A terminator)"
     assert rom[0x4EA5:0x4EA7] == bytes([0x07, 0x03]), "title list head moved"
@@ -835,15 +835,16 @@ def main():
     # Generate the 256-byte static LUT
     _obj_pal = bytearray(256)
     for _i in range(256):
-        if _i <= 0x01:       _obj_pal[_i] = 3   # projectile
-        elif _i <= 0x0F:     _obj_pal[_i] = 0   # effects
+        if _i <= 0x01:       _obj_pal[_i] = 0   # projectile → pal 0 (was pal 3, moved to avoid coupling with enemy palettes)
+        elif _i <= 0x0F:     _obj_pal[_i] = 0   # effects → pal 0
         elif _i <= 0x2F:     _obj_pal[_i] = 0xFF  # Sara dynamic
-        elif _i <= 0x3F:     _obj_pal[_i] = 6   # crow
-        elif _i <= 0x4F:     _obj_pal[_i] = 5   # orc
-        elif _i <= 0x5F:     _obj_pal[_i] = 4   # hornet
-        elif _i <= 0x6F:     _obj_pal[_i] = 5   # orc ground
-        elif _i <= 0x7F:     _obj_pal[_i] = 7   # soldier
-        else:                _obj_pal[_i] = 4   # default high
+        elif _i <= 0x3F:     _obj_pal[_i] = 3   # crow → pal 3 (was pal 6, freed by moving projectile to pal 0)
+        elif _i <= 0x4F:     _obj_pal[_i] = 5   # orc → pal 5
+        elif _i <= 0x5F:     _obj_pal[_i] = 4   # hornet → pal 4
+        elif _i <= 0x6F:     _obj_pal[_i] = 5   # orc ground → pal 5
+        elif _i <= 0x7F:     _obj_pal[_i] = 6   # soldier → pal 6 (was pal 7)
+        elif _i <= 0x8F:     _obj_pal[_i] = 3   # default high → pal 3 (was pal 4, first 16 high tiles)
+        else:                _obj_pal[_i] = 4   # rest high → pal 4
     _obj_pal_off = BANK13 + (OBJ_PAL_TABLE_ADDR - 0x4000)
     rom[_obj_pal_off:_obj_pal_off + 256] = _obj_pal
     # Verify LUT was written correctly
