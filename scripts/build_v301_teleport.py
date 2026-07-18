@@ -742,7 +742,7 @@ def main():
         + [0x04, 0x0A] + _txt("GAME    START") + [E]
         + [0x00, 0x0E, 0xC0, E]                                 # (c) glyph
         + [0x00, 0x0F] + JAM + [E]                              # JAPAN ART MEDIA
-        + [0x00, 0x11] + _txt("DX V") + [0xDA, 0xD7, 0xD8] + [E]  # "DX V301" (left-aligned)
+        + [0x00, 0x11] + _txt("STRUKTURED LABS") + [E]  # "STRUKTURED LABS" (row 17)
     )
     assert len(title_list) <= 125, f"title list {len(title_list)} > 125 (need room for trailing 0x9A terminator)"
     assert rom[0x4EA5:0x4EA7] == bytes([0x07, 0x03]), "title list head moved"
