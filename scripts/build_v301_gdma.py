@@ -754,10 +754,24 @@ def build_v301():
     code[skip_init_jr] = (len(code) - skip_init_jr - 1) & 0xFF
     code[cleaner_skip_jr] = (len(code) - cleaner_skip_jr - 1) & 0xFF
 
-    code.extend([0xF0, 0xC1, 0xB7])
-    ffc1_skip = len(code) + 1
-    code.extend([0x28, 0x00])
+    # Gate: run bg_sweep on title banner/showcase (D880=0x1B/0x1C) even if FFC1=0
+    code.extend([0xFA, 0x80, 0xD8])           # LD A, [D880]
+    code.extend([0xFE, 0x1B])                 # CP 0x1B (banner showcase)
+    code.extend([0x28, 0x04])                 # JR Z, do_sweep (D880=0x1B → run)
+    code.extend([0xFE, 0x1C])                 # CP 0x1C
+    do_sweep = len(code) + 1
+    code.extend([0x20, 0x00])                 # JR NZ, check_ffc1 (offset fixed below)
+    # do_sweep target: emit CALL bg_sweep, then JR past ffc1 check + sweep
     code.extend([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
+    code.extend([0x18, 0x0B])                 # JR past ffc1 check + sweep (to VBK restore)
+    # Now fixup the JR NZ offset — must be done AFTER do_sweep code is emitted
+    code[do_sweep] = (len(code) - do_sweep - 1) & 0xFF
+    # check_ffc1
+    check_ffc1 = len(code)
+    code.extend([0xF0, 0xC1, 0xB7])           # LDH A,[FFC1]; OR A
+    ffc1_skip = len(code) + 1
+    code.extend([0x28, 0x00])                 # JR Z, skip
+    code[ffc1_skip] = 0x28                    # fixup JR Z
     code.extend([0xCD, shadow_main_addr & 0xFF, (shadow_main_addr >> 8) & 0xFF])
     code.extend([0xCD, 0x80, 0xFF])           # OAM DMA
     code[ffc1_skip] = (len(code) - ffc1_skip - 1) & 0xFF
@@ -780,7 +794,8 @@ def build_v301():
     # Write wrapper to bank 13 ROM (offset in file is 13 * 0x4000 + (wrapper_addr - 0x4000))
     wrapper_off = 13 * 0x4000 + (wrapper_addr - 0x4000)
     wrapper = bytearray([
-        # --- PRESERVE REGISTERS ---
+        # --- PRESERVE REGISTERS (AF too, for sound engine compat) ---
+        0xF5,                                 # PUSH AF
         0xC5,                                 # PUSH BC
         0xD5,                                 # PUSH DE
         0xE5,                                 # PUSH HL
@@ -816,10 +831,14 @@ def build_v301():
         # --- CALL actual colorize_handler ---
         0xCD, colorize_addr & 0xFF, (colorize_addr >> 8) & 0xFF,
 
+        # --- SOUND ENGINE VBlank update (replaces CALL 0xFF80 at 0x06D5 which was NOP'd) ---
+        0xCD, 0x80, 0xFF,                     # CALL 0xFF80
+
         # --- RESTORE REGISTERS ---
         0xE1,                                 # POP HL
         0xD1,                                 # POP DE
         0xC1,                                 # POP BC
+        0xF1,                                 # POP AF
 
         0xC9,                                 # RET
     ])
@@ -841,7 +860,7 @@ def build_v301():
     assert len(hook) <= 47
     rom[0x0824:0x0824 + 47] = (hook + bytearray(47 - len(hook)))[:47]
 
-    # NOP game DMA
+    # NOP original CALL 0xFF80 (sound engine VBlank update — replaced by wrapper CALL)
     rom[0x06D5:0x06D8] = bytearray([0x00, 0x00, 0x00])
 
     # RST $38 RETI → RET
