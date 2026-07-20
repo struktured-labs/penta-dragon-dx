@@ -6,11 +6,14 @@ missing/invisible. Preserves all teleport features (O(1) OAM intercept,
 scene_detect, teleport combo, position sweep, lava override, arena tables).
 
 Fixes:
-1. **Ungated inline hook** — write tile+attr on the title screen (was tile-only
+1. **Outer FFC1 gate NOP'd** — bg_sweep now runs on title (FFC1=0) to fix
+   banner showcase palette corruption. v301's outer gate in the colorize
+   handler skipped bg_sweep entirely when FFC1=0.
+2. **Ungated inline hook** — write tile+attr on the title screen (was tile-only
    due to D880 gate). Arena still tile-only for position sweep compatibility.
-2. **OBJ palette LUT** — tiles 0x70-0x7F → pal 7 (was pal 6), matching the
+3. **OBJ palette LUT** — tiles 0x70-0x7F → pal 7 (was pal 6), matching the
    proven CP-cascade assignment. Cursor 'A' at tile 0x73 needs pal 7.
-3. **bg_sweep** — re-patched to WRAM 0xCC00 with FFC1 gate NOP'd (DMG NOPs
+4. **bg_sweep** — re-patched to WRAM 0xCC00 with FFC1 gate NOP'd (DMG NOPs
    remain removed as intended).
 """
 import sys
@@ -53,9 +56,9 @@ BANK13 = 13 * 0x4000
 BG_SWEEP_ADDR = 0x6CD0
 WRAM_BG_TABLE = 0xCC00
 COLORIZE_ADDR = 0x6E00
-TELEPORT_ADDR = 0x6E80
+TELEPORT_ADDR = 0x6E90  # moved from 0x6E80: v301's colorize handler tail at 0x6E7E-0x6E8C (FFC1 gate + shadow_main + OAM DMA + VBK restore) must be preserved
 OBJ_PAL_TABLE_ADDR = 0x6B00
-WRAPPER_ADDR = 0x6F30
+WRAPPER_ADDR = 0x6F40
 LANDING_PAD_ROM_ADDR = 0x6F80
 LANDING_PAD_WRAM = 0xCF90
 LEVELSEL_STUB_ROM_ADDR = 0x53C2
@@ -103,7 +106,17 @@ def main():
     build_v301()
     rom = bytearray(BASE_OUT.read_bytes())
 
-    # 2. Title screen text (same as teleport)
+    # 2. Verify v301 base has the D880 gate for banner showcase (D880=0x1B/0x1C)
+    #    This was applied in build_v301_gdma.py commit df4641e.
+    #    The colorize handler checks D880 first; if 0x1B or 0x1C, runs bg_sweep
+    #    unconditionally (bypassing the FFC1 gate). Other D880 values still
+    #    honor FFC1=0 (skip bg_sweep on menus / title idle).
+    colorize_off = BANK13 + (COLORIZE_ADDR - 0x4000) + 0x6E
+    assert rom[colorize_off:colorize_off+5] == bytes([0xFA, 0x80, 0xD8, 0xFE, 0x1B]), \
+        f"v301 base missing D880 gate at colorize_addr+0x6E: {rom[colorize_off:colorize_off+5].hex()}"
+    print(f"  banner D880 gate: verified at colorize_addr+0x6E")
+
+    # 4. Title screen text (same as teleport)
     E = 0x9A
     def _txt(s):
         return [0x00 if c == ' ' else 0x80 + (ord(c) - 65) for c in s]
@@ -125,14 +138,14 @@ def main():
     rom[0x4EA5:0x4EA5 + len(title_list)] = title_list
     print(f"  title: PENTA DRAGON DX header + STRUKTURED LABS ({len(title_list)}/125 bytes @0x4EA5)")
 
-    # 3. Landing pad source in bank13
+    # 5. Landing pad source in bank13
     lp = build_landing_pad()
     assert len(lp) <= 40
     off = BANK13 + (LANDING_PAD_ROM_ADDR - 0x4000)
     rom[off:off + len(lp)] = lp
     print(f"  landing pad source: {len(lp)} bytes at bank13:0x{LANDING_PAD_ROM_ADDR:04X}")
 
-    # 4. Levelsel attr-clear stub
+    # 6. Levelsel attr-clear stub
     ls = build_levelsel_attr_clear_stub()
     assert len(ls) <= LEVELSEL_STUB_MAX
     off = BANK13 + (LEVELSEL_STUB_ROM_ADDR - 0x4000)
@@ -141,7 +154,7 @@ def main():
     rom[off:off + len(ls)] = ls
     print(f"  levelsel attr-clear stub: {len(ls)} bytes at bank13:0x{LEVELSEL_STUB_ROM_ADDR:04X}")
 
-    # 5. Arena bg_tables (all 9 bosses)
+    # 7. Arena bg_tables (all 9 bosses)
     arena_tables = [
         ("Shalamar",      SHALAMAR_TABLE_ADDR,        _bg_table_shalamar),
         ("Riff",          RIFF_TABLE_ADDR,            _bg_table_riff),
@@ -163,25 +176,25 @@ def main():
         rom[off:off + 256] = table
         print(f"  {name:14s} bg_table: 256 bytes at bank13:0x{addr:04X}")
 
-    # 6. Scene-detect routine
+    # 8. Scene-detect routine
     sd = build_scene_detect(DUNGEON_TABLE_ADDR, ARENA_BASE_ADDR, SPLASH_TABLE_ADDR)
     assert SCENE_DETECT_ADDR + len(sd) <= DUNGEON_TABLE_ADDR
     off = BANK13 + (SCENE_DETECT_ADDR - 0x4000)
     rom[off:off + len(sd)] = sd
     print(f"  scene-detect: {len(sd)} bytes at bank13:0x{SCENE_DETECT_ADDR:04X}")
 
-    # 7. Lava override
+    # 9. Lava override
     lava = build_lava_override(LAVA_OVERRIDE_ADDR)
     off = BANK13 + (LAVA_OVERRIDE_ADDR - 0x4000)
     rom[off:off + len(lava)] = lava
     print(f"  lava override: {len(lava)} bytes at bank13:0x{LAVA_OVERRIDE_ADDR:04X}")
 
-    # 8. Splash table (all pal0, for D880=0x18)
+    # 10. Splash table (all pal0, for D880=0x18)
     off = BANK13 + (SPLASH_TABLE_ADDR - 0x4000)
     rom[off:off + 256] = bytes(256)
     print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
-    # 9. OBJ palette LUT at bank13:0x6B00 (was CP-cascade subroutine)
+    # 11. OBJ palette LUT at bank13:0x6B00 (was CP-cascade subroutine)
     # FIXED: tiles 0x70-0x7F → pal 7 (was pal 6 in teleport build).
     # The original CP-cascade assigned cursor tile 0x73 → pal 7.
     _obj_pal = bytearray(256)
@@ -213,7 +226,7 @@ def main():
     print(f"  OBJ palette LUT: 256 bytes at bank13:0x{OBJ_PAL_TABLE_ADDR:04X} "
           f"(tiles 0x70-0x7F → pal 7 [cursor fix])")
 
-    # 10. Re-patch bg_sweep to read WRAM 0xCC00 (per-scene) with FFC1 NOP'd
+    # 12. Re-patch bg_sweep to read WRAM 0xCC00 (per-scene) with FFC1 NOP'd
     sweep = bytearray(create_bg_sweep_viewport_gated(WRAM_BG_TABLE, BG_SWEEP_ADDR))
     assert sweep[:4] == bytearray([0xF0, 0xC1, 0xB7, 0xC8])
     sweep[0:4] = bytearray([0x00, 0x00, 0x00, 0x00])  # DMG NOPs removed
@@ -221,7 +234,7 @@ def main():
     rom[off:off + len(sweep)] = sweep
     print(f"  bg_sweep: WRAM 0x{WRAM_BG_TABLE:04X}, FFC1 gate NOP'd ({len(sweep)} bytes)")
 
-    # 11. Position sweep (holy-grail path for arena attrs)
+    # 13. Position sweep (holy-grail path for arena attrs)
     posmaps = parse_footprint_posmaps(FOOTPRINT_LOG)
     ptr = [0] * 9
     blob = bytearray()
@@ -261,7 +274,7 @@ def main():
     rom[off:off + len(possweep)] = possweep
     print(f"  position sweep: {len(possweep)} bytes at bank13:0x{POSSWEEP_ADDR:04X}")
 
-    # 12. INLINE HOOK: UNGATED tile+attr (title writes attrs too!)
+    # 14. INLINE HOOK: UNGATED tile+attr (title writes attrs too!)
     # This is the critical fix — no title_gate means attrs are written
     # on the title screen. Arena still tile-only via arena_neutralize.
     from build_v301_gdma import create_inline_tile_copy_tileonly
@@ -277,7 +290,7 @@ def main():
     print(f"  inline hook: UNGATED tile+attr ({len(inline_code)} bytes, "
           f"{available - len(inline_code)} free) — title=full, dungeon=full, arena=tile-only")
 
-    # 13. Teleport routine at bank13:0x6E80
+    # 15. Teleport routine at bank13:0x6E80
     tp = build_teleport_routine()
     tp = bytearray(tp)
     assert tp[-1] == 0xC9
@@ -288,7 +301,7 @@ def main():
     rom[off:off + len(tp)] = tp
     print(f"  teleport routine: {len(tp)} bytes at bank13:0x{TELEPORT_ADDR:04X}")
 
-    # 14. VBlank wrapper at 0x6F30
+    # 16. VBlank wrapper at 0x6F30
     assert TELEPORT_ADDR + len(tp) <= WRAPPER_ADDR
     wrapper = bytearray([
         0xF5,                                 # PUSH AF  (save for sound engine compat)
@@ -334,7 +347,7 @@ def main():
     rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
     print(f"  VBlank wrapper: {len(wrapper)} bytes at bank13:0x{WRAPPER_ADDR:04X}")
 
-    # 15. VBlank hook at 0x0824
+    # 17. VBlank hook at 0x0824
     new_hook = bytearray([
         0xF0, 0x99,                           # LDH A, [FF99]
         0xF5,                                 # PUSH AF
@@ -352,7 +365,7 @@ def main():
     rom[0x0824:0x0824 + 47] = new_hook_padded
     print(f"  VBlank hook: {len(new_hook)} bytes at 0x0824")
 
-    # 16. Levelsel JP NZ patch
+    # 18. Levelsel JP NZ patch
     expected = bytes([0xC2, 0x93, 0x73])
     actual = bytes(rom[LEVELSEL_PATCH_ADDR:LEVELSEL_PATCH_ADDR + 3])
     assert actual == expected, f"levelsel patch site corrupted: {actual.hex()}"

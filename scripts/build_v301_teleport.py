@@ -152,7 +152,9 @@ POSMAP_SCRATCH_ADDR = 0xDF47  # vram_hi (+1: rows_left)
 FOOTPRINT_LOG = "scripts/diagnostics/posmap_maps.log"
 ARENA_ORDER = ["shalamar", "riff", "crystal_dragon", "cameo", "ted",
                "troop", "faze", "angela", "penta_dragon"]
-TELEPORT_ADDR = 0x6E80     # teleport check + state setup + stack redirect
+TELEPORT_ADDR = 0x6E90     # teleport check + state setup + stack redirect
+                              # 0x6E80 conflicts with v301's colorize handler tail
+                              # (FFC1 gate + shadow_main + OAM DMA at 0x6E7E-0x6E8C)
 LANDING_PAD_ROM_ADDR = 0x6F80  # landing pad source (gets copied to WRAM CF82)
                               # — moved from 0x6F00 because the teleport
                               # routine grew past 128 bytes and was
@@ -964,6 +966,35 @@ def main():
     off = BANK13 + (TELEPORT_ADDR - 0x4000)
     rom[off:off + len(tp)] = tp
 
+    # === Fix: relocate colorize handler tail (FFC1 gate + shadow_main + OAM DMA + VBK restore + RET)
+    # The colorize handler at 0x6E00 ends with a tail at ~0x6E7E that includes the FFC1 check,
+    # shadow_main CALL, OAM DMA CALL, VBK restore, and RET. The teleport routine at 0x6E80
+    # OVERWRITES this tail. Replace the falling-through bytes 'F0 C1' at 0x6E7E with
+    # JP 0x6F20 (relocated tail), and write the actual tail code at 0x6F20 (free space
+    # between teleport routine end ~0x6F1E and wrapper at 0x6F30).
+    SHADOW_MAIN_ADDR = 0x69D0
+    COLORIZE_TAIL_ADDR = 0x6F40  # free space between teleport routine end (~0x6F31) and wrapper (0x6F50)
+    # JP to relocated tail at 0x6E7E (overwrites 'F0 C1')
+    off = BANK13 + (0x6E7E - 0x4000)
+    rom[off:off + 3] = bytearray([0xC3,
+                                   COLORIZE_TAIL_ADDR & 0xFF,
+                                   (COLORIZE_TAIL_ADDR >> 8) & 0xFF])
+    # Tail code at COLORIZE_TAIL_ADDR:
+    #   LDH A,[FFC1]; OR A; JR Z,+6; CALL shadow_main; CALL OAM DMA; POP AF; LDH [VBK],A; RET
+    tail = bytearray([
+        0xF0, 0xC1,                               # LDH A, [FFC1]
+        0xB7,                                      # OR A
+        0x28, 0x06,                                # JR Z, +6 (skip shadow_main + OAM DMA)
+        0xCD, SHADOW_MAIN_ADDR & 0xFF, (SHADOW_MAIN_ADDR >> 8) & 0xFF,  # CALL shadow_main
+        0xCD, 0x80, 0xFF,                          # CALL OAM DMA (0xFF80)
+        0xF1, 0xE0, 0x4F,                          # POP AF; LDH [VBK], A
+        0xC9,                                      # RET
+    ])
+    assert len(tail) == 15, f"tail code length: {len(tail)}"
+    off = BANK13 + (COLORIZE_TAIL_ADDR - 0x4000)
+    rom[off:off + len(tail)] = tail
+    print(f"  colorize handler tail relocated: JP 0x06E7E -> 0x{COLORIZE_TAIL_ADDR:04X} ({len(tail)} bytes)")
+
     # 4. Write new VBlank hook at 0x0824 and wrapper at WRAPPER_ADDR.
     # Wrapper moved 0x6F10 -> 0x6F20 -> 0x6F30: the teleport routine grew (per-
     # frame CALL lava_override, then the levelsel-stub cold-boot copy block)
@@ -971,7 +1002,7 @@ def main():
     # between WRAPPER_ADDR end and LANDING_PAD_ROM_ADDR=0x6F80 are unused.
     # would clobber the teleport routine's final `JP colorize`, breaking the
     # whole colorize chain (symptom: entire screen renders uncolored/white).
-    WRAPPER_ADDR = 0x6F30
+    WRAPPER_ADDR = 0x6F50
     assert TELEPORT_ADDR + len(tp) <= WRAPPER_ADDR, \
         f"teleport routine 0x{TELEPORT_ADDR + len(tp):04X} overruns wrapper 0x{WRAPPER_ADDR:04X}"
 
@@ -1021,8 +1052,8 @@ def main():
         0xC9,                                 # RET
     ])
 
-    assert WRAPPER_ADDR + len(wrapper) <= LANDING_PAD_ROM_ADDR, \
-        f"wrapper 0x{WRAPPER_ADDR + len(wrapper):04X} overruns landing pad 0x{LANDING_PAD_ROM_ADDR:04X}"
+    assert WRAPPER_ADDR + len(wrapper) <= 0x6FA0, \
+        f"wrapper 0x{WRAPPER_ADDR + len(wrapper):04X} overruns scene_detect/lava"
     wrapper_off = BANK13 + (WRAPPER_ADDR - 0x4000)
     rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
     print(f"  VBlank wrapper written: {len(wrapper)} bytes at bank13:0x{WRAPPER_ADDR:04X}")

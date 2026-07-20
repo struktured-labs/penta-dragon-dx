@@ -268,6 +268,24 @@ def main():
     off = BANK13 + (TELEPORT_ADDR - 0x4000)
     rom[off:off + len(tp)] = tp
 
+    # === Fix: relocate colorize handler tail (FFC1 gate + shadow_main + OAM DMA + VBK restore + RET)
+    SHADOW_MAIN_ADDR = 0x69D0
+    COLORIZE_TAIL_ADDR = 0x6F50   # between teleport routine end (~0x6F3D) and wrapper (0x6F60)
+    off = BANK13 + (0x6E7E - 0x4000)
+    rom[off:off + 3] = _B([0xC3, COLORIZE_TAIL_ADDR & 0xFF, (COLORIZE_TAIL_ADDR >> 8) & 0xFF])
+    tail = _B([
+        0xF0, 0xC1,                               # LDH A, [FFC1]
+        0xB7,                                      # OR A
+        0x28, 0x06,                                # JR Z, +6 (skip shadow_main + OAM DMA)
+        0xCD, SHADOW_MAIN_ADDR & 0xFF, (SHADOW_MAIN_ADDR >> 8) & 0xFF,
+        0xCD, 0x80, 0xFF,                          # CALL OAM DMA
+        0xF1, 0xE0, 0x4F,                          # POP AF; LDH [VBK], A
+        0xC9,                                      # RET
+    ])
+    assert len(tail) == 15, f"tail code length: {len(tail)}"
+    off = BANK13 + (COLORIZE_TAIL_ADDR - 0x4000)
+    rom[off:off + len(tail)] = tail
+
     # === Write wrapper (no stamper) at WRAPPER_ADDR ===
     wr = build_wrapper()
     print(f"  Wrapper: {len(wr)} bytes at 0x{WRAPPER_ADDR:04X}")
@@ -283,7 +301,7 @@ def main():
     rom[off:off + len(lp)] = lp
 
     # === Fix VBlank hook CALL target (old WRAPPER_ADDR -> new) ===
-    old_wrapper = 0x6F40
+    old_wrapper = 0x6F50  # teleport build's wrapper addr (build_v301_teleport.py WRAPPER_ADDR)
     found_hook = False
     for i in range(len(rom) - 2):
         if rom[i] == 0xCD:
