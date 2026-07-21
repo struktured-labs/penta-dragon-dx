@@ -18,11 +18,15 @@ from build_v301_gdma import build_v301
 BASE_OUT = Path("rom/working/penta_dragon_dx_v301.gb")
 TP_OUT = Path("rom/working/penta_dragon_dx_teleport.gb")
 
-# WRAM allocations
-OBJ_PAL_WRAM = 0xD900
-OBJ_PAL_WRAM_HI = 0xD9
+# WRAM allocations — WRAM BANK 0 (always accessible, no FF70 switching needed)
+# 0xCE00-0xCEFF: OBJ palette LUT (256 bytes)
+# 0xCF00-0xCF81: trampolines (~130 bytes)
+# These reside in WRAM bank 0 (C000-CFFF) which is always readable regardless of
+# the FF70 WRAM bank select register.
+OBJ_PAL_WRAM = 0xCE00
+OBJ_PAL_WRAM_HI = 0xCE
 
-WRAM_TRAMP_BASE = 0xDB80
+WRAM_TRAMP_BASE = 0xCF00
 S1_TRAMP = WRAM_TRAMP_BASE       # site 1 at attr write (0x10E4)
 S2_TRAMP = WRAM_TRAMP_BASE + 48  # site 2 at tile write (0x3487)
 S3_TRAMP = WRAM_TRAMP_BASE + 96  # site 3 at attr write (bank1:0x5221)
