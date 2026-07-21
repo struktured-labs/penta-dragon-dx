@@ -73,6 +73,11 @@ def _bg_table() -> bytes:
     # use their own tables. Start at 0x80 (was 0x88) to also catch A-H.
     for i in range(0x80, 0xE0):
         table[i] = 1
+    # Digit tiles at bank13:0x6F10-0x6F3F (which map to tile IDs 0xF0-0xFD / 0xF0-0xFF) -> pal 1 (red)
+    # This allows the VBlank wrapper's bg_sweep / inline tile copy to color them red naturally
+    # since we removed the direct-to-VRAM cold-boot copy block.
+    for i in range(0xF0, 0x100):
+        table[i] = 1
     # Sentinel — was 0xFF historically (palette 7 sentinel for ff_filter).
     # Changed to 0x00 (pal 0): inline tile+attr copy at 0x42A7 looks up
     # bg_table[tile_id] and writes the result as the attr byte. Any
@@ -526,7 +531,7 @@ def build_v301():
     boss_pal_addr = 0x6880
     boss_slot_addr = 0x68C0
     swj_addr = 0x68D0; sdj_addr = 0x68D8
-    sp_addr = 0x68E0; shp_addr = 0x68E8; tp_addr = 0x68F0
+    sp_addr = 0x68E0; shp_addr = 0x68E8
     pal_loader_addr = 0x6900
     shadow_main_addr = 0x69D0
     colorizer_addr = 0x6A10
@@ -551,11 +556,10 @@ def build_v301():
     w(sdj_addr, palettes['sara_dragon_jet'])
     w(sp_addr, palettes['spiral_proj'])
     w(shp_addr, palettes['shield_proj'])
-    w(tp_addr, palettes['turbo_proj'])
 
     w(pal_loader_addr, create_palette_loader(
         pal_addr, boss_pal_addr, boss_slot_addr,
-        swj_addr, sdj_addr, sp_addr, shp_addr, tp_addr))
+        swj_addr, sdj_addr, sp_addr, shp_addr, tp_addr=0x68F0))
     w(shadow_main_addr, create_shadow_colorizer_main(colorizer_addr, boss_slot_addr))
 
     colorizer = bytearray(create_tile_based_colorizer(colorizer_addr))
