@@ -201,6 +201,25 @@ TROOP_TABLE_ADDR = 0x7700
 FAZE_TABLE_ADDR = 0x7800
 ANGELA_TABLE_ADDR = 0x7900
 PENTA_DRAGON_TABLE_ADDR = 0x7A00
+# ---- Digit tiles for version number (replace letter lookalikes) ----
+# The game has no digit glyphs in its font (the year '199' on the title screen
+# uses decorative logo tiles). The version line "DX V3.01" uses letter lookalikes
+# T=3, O=0, I=1 which look like letters, not digits. We store proper digit tiles
+# in bank 13 and copy them to VRAM tile positions 7, 8, 9 during cold-boot.
+# Tile 7 = '3', tile 8 = '0', tile 9 = '1'.
+DIGIT_TILES_ADDR = 0x69F0  # bank 13 — 120+ bytes of dead space before trampolines at 0x6A70
+DIGIT_TILES = bytes([
+    # '3' (Tile 7): high-contrast 2bpp (Color 0 = white, Color 3 = black)
+    0x7C, 0x7C, 0x04, 0x04, 0x04, 0x04, 0x3C, 0x3C,
+    0x04, 0x04, 0x04, 0x04, 0x7C, 0x7C, 0x00, 0x00,
+    # '0' (Tile 8): high-contrast 2bpp (Color 0 = white, Color 3 = black)
+    0x3C, 0x3C, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
+    0x42, 0x42, 0x42, 0x42, 0x3C, 0x3C, 0x00, 0x00,
+    # '1' (Tile 9): high-contrast 2bpp (Color 0 = white, Color 3 = black)
+    0x18, 0x18, 0x38, 0x38, 0x18, 0x18, 0x18, 0x18,
+    0x18, 0x18, 0x18, 0x18, 0x3C, 0x3C, 0x00, 0x00,
+])  # 48 bytes total (3 tiles x 16 bytes)
+
 # ---- Lava colorization (later stages reuse stage-1 floor/wall tile IDs as a
 # molten field). scene_detect, after copying the dungeon table to WRAM 0xDA00,
 # tail-jumps to this helper which (in a lava stage, keyed on FFBA) over-writes
@@ -596,6 +615,17 @@ def build_teleport_routine() -> bytes:
     c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
     off = ls_loop - (len(c) + 2)
     c.extend([0x20, off & 0xFF])          # JR NZ, ls_loop
+    # Third copy: 48 bytes (digit tiles) from bank13 ROM to VRAM bank 0
+    # tile positions 7, 8, 9 (VRAM address 0x8000 + tile*16 = 0x8070).
+    # Same sentinel gates all three copies.
+    c.extend([0x21, DIGIT_TILES_ADDR & 0xFF, (DIGIT_TILES_ADDR >> 8) & 0xFF])  # LD HL, digit tiles in bank 13
+    c.extend([0x11, 0x70, 0x80])          # LD DE, 0x8070 (VRAM tile 7)
+    c.extend([0x06, 48])                   # LD B, 48 (3 tiles × 16 bytes)
+    dt_loop = len(c)
+    c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
+    off_dt = dt_loop - (len(c) + 2)
+    c.extend([0x20, off_dt & 0xFF])        # JR NZ, dt_loop
+
     # Set sentinel only. Do NOT touch FFBA in cold-boot — writing 0xFF
     # there causes the game's dispatch tables (FFBA-indexed) to read
     # garbage and crash. First user press goes to Riff (FFBA 0→1);
@@ -749,7 +779,7 @@ def main():
         + [0x04, 0x0A] + _txt("GAME    START") + [E]
         + [0x00, 0x0E, 0xC0, E]                                 # (c) glyph
         + [0x00, 0x0F] + JAM + [E]                              # JAPAN ART MEDIA
-        + [0x00, 0x11, 0x83, 0x97, 0x00, 0x95, 0xD7, 0xD8, 0xD8, 0x00] + _txt("STRUK LABS") + [E]  # "DX V199 STRUK LABS" (row 17)
+        + [0x00, 0x11] + _txt("DX V") + [7, 8, 9] + [0x00] + _txt("STRUK LABS") + [E]  # "DX V3.01 STRUK LABS" (tiles 7='3', 8='0', 9='1' loaded from bank 13)
     )
     assert len(title_list) <= 125, f"title list {len(title_list)} > 125 (need room for trailing 0x9A terminator)"
     assert rom[0x4EA5:0x4EA7] == bytes([0x07, 0x03]), "title list head moved"
@@ -785,6 +815,23 @@ def main():
             f"levelsel stub site at 0x{LEVELSEL_STUB_ROM_ADDR + i:04X} not free "
             f"(byte {rom[off + i]:02X}) — choose a different free run")
     rom[off:off + len(ls)] = ls
+
+    # 2c. Write digit tiles to bank 13 at DIGIT_TILES_ADDR (0x69F0).
+    # This region overlaps the tail of shadow_main (0x69D0..0x6A01) and the head of the
+    # old OBJ colorizer/stamper (0x6A10..0x6A70). The colorizer CALL was removed in the
+    # OAM intercept build (patch_oam_intercept.py). We terminate shadow_main with RET
+    # at 0x69D0 so digit tiles at 0x69F0 don't corrupt live code. The trampoline source
+    # at 0x6A70 (TRAMP_ROM_SRC) is now collision-free.
+    assert len(DIGIT_TILES) == 48, f"Digit tiles size {len(DIGIT_TILES)} != 48"
+    off = BANK13 + (DIGIT_TILES_ADDR - 0x4000)
+    rom[off:off + len(DIGIT_TILES)] = DIGIT_TILES
+    print(f"  digit tiles: {len(DIGIT_TILES)} bytes (3 tiles) at bank13:0x{DIGIT_TILES_ADDR:04X}")
+    # Terminate shadow_main early (RET at 0x69D0) — it only called the dead colorizer
+    off_sm = BANK13 + (0x69D0 - 0x4000)
+    rom[off_sm:off_sm + 1] = bytes([0xC9])  # RET
+    # NOP-pad the rest of 0x69D1..0x69EF (no longer live code)
+    for i in range(1, 0x20):
+        rom[off_sm + i] = 0x00
 
     # 2a. Scene-aware bg_table system (Phase 1b: all 9 boss arenas)
     arena_tables = [
