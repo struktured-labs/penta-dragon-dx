@@ -40,6 +40,8 @@ is the pre-teleport base; FIXED.gb.v302.gb is the new v3.02 build.
 
 ## CRITICAL: Verification Standards (Hard Gate)
 
+- **LAUNCH GATE REQUIRED:** Before launching mGBA-qt with any ROM, you MUST first run `python3 scripts/launch_gate.py <rom>` to verify the ROM boots correctly. If launch_gate exits non-zero, do NOT open mGBA — fix the ROM first. This is a hard gate — there is no override.
+
 - **PyBoy memory-register dumps are NEVER sufficient for timing bugs.** PyBoy does not enforce VBlank/STAT mode-3 write blocking. Writes that miss their VBlank window land cleanly in PyBoy's virtual memory. This means any test that only reads OAM/attribute registers and asserts "no orange" is fundamentally broken for flicker verification.
 
 - **All flicker/timing/rendering verification MUST go through mGBA's accurate pixel pipeline.** Use the mgba-mcp MCP tools to:

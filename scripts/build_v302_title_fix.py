@@ -387,6 +387,24 @@ def main():
 
     OUTPUT_PATH.write_bytes(rom)
     print(f"Wrote {OUTPUT_PATH} ({len(rom)} bytes)")
+    
+    # Auto-launch gate: verify ROM boots before returning
+    try:
+        import subprocess
+        _sd = Path(__file__).parent
+        result = subprocess.run(
+            [sys.executable, str(_sd / "launch_gate.py"), str(OUTPUT_PATH)],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            print(f"  ✅ LAUNCH GATE PASSED: {OUTPUT_PATH.name} boots correctly")
+        else:
+            print(f"  ❌ LAUNCH GATE FAILED: {OUTPUT_PATH.name} white screen freeze detected")
+            print(f"     {result.stdout.strip()}")
+            print(f"     {result.stderr.strip()}")
+    except Exception as e:
+        print(f"  ⚠️  Launch gate skipped: {e}")
+    
     return OUTPUT_PATH
 
 

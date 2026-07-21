@@ -35,9 +35,11 @@ def run_d887(rom_path: str, frames: int) -> dict:
     env = os.environ.copy()
     env["STATE_PATH"] = out
     env["MEASURE_FRAMES"] = str(frames)
-    env["QT_QPA_PLATFORM"] = "offscreen"
+    env["DISPLAY"] = ":0"
+    env["QT_QPA_PLATFORM"] = "xcb"
+    env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
     env["SDL_AUDIODRIVER"] = "dummy"
-    cmd = ["mgba-qt", rom_path,
+    cmd = ["/home/struktured/projects/penta-dragon-dx-claude/mgba-qt.sh", rom_path,
            "--script", "scripts/probes/phantom_d887.lua", "-l", "0"]
     try:
         proc = subprocess.run(cmd, env=env, capture_output=True, timeout=180)

@@ -27,7 +27,7 @@ def capture_title(rom_path: str, frame_at: int, lua_script: str) -> str:
     env["QT_QPA_PLATFORM"] = "xcb"
     env["SDL_AUDIODRIVER"] = "dummy"
     cmd = [
-        "mgba-qt", rom_path,
+        "/home/struktured/projects/penta-dragon-dx-claude/mgba-qt.sh", rom_path,
         "--script", lua_script,
         "-l", "0",
     ]

@@ -138,7 +138,7 @@ def run_probe(rom_path: str) -> dict:
     env["STATE_PATH"] = out
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["SDL_AUDIODRIVER"] = "dummy"
-    cmd = ["mgba-qt", rom_path, "--script", lua.name, "-l", "0"]
+    cmd = ["/home/struktured/projects/penta-dragon-dx-claude/mgba-qt.sh", rom_path, "--script", lua.name, "-l", "0"]
     subprocess.run(cmd, env=env, capture_output=True, timeout=120)
     if not os.path.exists(out) or os.path.getsize(out) < 10:
         raise RuntimeError(f"scroll harness produced no output for {rom_path}")

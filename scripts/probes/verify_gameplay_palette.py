@@ -21,9 +21,11 @@ def run_probe(rom_path: str, max_frames: int = 1200) -> dict:
     env = os.environ.copy()
     env["STATE_PATH"] = out
     env["MAX_FRAMES"] = str(max_frames)
-    env["QT_QPA_PLATFORM"] = "offscreen"
+    env["DISPLAY"] = ":0"
+    env["QT_QPA_PLATFORM"] = "xcb"
+    env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
     env["SDL_AUDIODRIVER"] = "dummy"
-    cmd = ["mgba-qt", rom_path,
+    cmd = ["/home/struktured/projects/penta-dragon-dx-claude/mgba-qt.sh", rom_path,
            "--script", "scripts/probes/gameplay_palette.lua", "-l", "0"]
     subprocess.run(cmd, env=env, capture_output=True, timeout=120)
     if not os.path.exists(out) or os.path.getsize(out) < 10:

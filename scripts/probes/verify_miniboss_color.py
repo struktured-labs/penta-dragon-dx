@@ -134,9 +134,11 @@ def run_probe(rom_path: str, force_spawn: bool = True) -> dict:
     env = os.environ.copy()
     env["STATE_PATH"] = out
     env["FORCE_SPAWN"] = "1" if force_spawn else "0"
-    env["QT_QPA_PLATFORM"] = "offscreen"
+    env["DISPLAY"] = ":0"
+    env["QT_QPA_PLATFORM"] = "xcb"
+    env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
     env["SDL_AUDIODRIVER"] = "dummy"
-    cmd = ["mgba-qt", rom_path, "--script", lua.name, "-l", "0"]
+    cmd = ["/home/struktured/projects/penta-dragon-dx-claude/mgba-qt.sh", rom_path, "--script", lua.name, "-l", "0"]
     # Natural-spawn mode runs the in-game state machine for thousands of
     # frames; bump the wall-clock budget proportionally.
     timeout = 600 if not force_spawn else 180
