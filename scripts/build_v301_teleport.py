@@ -615,16 +615,6 @@ def build_teleport_routine() -> bytes:
     c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
     off = ls_loop - (len(c) + 2)
     c.extend([0x20, off & 0xFF])          # JR NZ, ls_loop
-    # Third copy: 48 bytes (digit tiles) from bank13 ROM to VRAM bank 0
-    # tile positions 7, 8, 9 (VRAM address 0x8000 + tile*16 = 0x8070).
-    # Same sentinel gates all three copies.
-    c.extend([0x21, DIGIT_TILES_ADDR & 0xFF, (DIGIT_TILES_ADDR >> 8) & 0xFF])  # LD HL, digit tiles in bank 13
-    c.extend([0x11, 0x70, 0x80])          # LD DE, 0x8070 (VRAM tile 7)
-    c.extend([0x06, 48])                   # LD B, 48 (3 tiles × 16 bytes)
-    dt_loop = len(c)
-    c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
-    off_dt = dt_loop - (len(c) + 2)
-    c.extend([0x20, off_dt & 0xFF])        # JR NZ, dt_loop
 
     # Set sentinel only. Do NOT touch FFBA in cold-boot — writing 0xFF
     # there causes the game's dispatch tables (FFBA-indexed) to read
