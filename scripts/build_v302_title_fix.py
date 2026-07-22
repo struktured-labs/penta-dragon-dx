@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""Penta Dragon DX v3.02 — Title screen cursor & dynamic version fix.
+"""Penta Dragon DX — title cursor and v3.01 release footer fix.
 
 Features & Fixes:
-1. **Dynamic Git Version Rendering**: Reads active git tag (`git describe --tags --abbrev=0`),
-   maps digits 0-9 to custom 2bpp font tiles (0x76-0x7F) and writes `DX V<tag> STRUK LABS`
-   to row 17 of the title screen menu list.
-2. **Gated VBlank 2bpp Digit Tile Loader**: Places clean 2bpp Western digit glyphs (0-9)
-   at bank13:0x69F0 and copies them to vacant VRAM Bank 0 slots (0x8760 = tiles 0x76-0x7F)
-   ONLY during the gated VBlank window in the VBlank wrapper (gated on D880 < 2 and sentinel DF1C).
-3. **Ungated inline hook** — write tile+attr on the title screen (was tile-only
-   due to D880 gate). Arena still tile-only for position sweep compatibility.
-4. **OBJ palette LUT** — tiles 0x70-0x7F → pal 7, matching cursor 'A' at tile 0x73 requirements.
-5. **bg_sweep** — re-patched to WRAM 0xCC00 with FFC1 gate NOP'd.
+1. **Exact release footer**: writes `DX V3.01 STRUK LABS` to row 17.
+2. **Native title digits**: reuses the title's built-in 3, 0, and 1 glyphs.
+3. **Reversible period tile**: temporarily replaces unused title digit 9 with
+   a period via GDMA, then restores 9 when leaving the title.
+4. **Title-safe inline hook** — keeps the proven tile-only path on the title
+   screen and full tile+attr writes in gameplay. Arena remains tile-only for
+   position-sweep compatibility.
+5. **OBJ palette LUT** — tiles 0x70-0x7F → pal 7, matching cursor 'A' at tile 0x73 requirements.
+6. **Title bg_sweep** — reads the per-scene WRAM table with its FFC1 gate
+   removed so the title receives initialized attributes.
 """
 import os as _os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -43,7 +42,8 @@ from build_v301_teleport import (
     _bg_table_shalamar, _bg_table_riff, _bg_table_crystal_dragon,
     _bg_table_cameo, _bg_table_ted, _bg_table_troop,
     _bg_table_faze, _bg_table_angela, _bg_table_penta_dragon,
-    SPLASH_TABLE_ADDR,
+    SPLASH_TABLE_ADDR, LANDING_PAD_ROM_ADDR, LANDING_PAD_WRAM,
+    LEVELSEL_STUB_ROM_ADDR, LEVELSEL_STUB_WRAM, LEVELSEL_PATCH_ADDR,
 )
 
 BASE_OUT = Path("rom/working/penta_dragon_dx_v301.gb")
@@ -57,11 +57,6 @@ COLORIZE_ADDR = 0x6E00
 TELEPORT_ADDR = 0x6E80
 OBJ_PAL_TABLE_ADDR = 0x6B00
 WRAPPER_ADDR = 0x6F30
-LANDING_PAD_ROM_ADDR = 0x6F80
-LANDING_PAD_WRAM = 0xCF90
-LEVELSEL_STUB_ROM_ADDR = 0x53C2
-LEVELSEL_STUB_WRAM = 0xCFB0
-LEVELSEL_PATCH_ADDR = 0x3B47
 LEVELSEL_STUB_MAX = 36
 SCENE_DETECT_ADDR = 0x6FB0
 DUNGEON_TABLE_ADDR = 0x7000
@@ -83,99 +78,84 @@ POSMAP_PTR_TABLE = 0x7FE0
 ROW_CURSOR_ADDR = 0xDF40
 POSMAP_FLAG_ADDR = 0xDF46
 POSMAP_SCRATCH_ADDR = 0xDF47
-DIGIT_TILES_ROM_ADDR = 0x69F0   # 160 bytes: 10 digit tiles (0-9) x 16 bytes/tile
-VRAM_DIGIT_COPY_ADDR = 0x6AC0   # Gated VBlank helper: copies ROM 0x69F0 -> VRAM 0x8760 (tiles 0x76-0x7F)
-
-# 2bpp Western digit tile definitions (0-9, high-contrast 8x8)
-DIGIT_ART = {
-    '0': ['  ####  ', ' ##  ## ', ' ##  ## ', ' ##  ## ', ' ##  ## ', ' ##  ## ', '  ####  ', '        '],
-    '1': ['   ##   ', '  ###   ', '   ##   ', '   ##   ', '   ##   ', '   ##   ', '  ####  ', '        '],
-    '2': ['  ####  ', ' ##  ## ', '     ## ', '   ###  ', '  ##    ', ' ##     ', ' ###### ', '        '],
-    '3': ['  ####  ', ' ##  ## ', '     ## ', '   ###  ', '     ## ', ' ##  ## ', '  ####  ', '        '],
-    '4': ['   ##   ', '  ###   ', ' ## #   ', ' ## #   ', ' ###### ', '    #   ', '   ###  ', '        '],
-    '5': [' ###### ', ' ##     ', ' #####  ', '     ## ', '     ## ', ' ##  ## ', '  ####  ', '        '],
-    '6': ['  ####  ', ' ##  ## ', ' ##     ', ' #####  ', ' ##  ## ', ' ##  ## ', '  ####  ', '        '],
-    '7': [' ###### ', '     ## ', '    ##  ', '   ##   ', '   ##   ', '  ##    ', '  ##    ', '        '],
-    '8': ['  ####  ', ' ##  ## ', ' ##  ## ', '  ####  ', ' ##  ## ', ' ##  ## ', '  ####  ', '        '],
-    '9': ['  ####  ', ' ##  ## ', ' ##  ## ', '  ##### ', '     ## ', ' ##  ## ', '  ####  ', '        ']
+TITLE_GLYPH_DATA_ADDR = 0x6D50  # period + native digit-9 restore tiles
+VRAM_GLYPH_COPY_ADDR = 0x6DA7   # gap: end of RLE expander -> COLORIZE_ADDR
+TITLE_FOOTER = "DX V3.01 STRUK LABS"
+CUSTOM_TITLE_TILES = {
+    # 0x75 is swallowed by the title command parser as a control value.
+    ".": 0x7F,
+    "0": 0x76,
+    "1": 0x77,
+    "3": 0x79,
 }
 
-
-def ascii_to_2bpp(art: list[str]) -> bytes:
-    """Convert 8x8 ASCII art matrix to Game Boy 2bpp format (16 bytes)."""
-    tile_bytes = bytearray(16)
-    for y in range(8):
-        row_str = art[y]
-        b1, b2 = 0, 0
-        for x in range(8):
-            ch = row_str[x]
-            val = 3 if ch == '#' else 0
-            p1 = val & 1
-            p2 = (val >> 1) & 1
-            if p1:
-                b1 |= (1 << (7 - x))
-            if p2:
-                b2 |= (1 << (7 - x))
-        tile_bytes[y * 2] = b1
-        tile_bytes[y * 2 + 1] = b2
-    return bytes(tile_bytes)
+PERIOD_TILE = bytes.fromhex("00 00 00 00 00 00 00 00 00 00 00 00 18 18 00 00")
+NATIVE_DIGIT_9_TILE = bytes.fromhex(
+    "00 00 7C 7C C6 C6 C6 C6 7E 7E 06 06 C6 C6 7C 7C"
+)
 
 
-def build_digit_tiles_blob() -> bytes:
-    """Build 160-byte blob containing 2bpp tiles for digits 0-9."""
-    blob = bytearray()
-    for d in range(10):
-        blob += ascii_to_2bpp(DIGIT_ART[str(d)])
-    assert len(blob) == 160
-    return bytes(blob)
+def build_title_glyph_blob() -> bytes:
+    """Period tile plus the CGB boot-font 9 tile restored after the title."""
+    return PERIOD_TILE + NATIVE_DIGIT_9_TILE
 
 
-def build_vram_digit_copy() -> bytes:
-    """Build gated VBlank helper to copy 160 digit bytes from ROM 0x69F0 to VRAM 0x8760.
+def build_vram_glyph_copy() -> bytes:
+    """Build the gated VBlank helper for the exact v3.01 footer glyphs.
 
-    Gated by scene guard D880 < 2 (title/uninit). Runs continuously every VBlank
-    frame on title screen (160 bytes copy = ~2560T, well within VBlank) to beat
-    title animation tilemap refreshes.
+    LCDC uses signed BG tile addressing on the title, so IDs 0x76-0x7F are at
+    VRAM 0x9760-0x97FF, not 0x8760. Native tiles already provide 0, 1, and 3.
+    Tile 0x7F is temporarily replaced with a period, then its native 9 glyph is
+    restored after leaving the title. Both writes use one-block CGB GDMA.
     """
     c = bytearray()
-    # Scene guard: D880 < 2 (title or init stage)
-    c.extend([0xFA, 0x80, 0xD8])          # LD A, [D880]
-    c.extend([0xFE, 0x02])                # CP 0x02
-    j_skip = len(c) + 1
-    c.extend([0x30, 0x00])                # JR NC, copy_done
+    c.extend([0xF0, 0x4F, 0xF5])          # LDH A,[FF4F]; PUSH AF
 
-    # Select VRAM Bank 0
-    c.extend([0xAF])                      # XOR A
-    c.extend([0xE0, 0x4F])                # LDH [FF4F], A
+    # Select VRAM Bank 0 for the tilemap signature and tile data.
+    c.extend([0xAF, 0xE0, 0x4F])
 
-    # Copy 160 bytes: HL = 0x69F0 (ROM), DE = 0x8760 (VRAM tile 0x76), B = 160
-    c.extend([0x21, DIGIT_TILES_ROM_ADDR & 0xFF, (DIGIT_TILES_ROM_ADDR >> 8) & 0xFF])  # LD HL, 0x69F0
-    c.extend([0x11, 0x60, 0x87])          # LD DE, 0x8760 (tile 0x76 * 16 + 0x8000)
-    c.extend([0x06, 160])                 # LD B, 160
-    copy_loop = len(c)
-    c.extend([0x2A])                      # LD A, [HL+]
-    c.extend([0x12])                      # LD [DE], A
-    c.extend([0x13])                      # INC DE
-    c.extend([0x05])                      # DEC B
-    offset = copy_loop - (len(c) + 2)
-    c.extend([0x20, offset & 0xFF])       # JR NZ, copy_loop
+    # Title path for D880 0/1; all other scenes restore the native digit 9.
+    c.extend([0xFA, 0x80, 0xD8, 0xFE, 0x02])
+    j_restore_nine = len(c) + 1
+    c.extend([0x30, 0x00])                # JR NC, restore_nine
+
+    # Wait until the footer's native 3 has been placed in the active tilemap.
+    c.extend([0xFA, 0x45, 0x9A])          # LD A, [0x9A45]
+    c.extend([0xFE, CUSTOM_TITLE_TILES["3"]])
+    j_skip_footer = len(c) + 1
+    c.extend([0x20, 0x00])                # JR NZ, copy_done
+    c.extend([0xFA, 0xFC, 0x97])          # LD A, [0x97FC] (tile 0x7F row 6)
+    c.extend([0xFE, 0x18])
+    j_skip_loaded = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z, copy_done
+
+    def emit_gdma(source_addr: int) -> None:
+        for register, value in (
+            (0x51, (source_addr >> 8) & 0xFF),
+            (0x52, source_addr & 0xF0),
+            (0x53, 0x17),                  # destination 0x9700 page
+            (0x54, 0xF0),                  # destination 0x97F0
+            (0x55, 0x00),                  # one 16-byte block, GDMA mode
+        ):
+            c.extend([0x3E, value, 0xE0, register])
+
+    emit_gdma(TITLE_GLYPH_DATA_ADDR)
+    j_title_done = len(c) + 1
+    c.extend([0x18, 0x00])                # JR copy_done
+
+    restore_nine_pos = len(c)
+    c.extend([0xFA, 0xFC, 0x97, 0xFE, 0x18])
+    j_skip_restore = len(c) + 1
+    c.extend([0x20, 0x00])                # JR NZ, copy_done
+    emit_gdma(TITLE_GLYPH_DATA_ADDR + 0x10)
 
     copy_done_pos = len(c)
-    c[j_skip] = (copy_done_pos - j_skip - 1) & 0xFF
+    c[j_restore_nine] = (restore_nine_pos - j_restore_nine - 1) & 0xFF
+    for jump_pos in (j_skip_footer, j_skip_loaded, j_title_done, j_skip_restore):
+        c[jump_pos] = (copy_done_pos - jump_pos - 1) & 0xFF
+    c.extend([0xF1, 0xE0, 0x4F])          # POP AF; LDH [FF4F], A (restore VBK)
     c.extend([0xC9])                      # RET
     return bytes(c)
-
-
-def get_git_version_tag() -> str:
-    """Query git release tag programmatically."""
-    try:
-        tag = subprocess.check_output(
-            ["git", "describe", "--tags", "--abbrev=0"],
-            stderr=subprocess.DEVNULL
-        ).decode("utf-8").strip()
-    except Exception:
-        tag = "v3.02"
-    return tag
 
 
 def map_title_string_to_tiles(s: str) -> list[int]:
@@ -184,8 +164,8 @@ def map_title_string_to_tiles(s: str) -> list[int]:
     Mapping:
       Space  -> 0x00
       A-Z    -> 0x80 - 0x99
-      0-9    -> 0x76 - 0x7F (custom 2bpp font tiles)
-      .      -> 0x00 (space; 0x9A is the title command list string terminator!)
+      0,1,3  -> 0x76, 0x77, 0x79 (native title digit tiles)
+      .      -> 0x7F (temporary period; 0x75 is a parser control value)
     """
     tiles = []
     for char in s.upper():
@@ -193,10 +173,10 @@ def map_title_string_to_tiles(s: str) -> list[int]:
             tiles.append(0x00)
         elif 'A' <= char <= 'Z':
             tiles.append(0x80 + (ord(char) - ord('A')))
-        elif '0' <= char <= '9':
-            tiles.append(0x76 + (ord(char) - ord('0')))
-        elif char == '.':
-            tiles.append(0x00)  # Use space for dot to prevent premature entry termination by 0x9A parser
+        elif char in CUSTOM_TITLE_TILES:
+            tiles.append(CUSTOM_TITLE_TILES[char])
+        else:
+            raise ValueError(f"unsupported title character: {char!r}")
     return tiles
 
 
@@ -205,16 +185,12 @@ def main():
     build_v301()
     rom = bytearray(BASE_OUT.read_bytes())
 
-    # 2. Get active git tag and format version string
-    raw_tag = get_git_version_tag()
-    # Strip leading 'v' or 'V' and sanitize branch/build suffixes if present
-    version_part = raw_tag.lstrip('vV').split('-')[0]  # e.g., '3.02' or '302'
-    # Remove any dots so the version renders cleanly as digits (no period glyph needed)
-    version_part = version_part.replace('.', '')
-    version_str = f"V{version_part}"                     # e.g. 'V302' or 'V302'
-    row17_text = f"DX {version_str} STRUK LABS"
+    # 2. Encode the exact release identity. This intentionally does not depend
+    # on the current git tag: detached/debug tags must not rename the ROM.
+    row17_text = TITLE_FOOTER
     row17_tiles = map_title_string_to_tiles(row17_text)
-    print(f"  git tag: '{raw_tag}' -> version text: '{row17_text}'")
+    assert len(row17_tiles) == 19
+    print(f"  release footer: '{row17_text}'")
 
     # Construct title command list
     E = 0x9A
@@ -232,7 +208,7 @@ def main():
         + [0x04, 0x0A] + _txt("GAME    START") + [E]           # GAME START (row 10 -> screen row 10)
         + [0x00, 0x0E, 0xC0, E]                                 # (c) symbol (row 14 -> screen row 14)
         + [0x00, 0x0F] + JAM + [E]                              # JAPAN ART MEDIA (row 15 -> screen row 15)
-        + [0x00, 0x11] + row17_tiles + [E]                      # Row 17 -> screen row 17: "DX V3.02 STRUK LABS"
+        + [0x00, 0x11] + row17_tiles + [E]                      # "DX V3.01 STRUK LABS"
         + [E]                                                   # Explicit list terminator 0x9A
     )
     assert len(title_list) <= 125, f"title list {len(title_list)} > 125 bytes"
@@ -240,17 +216,26 @@ def main():
     rom[0x4EA5:0x4EA5 + len(title_list)] = title_list
     print(f"  title: PENTA DRAGON DX header + '{row17_text}' ({len(title_list)}/125 bytes @0x4EA5)")
 
-    # 3. Write 2bpp digit tiles to bank13:0x69F0
-    digits_blob = build_digit_tiles_blob()
-    off = BANK13 + (DIGIT_TILES_ROM_ADDR - 0x4000)
-    rom[off:off + len(digits_blob)] = digits_blob
-    print(f"  digit tiles blob: 160 bytes (digits 0-9) at bank13:0x{DIGIT_TILES_ROM_ADDR:04X}")
+    # 3. Store the period and native digit-9 restore tiles in the aligned gap
+    # between bg_sweep and the RLE expander.
+    glyph_blob = build_title_glyph_blob()
+    assert len(glyph_blob) == 32
+    assert TITLE_GLYPH_DATA_ADDR + len(glyph_blob) <= EXPAND_ADDR
+    off = BANK13 + (TITLE_GLYPH_DATA_ADDR - 0x4000)
+    assert rom[off:off + len(glyph_blob)] == bytes(len(glyph_blob)), \
+        "title glyph data region is no longer free"
+    rom[off:off + len(glyph_blob)] = glyph_blob
+    print(f"  period + digit-9 restore: {len(glyph_blob)} bytes at bank13:0x{TITLE_GLYPH_DATA_ADDR:04X}")
 
-    # 4. Write VRAM digit copy helper at bank13:0x6AC0
-    vram_copy_code = build_vram_digit_copy()
-    off = BANK13 + (VRAM_DIGIT_COPY_ADDR - 0x4000)
+    # 4. Store the glyph loader immediately after the RLE expander's reserved
+    # range. A later boundary assertion verifies the generated expander fits.
+    vram_copy_code = build_vram_glyph_copy()
+    assert VRAM_GLYPH_COPY_ADDR + len(vram_copy_code) <= COLORIZE_ADDR
+    off = BANK13 + (VRAM_GLYPH_COPY_ADDR - 0x4000)
+    assert rom[off:off + len(vram_copy_code)] == bytes(len(vram_copy_code)), \
+        "VRAM glyph-copy region is no longer free"
     rom[off:off + len(vram_copy_code)] = vram_copy_code
-    print(f"  vram digit copy helper: {len(vram_copy_code)} bytes at bank13:0x{VRAM_DIGIT_COPY_ADDR:04X}")
+    print(f"  VRAM glyph loader: {len(vram_copy_code)} bytes at bank13:0x{VRAM_GLYPH_COPY_ADDR:04X}")
 
     # 5. Landing pad source in bank13
     lp = build_landing_pad()
@@ -337,13 +322,17 @@ def main():
     assert _vb == 0
     print(f"  OBJ palette LUT: 256 bytes at bank13:0x{OBJ_PAL_TABLE_ADDR:04X} (tiles 0x70-0x7F -> pal 7)")
 
-    # 12. Re-patch bg_sweep to read WRAM 0xCC00 (per-scene) with FFC1 NOP'd
+    # 12. Re-patch bg_sweep to read WRAM 0xCC00 (per-scene), including on the
+    # title. The title-safe inline hook avoids the input corruption; this
+    # sweep is still required to replace all-white boot attributes.
     sweep = bytearray(create_bg_sweep_viewport_gated(WRAM_BG_TABLE, BG_SWEEP_ADDR))
     assert sweep[:4] == bytearray([0xF0, 0xC1, 0xB7, 0xC8])
-    sweep[0:4] = bytearray([0x00, 0x00, 0x00, 0x00])  # DMG NOPs removed
+    sweep[0:4] = bytearray([0x00, 0x00, 0x00, 0x00])
+    assert BG_SWEEP_ADDR + len(sweep) <= TITLE_GLYPH_DATA_ADDR, \
+        "bg_sweep collides with title glyph data"
     off = BANK13 + (BG_SWEEP_ADDR - 0x4000)
     rom[off:off + len(sweep)] = sweep
-    print(f"  bg_sweep: WRAM 0x{WRAM_BG_TABLE:04X}, FFC1 gate NOP'd ({len(sweep)} bytes)")
+    print(f"  bg_sweep: WRAM 0x{WRAM_BG_TABLE:04X}, title-enabled ({len(sweep)} bytes)")
 
     # 13. Position sweep
     posmaps = parse_footprint_posmaps(FOOTPRINT_LOG)
@@ -372,7 +361,8 @@ def main():
 
     # RLE expander
     expander = create_rle_expander()
-    assert EXPAND_ADDR + len(expander) <= COLORIZE_ADDR
+    assert EXPAND_ADDR + len(expander) <= VRAM_GLYPH_COPY_ADDR, \
+        "RLE expander collides with VRAM glyph loader"
     off = BANK13 + (EXPAND_ADDR - 0x4000)
     rom[off:off + len(expander)] = expander
     print(f"  RLE expander: {len(expander)} bytes at bank13:0x{EXPAND_ADDR:04X}")
@@ -385,18 +375,19 @@ def main():
     rom[off:off + len(possweep)] = possweep
     print(f"  position sweep: {len(possweep)} bytes at bank13:0x{POSSWEEP_ADDR:04X}")
 
-    # 14. INLINE HOOK: UNGATED tile+attr
+    # 14. INLINE HOOK: title-safe tile-only path. The ungated variant corrupts
+    # title-menu input state; the independent BG sweep still owns title attrs.
     from build_v301_gdma import create_inline_tile_copy_tileonly
     inline_code = create_inline_tile_copy_tileonly(
         arena_neutralize_d880=0x0C,
-        title_gate=None)
+        title_gate=0x02)
     available = 0x436D - 0x42A7 + 1
     assert len(inline_code) <= available
     rom[0x42A7:0x42A7 + len(inline_code)] = inline_code
     if len(inline_code) < available:
         rom[0x42A7 + len(inline_code):0x436E] = bytearray(available - len(inline_code))
     assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98])
-    print(f"  inline hook: UNGATED tile+attr ({len(inline_code)} bytes)")
+    print(f"  inline hook: title-gated tile+attr ({len(inline_code)} bytes)")
 
     # 15. Teleport routine at bank13:0x6E80
     tp = build_teleport_routine()
@@ -409,26 +400,45 @@ def main():
     rom[off:off + len(tp)] = tp
     print(f"  teleport routine: {len(tp)} bytes at bank13:0x{TELEPORT_ADDR:04X}")
 
-    # 16. VBlank wrapper at 0x6F30 with CALL VRAM_DIGIT_COPY
+    # 16. VBlank wrapper at 0x6F30. Preserve the proven v3.01 cold-boot timing:
+    # joypad -> teleport/colorizer first, then the one-shot footer helper.
+    # Sound remains owned by the original game; a second call here churns it.
     assert TELEPORT_ADDR + len(tp) <= WRAPPER_ADDR
     wrapper = bytearray([
-        0xF5,                                 # PUSH AF
         0xC5,                                 # PUSH BC
         0xD5,                                 # PUSH DE
         0xE5,                                 # PUSH HL
-        # CALL VRAM digit copy helper (copies digit 2bpp tiles during VBlank)
-        0xCD, VRAM_DIGIT_COPY_ADDR & 0xFF, (VRAM_DIGIT_COPY_ADDR >> 8) & 0xFF,
-        0xCD, TELEPORT_ADDR & 0xFF, (TELEPORT_ADDR >> 8) & 0xFF,  # CALL teleport
+        # Robust joypad sampler inherited from the proven v3.01 wrapper.
+        # FF93 is consumed by the game and by the teleport combo detector.
+        0x3E, 0x20,                           # LD A, 0x20 (directions)
+        0xE0, 0x00,                           # LDH [FF00], A
+        0xF0, 0x00, 0xF0, 0x00,              # settle reads
+        0x2F, 0xE6, 0x0F, 0xCB, 0x37, 0x47,  # CPL; AND 0x0F; SWAP A; LD B,A
+        0x3E, 0x10,                           # LD A, 0x10 (buttons)
+        0xE0, 0x00,                           # LDH [FF00], A
+        0xF0, 0x00, 0xF0, 0x00,              # eight settle reads
+        0xF0, 0x00, 0xF0, 0x00,
+        0xF0, 0x00, 0xF0, 0x00,
+        0xF0, 0x00, 0xF0, 0x00,
+        0x2F, 0xE6, 0x0F, 0xB0,              # CPL; AND 0x0F; OR B
+        0xE0, 0x93,                           # LDH [FF93], A
+        0x47,                                 # LD B, A
+        0x3E, 0x30, 0xE0, 0x00, 0x78,        # deselect; restore buttons in A
+        # CALL teleport (includes scene_detect + lava + colorize JP)
+        0xCD, TELEPORT_ADDR & 0xFF, (TELEPORT_ADDR >> 8) & 0xFF,
+        # One-shot period + v3.01 digits + footer attributes. Keeping this
+        # after colorize prevents it from delaying first-VBlank CRAM writes.
+        0xCD, VRAM_GLYPH_COPY_ADDR & 0xFF, (VRAM_GLYPH_COPY_ADDR >> 8) & 0xFF,
+        # Restore registers
         0xE1,                                 # POP HL
         0xD1,                                 # POP DE
         0xC1,                                 # POP BC
-        0xF1,                                 # POP AF
         0xC9,                                 # RET
     ])
     assert WRAPPER_ADDR + len(wrapper) <= LANDING_PAD_ROM_ADDR
     wrapper_off = BANK13 + (WRAPPER_ADDR - 0x4000)
     rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
-    print(f"  VBlank wrapper (with VRAM digit copy): {len(wrapper)} bytes at bank13:0x{WRAPPER_ADDR:04X}")
+    print(f"  VBlank wrapper (with VRAM glyph copy): {len(wrapper)} bytes at bank13:0x{WRAPPER_ADDR:04X}")
 
     # 17. VBlank hook at 0x0824
     new_hook = bytearray([

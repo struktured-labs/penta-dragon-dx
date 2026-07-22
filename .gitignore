@@ -10,6 +10,9 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
+# Local JavaScript dependencies
+node_modules/
+
 # Build artifacts
 CMakeCache.txt
 CMakeFiles/
@@ -49,6 +52,7 @@ rl/saves/user_demo/*.sav
 rom/working/*.png
 rom/working/*.sav
 rom/working/*.ss*
+rom/working/*.ram
 
 # Letta agent workspace
 .letta/
