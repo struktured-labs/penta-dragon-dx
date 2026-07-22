@@ -275,13 +275,14 @@ def _bg_table_penta_dragon() -> bytes:   return _table_from_dict("penta_dragon")
 
 
 def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
-                       splash_addr: int) -> bytes:
+                       splash_addr: int, title_addr: int | None = None) -> bytes:
     """Detect D880 scene change, swap WRAM 0xDA00 with the right bg_table.
 
     Reads D880 (WRAM scene state). Compares to DF23 (previous). If same,
     early RET. If different, dispatches:
-      D880 == 0x0C..0x14 (arena) → arena_base + (D880-0x0C)*0x100
-      else                       → dungeon table (default)
+      D880 < 0x02, when title_addr is supplied → title table
+      D880 == 0x0C..0x14 (arena)               → arena_base + index*0x100
+      else                                      → dungeon table (default)
     Copies 256 bytes from ROM table → WRAM 0xDA00. Updates DF23.
 
     Called from the teleport routine (which runs every VBlank with bank
@@ -302,6 +303,19 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
 
     # Scene changed: save new value
     c.extend([0x77])                      # LD [HL], A   (DF23 = new D880)   (A still = D880)
+
+    # Release builds may supply an all-pal0 title table. Keep this optional so
+    # historical/debug builders retain their byte layout and behavior.
+    j_copy_title = None
+    if title_addr is not None:
+        c.extend([0xFE, 0x02])            # CP 2
+        j_not_title = len(c) + 1
+        c.extend([0x30, 0x00])            # JR NC, not_title
+        c.extend([0x21, title_addr & 0xFF, (title_addr >> 8) & 0xFF])
+        j_copy_title = len(c) + 1
+        c.extend([0x18, 0x00])            # JR copy
+        not_title_pos = len(c)
+        c[j_not_title] = (not_title_pos - j_not_title - 1) & 0xFF
 
     # Transitional / title scenes -> uniform all-pal0 splash table. These are
     # direct-write/transient screens whose tile IDs span the whole 0x01-0xFF bank,
@@ -367,6 +381,8 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
     copy_pos = len(c)
     c[j_copy] = (copy_pos - j_copy - 1) & 0xFF
     c[j_copy_splash] = (copy_pos - j_copy_splash - 1) & 0xFF
+    if j_copy_title is not None:
+        c[j_copy_title] = (copy_pos - j_copy_title - 1) & 0xFF
 
     # Copy 256 bytes: HL → DE = 0xDA00
     c.extend([0x11, 0x00, 0xCC])          # LD DE, 0xCC00 (WRAM bank 0, always accessible)

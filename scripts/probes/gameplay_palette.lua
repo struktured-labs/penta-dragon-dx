@@ -1,6 +1,6 @@
 -- Gameplay BG colorization harness.
 --   1. Auto-press start sequence to enter gameplay
---   2. Wait until FFC1=1 (gameplay flag set)
+--   2. Wait until FFC1=1 in a dungeon scene (D880=0x02..0x0B)
 --   3. Wait a few extra seconds for colorization to settle
 --   4. Dump CGB BG palette RAM + BG tile-attribute table from VBK=1
 --
@@ -78,8 +78,11 @@ callbacks:add("frame", function()
     end
     emu:setKeys(keys)
 
-    -- Detect entry to gameplay
-    if gameplay_at < 0 and emu:read8(0xFFC1) == 1 then
+    -- FFC1 becomes 1 during the all-pal0 STAGE splash (D880=0x18), before
+    -- dungeon attributes exist. Do not mistake that transition for gameplay.
+    local d880 = emu:read8(0xD880)
+    if gameplay_at < 0 and emu:read8(0xFFC1) == 1
+        and d880 >= 0x02 and d880 < 0x0C then
         gameplay_at = f
         console:log("gameplay reached at frame " .. f)
     end

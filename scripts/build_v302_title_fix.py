@@ -12,6 +12,12 @@ Features & Fixes:
 5. **OBJ palette LUT** — tiles 0x70-0x7F → pal 7, matching cursor 'A' at tile 0x73 requirements.
 6. **Title bg_sweep** — reads the per-scene WRAM table with its FFC1 gate
    removed so the title receives initialized attributes.
+7. **Clean item-menu HUD** — clears the six visible window attribute rows once
+   when the menu opens so off-screen dungeon palettes cannot bleed into HP.
+8. **Release-safe inputs** — removes the unstable SELECT+START IRQ stack
+   redirect while retaining scene-aware palettes, lava, and level-select setup.
+9. **Intentional title colors** — routes title attrs to palette 0 and safely
+   reloads its blue-gray ramp after the game's partial cold-boot CRAM writes.
 """
 import os as _os
 import sys
@@ -37,12 +43,12 @@ from build_v301_gdma import (
 )
 from build_v301_teleport import (
     _table_from_dict, build_scene_detect, build_lava_override,
-    build_landing_pad, build_teleport_routine, build_levelsel_attr_clear_stub,
+    build_levelsel_attr_clear_stub,
     ARENA_TILE_PAL, FOOTPRINT_LOG, ARENA_ORDER,
     _bg_table_shalamar, _bg_table_riff, _bg_table_crystal_dragon,
     _bg_table_cameo, _bg_table_ted, _bg_table_troop,
     _bg_table_faze, _bg_table_angela, _bg_table_penta_dragon,
-    SPLASH_TABLE_ADDR, LANDING_PAD_ROM_ADDR, LANDING_PAD_WRAM,
+    SPLASH_TABLE_ADDR,
     LEVELSEL_STUB_ROM_ADDR, LEVELSEL_STUB_WRAM, LEVELSEL_PATCH_ADDR,
 )
 
@@ -54,7 +60,9 @@ BANK13 = 13 * 0x4000
 BG_SWEEP_ADDR = 0x6CD0
 WRAM_BG_TABLE = 0xCC00
 COLORIZE_ADDR = 0x6E00
-TELEPORT_ADDR = 0x6E80
+COLORIZE_PRELUDE_ADDR = 0x6E80
+TITLE_PALETTE_FIX_ADDR = 0x6F10
+TITLE_PALETTE_SOURCE_ADDR = 0x6800
 OBJ_PAL_TABLE_ADDR = 0x6B00
 WRAPPER_ADDR = 0x6F30
 LEVELSEL_STUB_MAX = 36
@@ -93,6 +101,11 @@ PERIOD_TILE = bytes.fromhex("00 00 00 00 00 00 00 00 00 00 00 00 18 18 00 00")
 NATIVE_DIGIT_9_TILE = bytes.fromhex(
     "00 00 7C 7C C6 C6 C6 C6 7E 7E 06 06 C6 C6 7C 7C"
 )
+
+# DF10-DF2F is bg_sweep scratch. DF0F sits beside the established DF0D scene
+# cache and DF0E cold-boot sentinel, outside that clobber range.
+MENU_WINDOW_SENTINEL = 0xDF0F
+MENU_WINDOW_ATTR_ROWS = 6
 
 
 def build_title_glyph_blob() -> bytes:
@@ -155,6 +168,102 @@ def build_vram_glyph_copy() -> bytes:
         c[jump_pos] = (copy_done_pos - jump_pos - 1) & 0xFF
     c.extend([0xF1, 0xE0, 0x4F])          # POP AF; LDH [FF4F], A (restore VBK)
     c.extend([0xC9])                      # RET
+    return bytes(c)
+
+
+def build_colorize_prelude() -> bytes:
+    """Build the safe per-VBlank setup that replaces the teleport monolith.
+
+    The old routine bundled useful scene/palette setup with a SELECT+START
+    stack redirect out of the VBlank IRQ. The redirect was timing- and wrapper-
+    layout-sensitive and could freeze the game. This prelude keeps only the
+    release features: scene table selection, lava overrides, the level-select
+    WRAM stub copy, and one-shot item-menu window attribute initialization.
+    """
+    c = bytearray()
+
+    c.extend([0xCD, SCENE_DETECT_ADDR & 0xFF, SCENE_DETECT_ADDR >> 8])
+    c.extend([0xCD, LAVA_OVERRIDE_ADDR & 0xFF, LAVA_OVERRIDE_ADDR >> 8])
+
+    # One-time level-select WRAM stub copy. The former DF0E block also copied
+    # the teleport landing pad; only the level-select stub is still required.
+    c.extend([0xFA, 0x0E, 0xDF, 0xFE, 0x5A])
+    j_stub_ready = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z, stub_ready
+    c.extend([
+        0x21, LEVELSEL_STUB_ROM_ADDR & 0xFF, LEVELSEL_STUB_ROM_ADDR >> 8,
+        0x11, LEVELSEL_STUB_WRAM & 0xFF, LEVELSEL_STUB_WRAM >> 8,
+        0x06, LEVELSEL_STUB_MAX,
+    ])
+    copy_loop = len(c)
+    c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
+    c.extend([0x20, (copy_loop - (len(c) + 2)) & 0xFF])
+    c.extend([0x3E, 0x5A, 0xEA, 0x0E, 0xDF])
+    stub_ready = len(c)
+    c[j_stub_ready] = (stub_ready - j_stub_ready - 1) & 0xFF
+
+    # The item menu is a hardware window at WY=96. The game rewrites its tile
+    # IDs but leaves VBK=1 untouched, so the window inherits dungeon item/wall
+    # attributes from the off-screen map. Reset the first six rows to palette 0
+    # exactly once per opening. The game can flip LCDC bit 6 after opening, so
+    # initialize both 0x9800 and 0x9C00 rather than only the first selected map.
+    # When the window closes, arm the next opening by clearing DF0F.
+    c.extend([0xF0, 0x40, 0xE6, 0x20])    # LDH A,[LCDC]; AND window-enable
+    j_window_on = len(c) + 1
+    c.extend([0x20, 0x00])                # JR NZ, window_on
+    c.extend([0xAF, 0xEA, 0x0F, 0xDF])    # DF0F = 0
+    j_colorize_off = len(c) + 1
+    c.extend([0x18, 0x00])                # JR colorize
+
+    window_on = len(c)
+    c[j_window_on] = (window_on - j_window_on - 1) & 0xFF
+    c.extend([0xFA, 0x0F, 0xDF, 0xFE, 0x5A])
+    j_colorize_ready = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z, colorize
+
+    # Preserve VBK, select the attribute plane, then clear 6*32 bytes in both
+    # window maps with two twelve-block GDMA transfers from the zero table.
+    c.extend([0xF0, 0x4F, 0xF5, 0x3E, 0x01, 0xE0, 0x4F])
+    for destination_high in (0x18, 0x1C):
+        for register, value in (
+            (0x51, (SPLASH_TABLE_ADDR >> 8) & 0xFF),
+            (0x52, SPLASH_TABLE_ADDR & 0xF0),
+            (0x53, destination_high),
+            (0x54, 0x00),
+            (0x55, MENU_WINDOW_ATTR_ROWS * 2 - 1),
+        ):
+            c.extend([0x3E, value, 0xE0, register])
+    c.extend([0xF1, 0xE0, 0x4F])          # restore VBK
+    c.extend([0x3E, 0x5A, 0xEA, 0x0F, 0xDF])
+
+    finish = len(c)
+    for jump_pos in (j_colorize_off, j_colorize_ready):
+        c[jump_pos] = (finish - jump_pos - 1) & 0xFF
+    c.extend([0xC9])
+    return bytes(c)
+
+
+def build_title_palette_fix() -> bytes:
+    """Safely restore the intended blue-gray BG palette 0 on title screens.
+
+    The stock cold-boot path can cross out of VBlank while loading CRAM, leaving
+    palette 0 mostly white even though palette 1 (red) succeeds. This helper is
+    called at the start of every title VBlank, where all eight bytes fit safely.
+    Repeating the tiny write also self-heals any later one-frame loader update.
+    """
+    c = bytearray()
+    c.extend([0xFA, 0x80, 0xD8, 0xFE, 0x02])
+    c.extend([0xD0])                      # RET NC (not a title state)
+    c.extend([0x3E, 0x80, 0xE0, 0x68])    # BCPS index 0, auto-increment
+    c.extend([
+        0x21, TITLE_PALETTE_SOURCE_ADDR & 0xFF,
+        TITLE_PALETTE_SOURCE_ADDR >> 8,
+        0x0E, 0x08,
+    ])
+    write_loop = len(c)
+    c.extend([0x2A, 0xE0, 0x69, 0x0D])    # copy byte to BCPD; DEC C
+    c.extend([0x20, (write_loop - (len(c) + 2)) & 0xFF])
+    c.extend([0xC9])
     return bytes(c)
 
 
@@ -237,14 +346,7 @@ def main():
     rom[off:off + len(vram_copy_code)] = vram_copy_code
     print(f"  VRAM glyph loader: {len(vram_copy_code)} bytes at bank13:0x{VRAM_GLYPH_COPY_ADDR:04X}")
 
-    # 5. Landing pad source in bank13
-    lp = build_landing_pad()
-    assert len(lp) <= 40
-    off = BANK13 + (LANDING_PAD_ROM_ADDR - 0x4000)
-    rom[off:off + len(lp)] = lp
-    print(f"  landing pad source: {len(lp)} bytes at bank13:0x{LANDING_PAD_ROM_ADDR:04X}")
-
-    # 6. Levelsel attr-clear stub
+    # 5. Levelsel attr-clear stub
     ls = build_levelsel_attr_clear_stub()
     assert len(ls) <= LEVELSEL_STUB_MAX
     off = BANK13 + (LEVELSEL_STUB_ROM_ADDR - 0x4000)
@@ -253,7 +355,7 @@ def main():
     rom[off:off + len(ls)] = ls
     print(f"  levelsel attr-clear stub: {len(ls)} bytes at bank13:0x{LEVELSEL_STUB_ROM_ADDR:04X}")
 
-    # 7. Arena bg_tables (all 9 bosses)
+    # 6. Arena bg_tables (all 9 bosses)
     arena_tables = [
         ("Shalamar",      SHALAMAR_TABLE_ADDR,        _bg_table_shalamar),
         ("Riff",          RIFF_TABLE_ADDR,            _bg_table_riff),
@@ -275,25 +377,28 @@ def main():
         rom[off:off + 256] = table
         print(f"  {name:14s} bg_table: 256 bytes at bank13:0x{addr:04X}")
 
-    # 8. Scene-detect routine
-    sd = build_scene_detect(DUNGEON_TABLE_ADDR, ARENA_BASE_ADDR, SPLASH_TABLE_ADDR)
+    # 7. Scene-detect routine
+    sd = build_scene_detect(
+        DUNGEON_TABLE_ADDR, ARENA_BASE_ADDR, SPLASH_TABLE_ADDR,
+        title_addr=SPLASH_TABLE_ADDR,
+    )
     assert SCENE_DETECT_ADDR + len(sd) <= DUNGEON_TABLE_ADDR
     off = BANK13 + (SCENE_DETECT_ADDR - 0x4000)
     rom[off:off + len(sd)] = sd
     print(f"  scene-detect: {len(sd)} bytes at bank13:0x{SCENE_DETECT_ADDR:04X}")
 
-    # 9. Lava override
+    # 8. Lava override
     lava = build_lava_override(LAVA_OVERRIDE_ADDR)
     off = BANK13 + (LAVA_OVERRIDE_ADDR - 0x4000)
     rom[off:off + len(lava)] = lava
     print(f"  lava override: {len(lava)} bytes at bank13:0x{LAVA_OVERRIDE_ADDR:04X}")
 
-    # 10. Splash table (all pal0, for D880=0x18)
+    # 9. Splash table (all pal0, for D880=0x18 and window-attr GDMA source)
     off = BANK13 + (SPLASH_TABLE_ADDR - 0x4000)
     rom[off:off + 256] = bytes(256)
     print(f"  splash table: 256 bytes (all pal0) at bank13:0x{SPLASH_TABLE_ADDR:04X}")
 
-    # 11. OBJ palette LUT at bank13:0x6B00
+    # 10. OBJ palette LUT at bank13:0x6B00
     _obj_pal = bytearray(256)
     for _i in range(256):
         if _i <= 0x01:
@@ -322,7 +427,7 @@ def main():
     assert _vb == 0
     print(f"  OBJ palette LUT: 256 bytes at bank13:0x{OBJ_PAL_TABLE_ADDR:04X} (tiles 0x70-0x7F -> pal 7)")
 
-    # 12. Re-patch bg_sweep to read WRAM 0xCC00 (per-scene), including on the
+    # 11. Re-patch bg_sweep to read WRAM 0xCC00 (per-scene), including on the
     # title. The title-safe inline hook avoids the input corruption; this
     # sweep is still required to replace all-white boot attributes.
     sweep = bytearray(create_bg_sweep_viewport_gated(WRAM_BG_TABLE, BG_SWEEP_ADDR))
@@ -334,7 +439,7 @@ def main():
     rom[off:off + len(sweep)] = sweep
     print(f"  bg_sweep: WRAM 0x{WRAM_BG_TABLE:04X}, title-enabled ({len(sweep)} bytes)")
 
-    # 13. Position sweep
+    # 12. Position sweep
     posmaps = parse_footprint_posmaps(FOOTPRINT_LOG)
     ptr = [0] * 9
     blob = bytearray()
@@ -375,7 +480,7 @@ def main():
     rom[off:off + len(possweep)] = possweep
     print(f"  position sweep: {len(possweep)} bytes at bank13:0x{POSSWEEP_ADDR:04X}")
 
-    # 14. INLINE HOOK: title-safe tile-only path. The ungated variant corrupts
+    # 13. INLINE HOOK: title-safe tile-only path. The ungated variant corrupts
     # title-menu input state; the independent BG sweep still owns title attrs.
     from build_v301_gdma import create_inline_tile_copy_tileonly
     inline_code = create_inline_tile_copy_tileonly(
@@ -389,27 +494,36 @@ def main():
     assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98])
     print(f"  inline hook: title-gated tile+attr ({len(inline_code)} bytes)")
 
-    # 15. Teleport routine at bank13:0x6E80
-    tp = build_teleport_routine()
-    tp = bytearray(tp)
-    assert tp[-1] == 0xC9
-    tp[-1] = 0xC3
-    tp.append(COLORIZE_ADDR & 0xFF)
-    tp.append((COLORIZE_ADDR >> 8) & 0xFF)
-    off = BANK13 + (TELEPORT_ADDR - 0x4000)
-    rom[off:off + len(tp)] = tp
-    print(f"  teleport routine: {len(tp)} bytes at bank13:0x{TELEPORT_ADDR:04X}")
+    # 14. Safe scene/colorize prelude at bank13:0x6E80. It deliberately has no
+    # SELECT+START handling and no IRQ stack redirection.
+    prelude = build_colorize_prelude()
+    assert COLORIZE_PRELUDE_ADDR + len(prelude) <= TITLE_PALETTE_FIX_ADDR
+    off = BANK13 + (COLORIZE_PRELUDE_ADDR - 0x4000)
+    rom[off:off + len(prelude)] = prelude
+    print(f"  safe colorize prelude: {len(prelude)} bytes at bank13:0x{COLORIZE_PRELUDE_ADDR:04X}")
 
-    # 16. VBlank wrapper at 0x6F30. Preserve the proven v3.01 cold-boot timing:
-    # joypad -> teleport/colorizer first, then the one-shot footer helper.
+    title_palette_fix = build_title_palette_fix()
+    assert TITLE_PALETTE_FIX_ADDR + len(title_palette_fix) <= WRAPPER_ADDR
+    palette_source_off = BANK13 + (TITLE_PALETTE_SOURCE_ADDR - 0x4000)
+    assert rom[palette_source_off:palette_source_off + 8] == bytes.fromhex(
+        "FF 7F 94 7E 4A 3D 00 00"
+    ), "title palette source no longer contains the dungeon blue-gray ramp"
+    off = BANK13 + (TITLE_PALETTE_FIX_ADDR - 0x4000)
+    rom[off:off + len(title_palette_fix)] = title_palette_fix
+    print(f"  title palette repair: {len(title_palette_fix)} bytes at bank13:0x{TITLE_PALETTE_FIX_ADDR:04X}")
+
+    # 15. VBlank wrapper at 0x6F30. Preserve the proven v3.01 cold-boot timing:
+    # joypad -> scene/colorizer first, then the one-shot footer helper.
     # Sound remains owned by the original game; a second call here churns it.
-    assert TELEPORT_ADDR + len(tp) <= WRAPPER_ADDR
+    assert TITLE_PALETTE_FIX_ADDR + len(title_palette_fix) <= WRAPPER_ADDR
     wrapper = bytearray([
         0xC5,                                 # PUSH BC
         0xD5,                                 # PUSH DE
         0xE5,                                 # PUSH HL
+        # Refresh the non-red title palette at the start of title VBlank.
+        0xCD, TITLE_PALETTE_FIX_ADDR & 0xFF, (TITLE_PALETTE_FIX_ADDR >> 8) & 0xFF,
         # Robust joypad sampler inherited from the proven v3.01 wrapper.
-        # FF93 is consumed by the game and by the teleport combo detector.
+        # FF93 is consumed by the game. SELECT+START is no longer intercepted.
         0x3E, 0x20,                           # LD A, 0x20 (directions)
         0xE0, 0x00,                           # LDH [FF00], A
         0xF0, 0x00, 0xF0, 0x00,              # settle reads
@@ -424,8 +538,9 @@ def main():
         0xE0, 0x93,                           # LDH [FF93], A
         0x47,                                 # LD B, A
         0x3E, 0x30, 0xE0, 0x00, 0x78,        # deselect; restore buttons in A
-        # CALL teleport (includes scene_detect + lava + colorize JP)
-        0xCD, TELEPORT_ADDR & 0xFF, (TELEPORT_ADDR >> 8) & 0xFF,
+        # CALL safe prelude (scene_detect + lava + menu/window init)
+        0xCD, COLORIZE_PRELUDE_ADDR & 0xFF, (COLORIZE_PRELUDE_ADDR >> 8) & 0xFF,
+        0xCD, COLORIZE_ADDR & 0xFF, (COLORIZE_ADDR >> 8) & 0xFF,
         # One-shot period + v3.01 digits + footer attributes. Keeping this
         # after colorize prevents it from delaying first-VBlank CRAM writes.
         0xCD, VRAM_GLYPH_COPY_ADDR & 0xFF, (VRAM_GLYPH_COPY_ADDR >> 8) & 0xFF,
@@ -435,12 +550,12 @@ def main():
         0xC1,                                 # POP BC
         0xC9,                                 # RET
     ])
-    assert WRAPPER_ADDR + len(wrapper) <= LANDING_PAD_ROM_ADDR
+    assert WRAPPER_ADDR + len(wrapper) <= SCENE_DETECT_ADDR
     wrapper_off = BANK13 + (WRAPPER_ADDR - 0x4000)
     rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
     print(f"  VBlank wrapper (with VRAM glyph copy): {len(wrapper)} bytes at bank13:0x{WRAPPER_ADDR:04X}")
 
-    # 17. VBlank hook at 0x0824
+    # 16. VBlank hook at 0x0824
     new_hook = bytearray([
         0xF0, 0x99,                           # LDH A, [FF99]
         0xF5,                                 # PUSH AF
@@ -458,7 +573,7 @@ def main():
     rom[0x0824:0x0824 + 47] = new_hook_padded
     print(f"  VBlank hook: {len(new_hook)} bytes at 0x0824")
 
-    # 18. Levelsel JP NZ patch
+    # 17. Levelsel JP NZ patch
     expected = bytes([0xC2, 0x93, 0x73])
     actual = bytes(rom[LEVELSEL_PATCH_ADDR:LEVELSEL_PATCH_ADDR + 3])
     assert actual == expected, f"levelsel patch site corrupted: {actual.hex()}"
