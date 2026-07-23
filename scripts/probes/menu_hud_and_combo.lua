@@ -8,6 +8,8 @@ local f = 0
 local ffba_before = -1
 local d880_before = -1
 local shadow_states = {}
+local menu_attr_trace = {}
+local last_menu_attr_signature = ""
 
 local function press(lo, hi, mask)
     return (f >= lo and f < hi) and mask or 0
@@ -97,22 +99,52 @@ callbacks:add("frame", function()
         shadow_states[shadow_checksum()] = true
     end
 
+    if MODE == "menu" and f >= 1180 then
+        local lcdc = emu:read8(0xFF40)
+        local window_map = ((lcdc & 0x40) ~= 0) and 0x9C00 or 0x9800
+        local original_vbk = emu:read8(0xFF4F)
+        emu:write8(0xFF4F, 1)
+        local signature = string.format(
+            "%02X/%04X/%02X%02X%02X/%02X",
+            lcdc, window_map,
+            emu:read8(window_map), emu:read8(window_map + 1),
+            emu:read8(window_map + 2), emu:read8(0xDF0F))
+        emu:write8(0xFF4F, original_vbk)
+        if signature ~= last_menu_attr_signature then
+            table.insert(menu_attr_trace, string.format("f%d:%s", f, signature))
+            last_menu_attr_signature = signature
+        end
+    end
+
     if MODE == "menu" and f == 1245 then
         local lcdc = emu:read8(0xFF40)
         local window_map = ((lcdc & 0x40) ~= 0) and 0x9C00 or 0x9800
         local contaminated = 0
+        local contaminated_entries = {}
         local visible_cells = 0
         emu:write8(0xFF4F, 1)
         -- Rows 0, 4, and 5 contain the separator/MEDICAL and both HP rows.
         for _, row in ipairs({0, 4, 5}) do
             for col = 0, 19 do
                 visible_cells = visible_cells + 1
-                if (emu:read8(window_map + row * 32 + col) & 7) ~= 0 then
+                local attr = emu:read8(window_map + row * 32 + col)
+                if (attr & 7) ~= 0 then
                     contaminated = contaminated + 1
+                    table.insert(contaminated_entries, {
+                        row = row, col = col, attr = attr,
+                    })
                 end
             end
         end
         emu:write8(0xFF4F, 0)
+        local details = ""
+        for _, entry in ipairs(contaminated_entries) do
+            local tile = emu:read8(
+                window_map + entry.row * 32 + entry.col)
+            details = details .. string.format(
+                "r%dc%d:tile%02X/attr%02X,",
+                entry.row, entry.col, tile, entry.attr)
+        end
         write_result({
             reached = f,
             lcdc = string.format("%02X", lcdc),
@@ -120,6 +152,9 @@ callbacks:add("frame", function()
             window_map = string.format("%04X", window_map),
             checked_cells = visible_cells,
             contaminated_cells = contaminated,
+            contaminated_entries = details,
+            menu_attr_trace = table.concat(menu_attr_trace, ";"),
+            menu_sentinel = string.format("%02X", emu:read8(0xDF0F)),
         })
     end
 

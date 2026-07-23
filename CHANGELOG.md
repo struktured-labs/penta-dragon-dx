@@ -3,6 +3,32 @@
 This project records source-level changes only. Copyrighted ROM images and
 emulator save/state files are never release artifacts in this repository.
 
+## [v3.01-stream-rc3] - 2026-07-22
+
+### Fixed
+
+- Restore the original `STAGE XX` splash duration by bypassing the expensive
+  background/object colorizer while the all-palette-0 stage card is active.
+  The stock LCD-mode wait now observes every VBlank, so the intro ditty plays
+  once instead of repeating while stage loading stalls.
+- Keep the item-menu HUD clean with either hardware window map. While gameplay
+  is paused in the menu, the color sweep and inline attribute writer are gated
+  off and the six visible window rows are reset directly to palette 0. This
+  removes the timing-dependent red HP/separator artifacts exposed by the
+  shorter stage transition.
+- Run the title-color screenshot probe on Qt's headless offscreen platform so
+  it no longer depends on the desktop display cookie.
+
+### Verified
+
+- Frame-matched mGBA comparison: both the original ROM and DX remain on the
+  stage card for exactly 156 frames and receive 233 timer ticks; neither sound
+  pointer rewinds nor stage-card attribute contamination occur in DX.
+- Title integration/color, gameplay palette, menu HUD, `SELECT+START` safety,
+  scrolling stability, and phantom-sound regressions all pass.
+- Repaired output MD5: `9c41db6cc7839136459c84078435d89f`
+  (informational only; the ROM itself is not committed).
+
 ## [v3.01-stream-rc2] - 2026-07-22
 
 ### Fixed

@@ -94,7 +94,8 @@ ATTR_BUFFER = 0xCC80  # WRAM bank 0 (dead-code attr buffer, kept consistent)
 
 
 def create_inline_tile_copy_tileonly(arena_neutralize_d880=None,
-                                      title_gate=None) -> bytes:
+                                      title_gate=None,
+                                      window_gate=False) -> bytes:
     """Inline tile+attr copy with D880-gated attr writes.
 
     Per group: 4 tile writes (VBK=0) then 4 attr writes (VBK=1) with
@@ -108,7 +109,8 @@ def create_inline_tile_copy_tileonly(arena_neutralize_d880=None,
          items get immediate attrs, no palette flicker)
       3. D880 in [base, base+9)     -> tile-only (arena — position sweep
          owns the attr plane, tile-ID attrs would fight posmap)
-      4. else                       -> full tile+attr (splash/banner;
+      4. LCDC window enabled        -> tile-only (item-menu HUD attrs stay 0)
+      5. else                       -> full tile+attr (splash/banner;
          scene_detect loads all-pal0 table, attrs are harmless)
 
     Replaces 0x42A7..0x436D. H pre-set to 0x98 or 0x9C by entry point.
@@ -141,6 +143,16 @@ def create_inline_tile_copy_tileonly(arena_neutralize_d880=None,
         assert -128 <= offset <= 127
         code[pos] = offset & 0xFF
 
+    def emit_jp_fwd(opcode):
+        pos = len(code) + 1
+        emit([opcode, 0x00, 0x00])
+        return pos
+
+    def patch_jp_fwd(pos):
+        target = 0x42A7 + len(code)
+        code[pos] = target & 0xFF
+        code[pos + 1] = (target >> 8) & 0xFF
+
     # Setup (H pre-set by entry point to 0x98 or 0x9C)
     emit([0x2E, 0x00])               # LD L, 0x00
     emit([0x11, 0xA0, 0xC1])         # LD DE, 0xC1A0 (WRAM tile source)
@@ -154,12 +166,15 @@ def create_inline_tile_copy_tileonly(arena_neutralize_d880=None,
     # When neither is set: simple full tile+attr copy everywhere.
     j_tileonly = None                # arena dispatch JR patch pos
     j_tileonly_title = None          # title gate JR patch pos
+    j_tileonly_window = None         # item-window gate JR patch pos
 
     # 1. Title gate: D880 < title_gate -> tile-only
     if title_gate is not None:
         emit([0xFA, 0x80, 0xD8])     # LD A, [D880]
         emit([0xFE, title_gate & 0xFF])  # CP title_gate
-        j_tileonly_title = emit_jr_fwd(0x38)  # JR C, tileonly
+        # The full attr path is close to the JR range limit; use an absolute
+        # conditional jump so optional dispatch gates cannot break the build.
+        j_tileonly_title = emit_jp_fwd(0xDA)  # JP C, tileonly
 
     # 2. Arena neutralize: D880 in [base, base+9) -> tile-only
     if arena_neutralize_d880 is not None:
@@ -169,6 +184,14 @@ def create_inline_tile_copy_tileonly(arena_neutralize_d880=None,
         emit([0xFE, 0x09])           # CP 9
         j_tileonly = emit_jr_fwd(0x38)  # JR C, tileonly (idx 0..8 = arena)
         patch_jr_fwd(j_full)         # else fall through to full
+
+    # Hardware-window tile writes are item-menu HUD text, not dungeon tiles.
+    # Its attribute rows are cleared by the VBlank prelude and must stay pal0.
+    # Keep this last in the dispatch so its short branch reaches tile-only.
+    if window_gate:
+        emit([0xF0, 0x40])           # LDH A, [LCDC]
+        emit([0xE6, 0x20])           # AND window-enable
+        j_tileonly_window = emit_jr_fwd(0x20)  # JR NZ, tileonly
 
     emit([0x3E, 0x18])               # LD A, 24
     emit([0xF5])                     # PUSH AF (row counter on stack)
@@ -258,11 +281,14 @@ def create_inline_tile_copy_tileonly(arena_neutralize_d880=None,
     # ---- TILE-ONLY PATH: copy tiles, write NO attrs ----
     # Both title gate and arena dispatch jump here (at j_tileonly or
     # j_tileonly_title). Same L/E/HL advancement as full path.
-    if j_tileonly is not None or j_tileonly_title is not None:
+    if (j_tileonly is not None or j_tileonly_title is not None
+            or j_tileonly_window is not None):
         if j_tileonly is not None:
             patch_jr_fwd(j_tileonly)
         if j_tileonly_title is not None:
-            patch_jr_fwd(j_tileonly_title)
+            patch_jp_fwd(j_tileonly_title)
+        if j_tileonly_window is not None:
+            patch_jr_fwd(j_tileonly_window)
         emit([0x3E, 0x18])           # LD A, 24
         emit([0xF5])                 # PUSH AF
         mark('to_row')

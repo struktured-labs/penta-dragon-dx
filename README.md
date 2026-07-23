@@ -8,25 +8,37 @@ Shadow OAM intercept system that eliminates VBlank overflow flickering.
 
 ---
 
-## Status: ✅ v3.01-o2 — O(1) Shadow OAM Intercept + Per-Monster Palettes
+## Status: ✅ v3.01-stream-rc3 — livestream release candidate
 
-All five visible-regression categories verified passing on
-`rom/working/penta_dragon_dx_FIXED.gb` and `rom/working/penta_dragon_dx_teleport.gb`:
+The current release workflow builds `rom/working/penta_dragon_dx_FIXED.gb`
+with the exact title footer `DX V3.01 STRUK LABS`. The ROM is intentionally
+excluded from Git; the builder, probes, and documentation are versioned.
 
-| Bug                       | Probe                                        | v3.01 result        |
-|---------------------------|----------------------------------------------|---------------------|
-| Title screen white        | `scripts/probes/verify_title_color.py`       | PASS (2 colors)     |
-| Phantom sound on items    | `scripts/probes/verify_phantom_d887.py`      | 0 transitions (baseline: 18) |
-| BG colorization           | `scripts/probes/verify_gameplay_palette.py`  | PASS                |
-| Mini-boss colors          | `scripts/probes/verify_miniboss_color.py`    | PASS                |
-| Scroll tearing            | `scripts/probes/verify_scroll_tearing.py`    | PASS (0.00/s)       |
-| Sprite orange flicker     | `scripts/diagnostics/verify_sprite_flicker.py`| 0% (120 frames)    |
+| Release gate | Probe | RC3 result |
+|--------------|-------|------------|
+| Title footer and palette | `verify_title_screen_integration.py`, `verify_title_color.py` | PASS |
+| `STAGE XX` timing/ditty | `verify_stage_intro_timing.py` | 156 frames and 233 timer ticks, exactly matching vanilla |
+| Item-menu HP/MEDICAL attributes | `verify_menu_hud_and_combo.py` | PASS, 0 contaminated cells |
+| BG colorization | `verify_gameplay_palette.py` | PASS, 15 palette words / 3 indices |
+| Phantom sound | `verify_phantom_d887.py` | PASS, 2 transitions versus vanilla's 18 |
+| Scroll stability | `verify_scroll_tearing.py` | PASS, 0.00 changes/s |
+| `SELECT+START` safety | `verify_menu_hud_and_combo.py` | PASS, no scene change or freeze |
 
-Tagged `v3.01-o2`. Latest release tag.
+Tagged `v3.01-stream-rc3`.
 
 ---
 
 ## Key features
+
+### Stream-safe title, transitions, and HUD (v3.01-stream-rc3)
+
+- Exact `DX V3.01 STRUK LABS` release footer with a native-style period glyph.
+- Intentional white-to-blue-gray title palette with no accidental red text.
+- Vanilla-length `STAGE XX` card: the colorizer yields during the stock
+  frame-synchronized wait, preventing the intro ditty from repeating.
+- Clean item-menu HP bar, `MEDICAL` separator, and full-health `F` marker on
+  either hardware window map.
+- The unstable IRQ-stack `SELECT+START` teleport is removed from production.
 
 ### O(1) Shadow OAM Intercept (v3.01)
 Replaces the old hwoam_recolor post-process (53K cycles/VBlank) with a
@@ -56,11 +68,14 @@ The inline hook at bank1:0x42A7 dispatches based on scene:
 - D880 < 0x02 (title screen) → tile-only, no attr writes
 - D880 < 0x0C (dungeon) → full tile+attr (pickup items red immediately)
 - D880 >= 0x0C (boss arena) → tile-only (position sweep owns attrs)
+- Hardware window enabled (item menu) → tile-only, preserving palette-0 HUD attrs
 
-### Teleport + Boss Debugging
-The `penta_dragon_dx_teleport.gb` ROM adds SELECT+START combo to teleport
-between all 9 boss arenas. Enabled by a WRAM landing pad at 0xDB00 with
-stack-redirect mechanism. Debug-only — not in the production build.
+### Legacy teleport debugging
+
+The older `penta_dragon_dx_teleport.gb` debug build contains the retired
+IRQ-stack teleport experiment. It is not a release artifact and must not be
+used for livestream/release validation. A safe main-loop browser teleport can
+be added later without restoring the stack redirect.
 
 ---
 
@@ -68,57 +83,49 @@ stack-redirect mechanism. Debug-only — not in the production build.
 
 ### Build
 
-#### Production ROM (FIXED.gb):
-```bash
-python3 scripts/build_v301_gdma.py
-# → rom/working/penta_dragon_dx_FIXED.gb (via v301.gb)
-```
+#### Stream release candidate (`FIXED.gb`)
 
-#### Teleport ROM (with boss debug):
 ```bash
-python3 scripts/build_v301_teleport.py
-# → rom/working/penta_dragon_dx_teleport.gb
+python3 scripts/build_v302_title_fix.py
+# → rom/working/penta_dragon_dx_FIXED.gb
 ```
 
 ### Test in mGBA
 
 ```bash
-# Human testing (desktop)
-scripts/palette_session.sh start
-
-# Or raw launch (KDE Wayland + NVIDIA):
-XAUTHORITY=/run/user/1000/xauth_vYbeWX DISPLAY=:0 QT_QPA_PLATFORM=xcb mgba-qt rom/working/penta_dragon_dx_teleport.gb
+# Verified human-testing launch (KDE Wayland + NVIDIA):
+DISPLAY=:0 XAUTHORITY=/run/user/1000/xauth_vYbeWX QT_QPA_PLATFORM=xcb \
+  /home/struktured/bin/mgba-qt \
+  /home/struktured/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_FIXED.gb
 ```
 
 ### Run verification probes
 
 ```bash
 # Title screen (must show 2+ colors, >5% non-white)
-python3 scripts/probes/verify_title_color.py rom/working/penta_dragon_dx_teleport.gb
+python3 scripts/probes/verify_title_color.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Exact STAGE XX/ditty duration versus the original ROM
+python3 scripts/probes/verify_stage_intro_timing.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Title, menu HUD, and retired SELECT+START safety
+python3 scripts/probes/verify_menu_hud_and_combo.py rom/working/penta_dragon_dx_FIXED.gb
 
 # Gameplay palette (must show 10+ distinct BG palette words)
-python3 scripts/probes/verify_gameplay_palette.py rom/working/penta_dragon_dx_teleport.gb
+python3 scripts/probes/verify_gameplay_palette.py rom/working/penta_dragon_dx_FIXED.gb
 
 # Miniboss colorization
-python3 scripts/probes/verify_miniboss_color.py rom/working/penta_dragon_dx_teleport.gb
+python3 scripts/probes/verify_miniboss_color.py rom/working/penta_dragon_dx_FIXED.gb
 
 # Scroll tearing (must be ≤0.50 changes/s)
-python3 scripts/probes/verify_scroll_tearing.py rom/working/penta_dragon_dx_teleport.gb
+python3 scripts/probes/verify_scroll_tearing.py rom/working/penta_dragon_dx_FIXED.gb
 
 # Phantom sound (must be ≤1.5× vanilla baseline)
-python3 scripts/probes/verify_phantom_d887.py rom/working/penta_dragon_dx_teleport.gb
+python3 scripts/probes/verify_phantom_d887.py rom/working/penta_dragon_dx_FIXED.gb
 
 # Orange sprite flicker (PyBoy, 120 frames, must be 0%)
 python3 scripts/diagnostics/verify_sprite_flicker.py
 ```
-
-### Teleport to boss arenas (teleport ROM only)
-
-In-game at a dungeon scene, press **SELECT + START** to cycle through
-bosses 0-8 (Shalamar → Riff → Crystal Dragon → Cameo → Ted → Troop →
-Faze → Angela → Penta Dragon).
-
----
 
 ## Live palette editing session
 
@@ -126,12 +133,16 @@ Faze → Angela → Penta Dragon).
 scripts/palette_session.sh start
 ```
 
-This boots:
+This currently boots the legacy debug workflow:
 1. mGBA-qt with `penta_dragon_dx_teleport.gb` and `live_palettes.lua`
 2. A Python HTTP server at localhost:8077 serving the color-picker UI
 3. A browser tab pointed at the UI
 
 Stop with `scripts/palette_session.sh stop`.
+
+Use `FIXED.gb` for release validation. The palette browser remains useful for
+live color tuning, but its boss-teleport request has no release-safe in-ROM
+consumer yet.
 
 ---
 
@@ -139,8 +150,9 @@ Stop with `scripts/palette_session.sh stop`.
 
 ```
 scripts/
-├── build_v301_gdma.py          # Production ROM builder
+├── build_v301_gdma.py           # Base production ROM builder
 ├── build_v301_teleport.py       # Teleport ROM builder (extends gdma)
+├── build_v302_title_fix.py       # v3.01 stream RC builder
 ├── patch_oam_intercept.py       # O(1) intercept + trampoline installer
 ├── bg_experiment.py             # Colorizer codegen utilities
 ├── probes/                      # Verification probes (5 main + extras)

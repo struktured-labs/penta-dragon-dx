@@ -12,12 +12,16 @@ Features & Fixes:
 5. **OBJ palette LUT** — tiles 0x70-0x7F → pal 7, matching cursor 'A' at tile 0x73 requirements.
 6. **Title bg_sweep** — reads the per-scene WRAM table with its FFC1 gate
    removed so the title receives initialized attributes.
-7. **Clean item-menu HUD** — clears the six visible window attribute rows once
-   when the menu opens so off-screen dungeon palettes cannot bleed into HP.
+7. **Clean item-menu HUD** — keeps the six visible window attribute rows on
+   palette 0 and pauses the background sweep until the menu closes, so
+   off-screen dungeon palettes cannot bleed back into HP or MEDICAL text.
 8. **Release-safe inputs** — removes the unstable SELECT+START IRQ stack
    redirect while retaining scene-aware palettes, lava, and level-select setup.
 9. **Intentional title colors** — routes title attrs to palette 0 and safely
    reloads its blue-gray ramp after the game's partial cold-boot CRAM writes.
+10. **Vanilla stage-intro timing** — bypasses the heavy colorizer while the
+    all-palette-0 `STAGE XX` splash is active so its LCD-mode wait sees every
+    VBlank instead of stretching the 100-frame ditty across several loops.
 """
 import os as _os
 import sys
@@ -204,10 +208,10 @@ def build_colorize_prelude() -> bytes:
 
     # The item menu is a hardware window at WY=96. The game rewrites its tile
     # IDs but leaves VBK=1 untouched, so the window inherits dungeon item/wall
-    # attributes from the off-screen map. Reset the first six rows to palette 0
-    # exactly once per opening. The game can flip LCDC bit 6 after opening, so
-    # initialize both 0x9800 and 0x9C00 rather than only the first selected map.
-    # When the window closes, arm the next opening by clearing DF0F.
+    # attributes from the off-screen map. While the paused menu is open, clear
+    # the visible 20 columns of its first six rows on every VBlank. Direct VRAM
+    # writes are reliable here; the former GDMA clear did not update the first
+    # three cells on the 0x9C00 window map after vanilla stage timing returned.
     c.extend([0xF0, 0x40, 0xE6, 0x20])    # LDH A,[LCDC]; AND window-enable
     j_window_on = len(c) + 1
     c.extend([0x20, 0x00])                # JR NZ, window_on
@@ -217,28 +221,23 @@ def build_colorize_prelude() -> bytes:
 
     window_on = len(c)
     c[j_window_on] = (window_on - j_window_on - 1) & 0xFF
-    c.extend([0xFA, 0x0F, 0xDF, 0xFE, 0x5A])
-    j_colorize_ready = len(c) + 1
-    c.extend([0x28, 0x00])                # JR Z, colorize
-
-    # Preserve VBK, select the attribute plane, then clear 6*32 bytes in both
-    # window maps with two twelve-block GDMA transfers from the zero table.
     c.extend([0xF0, 0x4F, 0xF5, 0x3E, 0x01, 0xE0, 0x4F])
-    for destination_high in (0x18, 0x1C):
-        for register, value in (
-            (0x51, (SPLASH_TABLE_ADDR >> 8) & 0xFF),
-            (0x52, SPLASH_TABLE_ADDR & 0xF0),
-            (0x53, destination_high),
-            (0x54, 0x00),
-            (0x55, MENU_WINDOW_ATTR_ROWS * 2 - 1),
-        ):
-            c.extend([0x3E, value, 0xE0, register])
+    c.extend([0xF0, 0x40, 0xE6, 0x40])    # LCDC window-map select
+    c.extend([0x26, 0x98, 0x28, 0x02, 0x26, 0x9C])
+    c.extend([0x2E, 0x00, 0x06, MENU_WINDOW_ATTR_ROWS])
+    clear_row = len(c)
+    c.extend([0x0E, 0x14, 0xAF])           # 20 visible cells; A = pal0
+    clear_cell = len(c)
+    c.extend([0x22, 0x0D])                 # LD [HL+],A; DEC C
+    c.extend([0x20, (clear_cell - (len(c) + 2)) & 0xFF])
+    c.extend([0x7D, 0xC6, 0x0C, 0x6F, 0x30, 0x01, 0x24])  # next 32-byte row
+    c.extend([0x05])                       # DEC B
+    c.extend([0x20, (clear_row - (len(c) + 2)) & 0xFF])
     c.extend([0xF1, 0xE0, 0x4F])          # restore VBK
     c.extend([0x3E, 0x5A, 0xEA, 0x0F, 0xDF])
 
     finish = len(c)
-    for jump_pos in (j_colorize_off, j_colorize_ready):
-        c[jump_pos] = (finish - jump_pos - 1) & 0xFF
+    c[j_colorize_off] = (finish - j_colorize_off - 1) & 0xFF
     c.extend([0xC9])
     return bytes(c)
 
@@ -485,7 +484,8 @@ def main():
     from build_v301_gdma import create_inline_tile_copy_tileonly
     inline_code = create_inline_tile_copy_tileonly(
         arena_neutralize_d880=0x0C,
-        title_gate=0x02)
+        title_gate=0x02,
+        window_gate=True)
     available = 0x436D - 0x42A7 + 1
     assert len(inline_code) <= available
     rom[0x42A7:0x42A7 + len(inline_code)] = inline_code
@@ -540,6 +540,19 @@ def main():
         0x3E, 0x30, 0xE0, 0x00, 0x78,        # deselect; restore buttons in A
         # CALL safe prelude (scene_detect + lava + menu/window init)
         0xCD, COLORIZE_PRELUDE_ADDR & 0xFF, (COLORIZE_PRELUDE_ADDR >> 8) & 0xFF,
+        # Gameplay is paused while the item-menu window is visible. The
+        # prelude has just cleared the active window map; do not let the
+        # background sweep repaint those HUD cells later in this VBlank.
+        0xF0, 0x40,                        # LDH A,[LCDC]
+        0xE6, 0x20,                        # AND window-enable
+        0x20, 0x0A,                        # JR NZ, skip full colorizer
+        # The STAGE XX splash uses the all-pal0 inline attribute path and has
+        # no gameplay OAM to recolor. Running the full colorizer here extends
+        # VBlank beyond LCD mode 1, so the stock 0x407E frame-sync loop misses
+        # VBlank and the intro ditty/splash lasts roughly three times longer.
+        0xFA, 0x80, 0xD8,                  # LD A,[D880]
+        0xFE, 0x18,                        # CP stage-intro scene
+        0x28, 0x03,                        # JR Z, skip full colorizer
         0xCD, COLORIZE_ADDR & 0xFF, (COLORIZE_ADDR >> 8) & 0xFF,
         # One-shot period + v3.01 digits + footer attributes. Keeping this
         # after colorize prevents it from delaying first-VBlank CRAM writes.
