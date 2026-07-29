@@ -3,32 +3,89 @@
 **Game Boy Color colorization of Penta Dragon (ペンタドラゴン)**
 
 Converts the original DMG ROM into a CGB build with semantically-aware
-palettes for floors, walls, items, hazards, and sprites — plus an O(1)
-Shadow OAM intercept system that eliminates VBlank overflow flickering.
+palettes for floors, walls, items, hazards, and sprites. Its OBJ path colors
+the exact alternating Shadow OAM buffer immediately before the game's native
+DMA, avoiding stale palette attributes without touching sprite positions.
 
 ---
 
-## Status: ✅ v3.01-stream-rc3 — livestream release candidate
+## Status: ✅ v3.01 emulator-green stream candidate — hardware + audience vote pending
 
 The current release workflow builds `rom/working/penta_dragon_dx_FIXED.gb`
 with the exact title footer `DX V3.01 STRUK LABS`. The ROM is intentionally
-excluded from Git; the builder, probes, and documentation are versioned.
+excluded from Git; the deterministic IPS patch, builder, probes, and
+documentation are versioned.
 
-| Release gate | Probe | RC3 result |
+The newest source-built validation candidate is intentionally still outside
+the repository at MD5 `210c340bcfb261aa0337e19397eeead0` and SHA-256
+`29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784`.
+Two independent builds reproduced it byte-for-byte, and the complete isolated
+matrix bound 36/36 passing gates to source fingerprint
+`954239dea4bf6870f71811a2003eb9fc8c6707bee03b7d8c228fbe285cdf01d9`.
+It is not yet promoted, tagged, or matched by the checked-in IPS; the older
+promoted `c0a29419…` receipts below remain historical release evidence until
+an explicit promotion.
+
+| Release gate | Probe | Current result |
 |--------------|-------|------------|
+| Emulator process safety | `verify_mgba_singleflight_guard.py` | PASS without launching mGBA: raw commands denied, concurrent launch returns 75, parent-death cleanup works, and the suite confirms random-token ownership plus exact process-group cleanup |
+| Latest focused regression sweep | Isolated mGBA/PyBoy gates | **PASS** on unpromoted MD5 `210c340bcfb261aa0337e19397eeead0`: title, spotlight, gameplay BG/OBJ, flicker, stages, bosses, death, story/ending, speed, sound, scroll, and 42-scene live deck |
+| Full deterministic suite | `run_deterministic_suite.py` | **PASS 36/36** with two byte-identical builds; source fingerprint `954239dea4bf…`, zero failures, zero emulator processes left; [committable receipt](docs/release/verification/latest.json) |
+| Candidate-only IPS round trip | `verify_release_patch.py --candidate-only` | **PASS** for MD5 `210c340b…`; no ROM or IPS was committed |
+| Checked-in distributable IPS | `verify_release_patch.py` | Historical promoted evidence: 6,571-byte IPS MD5 `eb8544fcdea2ea0be0ad480bdcfc327d` reconstructs ROM MD5 `c0a29419…` from the supported Japanese base |
+| MiSTer reservation guard | `verify_mister_reservation_guard.py` | PASS, unreserved hardware commands stop before SSH/SCP; local-only commands remain usable |
+| Audience palette → release ROM | `verify_palette_build_roundtrip.py` | PASS, edited base BG/OBJ, both jet forms, boss overrides, and all powerup bytes bake into a fresh ROM; base colors reach live mGBA CRAM |
 | Title footer and palette | `verify_title_screen_integration.py`, `verify_title_color.py` | PASS |
-| `STAGE XX` timing/ditty | `verify_stage_intro_timing.py` | 156 frames and 233 timer ticks, exactly matching vanilla |
+| Complete title/logo/banner cycle | `verify_title_showcase_mgba.py`, `verify_title_visual_receipts.py` | PASS, 399 scene samples + 9 rendered frames; exact cold/returned footer, 0 unsafe/red banner cells |
+| Title cursor and option order | `verify_title_cursor_pixels.py` | PASS, native marker defaults to OPENING; DOWN moves it to GAME START; OG and DX retain the same raster-visible partial blink behavior |
+| Livestream palette bridge | `verify_live_palette_session.py` | PASS, all 29 builder palettes, guarded special CRAM, serialized rapid edits, repeatable requests, and 42/42 scene buttons |
+| `STAGE XX` timing/ditty | `verify_stage_intro_timing.py` | PASS, 156 frames; 232 versus vanilla's 233 timer ticks, no sound rewinds |
 | Item-menu HP/MEDICAL attributes | `verify_menu_hud_and_combo.py` | PASS, 0 contaminated cells |
-| BG colorization | `verify_gameplay_palette.py` | PASS, 15 palette words / 3 indices |
-| Phantom sound | `verify_phantom_d887.py` | PASS, 2 transitions versus vanilla's 18 |
+| Save-present GAME START score screen | `verify_levelselect_screen.py` | PASS, 360/360 visible attributes on palette 0 |
+| Vanilla gameplay-speed parity | `verify_stage_speed_matrix.py` | PASS on latest candidate after 600 exact-scene frames: Stage 1 135/141 (95.7%), Stage 5 159/164 (97.0%), Stage 7 153/167 (91.6%) |
+| Adversarial speed routes | `verify_stage_speed_matrix.py` | Stationary Stage 5/7: 97.1%/100%; right: 95.1%/91.6%; patrol: 80.1%/91.4% (Stage 5 patrol is the remaining worst case) |
+| Headed live speed comparison | Manual user playtest | **PASS**, user reports speed is good on the promoted no-bleed build |
+| Ordinary gameplay enemy OBJ palettes | `verify_gameplay_obj_palettes.py` | PASS, 6,150 hardware-OAM samples / 0 mismatches across 7 active combat anchors; the eighth naturally entered its miniboss scene before sampling |
+| Idle actor spotlight reel | `inventory_spotlight_roster.py`, `inventory_attract_reel.py` | PASS, all 38 roster identities use their gameplay-YAML family; Sara W/Sara D/Dragonfly travel and 2,522 Gargoyle sprites have 0 palette mismatches; demo timing is 1,987/429 frames versus OG 1,856/395 |
+| ROM-native OPENING story palettes | `inventory_opening_cutscene.py --expect-production` | PASS, committed art is 160 page-palette cells above 200 neutral dialogue cells |
+| ROM-native final-story palettes | `verify_final_cutscene_mgba.py` | PASS, both branches; 0 position-aware layout mismatches or bad tables |
+| Complete ending phase map | `analyze_ending_page_discriminators.py`, `verify_story_attr_production.py` | PASS, credits/END/epilogue reach full BG1/BG2/BG3 layouts |
+| Stage 1 BG colorization | `verify_gameplay_palette.py` | PASS, active map uses floor BG0 + slate-wall BG6 |
+| Stage 1 pickup color containment | `verify_stage1_no_bleed.py` | **PASS**, 1,200 continuous gameplay frames across alternating `$9800/$9C00` maps; every visible cell exactly matches the compiled LUT, including only the 48 confirmed cherry-red pickup tiles; six native screenshots |
+| Later-stage BG integrity | `verify_later_stage_integrity.py` | PASS, no cross-stage or unsafe attributes in Stages 2–7 |
+| Later-stage 48K-frame soak | `verify_later_stage_soak.py` | PASS, Stages 2–7; 0 unsafe attrs or lava mismatches |
+| All nine boss arenas | `verify_boss_arena_palettes.py` | PASS, 9/9 live tables exact and visibly colorized |
+| Death / GAME OVER containment | `verify_death_gameover.py` | PASS, six naturally terminating boss variants; both physical maps stay exact BG0 with zero unsafe attributes |
+| Phantom sound | `verify_phantom_d887.py` | PASS, 15 one-frame command/clear pairs with no chaining or unpaired writes; progress-sensitive total is 30 transitions versus vanilla's cached 18 and remains below the clean hard ceiling of 36 |
 | Scroll stability | `verify_scroll_tearing.py` | PASS, 0.00 changes/s |
 | `SELECT+START` safety | `verify_menu_hud_and_combo.py` | PASS, no scene change or freeze |
 
-Tagged `v3.01-stream-rc3`.
+Tagged `v3.01-stream-rc3`; speed parity, title-reel DMA, miniboss stability,
+later-stage containment, story cleanup, and the complete gameplay OBJ pass are
+current post-tag working-candidate changes. Persistent receipts for the
+promoted build are in
+[`docs/release/receipts/c0a29419`](docs/release/receipts/c0a29419), including
+the 33-gate manifest and headed/automated Stage 1 before-and-after screenshot
+receipts. The prior `67cf1235` folder retains the six 8,000-frame soak reports
+and 48-panel stable-versus-candidate sheet.
 
 ---
 
 ## Key features
+
+### Emulator process safety
+
+- All maintained headed and automated entrypoints execute mGBA through one
+  project-wide nonblocking lock. A second launch fails immediately with status
+  75 instead of competing for CPU/GPU resources.
+- The wrapper becomes the real emulator process and arms Linux
+  `PR_SET_PDEATHSIG`. Killing or timing out its verifier therefore terminates
+  that exact emulator and releases the lock instead of stranding `mgba-qt`.
+- The checked-in Claude `PreToolUse` hook rejects raw emulator commands,
+  unguarded `--mgba` overrides, and quarantined legacy launchers. `AGENTS.md`
+  applies the same no-parallel/no-broad-kill rule to other project agents.
+- `scripts/launch_mgba.sh` is the only headed-play entrypoint. It never uses
+  broad `pkill` or `killall`.
 
 ### Stream-safe title, transitions, and HUD (v3.01-stream-rc3)
 
@@ -36,38 +93,92 @@ Tagged `v3.01-stream-rc3`.
 - Intentional white-to-blue-gray title palette with no accidental red text.
 - Vanilla-length `STAGE XX` card: the colorizer yields during the stock
   frame-synchronized wait, preventing the intro ditty from repeating.
+- The active-play fade shim normalizes the stock `$90/$F9` whole-background
+  mappings to `$E4`, eliminating the white checker pulse without blackening
+  CGB palette RAM. The complete gameplay/Gargoyle/title return remains within
+  10.4% of the measured OG segment timing.
 - Clean item-menu HP bar, `MEDICAL` separator, and full-health `F` marker on
-  either hardware window map.
+  either hardware window map. The VBlank service alternates rows 0/4/5 and
+  1/2/3 so the timing-critical HP row cannot be stranded red.
+- Neutral death and GAME OVER artwork on either physical tilemap. A bounded
+  seven-phase service clears stale arena palette, bank, flip, and priority
+  bits before the stock window appears; a mode-safe late check contains the
+  final two Faze illustration cells.
 - The unstable IRQ-stack `SELECT+START` teleport is removed from production.
+- CRAM restores are split into one palette per VBlank and each four-byte half
+  is written only with the LCD off, in VBlank, or during a fresh HBlank. This
+  keeps audience-tuned palettes exact instead of producing mixed old/new rows.
 
-### O(1) Shadow OAM Intercept (v3.01)
-Replaces the old hwoam_recolor post-process (53K cycles/VBlank) with a
-71-byte HW-OAM stamper at bank13:0x6DB0 running ~375 cycles — **141× speedup**.
+### Stage and pickup palette containment (unreleased)
 
-Three WRAM-resident trampoline hooks intercept the game's native shadow OAM
-writes and inject CGB OBJ palette attributes at the source. No more VBlank
-overflow, no more orange sprite flickering.
+- Stage 1 keeps its tuned semantic floor and wall table. Only six confirmed
+  eight-tile pickup bands (`$88–8F` through `$D8–DF`) use the cherry-red BG1
+  accent; the interleaved font/structural bands and `$F0–FF` remain neutral.
+  Every visible cell is checked against this exact LUT, so a red attribute
+  cannot survive after its pickup tile scrolls away.
+- Stages 2–4 and 6 use a neutral baseline instead of misinterpreting reused
+  tile IDs through the Stage 1 table.
+- Stages 5 and 7 retain only their captured and verified lava-field mappings.
+- Boss arenas remain independently colorized by their nine arena tables.
+- The selected table is protected every VBlank after arena entry, including
+  Ted's delayed stock sentinel reset that previously restored the Stage 1
+  table roughly 250 frames into the fight.
+- `probe_stage_integrity.lua` captures both VRAM banks and both map planes;
+  `render_stage_integrity.py` reconstructs the background for visual review.
 
-### Per-Monster-Type Palette LUT
-A 256-byte static lookup table at bank13:0x6B00 replaces the old 19-byte
-CP-cascade assembly. Monster palette assignments are driven by
-`palettes/monster_palette_map.yaml`:
+### Title-idle reel and story prologue (unreleased)
 
-| Monster     | Tile range | Palette |
-|-------------|-----------|---------|
-| Crow        | 0x30-0x3F | 6 (purple) |
-| Orc         | 0x40-0x4F | 5 (blue) |
-| Hornet      | 0x50-0x5F | 4 (orange) |
-| Soldier     | 0x70-0x7F | 7 (red) |
-| Sara Witch  | 0x10-0x2F | Dynamic (FFBE→pal 2) |
-| Sara Dragon | 0x10-0x2F | Dynamic (FFBE→pal 1) |
-| Projectile  | 0x00-0x01 | 3 (yellow) |
+- The title cursor defaults to **OPENING START**; press DOWN before confirming
+  to select **GAME START**.
+- The real title spotlight is scene `D880=0x1B`. Its stock `FFF2` identity
+  indexes a packed 38-entry map at bank13:`0x6BE8`; every actor uses the same
+  YAML OBJ family as its matching gameplay graphics. Sara W → OBJ2,
+  Sara D → OBJ1, and Dragonfly → OBJ4 are explicit roster examples.
+- Only spotlight shadow-OAM slots 0–3 are recolored immediately before native
+  DMA. The ordinary `D880=0x0A` gameplay demo remains on its normal boss
+  mapping, so its Gargoyle palette no longer changes once per second.
+- The release ROM now colorizes the OPENING book, Sara, and dragon-eye panels
+  from their committed story identities. Artwork rows use BG1/BG2/BG3 while
+  the separator, border, and dialogue remain neutral BG0. The first title
+  option enters this intro; DOWN selects GAME START.
+- The Penta Dragon pre-battle speech and the Lisa/Sara post-final ending are
+  separate paths. Their committed artwork uses BG4–BG7 above neutral dialogue;
+  credits, END, and epilogue use full-screen BG1, BG2, and BG3. The scene deck
+  loads ROM-matched states so audience edits preview the same mappings that the
+  builder bakes into release. Their corrected control-flow map and verification
+  evidence are in `docs/audit/cutscenes_intro_ending.md`.
+
+### DMA-ordered Shadow OAM palette pass (unreleased)
+
+The old helper colored ten entries in each Shadow OAM buffer. That missed
+ordinary enemies in slots 10–23, and the main loop could rebuild the future
+DMA buffer with palette 0 after it had already been colored.
+
+The release builder now predicts which of `C000`/`C100` the immediately
+following `FF80` DMA will select, colors all 40 entries in that one buffer,
+then lets the native DMA run. Sara's dynamic palette and boss-slot semantics
+are preserved. An mGBA hardware-OAM gate checks every stable ordinary enemy
+tile on every frame rather than inferring success from WRAM.
+
+The title-idle reel and ordinary gameplay intentionally use separate maps:
+
+| Context | Mapping |
+|---------|---------|
+| Title-idle reel | Packed 38-entry `FFF2` identity map at bank13:`0x6BE8`, compiled from gameplay YAML families |
+| Ordinary gameplay | Packed runtime ranges: `30–3F→3`, `40–4F→4`, `50–5F→5`, `60–6F→6`, `70–7F→7` |
+| Sara | Dynamic `FFBE`: Witch palette 2, Dragon palette 1 |
+| Bosses | Existing boss-specific OBJ slot table |
 
 ### Arena-Dispatched Inline Hook
 The inline hook at bank1:0x42A7 dispatches based on scene:
-- D880 < 0x02 (title screen) → tile-only, no attr writes
-- D880 < 0x0C (dungeon) → full tile+attr (pickup items red immediately)
-- D880 >= 0x0C (boss arena) → tile-only (position sweep owns attrs)
+- D880 `0x02` (Stage 1) → independent `$9800` and `$9C00` camera-phase
+  caches; changed maps copy tile+attribute atomically, while steady maps keep
+  the stock-width tile-only path
+- D880 `0x06`/`0x08` (Stage 5/7 lava) → atomic tile+attribute copy when
+  the packed tile source or camera signature changes
+- Other dungeon scenes → native tile copy with their neutral scene baseline
+- Title, story, and boss scenes → tile-only here; their dedicated bounded
+  services own attributes
 - Hardware window enabled (item menu) → tile-only, preserving palette-0 HUD attrs
 
 ### Legacy teleport debugging
@@ -90,20 +201,127 @@ python3 scripts/build_v302_title_fix.py
 # → rom/working/penta_dragon_dx_FIXED.gb
 ```
 
+Generate and verify the distributable patch:
+
+```bash
+uv run penta-colorize build-patch \
+  --original "rom/Penta Dragon (J).gb" \
+  --modified rom/working/penta_dragon_dx_FIXED.gb \
+  --out rom/penta_dragon_dx.ips
+python3 scripts/diagnostics/verify_release_patch.py
+```
+
+The patch accepts only the verified Japanese base ROM with MD5
+`df43e0adfdc74b2829c7e95e91c71a28`. The checked-in 6,571-byte IPS has MD5
+`eb8544fcdea2ea0be0ad480bdcfc327d` and reconstructs the current working ROM
+MD5 `c0a29419e91b57462ab649b23b2deae7`; copyrighted source and output ROMs are
+not distribution artifacts.
+
+### Build the ROM-free pre-hardware bundle
+
+After a full matrix pass, build the deterministic IPS/readme/checksum archive
+and four native 160x144 submission screenshots:
+
+```bash
+python3 scripts/build_release_bundle.py \
+  --emulator-manifest /tmp/penta-release-candidate/manifest.json
+```
+
+Without a hash-bound MiSTer pass and audience palette approval, the script
+emits only `Penta_Dragon_DX_v3.01_PREHARDWARE.zip`; its bundled readme says
+not to publish it. `--final` fails closed unless both approvals match the exact
+ROM, patch, emulator manifest, and production palette YAML. No ROM, save, or
+savestate can enter the archive allowlist. See `docs/release/README.md`.
+After the livestream vote, `scripts/record_palette_approval.py` independently
+rebuilds the ROM from the approved YAML before it writes that approval.
+
+Romhacking.net's database stopped accepting new submissions in August 2024.
+The current packaging target is Romhack Plaza, whose rules permit IPS/ZIP
+patch releases, forbid ROM files, and require native-resolution screenshots:
+
+- https://community.romhackplaza.org/help/terms/
+- https://romhackplaza.org/news/many-new-things-on-the-plaza/
+
 ### Test in mGBA
 
 ```bash
 # Verified human-testing launch (KDE Wayland + NVIDIA):
-DISPLAY=:0 XAUTHORITY=/run/user/1000/xauth_vYbeWX QT_QPA_PLATFORM=xcb \
-  /home/struktured/bin/mgba-qt \
-  /home/struktured/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_FIXED.gb
+scripts/launch_mgba.sh rom/working/penta_dragon_dx_FIXED.gb
 ```
 
+Do not pipe, redirect, background, or bypass this launcher. It uses the
+project's xcb display setup, holds the single-flight lock, and remains the
+exact parent guardian of mGBA. If another emulator owns the slot, wait for it;
+never use a broad `pkill` or `killall`.
+
 ### Run verification probes
+
+The authoritative deterministic suite refuses an occupied emulator slot,
+builds the candidate twice under `/tmp`, requires byte-identical output, runs
+all current gates sequentially, and writes a source-bound receipt only after
+the complete matrix passes:
+
+```bash
+python3 scripts/diagnostics/run_deterministic_suite.py
+```
+
+Passing all 36 emulator/local-tooling gates does not replace the
+reservation-backed MiSTer FPGA sweep required before release. The historical
+`scripts/probes/full_verification_loop*.sh` scripts target the retired
+teleport build and are not release evidence.
+
+The repository's legacy `scripts/mister.py` entry point fails closed before
+all MiSTer status, SSH, SCP, input, launch, screenshot, or deployment work.
+After acquiring a reservation through the shared service, expose its lease ID
+and trusted local checker:
+
+```bash
+MISTER_RESERVATION_ID='<active lease>' \
+MISTER_RESERVATION_CHECKER='<reservation-service check command>' \
+python3 scripts/mister.py reservation_check
+```
+
+The checker receives `MISTER_RESERVATION_ID` and
+`MISTER_RESERVATION_HOST`; it must exit zero only while that exact lease owns
+that exact host. It is re-run before every SSH/SCP boundary so an expired lease
+cannot remain cached during a long command. No checker is bundled, because
+reservation ownership belongs to the external shared service. MiSTerClaw MCP
+calls must follow the same reservation rule.
+
+Once reserved, start the physical release sweep from the exact successful
+emulator manifest:
+
+```bash
+python3 scripts/mister.py release_sweep_start \
+  /tmp/penta-release-candidate/manifest.json
+```
+
+Navigate with the physical controller. At each state, capture and explicitly
+confirm the live output:
+
+```bash
+python3 scripts/mister.py release_checkpoint \
+  tmp/mister_release_sweeps/.../manifest.json title confirm
+```
+
+The required visual checkpoints are title, default OPENING route, DOWN→GAME
+START route, STAGE card, Stage 1 gameplay, item menu, a later stage, a boss
+arena, and death/GAME OVER. `release_sweep_finish` refuses to emit
+`hardware-pass` until every checkpoint is confirmed, the live core is still
+GBC, the deployed/local ROM hashes still match, and every screenshot remains
+intact. A failed capture cannot reuse an older screenshot.
+
+Individual gates remain useful while developing:
 
 ```bash
 # Title screen (must show 2+ colors, >5% non-white)
 python3 scripts/probes/verify_title_color.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Entire title/logo/animated-banner cycle must stay artifact-free
+python3 scripts/diagnostics/verify_title_showcase_mgba.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Default marker is OPENING; DOWN moves it to GAME START
+python3 scripts/diagnostics/verify_title_cursor_pixels.py rom/working/penta_dragon_dx_FIXED.gb
 
 # Exact STAGE XX/ditty duration versus the original ROM
 python3 scripts/probes/verify_stage_intro_timing.py rom/working/penta_dragon_dx_FIXED.gb
@@ -111,8 +329,35 @@ python3 scripts/probes/verify_stage_intro_timing.py rom/working/penta_dragon_dx_
 # Title, menu HUD, and retired SELECT+START safety
 python3 scripts/probes/verify_menu_hud_and_combo.py rom/working/penta_dragon_dx_FIXED.gb
 
+# DOWN selects GAME START; its save-present score screen must remain clean
+python3 scripts/diagnostics/verify_levelselect_screen.py rom/working/penta_dragon_dx_FIXED.gb
+
 # Gameplay palette (must show 10+ distinct BG palette words)
 python3 scripts/probes/verify_gameplay_palette.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Ordinary enemy tiles must match the production map in hardware OAM
+python3 scripts/diagnostics/verify_gameplay_obj_palettes.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Later-stage neutral baseline + Stage 5/7 lava containment
+python3 scripts/diagnostics/verify_later_stage_integrity.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Long-run containment across Stages 2-7
+python3 scripts/diagnostics/verify_later_stage_soak.py rom/working/penta_dragon_dx_FIXED.gb --frames 8000
+
+# Every boss arena must load its exact dedicated table
+python3 scripts/probes/verify_boss_arena_palettes.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Stock death illustration and GAME OVER window must remain neutral
+python3 scripts/diagnostics/verify_death_gameover.py rom/working/penta_dragon_dx_FIXED.gb
+
+# Title-idle Sara W/Sara D/Dragonfly identities must select OBJ2/OBJ1/OBJ4
+python3 scripts/diagnostics/inventory_attract_reel.py rom/working/penta_dragon_dx_FIXED.gb --frames 14000
+
+# Default OPENING option: exact ROM-native art/dialogue palette split
+python3 scripts/diagnostics/inventory_opening_cutscene.py rom/working/penta_dragon_dx_FIXED.gb --expect-production
+
+# Both original final-story branches through the mGBA pixel pipeline
+python3 scripts/diagnostics/verify_final_cutscene_mgba.py rom/working/penta_dragon_dx_FIXED.gb
 
 # Miniboss colorization
 python3 scripts/probes/verify_miniboss_color.py rom/working/penta_dragon_dx_FIXED.gb
@@ -123,8 +368,8 @@ python3 scripts/probes/verify_scroll_tearing.py rom/working/penta_dragon_dx_FIXE
 # Phantom sound (must be ≤1.5× vanilla baseline)
 python3 scripts/probes/verify_phantom_d887.py rom/working/penta_dragon_dx_FIXED.gb
 
-# Orange sprite flicker (PyBoy, 120 frames, must be 0%)
-python3 scripts/diagnostics/verify_sprite_flicker.py
+# Cold-boot title menu semantics and Stage 1 entry
+python3 scripts/diagnostics/verify_hardware_gate.py rom/working/penta_dragon_dx_FIXED.gb
 ```
 
 ## Live palette editing session
@@ -133,16 +378,55 @@ python3 scripts/diagnostics/verify_sprite_flicker.py
 scripts/palette_session.sh start
 ```
 
-This currently boots the legacy debug workflow:
-1. mGBA-qt with `penta_dragon_dx_teleport.gb` and `live_palettes.lua`
-2. A Python HTTP server at localhost:8077 serving the color-picker UI
-3. A browser tab pointed at the UI
+This boots the verified `FIXED.gb` through the correct XWayland/NVIDIA launch,
+attaches `live_palettes.lua`, serves the color picker on loopback port 8077,
+and opens the browser UI. Its 42-button Stream Scene Deck loads 15 curated
+emulator states, 12 ROM-matched story/ending states, six Stage 2–7 states, and
+all nine boss arenas without changing release-ROM control flow. The group
+includes the intro's first text/book/Sara/dragon-eye panels, pre-final
+Penta/Sara, post-final dragon/Lisa/Sara, credits, the END page, and the
+epilogue. Generated stage/story/boss states are refreshed automatically when
+the ROM checksum changes.
+
+The boss-state generator starts from a freshly generated Stage 1 state,
+modifies only a temporary copy of mGBA's serialized CPU/memory state to enter
+the original boss dispatcher, and then runs and recaptures every arena for 240
+frames on `FIXED.gb`. The browser never writes PC, stack, `D880`, or `FFBA`.
+The five final-story states are likewise recaptured from the original routines,
+then loaded in fresh mGBA processes against the untouched ROM before they can
+enter the deck. Their artwork previews use the exact stock
+`D880/DCE8/DCEA/DCF0/DD07` discriminator; the separator, dialogue border, and
+text remain on neutral BG0. These are ROM-native attributes, not an emulator
+overlay. Credits, END, and epilogue use independent complete ending-phase
+guards and all 360 visible cells on BG1, BG2, and BG3, respectively.
 
 Stop with `scripts/palette_session.sh stop`.
 
-Use `FIXED.gb` for release validation. The palette browser remains useful for
-live color tuning, but its boss-teleport request has no release-safe in-ROM
-consumer yet.
+Only palettes actually changed in the browser are reapplied, so unrelated
+boss/scene CRAM is preserved. All 29 production palette rows are exposed:
+eight BG, eight primary OBJ, eight guarded boss overrides, two guarded jet
+forms, and three guarded powerup projectiles. Saving updates those exact YAML
+arrays without reformatting commentary and creates a hash-named pre-save
+backup; rebuild with `build_v302_title_fix.py`. The title keeps its proven
+BG7→BG0 boot mask. The phased CRAM service then restores independently tuned
+BG7 for gameplay, one palette per VBlank with LCD-mode-safe four-byte writes.
+When the default `FIXED.gb` would change, the builder
+first preserves its previous bytes as
+`penta_dragon_dx_FIXED.prebuild_<md5>.backup.gb`; rebuilding identical bytes
+creates no redundant backup. The session stop command tracks its own PIDs and
+does not kill unrelated mGBA windows.
+
+```bash
+python3 scripts/diagnostics/verify_live_palette_session.py \
+  rom/working/penta_dragon_dx_FIXED.gb
+```
+
+The retired SELECT+START teleport and raw state-byte holds are absent from this
+workflow.
+
+For the show order, title-control explanation, audience-vote sequence,
+post-stream rebuild, approval, and recovery steps, use
+`docs/stream_runbook.md`.
 
 ---
 
@@ -153,7 +437,12 @@ scripts/
 ├── build_v301_gdma.py           # Base production ROM builder
 ├── build_v301_teleport.py       # Teleport ROM builder (extends gdma)
 ├── build_v302_title_fix.py       # v3.01 stream RC builder
-├── patch_oam_intercept.py       # O(1) intercept + trampoline installer
+├── build_release_bundle.py       # Deterministic ROM-free guarded packager
+├── record_palette_approval.py    # Explicit post-stream palette hash lock
+├── patch_oam_intercept.py       # Retired experimental intercept (not release path)
+├── palette_session.sh           # Release-safe headed stream launcher
+├── live_palette_editor.py       # Loopback browser palette UI
+├── lua/live_palettes.lua        # Selective live CRAM + scene-deck bridge
 ├── bg_experiment.py             # Colorizer codegen utilities
 ├── probes/                      # Verification probes (5 main + extras)
 │   ├── verify_title_color.py
@@ -162,6 +451,18 @@ scripts/
 │   ├── verify_scroll_tearing.py
 │   └── verify_phantom_d887.py
 └── diagnostics/                 # Diagnostic harnesses
+    ├── inventory_opening_cutscene.py
+    ├── inventory_final_cutscene.py
+    ├── verify_gameplay_obj_palettes.py
+    ├── generate_stream_stage_states.py
+    ├── generate_stream_boss_states.py
+    ├── generate_stream_story_states.py
+    ├── verify_live_palette_session.py
+    ├── verify_mister_release_workflow.py
+    ├── verify_release_candidate.py
+    ├── verify_levelselect_screen.py
+    ├── verify_final_cutscene_mgba.py
+    ├── verify_later_stage_soak.py
     ├── verify_sprite_flicker.py
     └── verify_title_cursor_pixels.py
 
@@ -171,7 +472,8 @@ palettes/
 └── penta_palettes_v097.yaml     # CGB palette color definitions
 
 docs/
-├── o1_oam_intercept_plan.md     # O(1) intercept architecture
+├── release/                      # Public readme template + packaging contract
+├── o1_oam_intercept_plan.md     # Historical intercept design
 ├── per_monster_palette_plan_v2.md  # Per-monster palette design
 ├── VBLANK_HOOK_LIMITATIONS.md   # VBlank hook constraint documentation
 └── inline_hook_analysis_v300.md # Inline hook design analysis

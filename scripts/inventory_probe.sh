@@ -4,9 +4,7 @@ set -e
 PROJ=/home/struktured/projects/penta-dragon-dx-claude
 ROM="$PROJ/rom/Penta Dragon (J) [A-fix].gb"
 SCRIPT="$PROJ/scripts/probes/inventory_probe.lua"
-
-pkill -9 -f mgba-qt 2>/dev/null || true
-sleep 1
+GUARDED_MGBA="$PROJ/scripts/mgba-qt-singleflight"
 QTINI="$HOME/.config/mgba/qt.ini"
 [ -f "$QTINI" ] && sed -i 's/^displayDriver=.*/displayDriver=1/' "$QTINI"
 
@@ -17,7 +15,7 @@ echo ""
 QT_QPA_PLATFORM=xcb \
 __GLX_VENDOR_LIBRARY_NAME=nvidia \
 VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json \
-  mgba-qt "$ROM" --script "$SCRIPT"
+  "$GUARDED_MGBA" "$ROM" --script "$SCRIPT"
 
 echo ""
 echo "Probe done. Lines:"

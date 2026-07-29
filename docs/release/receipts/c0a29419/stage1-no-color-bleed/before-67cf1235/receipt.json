@@ -1,0 +1,192 @@
+{
+  "schema": "penta-dragon-dx-stage1-no-bleed-v1",
+  "status": "fail",
+  "rom": "/home/struktured/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_FIXED.gb",
+  "rom_md5": "67cf123591765e8113e4cdb09dc80448",
+  "rom_sha256": "dd9a69c1d4286b5e4850a3c9d24f509243bf62a08a485364184d59c5267276fc",
+  "route": {
+    "source": "cold boot; native Stage 1 selection; continuous input",
+    "mode": "right",
+    "play_frames_requested": 1200,
+    "emulated_seconds": 20.091
+  },
+  "stage1_table_histogram": {
+    "0": 108,
+    "1": 111,
+    "6": 37
+  },
+  "probe": {
+    "captures": [
+      {
+        "play_frame": 120,
+        "elapsed_seconds": 2.009,
+        "screenshot": "play-0120.png",
+        "attribute_histogram": {
+          "0": 275,
+          "1": 61,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 24,
+          "7": 0
+        },
+        "palette_1_cells": 61,
+        "unexpected_palette_cells": 61,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "a862a55185f6662165e113eca2a36ed237e3d7700cb18c899ec770045f998515",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 360,
+        "elapsed_seconds": 6.027,
+        "screenshot": "play-0360.png",
+        "attribute_histogram": {
+          "0": 256,
+          "1": 71,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 33,
+          "7": 0
+        },
+        "palette_1_cells": 71,
+        "unexpected_palette_cells": 71,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "3a2185dbac716ef3d1249eba3b872d47fe992a92576d9c276e946620e4196e02",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 600,
+        "elapsed_seconds": 10.046,
+        "screenshot": "play-0600.png",
+        "attribute_histogram": {
+          "0": 256,
+          "1": 71,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 33,
+          "7": 0
+        },
+        "palette_1_cells": 71,
+        "unexpected_palette_cells": 71,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "c09ddfbf9f6cbfd0e8d6aa3ade353f5667d392d7647f49baa9d0a8c75b4183cf",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 840,
+        "elapsed_seconds": 14.064,
+        "screenshot": "play-0840.png",
+        "attribute_histogram": {
+          "0": 256,
+          "1": 71,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 33,
+          "7": 0
+        },
+        "palette_1_cells": 71,
+        "unexpected_palette_cells": 71,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "cb2690dc7cd1b91fd37eaed81f10ed838a741cb78d62037250208439c6f34613",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 1080,
+        "elapsed_seconds": 18.082,
+        "screenshot": "play-1080.png",
+        "attribute_histogram": {
+          "0": 275,
+          "1": 61,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 24,
+          "7": 0
+        },
+        "palette_1_cells": 61,
+        "unexpected_palette_cells": 61,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "094096b0f32a473ea01affbd09a59f49e10f71a3c7ea08f21a1b5046002261eb",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 1200,
+        "elapsed_seconds": 20.091,
+        "screenshot": "play-1200.png",
+        "attribute_histogram": {
+          "0": 256,
+          "1": 71,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 33,
+          "7": 0
+        },
+        "palette_1_cells": 71,
+        "unexpected_palette_cells": 71,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "8e3bcce434b51fd5eb11f583b4c2219139853837760d0c32f2ea7b508972cf1f",
+        "native_size": [
+          160,
+          144
+        ]
+      }
+    ],
+    "frames": 1206,
+    "sampled_frames": 1206,
+    "checked_cells": 434790,
+    "pal1_cells": 76411,
+    "unexpected_cells": 76411,
+    "unsafe_cells": 0,
+    "first_pal1_frame": 1,
+    "first_unexpected_frame": 1,
+    "scene_frames": 1206,
+    "active_frames": 1206,
+    "scroll_changes": 15,
+    "final_scene": 2,
+    "final_ffc1": 1,
+    "capture_count": 6
+  },
+  "checks": {
+    "1200+ continuous actual gameplay frames": true,
+    "every actual-play frame sampled": true,
+    "route visibly scrolled": true,
+    "no visible red BG1 cells": false,
+    "no unexpected visible BG palettes": false,
+    "no tile-bank/flip/priority leakage": true,
+    "six native screenshots": true,
+    "final state remains Stage 1 gameplay": true
+  },
+  "contact_sheet": "actual-play-stage1.png",
+  "contact_sheet_sha256": "3993c378d4ccbbe2d86b2bcfc0ebf261c2d159ee17377becfc4476c7a64ca571",
+  "failures": [
+    "Stage 1 ROM table contains palettes outside neutral floor/wall set {0,6}: {'0': 108, '1': 111, '6': 37}",
+    "Stage 1 ROM table still maps 111 tile IDs to red BG1",
+    "no visible red BG1 cells",
+    "no unexpected visible BG palettes"
+  ]
+}

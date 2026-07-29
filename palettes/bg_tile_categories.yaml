@@ -12,17 +12,6 @@
 # The game uses 2x2 tile blocks for most elements.
 # Items follow a pattern: base, base+1, base+16, base+17
 #
-<<<<<<< Updated upstream
-# Recommended BG Palette Assignment:
-#   Palette 0: Floor/platforms (blue-white dungeon)
-#   Palette 1: Items (gold/yellow - makes them pop!)
-#   Palette 2: Walls/structure (darker blue-gray)
-#   Palette 3: Hazards (red/orange warning)
-#   Palette 4: Decorative (purple/magenta)
-#   Palette 5: Nature/organic (green)
-#   Palette 6: Water/ice (cyan)
-#   Palette 7: Special/secret (deep blue)
-=======
 # The pre-iter-278w `categories:` block at the bottom is RETAINED for
 # historical category names (floor/void/walls/etc.) used elsewhere in
 # the codebase. It is documentation only — the bg_table palette assignment
@@ -37,8 +26,8 @@ bg_table:
 
   # Palette legend (what each pal index renders as on the dungeon scene)
   legend:
-    0: "default / floor / void / structural transitions"
-    1: "items + title/menu uppercase font (0x80-0xDF unified red)"
+    0: "default / floor / void / structural transitions / BG pickup tiles"
+    1: "confirmed Stage 1 pickup art only (cherry-red item accents)"
     5: "RESERVED for stage-2 LAVA path (not used in dungeon bg_table)"
     6: "walls + spike cylinders (slate/gunmetal metallic ramp)"
     7: "RESERVED — was deep-blue secret-stage intent; build override sets pal 7 CRAM to pal 0 colors to hide stale CGB boot-ROM attrs"
@@ -72,15 +61,35 @@ bg_table:
         LAVA. Excludes 0x47/0x57 — handled as wall corners.
       tiles: [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]
 
-    - name: items_and_font
+    - name: pickup_tiles_targeted
       palette: 1
       description: |
-        Item pickups + title/menu uppercase font. 0x80-0x99 = letters A..Z
-        (font); 0x88-0xDF = item pickups. Block starts at 0x80 (was 0x88)
-        so all title/menu text is uniform red instead of A-H(black)/I-Z(red)
-        two-tone. Safe because tiles 0x80-0x9F never appear as dungeon BG
-        tiles (font/letters only); arenas use their own tables. Excluded tile 0xC0 (cursor).
-      tile_range: [0x81, 0xDF]  # inclusive, excluded tile 0xC0 (was 0x80)
+        The old blanket 0x80-0xDF + 0xF0-0xFF rule painted font and reused
+        background tiles red. Actual 2x2 pickup art occupies alternating
+        eight-tile bands in the Stage 1 tileset. Color only those confirmed
+        bands; keep the interleaved font/background bands neutral. Title,
+        footer, and item-menu attributes remain scene/window-specific BG0.
+      tile_ranges:
+        - [0x88, 0x8F]
+        - [0x98, 0x9F]
+        - [0xA8, 0xAF]
+        - [0xB8, 0xBF]
+        - [0xC8, 0xCF]
+        - [0xD8, 0xDF]
+
+    - name: pickup_font_no_bleed
+      palette: 0
+      description: |
+        Explicit neutral bands surrounding the pickup tiles. These contain
+        font, menu, and reused structural art that caused the broad red bleed.
+      tile_ranges:
+        - [0x80, 0x87]
+        - [0x90, 0x97]
+        - [0xA0, 0xA7]
+        - [0xB0, 0xB7]
+        - [0xC0, 0xC7]
+        - [0xD0, 0xD7]
+        - [0xF0, 0xFF]
 
     - name: sentinel_reset
       palette: 0
@@ -163,7 +172,6 @@ obj_colorizer:
 # This block was the original aspirational design doc. It does NOT drive
 # the build — bg_table above is canonical. Keep for category-name reference
 # only; per-category palette assignments here are stale.
->>>>>>> Stashed changes
 
 categories:
   # -----------------------------------------
@@ -258,7 +266,7 @@ categories:
     frequency: "low (1-8 per screen)"
 
   # -----------------------------------------
-  # ITEMS (0x88-0xDF) - THE GOLD RANGE!
+  # ITEMS (alternating bands in 0x88-0xDF)
   # -----------------------------------------
   # All pickups: health, extra life, powerups, etc.
   # Each item is a 2x2 block:
@@ -277,10 +285,10 @@ categories:
   items:
     range: [0x88, 0xDF]
     # Full list: 136-223 decimal
-    palette: 1
+    palette: 0
     description: "All item pickups - health, powerups, extra lives"
     frequency: "2-4 tiles when item present (2x2 blocks)"
-    colorization: "PRIORITY - makes items stand out!"
+    colorization: "BG1 only on confirmed eight-tile pickup bands"
 
     # Detailed breakdown:
     subtypes:

@@ -14,6 +14,11 @@ to zero after a bg_table refactor).
 """
 from __future__ import annotations
 import os, sys, subprocess, tempfile, argparse
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MGBA_QT = PROJECT_ROOT / "scripts/mgba-qt-singleflight"
 
 
 def run_probe(rom_path: str, max_frames: int = 1200) -> dict:
@@ -23,7 +28,7 @@ def run_probe(rom_path: str, max_frames: int = 1200) -> dict:
     env["MAX_FRAMES"] = str(max_frames)
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["SDL_AUDIODRIVER"] = "dummy"
-    cmd = ["mgba-qt", rom_path,
+    cmd = [str(MGBA_QT), rom_path,
            "--script", "scripts/probes/gameplay_palette.lua", "-l", "0"]
     subprocess.run(cmd, env=env, capture_output=True, timeout=120)
     if not os.path.exists(out) or os.path.getsize(out) < 10:

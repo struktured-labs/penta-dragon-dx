@@ -18,6 +18,11 @@ catches that, while the original pal-RAM-only check would miss it.
 """
 from __future__ import annotations
 import os, sys, subprocess, tempfile, argparse
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MGBA_QT = PROJECT_ROOT / "scripts/mgba-qt-singleflight"
 
 
 PROBE = r"""
@@ -63,10 +68,36 @@ local function read_attr_histogram()
     end
     emu:write8(0xFF4F, 0)
     local parts = {}
+    local active_mask = 0
     for p = 0, 7 do
         table.insert(parts, string.format("p%d=%d", p, counts[p]))
+        if counts[p] > 0 then active_mask = active_mask | (1 << p) end
     end
-    return table.concat(parts, ",")
+    return table.concat(parts, ","), active_mask
+end
+
+local function changed_pal_bytes(before, after)
+    local changed = {}
+    for byte = 0, 63 do
+        local first = byte * 2 + 1
+        if string.sub(before, first, first + 1) ~=
+           string.sub(after, first, first + 1) then
+            table.insert(changed, string.format("%02X", byte))
+        end
+    end
+    return table.concat(changed, ",")
+end
+
+local function changed_pal_mask(before, after)
+    local mask = 0
+    for byte = 0, 63 do
+        local first = byte * 2 + 1
+        if string.sub(before, first, first + 1) ~=
+           string.sub(after, first, first + 1) then
+            mask = mask | (1 << (byte >> 3))
+        end
+    end
+    return mask
 end
 
 callbacks:add("frame", function()
@@ -91,25 +122,57 @@ callbacks:add("frame", function()
     -- Capture pal RAM + attr histogram every frame for the measurement window
     if elapsed >= 60 and elapsed < 60 + 240 then  -- 4 seconds of scroll
         local p = read_pal()
-        local a = read_attr_histogram()
+        local a, active = read_attr_histogram()
         local scx = emu:read8(0xFF43)
         local scy = emu:read8(0xFF42)
         local room = emu:read8(0xFFBD)
-        table.insert(samples, {f=elapsed, pal=p, attr=a, scx=scx, scy=scy, room=room})
+        table.insert(samples, {
+            f=elapsed, pal=p, attr=a, scx=scx, scy=scy, room=room,
+            phase=emu:read8(0xDF4C), bgp=emu:read8(0xFF47),
+            tick=emu:read8(0xFFD4), cache=emu:read8(0xDF00),
+            active=active
+        })
     end
 
     if elapsed >= 60 + 240 then
         fired = true
         local fh = io.open(OUT, "w")
         local pal_changes = 0
+        local visible_pal_changes = 0
         local attr_changes = 0
         local room_transitions = 0
+        local pal_change_details = {}
         for i = 2, #samples do
             if samples[i].room ~= samples[i-1].room then
                 room_transitions = room_transitions + 1
             elseif samples[i].room == samples[i-1].room then
                 if samples[i].pal ~= samples[i-1].pal then
                     pal_changes = pal_changes + 1
+                    local changed_mask = changed_pal_mask(
+                        samples[i-1].pal, samples[i].pal
+                    )
+                    local active_mask =
+                        samples[i-1].active | samples[i].active
+                    if (changed_mask & active_mask) ~= 0 then
+                        visible_pal_changes = visible_pal_changes + 1
+                    end
+                    table.insert(
+                        pal_change_details,
+                        string.format(
+                            "frame:%d,room:%02X,bytes:%s",
+                            samples[i].f,
+                            samples[i].room,
+                            changed_pal_bytes(
+                                samples[i-1].pal, samples[i].pal
+                            )
+                        ) .. string.format(
+                            ",phase:%02X->%02X,bgp:%02X,tick:%02X,cache:%02X" ..
+                            ",changed_mask:%02X,active_mask:%02X",
+                            samples[i-1].phase, samples[i].phase,
+                            samples[i].bgp, samples[i].tick, samples[i].cache,
+                            changed_mask, active_mask
+                        )
+                    )
                 end
                 if samples[i].attr ~= samples[i-1].attr then
                     attr_changes = attr_changes + 1
@@ -121,8 +184,27 @@ callbacks:add("frame", function()
         fh:write(string.format("room_transitions=%d\n", room_transitions))
         fh:write(string.format("pal_changes_within_room=%d\n", pal_changes))
         fh:write(string.format("pal_changes_per_second=%.2f\n", pal_changes * 60 / 240))
+        fh:write(string.format(
+            "visible_pal_changes_within_room=%d\n", visible_pal_changes
+        ))
+        fh:write(string.format(
+            "visible_pal_changes_per_second=%.2f\n",
+            visible_pal_changes * 60 / 240
+        ))
         fh:write(string.format("attr_changes_within_room=%d\n", attr_changes))
         fh:write(string.format("attr_changes_per_second=%.2f\n", attr_changes * 60 / 240))
+        for i, detail in ipairs(pal_change_details) do
+            fh:write(string.format("pal_change_%d=%s\n", i, detail))
+        end
+        for i = 2, #samples do
+            if samples[i].phase ~= samples[i-1].phase then
+                fh:write(string.format(
+                    "phase_change_%d=frame:%d,%02X->%02X,bgp:%02X,tick:%02X,cache:%02X\n",
+                    i, samples[i].f, samples[i-1].phase, samples[i].phase,
+                    samples[i].bgp, samples[i].tick, samples[i].cache
+                ))
+            end
+        end
         fh:close()
         os.exit(0)
     end
@@ -131,25 +213,43 @@ end)
 
 
 def run_probe(rom_path: str) -> dict:
-    out = tempfile.NamedTemporaryFile(suffix=".txt", delete=False).name
-    lua = tempfile.NamedTemporaryFile(suffix=".lua", delete=False, mode="w")
-    lua.write(PROBE); lua.close()
-    env = os.environ.copy()
-    env["STATE_PATH"] = out
-    env["QT_QPA_PLATFORM"] = "offscreen"
-    env["SDL_AUDIODRIVER"] = "dummy"
-    cmd = ["mgba-qt", rom_path, "--script", lua.name, "-l", "0"]
-    subprocess.run(cmd, env=env, capture_output=True, timeout=120)
-    if not os.path.exists(out) or os.path.getsize(out) < 10:
-        raise RuntimeError(f"scroll harness produced no output for {rom_path}")
-    with open(out) as fh: text = fh.read()
+    with tempfile.TemporaryDirectory(prefix="penta-scroll-") as temp:
+        out = Path(temp) / "result.txt"
+        lua = Path(temp) / "probe.lua"
+        lua.write_text(PROBE)
+        env = os.environ.copy()
+        env["STATE_PATH"] = str(out)
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["SDL_AUDIODRIVER"] = "dummy"
+        cmd = [
+            str(MGBA_QT),
+            "-C",
+            f"savegamePath={temp}",
+            "-C",
+            f"savestatePath={temp}",
+            str(Path(rom_path).resolve()),
+            "--script",
+            str(lua),
+            "-l",
+            "0",
+        ]
+        subprocess.run(
+            cmd,
+            cwd=temp,
+            env=env,
+            capture_output=True,
+            timeout=120,
+        )
+        if not out.is_file() or out.stat().st_size < 10:
+            raise RuntimeError(
+                f"scroll harness produced no output for {rom_path}"
+            )
+        text = out.read_text()
     state = {}
     for line in text.splitlines():
         if "=" in line and not line.startswith("#"):
             k, v = line.split("=", 1)
             state[k.strip()] = v.strip()
-    try: os.unlink(out); os.unlink(lua.name)
-    except OSError: pass
     return state
 
 
@@ -164,19 +264,32 @@ def main():
     b = run_probe(args.baseline_rom)
     print(f"vanilla:   pal_changes_within_room={b.get('pal_changes_within_room')} "
           f"({b.get('pal_changes_per_second')}/s) "
+          f"visible={b.get('visible_pal_changes_within_room', 'n/a')} "
+          f"({b.get('visible_pal_changes_per_second', 'n/a')}/s) "
           f"attr_changes={b.get('attr_changes_within_room', 'n/a')} "
           f"({b.get('attr_changes_per_second', 'n/a')}/s)")
     c = run_probe(args.rom)
     print(f"candidate: pal_changes_within_room={c.get('pal_changes_within_room')} "
           f"({c.get('pal_changes_per_second')}/s) "
+          f"visible={c.get('visible_pal_changes_within_room', 'n/a')} "
+          f"({c.get('visible_pal_changes_per_second', 'n/a')}/s) "
           f"attr_changes={c.get('attr_changes_within_room', 'n/a')} "
           f"({c.get('attr_changes_per_second', 'n/a')}/s)")
+    for key in sorted(c):
+        if key.startswith(("pal_change_", "phase_change_")):
+            print(f"  {key}: {c[key]}")
     # NOTE: attr_changes_per_second is currently informational only — the
     # right threshold depends on expected baseline behavior of v3.00's
     # inline hook (which writes VBK=1 attrs during scroll, by design).
     # The PASS/FAIL gate stays on pal_changes_per_second.
-    b_pps = float(b.get('pal_changes_per_second', 0))
-    c_pps = float(c.get('pal_changes_per_second', 0))
+    b_pps = float(b.get(
+        'visible_pal_changes_per_second',
+        b.get('pal_changes_per_second', 0),
+    ))
+    c_pps = float(c.get(
+        'visible_pal_changes_per_second',
+        c.get('pal_changes_per_second', 0),
+    ))
     threshold = max(b_pps * args.tolerance, 0.5)
     if c_pps > threshold:
         print(f"\nFAIL: {c_pps:.2f}/s > threshold {threshold:.2f}/s "

@@ -9,27 +9,29 @@ Penta Dragon DX is a Game Boy Color colorization of the DMG game
 8 BG + 8 OBJ palettes plus per-scene boss palettes, while preserving
 the original gameplay, sound, and timing.
 
-**Current production**: `rom/working/penta_dragon_dx_FIXED.gb` is
-v3.02 (`scripts/build_v302_title_fix.py`; `FIXED.gb` == `v302.gb`,
-md5 `f4ac6367f75d50765cf018661f7c5e8c`). Overwrote v3.01 on
-2026-07-18 (old v3.01 teleport-era build had title screen regressions:
-cursor 'A' at tile 0x73 was missing due to D880-gated inline hook and
-OBJ palette LUT assigning pal 6 instead of pal 7). FIXED.gb.v300c.backup.gb
-is the pre-teleport base; FIXED.gb.v302.gb is the new v3.02 build.
+**Current candidate**: `rom/working/penta_dragon_dx_FIXED.gb` is built by
+`scripts/build_v302_title_fix.py`, displays the exact footer
+`DX V3.01 STRUK LABS`, and has MD5
+`417975b53e6f20d611b813a7ed285c3c`. The production release path has no
+SELECT+START teleport. The stream deck uses release-compatible mGBA states;
+`penta_dragon_dx_teleport.gb` is a retired diagnostic and is never release
+evidence.
 
 > **Naming caveat (verified 2026-06-07):** the "GDMA" in
-> `build_v301_gdma.py` is a misnomer. It *writes* a GDMA routine
+> `build_v301_gdma.py` is a misnomer. Its base build writes a GDMA routine
 > (bank13:0x6D80) and a 1024-byte `attr_computation` routine
-> (bank13:0x7100) into ROM, but **neither is ever CALLed** — scanning
-> the built ROM for `CD 80 6D` / `CD 00 71` finds nothing. They are
-> dead code. What actually ships is the v3.00-style inline tile+attr
-> copy at bank1:0x42A7 + `cond_pal` + attr-cleaner + ungated
-> `bg_sweep` + OBJ colorizer.
+> (bank13:0x7100), but neither base routine is called. The production builder
+> reclaims those regions for the live RLE expander and the called
+> death/GAME-OVER attribute service. The ordinary gameplay path that actually
+> ships remains the v3.00-style inline tile+attr copy at bank1:0x42A7 plus
+> `cond_pal`, attr-cleaner, `bg_sweep`, and the OBJ colorizer.
 >
-> The inline 0x42A7 hook is the ONLY live BG-attr writer, and it already
+> The inline 0x42A7 hook is the live buffered tile+attr writer, and it already
 > does the fused `[BC]` lookup (`LD A,[DE]; INC DE; LD C,A; LD A,[BC];
-> LD [HL+],A`) single-pass — so don't try to "add" a fused lookup
-> anywhere (PR #1's fused `bg_sweep` was closed for this reason). If
+> LD [HL+],A`) single-pass. Dedicated position, story, and ending sweeps also
+> write attributes by screen semantics, so do not treat the inline hook as the
+> only production writer. Do not try to "add" a second fused lookup
+> (PR #1's fused `bg_sweep` was closed for this reason). If
 > GB-speed parity is ever the goal, the real lever is the hook's
 > **second (attr-phase) STAT mode-0 wait per group** (vanilla waits
 > once/group, we wait twice, ×144 groups) — NOT `attr_computation`,
@@ -40,6 +42,15 @@ is the pre-teleport base; FIXED.gb.v302.gb is the new v3.02 build.
 
 ## CRITICAL: Verification Standards (Hard Gate)
 
+- **mGBA is single-flight across the entire project.** Never invoke raw
+  `mgba`, `mgba-qt`, `mgba-headless`, or `xvfb-run ... mgba`, never run two
+  emulator-backed tools in parallel, and never use broad `pkill`/`killall`.
+  Headed play goes through `scripts/launch_mgba.sh`; verification scripts use
+  `scripts/mgba-{qt,headless}-singleflight`. The wrapper holds an atomic
+  cross-process lock, execs the real emulator, and arms Linux parent-death
+  cleanup so a killed verifier cannot strand a Qt process. Lock failure
+  (status 75) is a hard stop, not permission to bypass it.
+
 - **PyBoy memory-register dumps are NEVER sufficient for timing bugs.** PyBoy does not enforce VBlank/STAT mode-3 write blocking. Writes that miss their VBlank window land cleanly in PyBoy's virtual memory. This means any test that only reads OAM/attribute registers and asserts "no orange" is fundamentally broken for flicker verification.
 
 - **All flicker/timing/rendering verification MUST go through mGBA's accurate pixel pipeline.** Use the mgba-mcp MCP tools to:
@@ -47,11 +58,19 @@ is the pre-teleport base; FIXED.gb.v302.gb is the new v3.02 build.
   2. `mgba_read_memory` on hardware OAM (0xFE00) to check actual displayed sprite attributes
   3. `mgba_run_lua` to run the existing Lua probes in probes/diagnostics/
   
-- **The 5 probes in scripts/probes/ are a MINIMUM, not a guarantee.** Passing them does not mean the build is good. The user's eyes are the final judge.
+- **The authoritative emulator gate is
+  `scripts/diagnostics/verify_release_candidate.py`.** It runs 30 checks on an
+  isolated ROM copy and proves both hashes remain unchanged. The older five
+  probes remain focused development checks, not a release matrix.
 
-- **Any fix that claims "0% orange flicker" must be verified using `scripts/diagnostics/verify_sprite_flicker.py` inside PyBoy AND pass all 5 probes.** Accepting one without the other is a gate failure.
+- **Any fix that claims "0% orange flicker" must pass the mGBA hardware-OAM
+  gates and the full 30-gate release matrix.** A PyBoy-only memory assertion is
+  not rendering evidence.
 
-- **The hwoam_recolor floor-through for tiles 0x10-0x1F is a KNOWN, DOCUMENTED, UNSOLVED timing issue.** See build_v301_teleport.py lines 548-580. DO NOT claim it's fixed without also confirming the fix does NOT cause fresh-boot CRAM regressions (run a cold-boot probe). The B=20 attempt (iter 277) was reverted for this exact reason.
+- **The old hwoam_recolor floor-through is retired in production.** The release
+  builder colors all 40 entries in the exact next-DMA shadow buffer. Treat the
+  mGBA hardware-OAM gate and cold-boot CRAM/palette round-trip gates as the
+  proof; do not revive the old `build_v301_teleport.py` timing path.
 
 - **The golden check: build the ROM, launch it in mGBA-qt with the NVIDIA GL driver override (`QT_QPA_PLATFORM=xcb __GLX_VENDOR_LIBRARY_NAME=nvidia`), navigate to Stage 1 gameplay, and visually confirm zero orange flicker on Sara and monsters across 5 seconds of gameplay.** No automated test replaces this.
 - **Colorize VBlank timing: keep custom WRAM scratch OUT of
@@ -65,26 +84,28 @@ is the pre-teleport base; FIXED.gb.v302.gb is the new v3.02 build.
   LY 144–153). Full write-up + reusable methods (deterministic A/B
   frame diff, banked VRAM reads, palette-RAM reads, Riff arena
   colorization): `docs/FINDINGS_2026_06_13_dungeon_flicker_and_riff.md`.
-- **Promote to FIXED.gb only via the backup pattern**
-  `cp FIXED.gb FIXED.vNN.backup.gb && cp candidate.gb FIXED.gb`.
-  Keeps rollback one command away.
-- **Use `/launch-mgba` skill, never raw `mgba-qt`.** It handles the
-  KDE-Wayland-NVIDIA quirks correctly.
-- **MiSTer deploy via `/mister-deploy` skill.** Audio mode = "No Pops"
-  is required on the Gameboy core.
+- **Promote to FIXED.gb only with `build_v302_title_fix.py`.** The builder
+  preserves changed prior bytes as
+  `penta_dragon_dx_FIXED.prebuild_<md5>.backup.gb` before replacement.
+- **Use `/launch-mgba` skill, never raw `mgba-qt`.** It handles both the
+  KDE-Wayland-NVIDIA quirks and the mandatory single-flight guardian.
+- **MiSTer reservation is mandatory before any MiSTerClaw status, shell,
+  deploy, launch, input, reload, or screenshot action.** Do not bypass the
+  reservation service with direct SSH. Once reserved, deploy via
+  `/mister-deploy`; Audio mode = "No Pops" is required on the Gameboy core.
+  The legacy `scripts/mister.py` path additionally requires
+  `MISTER_RESERVATION_ID` plus a trusted `MISTER_RESERVATION_CHECKER` that
+  validates that lease for `MISTER_RESERVATION_HOST`; without both it exits
+  before all SSH/SCP activity.
 
 ## Where things live
 
 ### Build pipeline
-- `scripts/build_v302_title_fix.py` — **current production builder** (v3.02).
-  Builds on the teleport infrastructure (scene_detect, position sweep, arena
-  bg_tables, teleport combo) with two critical fixes:
-  - **Ungated inline hook**: writes tile+attr on the title screen (was tile-only
-    due to D880 gate in teleport build, causing cursor to go missing).
-  - **OBJ palette LUT**: tiles 0x70-0x7F → pal 7 (was pal 6), matching the
-    original CP-cascade that cursor 'A' (tile 0x73) depends on.
-  Preserves DMG NOP removal (bg_sweep runs on title), O(1) OAM intercept,
-  and all teleport features.
+- `scripts/build_v302_title_fix.py` — **current production builder**. It emits
+  the fixed title/footer, safe stage/menu paths, later-stage and boss tables,
+  DMA-ordered 40-slot OBJ mapping, ROM-native story/ending attributes, and the
+  one-palette-per-VBlank CRAM service plus bounded death/GAME-OVER attribute
+  containment. The retired SELECT+START teleport is not present.
 - `scripts/build_v301_gdma.py` — v3.01 base builder (see the
   naming caveat above: the GDMA/attr_comp routines it emits are dead code;
   the shipping path is the inline 0x42A7 hook + bg_sweep + attr-cleaner)
@@ -101,6 +122,31 @@ is the pre-teleport base; FIXED.gb.v302.gb is the new v3.02 build.
   The calibrated/minimal tables live inline in the v296/v299 builders.
 
 ### Verification (the trust-me-not-the-user loop)
+- `scripts/diagnostics/verify_release_candidate.py` — authoritative 30-gate
+  isolated emulator matrix; emits a JSON manifest and per-gate evidence.
+- `scripts/diagnostics/verify_release_patch.py` — requires the checked-in IPS
+  to rebuild deterministically and reconstruct the exact candidate from the
+  supported Japanese base ROM.
+- `scripts/build_release_bundle.py` — deterministic ROM-free packager. Default
+  output is marked `PREHARDWARE`; final output requires exact hash-bound MiSTer
+  and audience-palette approval manifests.
+- `scripts/record_palette_approval.py` — explicit post-stream approval only;
+  proves the selected palette YAML rebuilds the exact candidate before signing
+  their hashes.
+- `docs/stream_runbook.md` — authoritative Twitch session order and post-stream
+  release sequence.
+- `scripts/mister.py release_sweep_*` — reservation-required physical
+  checkpoint workflow. It binds the exact emulator manifest/ROM/IPS, requires
+  explicit visual confirmations, and is the only path to a hardware-pass
+  manifest.
+- `scripts/diagnostics/verify_mister_release_workflow.py` — hardware-free
+  regression for wrong-core, stale-screenshot, incomplete-checkpoint, and
+  successful sealing behavior.
+- `scripts/diagnostics/verify_palette_build_roundtrip.py` — mutates a temporary
+  YAML, builds to `/tmp`, and proves title-mask/gameplay CRAM round-trip without
+  touching the working candidate.
+- `scripts/diagnostics/verify_mister_reservation_guard.py` — local fail-closed
+  regression; never contacts MiSTer.
 - `scripts/probes/verify_title_screen_integration.py` — boots in PyBoy,
   captures title screen, verifies text presence (PENTA DRAGON DX, JAPAN ART
   MEDIA, STRUKTURED LABS), non-white screen, and no garbage artifacts.
@@ -128,6 +174,7 @@ is the pre-teleport base; FIXED.gb.v302.gb is the new v3.02 build.
 
 ### Tooling skills
 - `/launch-mgba` → `scripts/launch_mgba.sh` (KDE-Wayland-NVIDIA aware)
+- Acquire a MiSTer reservation before using any command below.
 - `/mister-deploy` → `scripts/deploy_mister.sh`
 - `/mister-status` → status via MiSTerClaw MCP (port 9900)
 - `/mister-screenshot`
@@ -236,10 +283,12 @@ before any RL eval. Highlights:
 ## Workflow rules
 
 1. **Branch on `main`**, commit often, tag every visible milestone.
-2. **All changes verified through the five probes** before promotion.
-3. **Backups in `rom/working/penta_dragon_dx_FIXED.vNN.backup.gb`** before
+2. **All changes verified through the 30-gate release matrix** before
+   promotion.
+3. **Let the production builder create its hash-named prebuild backup** before
    overwriting FIXED.gb.
-4. **Hardware test via `/launch-mgba` then `/mister-deploy`.**
+4. **Hardware test via `/launch-mgba`, acquire the MiSTer reservation, then
+   `/mister-deploy`.**
 5. **Don't push `setenv.sh`** (per user's global rule).
 6. **Use `uv` or `pixi`, never `pip`** (per user's global rule).
 
@@ -248,7 +297,8 @@ before any RL eval. Highlights:
 - Check `~/.claude/projects/-home-struktured-projects-penta-dragon-dx-remote/memory/MEMORY.md`
   — it lists the topic-specific memory files (boss mechanics, sound
   engine analysis, palette pipeline, RL findings, etc.).
-- Run all 5 probes to localize which dimension regressed.
+- Run the full release matrix, then use its per-gate logs to localize which
+  dimension regressed.
 - Compare against the nearest passing backup ROM via `md5sum` + the
   per-version build scripts to bisect.
 - Per the user: "I really want you to work on this autonomously. I've
@@ -257,6 +307,7 @@ before any RL eval. Highlights:
   candidates with backups; iterate.
 
 ## Active Hardware Alert (July 13, 2026)
-* **The MiSTer FPGA is ONLINE:** The physical MiSTer console (port 9900) is online right now. You are encouraged to run `/mister-deploy` to test your builds on cycle-accurate GBC silicon after completing headless verification!
-* **Maximize Headless Testing:** Verify all builds headlessly against the 5 probes before physical deployment.
-
+* **The MiSTer FPGA may be online but is shared:** acquire its reservation
+  before all MiSTerClaw or SSH activity.
+* **Maximize Headless Testing:** Require the full 30-gate isolated matrix
+  before physical deployment.

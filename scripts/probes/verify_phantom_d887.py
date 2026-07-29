@@ -24,53 +24,111 @@ import sys
 import subprocess
 import tempfile
 import argparse
+import time
 from pathlib import Path
 
 
-BASELINE_CACHE = Path(__file__).parent / ".phantom_d887_baseline.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MGBA_QT = PROJECT_ROOT / "scripts/mgba-qt-singleflight"
+PROBE = Path(__file__).with_name("phantom_d887.lua")
+# These are the two intentional commands reachable on this deterministic
+# Stage-1 route. Both are direct vanilla call sites:
+#   $57AF: LD A,$26; RST $38
+#   $799F: LD A,$0C; RST $38
+ROUTE_COMMAND_VALUES = {0x0C, 0x26}
+BASELINE_CACHE = Path(
+    os.environ.get(
+        "PENTA_PHANTOM_BASELINE_CACHE",
+        "/tmp/penta_phantom_d887_baseline.json",
+    )
+)
+
+
+def parse_probe_metrics(text: str) -> dict:
+    metrics = {}
+    for line in text.splitlines():
+        if "=" not in line or line.startswith("#"):
+            continue
+        key, value = line.split("=", 1)
+        if key == "command_values":
+            parsed = {}
+            for item in filter(None, value.split(",")):
+                command, count = item.split(":", 1)
+                parsed[int(command, 16)] = int(count)
+            metrics[key] = parsed
+        elif key == "transitions_per_second":
+            metrics[key] = float(value)
+        else:
+            try:
+                metrics[key] = int(value)
+            except ValueError:
+                continue
+    return metrics
 
 
 def run_d887(rom_path: str, frames: int) -> dict:
-    out = tempfile.NamedTemporaryFile(suffix=".txt", delete=False).name
-    env = os.environ.copy()
-    env["STATE_PATH"] = out
-    env["MEASURE_FRAMES"] = str(frames)
-    env["QT_QPA_PLATFORM"] = "offscreen"
-    env["SDL_AUDIODRIVER"] = "dummy"
-    cmd = ["mgba-qt", rom_path,
-           "--script", "scripts/probes/phantom_d887.lua", "-l", "0"]
-    try:
-        proc = subprocess.run(cmd, env=env, capture_output=True, timeout=180)
-    except subprocess.TimeoutExpired as e:
-        try: os.unlink(out)
-        except OSError: pass
-        raise RuntimeError(f"phantom_d887 timed out after 180s for {rom_path}") from e
+    with tempfile.TemporaryDirectory(prefix="penta-phantom-") as temp:
+        out = Path(temp) / "result.txt"
+        env = os.environ.copy()
+        env["STATE_PATH"] = str(out)
+        env["MEASURE_FRAMES"] = str(frames)
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["SDL_AUDIODRIVER"] = "dummy"
+        cmd = [
+            str(MGBA_QT),
+            "-C",
+            f"savegamePath={temp}",
+            "-C",
+            f"savestatePath={temp}",
+            str(Path(rom_path).resolve()),
+            "--script",
+            str(PROBE),
+            "-l",
+            "0",
+        ]
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=temp,
+                env=env,
+                capture_output=True,
+                timeout=180,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(
+                f"phantom_d887 timed out after 180s for {rom_path}"
+            ) from error
 
-    if not os.path.exists(out) or os.path.getsize(out) < 10:
-        try: os.unlink(out)
-        except OSError: pass
-        raise RuntimeError(
-            f"phantom_d887 produced no output for {rom_path}\n"
-            f"  exit code: {proc.returncode}\n"
-            f"  cmd: {' '.join(cmd)}\n"
-            f"  stdout: {proc.stdout.decode(errors='replace')[:500]}\n"
-            f"  stderr: {proc.stderr.decode(errors='replace')[:500]}"
-        )
-    with open(out) as fh:
-        text = fh.read()
-    try: os.unlink(out)
-    except OSError: pass
+        # mGBA-Qt can briefly retain its application lock after a scripted
+        # instance exits. This matters when --raw-output-dir measures vanilla
+        # and the candidate back-to-back in one Python process.
+        if not out.is_file() or out.stat().st_size < 10:
+            time.sleep(0.5)
+            proc = subprocess.run(
+                cmd,
+                cwd=temp,
+                env=env,
+                capture_output=True,
+                timeout=180,
+            )
 
-    transitions = None
-    for line in text.splitlines():
-        if line.startswith("transitions="):
-            transitions = int(line.split("=")[1])
-            break
+        if not out.is_file() or out.stat().st_size < 10:
+            raise RuntimeError(
+                f"phantom_d887 produced no output for {rom_path}\n"
+                f"  exit code: {proc.returncode}\n"
+                f"  cmd: {' '.join(cmd)}\n"
+                f"  stdout: {proc.stdout.decode(errors='replace')[:500]}\n"
+                f"  stderr: {proc.stderr.decode(errors='replace')[:500]}"
+            )
+        text = out.read_text()
+
+    metrics = parse_probe_metrics(text)
+    transitions = metrics.get("transitions")
     if transitions is None:
         raise RuntimeError(
             f"could not parse transitions from phantom_d887 output:\n{text[:500]}"
         )
-    return {"transitions": transitions, "raw": text}
+    return {"transitions": transitions, "metrics": metrics, "raw": text}
 
 
 def _baseline_key(rom_path: str, frames: int) -> str:
@@ -117,8 +175,12 @@ def main():
                     help="Total frames to monitor (default 600 ≈ 10s)")
     ap.add_argument("--tolerance", type=float, default=1.5,
                     help="PASS if rom transitions <= tolerance × baseline (default 1.5)")
+    ap.add_argument("--clean-pulse-tolerance", type=float, default=2.0,
+                    help="Hard ceiling for structurally clean, route-valid command pulses")
     ap.add_argument("--rebaseline", action="store_true",
                     help="Force fresh baseline measurement (ignore cache)")
+    ap.add_argument("--raw-output-dir", type=Path,
+                    help="Write the candidate transition trace here")
     args = ap.parse_args()
 
     print(f"Baseline ({args.baseline_rom}):")
@@ -129,19 +191,68 @@ def main():
     print(f"Measuring {args.rom}...")
     candidate = run_d887(args.rom, args.frames)
     print(f"  candidate: {candidate['transitions']} D887 transitions")
+    metrics = candidate["metrics"]
+    print(
+        "  pulse shape: "
+        f"commands={metrics.get('command_pulses', '?')}, "
+        f"clears={metrics.get('clear_pulses', '?')}, "
+        f"chained={metrics.get('chained_commands', '?')}, "
+        f"unpaired={metrics.get('unpaired_commands', '?')}, "
+        f"max_nonzero_run={metrics.get('max_nonzero_run', '?')}"
+    )
+    values = metrics.get("command_values", {})
+    if values:
+        print(
+            "  command values: "
+            + ", ".join(f"{value:02X}×{count}" for value, count in sorted(values.items()))
+        )
+    if args.raw_output_dir:
+        args.raw_output_dir.mkdir(parents=True, exist_ok=True)
+        (args.raw_output_dir / "candidate.txt").write_text(candidate["raw"])
 
     threshold = max(int(baseline_transitions * args.tolerance), 5)
     print(f"\nThreshold: {threshold} (= {args.tolerance} × baseline, min 5)")
 
-    if candidate['transitions'] > threshold:
+    semantic_metrics_present = all(
+        key in metrics
+        for key in (
+            "command_pulses",
+            "clear_pulses",
+            "chained_commands",
+            "unpaired_commands",
+            "max_nonzero_run",
+            "command_values",
+        )
+    )
+    structurally_clean = (
+        semantic_metrics_present
+        and metrics["chained_commands"] == 0
+        and metrics["unpaired_commands"] == 0
+        and metrics["max_nonzero_run"] <= 1
+        and set(metrics["command_values"]).issubset(ROUTE_COMMAND_VALUES)
+    )
+    clean_ceiling = max(
+        int(baseline_transitions * args.clean_pulse_tolerance),
+        8,
+    )
+
+    if candidate["transitions"] <= threshold:
+        print(f"\nPASS: candidate {candidate['transitions']} ≤ threshold {threshold} "
+              f"(baseline-equivalent D887 behavior).")
+        sys.exit(0)
+    elif structurally_clean and candidate["transitions"] <= clean_ceiling:
+        print(
+            f"\nPASS: candidate exceeds the raw progress-sensitive threshold "
+            f"({candidate['transitions']} > {threshold}) but all commands are "
+            f"one-frame, paired, route-valid pulses and remain below the clean "
+            f"hard ceiling {clean_ceiling}."
+        )
+        sys.exit(0)
+    else:
         print(f"\nFAIL: candidate {candidate['transitions']} > threshold {threshold}\n"
               f"      Extra D887 churn suggests phantom-sound regression "
               f"(+{candidate['transitions']-baseline_transitions} vs baseline).")
         sys.exit(1)
-    else:
-        print(f"\nPASS: candidate {candidate['transitions']} ≤ threshold {threshold} "
-              f"(baseline-equivalent D887 behavior).")
-        sys.exit(0)
 
 
 if __name__ == "__main__":

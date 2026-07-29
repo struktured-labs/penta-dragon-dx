@@ -63,7 +63,7 @@ from create_vblank_colorizer_v288 import create_conditional_palette_cached
 def create_bg_sweep_viewport_gated(bg_table_addr: int, base_addr: int) -> bytes:
     """Visible-viewport BG sweep with 16-bit row-address math, gated by FFC1.
 
-    Each frame writes BG attributes for ONE of the 18 visible rows. The
+    Each frame writes BG attributes for one of the 18 visible rows. The
     row to process is (SCY/8 + DF04) mod 32, where DF04 cycles 0..17.
 
     Address calculation reuses v2.90's correct 16-bit form (see
@@ -84,17 +84,18 @@ def create_bg_sweep_viewport_gated(bg_table_addr: int, base_addr: int) -> bytes:
     s.extend([0xF0, 0xC1, 0xB7, 0xC8])
     s.extend([0xC5, 0xD5, 0xE5])  # save BC, DE, HL
 
-    # base_hi from LCDC bit 3 (0x98 or 0x9C)
-    s.extend([0xF0, 0x40, 0xE6, 0x08, 0x0F, 0xC6, 0x98, 0xEA, 0x01, 0xDF])
+    # D = base_hi from LCDC bit 3 (0x98 or 0x9C). Keeping it in a saved
+    # register avoids a WRAM spill/reload on every half row.
+    s.extend([0xF0, 0x40, 0xE6, 0x08, 0x0F, 0xC6, 0x98, 0x57])
 
     # B = SCY/8
     s.extend([0xF0, 0x42, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F, 0x47])
 
-    # Increment DF04, clamp 0..17
+    # Increment DF04, clamp 0..17.
     s.extend([0xFA, 0x04, 0xDF, 0x3C, 0xFE, 0x12, 0x20, 0x02, 0x3E, 0x00])
     s.extend([0xEA, 0x04, 0xDF])         # store back
 
-    # A = DF04 (0..17), B already = SCY/8.  Compute tilemap_row = (A+B) & 0x1F
+    # B already = SCY/8. Compute tilemap_row = (A+B) & 0x1F.
     s.extend([0x80])                      # A = A + B
     s.extend([0xE6, 0x1F])               # AND 0x1F (0..31)
 
@@ -105,9 +106,8 @@ def create_bg_sweep_viewport_gated(bg_table_addr: int, base_addr: int) -> bytes:
     s.extend([0xCB, 0x3F])                # SRL A   (row >> 1)
     s.extend([0xCB, 0x3F])                # SRL A   (row >> 2)
     s.extend([0xCB, 0x3F])                # SRL A   (row >> 3) → 0..3
-    s.extend([0x57])                      # D = A (will add to base_hi)
-    s.extend([0xFA, 0x01, 0xDF])         # A = base_hi
-    s.extend([0x82])                      # A += D
+    s.extend([0x5F])                      # E = row >> 3
+    s.extend([0x7A, 0x83])                # A = base_hi; A += E
     s.extend([0x57])                      # D = base_hi + (row >> 3)
 
     s.extend([0x78])                      # A = B (tilemap_row)
@@ -122,28 +122,45 @@ def create_bg_sweep_viewport_gated(bg_table_addr: int, base_addr: int) -> bytes:
     s.extend([0x7B, 0x6F])               # LD A,E; LD L,A
     s.extend([0x11, 0x10, 0xDF])         # DE = DF10 (buffer)
 
-    # Phase 1: read 32 tile IDs from tilemap (VBK=0) into DF10..DF2F
+    # Phase 1: read 32 tile IDs from the row into DF10..DF2F.
     s.extend([0xAF, 0xE0, 0x4F])         # VBK=0
     s.extend([0x06, 0x20])               # B = 32
-    s.extend([0x2A, 0x12, 0x13])         # A=[HL+]; [DE]=A; INC DE
+    s.extend([0x2A, 0x12, 0x1C])         # A=[HL+]; [DE]=A; INC E
     s.extend([0x05, 0x20, 0xFA])         # DEC B; JR NZ -6
 
-    # Phase 2: lookup palette for each tile via bg_table (still VBK=0)
+    # Phase 2: lookup palette for each tile via bg_table (still VBK=0).
+    # Every production table is page-aligned, so keep H constant and replace
+    # only L with the tile ID. The old generic 16-bit add rebuilt HL and
+    # checked carry for every one of the 32 cells.
     s.extend([0x11, 0x10, 0xDF])         # DE = DF10
     s.extend([0x06, 0x20])               # B = 32
-    # loop:
-    s.extend([0x1A])                      # A = [DE]
-    s.extend([0x21, 0x00, bg_table_hi])  # HL = bg_table base
-    s.extend([0x85, 0x6F])               # L += A
-    s.extend([0x30, 0x01, 0x24])         # if carry, H++
-    s.extend([0x7E, 0x12, 0x13])         # A=[HL]; [DE]=A; INC DE
-    s.extend([0x05, 0x20, 0xF1])         # DEC B; JR NZ -15
+    if (bg_table_addr & 0xFF) == 0:
+        s.extend([0x26, bg_table_hi])      # H = aligned table page
+        lookup_loop = len(s)
+        s.extend([0x1A, 0x6F, 0x7E])      # A=[DE]; L=A; A=[HL]
+        s.extend([0x12, 0x1C, 0x05])      # [DE]=A; INC E; DEC B
+        s.extend([
+            0x20,
+            (lookup_loop - (len(s) + 2)) & 0xFF,
+        ])
+    else:
+        lookup_loop = len(s)
+        s.extend([0x1A])                   # A = [DE]
+        s.extend([0x21, bg_table_addr & 0xFF, bg_table_hi])
+        s.extend([0x85, 0x6F])            # L += A
+        s.extend([0x30, 0x01, 0x24])      # if carry, H++
+        s.extend([0x7E, 0x12, 0x13])      # A=[HL]; [DE]=A; INC DE
+        s.extend([0x05])
+        s.extend([
+            0x20,
+            (lookup_loop - (len(s) + 2)) & 0xFF,
+        ])
 
     # Phase 3: write palette attrs to active tilemap (VBK=1)
     s.extend([0x3E, 0x01, 0xE0, 0x4F])   # VBK=1
     s.extend([0xE1])                      # POP HL → HL = saved row base (DE prev)
     s.extend([0x11, 0x10, 0xDF, 0x06, 0x20])  # DE = DF10; B = 32
-    s.extend([0x1A, 0x22, 0x13])         # A=[DE]; [HL+]=A; INC DE
+    s.extend([0x1A, 0x22, 0x1C])         # A=[DE]; [HL+]=A; INC E
     s.extend([0x05, 0x20, 0xFA])         # DEC B; JR NZ
 
     s.extend([0xAF, 0xE0, 0x4F])         # VBK=0

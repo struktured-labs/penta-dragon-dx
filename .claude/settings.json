@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/hooks/guard_mgba_launch.py\"",
+            "timeout": 5,
+            "statusMessage": "Enforcing single-flight mGBA safety"
+          }
+        ]
+      }
+    ]
+  }
+}

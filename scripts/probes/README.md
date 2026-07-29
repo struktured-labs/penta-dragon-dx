@@ -1,10 +1,32 @@
 # Penta Dragon DX colorization verification harnesses
 
-Each script self-verifies one regression class from the v2.85-v3.00 arc.
-Run all five before declaring a build good — per CLAUDE.md, the user's
-eyes are the final judge, but no-probe regressions waste their time.
+The authoritative current emulator gate is:
 
-## The 5 probes
+```bash
+python3 scripts/diagnostics/verify_release_candidate.py \
+  rom/working/penta_dragon_dx_FIXED.gb
+```
+
+It runs 27 release checks against an isolated byte-identical ROM copy, retains
+a JSON manifest and all logs/artifacts under `/tmp`, and fails if either ROM
+hash changes. The final local-tooling gate proves repository MiSTer commands
+fail closed without a verified reservation and does not contact the hardware.
+A pass still requires the separate reservation-backed MiSTer FPGA sweep before
+release.
+
+The matrix also builds a throwaway ROM from deliberately changed BG0, BG7,
+OBJ2, Boss3, and Turbo YAML entries. That gate proves the title-safe BG7 mask
+and independently tuned gameplay BG7 both survive the complete production
+builder/runtime path.
+
+The historical `full_verification_loop*.sh` files rebuild and test the retired
+teleport ROM. They are useful only for archaeology and must not be cited as
+release-candidate evidence.
+
+Each script below self-verifies one regression class from the v2.85-v3.00 arc.
+They remain useful for focused development.
+
+## The five legacy focused probes
 
 ```bash
 # Title-screen white bug (CGB BG palette never loaded on menus)

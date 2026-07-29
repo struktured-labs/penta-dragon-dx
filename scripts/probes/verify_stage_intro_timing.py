@@ -12,6 +12,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LUA_PROBE = Path(__file__).with_name("stage_intro_timing.lua")
 DEFAULT_BASELINE = PROJECT_ROOT / "rom" / "Penta Dragon (J).gb"
+MGBA_QT = PROJECT_ROOT / "scripts/mgba-qt-singleflight"
 
 
 def parse_result(path: Path) -> dict[str, str]:
@@ -33,12 +34,21 @@ def run_rom(rom: Path) -> dict[str, str]:
             "SDL_AUDIODRIVER": "dummy",
         })
         command = [
-            "xvfb-run", "-a", "/home/struktured/bin/mgba-qt", str(rom),
-            "--script", str(LUA_PROBE), "--fastforward", "-l", "0",
+            str(MGBA_QT),
+            "-C",
+            f"savegamePath={temp_dir}",
+            "-C",
+            f"savestatePath={temp_dir}",
+            str(rom),
+            "--script",
+            str(LUA_PROBE),
+            "--fastforward",
+            "-l",
+            "0",
         ]
         try:
             subprocess.run(
-                command, cwd=PROJECT_ROOT, env=env, capture_output=True,
+                command, cwd=temp_dir, env=env, capture_output=True,
                 timeout=120, check=False,
             )
         except subprocess.TimeoutExpired:

@@ -4,26 +4,26 @@ Launch the Penta Dragon DX ROM in mGBA with proper display settings for KDE Wayl
 
 ## Steps
 
-1. Kill any existing mGBA instances (ignore errors):
+1. Launch through the project-owned single-flight guardian (NO pipes, NO
+   redirects — those break Wayland window visibility):
    ```bash
-   pkill -f mgba-qt || true
+   /home/struktured/projects/penta-dragon-dx-claude/scripts/launch_mgba.sh /home/struktured/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_FIXED.gb
    ```
-   Wait 0.5s for cleanup.
+   Keep the command session alive while the window is open. The launcher is
+   the emulator's parent-death guardian.
 
-2. Launch mGBA with proper environment (NO pipes, NO redirects — breaks Wayland window visibility):
+2. Optionally load a save state by passing the state arguments through the
+   guarded launcher only after its ROM argument.
+
+3. Verify through the project status script; never use raw `pgrep` patterns:
    ```bash
-   DISPLAY=:0 QT_QPA_PLATFORM=xcb __GLX_VENDOR_LIBRARY_NAME=nvidia mgba-qt /home/struktured/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_FIXED.gb &
-   ```
-
-3. Optionally load a save state by appending `-t path/to/state.ss0` before the `&`.
-
-4. Verify the process is running:
-   ```bash
-   sleep 1 && pgrep -a mgba-qt
+   scripts/check_emulator_processes.sh
    ```
 
 ## Critical Notes
 - MUST use `DISPLAY=:0 QT_QPA_PLATFORM=xcb __GLX_VENDOR_LIBRARY_NAME=nvidia` — without these, the GPU display device fails and the game runs poorly
 - NEVER pipe stdout/stderr — this breaks window visibility on Wayland
-- The `pkill` and launch MUST be separate commands (not chained with `&&`) because pkill returns non-zero when no process exists
-- The `&` at the end is required to avoid blocking the terminal
+- NEVER invoke raw `mgba-qt`, use `pkill`/`killall`, or launch a second
+  emulator. The project lock rejects concurrent instances with status 75.
+- If the command session or verifier dies, Linux parent-death cleanup
+  terminates its exact emulator and releases the lock.

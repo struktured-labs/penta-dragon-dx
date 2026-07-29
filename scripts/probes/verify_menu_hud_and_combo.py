@@ -11,6 +11,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LUA_PROBE = Path(__file__).with_name("menu_hud_and_combo.lua")
+MGBA_QT = PROJECT_ROOT / "scripts/mgba-qt-singleflight"
 BANK13 = 13 * 0x4000
 PRELUDE_ROM_OFFSET = BANK13 + (0x6E80 - 0x4000)
 PRELUDE_LIMIT = BANK13 + (0x6F30 - 0x4000)
@@ -41,7 +42,7 @@ def run_case(rom: Path, mode: str) -> dict[str, str]:
             "SDL_AUDIODRIVER": "dummy",
         })
         command = [
-            "xvfb-run", "-a", "mgba-qt", str(rom),
+            str(MGBA_QT), "--fastforward", str(rom),
             "--script", str(LUA_PROBE), "-l", "0",
         ]
         try:

@@ -1,48 +1,53 @@
-# OBJ enemy "black/blue/flat" color — root cause + fix (NEEDS hardware verify)
+# OBJ enemy "black/blue/flat" color — root cause and working fix
 
 Covers user items 3, 4, 6, 11 (Sara/monsters black or flat-blue; "random red
 quadrants"; regular enemies one flat color). Diagnosed by the color-sweep
 investigation workflow + firsthand mGBA save-state probes.
 
 ## Symptom
-In-game (and attract-demo) enemy sprites render at OBJ palette 0 (blue/black)
-instead of their intended type palette. Measured stably (NOT flickering) across
-consecutive frames on multiple save states:
-  catfish tiles 0x7C-0x7F -> p0 (should be p7 cyan)
-  soldier tiles 0x68-0x6B -> p0 (should be p6)
-  moth/hornet partially p4; Sara forms get p1/p2 (work).
-The colorizer's per-tile palette assignment is NOT reaching the displayed HW OAM.
 
-## Root cause (two compounding issues)
-1. OAM scan cap: the colorizer scans only the first 10 shadow-OAM entries
-   (build_v301_gdma.py `colorizer[1] = 0x0A`). Sprites at index >=10 (the
-   attract-demo monsters at slots 16-19, in-game mage/catfish at 16-23) are
-   never assigned a CGB OBJ palette -> default OBP0. (Raising to 0x28=40 gives
-   full coverage but did NOT fix the in-game enemies below, and costs ~+5400T
-   VBlank.)
-2. DMA-ordering race (the dominant cause): the build NOP'd the game's own OAM DMA
-   (rom[0x06D5]=00 00 00) and relies on the colorize handler's double-buffered
-   DMA (CALL 0xFF80, source alternating 0xC0/0xC1 via FFCB). The game rebuilds
-   enemy sprite entries (at pal=0) into shadow OAM in its MAIN loop; the colorize
-   handler colorizes shadow OAM once in VBlank then DMAs. For sprites whose entry
-   the game writes into whichever buffer is DMA'd next, the colorizer's tile-range
-   palette is overwritten by the game's pal=0 rebuild before that buffer displays
-   -> enemy renders pal 0 (blue). Stable (not flicker) because the buffer index
-   per enemy is consistent.
+Ordinary gameplay enemies rendered with OBJ palette 0 (blue/black) or with
+only some quadrants colored. Direct mGBA hardware-OAM sampling reproduced the
+defect in seven of eight combat anchors: 3,816 mismatches among 6,456 checked
+enemy samples.
 
-## Candidate fixes (ALL timing-critical -> verify on MiSTer hardware first;
-## ~76% VBlank budget; phantom-sound/audio-dropout history on this exact path)
-A. Raise the scan cap to 0x28 (full 40) AND make the colorizer win the OAM write
-   ordering: have shadow_main + OAM-DMA run as the FINAL OAM writer of the frame
-   (e.g. move them to the end of the VBlank wrapper after the game's OAM build),
-   OR add a post-DMA HW-OAM recolor pass that reads 0xFE00 and re-stamps palette
-   bits by tile range. Fixes enemies AND the miniboss segmentation (item 7) in
-   one shot.
-B. Stop the DMA source from alternating: patch the HRAM OAM-DMA routine
-   (`F0 CB 3C E6 01 E0 CB C6 C0 E0 46`) to always DMA the buffer shadow_main
-   colorized. RISK: the game may rely on the alternation for live sprite
-   POSITIONS — forcing one buffer can lag/garble sprite positions. Must verify
-   positions stay correct.
+## Root cause
+
+Two behaviors compounded:
+
+1. The historical helper processed ten entries in each of the two Shadow OAM
+   buffers. Monsters often occupy slots 10–23, so their palette attributes were
+   never assigned.
+2. Processing both buffers was not ordering-safe. The main loop could rebuild
+   the future DMA buffer with palette 0 after the colorizer had touched it.
+   The alternating DMA then displayed those stale attributes.
+
+## Working fix
+
+`scripts/build_v302_title_fix.py` installs a 51-byte dispatcher at bank
+13:`0x69D0`. It reproduces the native `FF80` routine's `FFCB` calculation to
+select the exact `C000`/`C100` buffer that will be transferred next, then runs
+the established gameplay colorizer over all 40 entries in that one buffer.
+The caller's next instruction is the native DMA, so no main-loop write can
+intervene. Sprite positions and buffer alternation are unchanged.
+
+This is deliberately separate from the title-idle reel's YAML LUT. Ordinary
+gameplay dynamically packs monster graphics and retains the production range
+mapping (`30–3F→3`, `40–4F→4`, `50–5F→5`, `60–6F→6`, `70–7F→7`), plus dynamic
+Sara and boss-specific assignments.
+
+## Verification
+
+- `verify_gameplay_obj_palettes.py` checks visible mGBA hardware OAM every
+  frame, not just the WRAM source buffer.
+- Eight combat states, 120 sampled frames per state, 6,562 checked enemy
+  entries, zero mismatches.
+- Actors through Shadow OAM slot 23 are covered; projectile/effect slots as
+  high as 36 remain outside the ordinary-enemy assertion domain.
+- Title reel, real miniboss, scroll, audio/timing, HUD, boss arenas, later
+  stages, both story branches, and production stress gates all still pass.
+- The pre-fix ROM is preserved as
+  `penta_dragon_dx_FIXED.v303-before-gameplay-obj.backup.gb`.
 
 ## Color-quality follow-up (LOW risk, only meaningful once colorization sticks)
 Retune palettes/penta_palettes_v097.yaml obj_palettes for distinct enemies:
@@ -53,5 +58,6 @@ Retune palettes/penta_palettes_v097.yaml obj_palettes for distinct enemies:
   Sara's shots) by reassigning colorizer tile range 0x30-0x3F to its own pal.
 
 ## Status
-NOT shipped. The shipped ROM keeps the hardware-verified safe config (cap=10,
-double-buffer DMA). Implement + verify on MiSTer in a focused pass.
+
+Implemented in the current untagged working candidate. Emulator verification
+is complete; MiSTer FPGA timing is still required before release.

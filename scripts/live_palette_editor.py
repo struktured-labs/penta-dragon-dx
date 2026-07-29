@@ -5,17 +5,18 @@ Workflow:
   1. Start this script:  python3 scripts/live_palette_editor.py
   2. Open http://localhost:8077 in browser
   3. Launch mGBA with live palette script:
-       mgba-qt rom/working/penta_dragon_dx_v301.gb --script scripts/lua/live_palettes.lua
+       mgba-qt rom/working/penta_dragon_dx_FIXED.gb --script scripts/lua/live_palettes.lua
   4. Adjust colors in browser. Changes apply to running game within ~0.5s.
 
-The browser saves color picks to /tmp/live_palettes.txt. The mGBA Lua
+The browser saves color picks to rom/working/live_palettes.txt. The mGBA Lua
 script polls that file every 30 frames (~0.5s) and rewrites CGB palette
 CRAM (BCPS/BCPD for BG, OCPS/OCPD for OBJ) with the new values.
 
-To persist tuned colors back to the YAML, click "Save to YAML" — appends
-the current state to palettes/penta_palettes_v097.yaml.
+To persist tuned colors, click "Save to YAML". The editor updates only the
+palette color arrays in palettes/penta_palettes_v097.yaml and preserves its
+comments and structure.
 
-Color format in /tmp/live_palettes.txt:
+Color format in rom/working/live_palettes.txt:
   BG<n>:<idx>=<hex>,<idx>=<hex>,...
   OBJ<n>:<idx>=<hex>,<idx>=<hex>,...
 where <hex> is 4-char BGR555 (e.g. "7FFF") or 6-char RGB hex.
@@ -23,14 +24,16 @@ where <hex> is 4-char BGR555 (e.g. "7FFF") or 6-char RGB hex.
 Default palettes are loaded from palettes/penta_palettes_v097.yaml.
 """
 import http.server
+import argparse
+import hashlib
 import json
+import os
 import socketserver
-import threading
-import time
 import re
 import sys
+import threading
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 try:
     import yaml
@@ -39,45 +42,138 @@ except ImportError:
     sys.exit(1)
 
 ROOT = Path(__file__).parent.parent
-LIVE_FILE = ROOT / "rom" / "working" / "live_palettes.txt"
-YAML_PATH = ROOT / "palettes" / "penta_palettes_v097.yaml"
+LIVE_FILE = Path(os.environ.get(
+    "PENTA_LIVE_PALETTE_FILE",
+    ROOT / "rom" / "working" / "live_palettes.txt",
+))
+YAML_PATH = Path(os.environ.get(
+    "PENTA_PALETTE_YAML",
+    ROOT / "palettes" / "penta_palettes_v097.yaml",
+))
+YAML_BACKUP_DIR = Path(os.environ.get(
+    "PENTA_PALETTE_BACKUP_DIR",
+    ROOT / "tmp" / "palette_session" / "backups",
+))
 
 PORT = 8077
 
-# Stage boss metadata.
-#
-# The 9 stage bosses are dispatched by FFBA (level counter 0-8) via the
-# arena jump table at bank 2:0x6EA6. Each arena routine self-publishes
-# D880 + FFB7 at entry. Names + D880 values from
-# docs/boss_arena_routines.md.
-#
-# FFBA is the canonical identifier. FFBF is a SEPARATE flag used for
-# mini-bosses (Gargoyle=1, Spider=2) and the boss_palette_table
-# (which has only 6 "stage boss" entries — Boss3_Crimson..Angela —
-# whose direct correspondence to in-game named bosses is unverified,
-# so we use the YAML keys as-is for color tuning).
-#
-# Teleport caveat: memory note from runtime_probe_final.md says
-# "raw D880 write reverts on next frame — need FFD3 event sequence
-# + room conditions". So teleport here uses FORCE-EVERY-FRAME to
-# hold the state, which still won't load boss tile data but at
-# least keeps the arena state byte set.
-STAGE_BOSSES = [
-    # (FFBA, name, arena D880, hint about palette source)
-    # Indexes 7 and 8 corrected 2026-06-03 — empirically Angela=7,
-    # Penta Dragon=8 (user-verified via DX Teleport buttons).
-    # docs/boss_arena_routines.md previously had these swapped; the
-    # reverse_engineering notes (gap_boss_arena_setup.md) were correct.
-    (0, "Shalamar (Stage 1)",      0x0C, "uses tile-range OBJ pal"),
-    (1, "Riff (Stage 2)",          0x0D, "uses tile-range OBJ pal"),
-    (2, "Crystal Dragon (Stage 3)", 0x0E, "uses tile-range OBJ pal"),
-    (3, "Cameo (Stage 4)",         0x0F, "uses tile-range OBJ pal"),
-    (4, "Ted (Stage 5)",           0x10, "uses tile-range OBJ pal"),
-    (5, "Troop (Stage 6)",         0x11, "uses tile-range OBJ pal"),
-    (6, "Faze (Stage 7)",          0x12, "uses tile-range OBJ pal"),
-    (7, "Angela",                  0x13, "uses tile-range OBJ pal"),
-    (8, "Penta Dragon (Final)",    0x14, "uses tile-range OBJ pal"),
+# Release-safe navigation presets. mGBA loads these emulator states directly;
+# no ROM memory/stack redirect or SELECT+START teleport is involved.
+SCENE_PRESETS = [
+    ("title", "Title / idle reel", "title_screen.ss0"),
+    (
+        "opening",
+        "Story intro — first text (default title option)",
+        "generated-story:opening.ss0",
+    ),
+    (
+        "opening_book",
+        "Story intro — magic book (BG1)",
+        "generated-story:opening_book.ss0",
+    ),
+    (
+        "opening_sara",
+        "Story intro — Sara (BG2)",
+        "generated-story:opening_sara.ss0",
+    ),
+    (
+        "opening_dragon_eye",
+        "Story intro — dragon eye (BG3)",
+        "generated-story:opening_dragon_eye.ss0",
+    ),
+    (
+        "pre_final_story",
+        "Pre-final story — Penta Dragon (BG4)",
+        "generated-story:pre_final.ss0",
+    ),
+    (
+        "pre_final_sara",
+        "Pre-final story — Sara (BG7)",
+        "generated-story:pre_final_sara.ss0",
+    ),
+    (
+        "post_final_story",
+        "Post-final story — dragon (BG5)",
+        "generated-story:post_final.ss0",
+    ),
+    (
+        "post_final_lisa",
+        "Post-final story — Lisa (BG6)",
+        "generated-story:post_final_lisa.ss0",
+    ),
+    (
+        "post_final_sara",
+        "Post-final story — Sara (BG7)",
+        "generated-story:post_final_sara.ss0",
+    ),
+    (
+        "ending_credits",
+        "Ending — credits (BG1)",
+        "generated-story:ending_credits.ss0",
+    ),
+    (
+        "ending_end",
+        "Ending — END page (BG2)",
+        "generated-story:ending_end.ss0",
+    ),
+    (
+        "ending_epilogue",
+        "Ending — epilogue text (BG3)",
+        "generated-story:ending_epilogue.ss0",
+    ),
+    ("stage2", "Stage 2", "generated:stage2.ss0"),
+    ("stage3", "Stage 3", "generated:stage3.ss0"),
+    ("stage4", "Stage 4", "generated:stage4.ss0"),
+    ("stage5", "Stage 5 lava", "generated:stage5.ss0"),
+    ("stage6", "Stage 6", "generated:stage6.ss0"),
+    ("stage7", "Stage 7 lava", "generated:stage7.ss0"),
+    ("boss_shalamar", "Boss 1 — Shalamar", "generated-boss:boss0_shalamar.ss0"),
+    ("boss_riff", "Boss 2 — Riff", "generated-boss:boss1_riff.ss0"),
+    (
+        "boss_crystal_dragon",
+        "Boss 3 — Crystal Dragon",
+        "generated-boss:boss2_crystal_dragon.ss0",
+    ),
+    ("boss_cameo", "Boss 4 — Cameo", "generated-boss:boss3_cameo.ss0"),
+    ("boss_ted", "Boss 5 — Ted", "generated-boss:boss4_ted.ss0"),
+    ("boss_troop", "Boss 6 — Troop", "generated-boss:boss5_troop.ss0"),
+    ("boss_faze", "Boss 7 — Faze", "generated-boss:boss6_faze.ss0"),
+    ("boss_angela", "Boss 8 — Angela", "generated-boss:boss7_angela.ss0"),
+    (
+        "boss_penta_dragon",
+        "Final Boss — Penta Dragon",
+        "generated-boss:boss8_penta_dragon.ss0",
+    ),
+    ("witch", "Sara Witch", "level1_sara_w_alone.ss0"),
+    ("dragon", "Sara Dragon", "level1_sara_d_alone.ss0"),
+    ("crow", "Crow", "level1_sara_w_crow.ss0"),
+    ("hornets", "Four hornets", "level1_sara_w_4_hornets.ss0"),
+    ("orc", "Orc", "level1_sara_w_orc.ss0"),
+    ("soldier", "Soldier", "level1_sara_w_soldier.ss0"),
+    ("mage", "Mage + items", "level1_sara_w_mage_health1_items.ss0"),
+    (
+        "mixed",
+        "Catfish / moth / hazards",
+        "level1_cat_fish_moth_spike_hazard_orb_item.ss0",
+    ),
+    ("gargoyle", "Gargoyle miniboss", "level1_sara_w_gargoyle_mini_boss.ss0"),
+    ("spider", "Spider miniboss", "level1_sara_w_spier_miniboss.ss0"),
+    (
+        "spiral",
+        "Spiral projectile (FFC0=1)",
+        "sara_d_special_spiral_weapon_activated_level1_v_2.31.ss0",
+    ),
+    (
+        "shield",
+        "Shield projectile (FFC0=2)",
+        "level1_cat_fish_moth_spike_hazard_orb_item.ss0",
+    ),
+    ("jet", "Secret jet stage", "level1_sara_w_in_jet_form_secret_stage.ss0"),
+    ("menu", "Item menu", "level1_square_cat_fish_menu_open.ss0"),
 ]
+SCENE_KEYS = {key for key, _label, _state in SCENE_PRESETS}
+STATE_LOCK = threading.RLock()
+SCENE_REQUEST_ID = 0
 
 # Per-stage-boss BG palette assignments — mirrors the _bg_table_<boss>()
 # functions in scripts/build_v301_teleport.py. Each boss's body tiles map
@@ -128,15 +224,16 @@ STAGE_BOSS_BODY_PALETTES = [
 ]
 
 
-# Boss-palette YAML entries (FFBF 3-8 → boss-palette CRAM override).
+# Boss-palette YAML entries (FFBF 1-8 → boss-palette CRAM override).
 # These are SEPARATE from stage-boss arena identification. They are
 # the entries that v3.01's palette_loader writes when FFBF != 0
 # (replacing the OBJ slot from the boss_slot_table). The names below
-# are the YAML keys, not necessarily the in-game bosses — we'd need
-# more reverse engineering to confirm which FFBF value corresponds
-# to which named in-game boss (if any).
+# are the YAML keys. FFBF 1/2 are verified Gargoyle/Spider minibosses;
+# the legacy names for 3-8 remain builder-facing identifiers.
 BOSS_PAL_ENTRIES = [
     # (FFBF value, YAML key, OBJ slot from boss_slot_table)
+    (1, "Gargoyle",       6),
+    (2, "Spider",         7),
     (3, "Boss3_Crimson",  6),
     (4, "Boss4_Ice",      7),
     (5, "Boss5_Void",     6),
@@ -145,14 +242,27 @@ BOSS_PAL_ENTRIES = [
     (8, "Angela",         5),
 ]
 
+JET_PAL_ENTRIES = [
+    # (OBJ slot, YAML key)
+    (1, "SaraDragonJet"),
+    (2, "SaraWitchJet"),
+]
+
+POWERUP_PAL_ENTRIES = [
+    # (FFC0 value, YAML key)
+    (1, "SpiralProjectile"),
+    (2, "ShieldProjectile"),
+    (3, "TurboProjectile"),
+]
+
 
 def bgr555_to_rgb888(val15: int) -> str:
     r5 = val15 & 0x1F
     g5 = (val15 >> 5) & 0x1F
     b5 = (val15 >> 10) & 0x1F
-    r = (r5 * 255) // 31
-    g = (g5 * 255) // 31
-    b = (b5 * 255) // 31
+    r = (r5 * 255 + 15) // 31
+    g = (g5 * 255 + 15) // 31
+    b = (b5 * 255 + 15) // 31
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
@@ -161,9 +271,9 @@ def rgb888_to_bgr555(rgb_hex: str) -> int:
     r = int(s[0:2], 16) if len(s) >= 6 else 0
     g = int(s[2:4], 16) if len(s) >= 6 else 0
     b = int(s[4:6], 16) if len(s) >= 6 else 0
-    r5 = min(31, (r * 31) // 255)
-    g5 = min(31, (g * 31) // 255)
-    b5 = min(31, (b * 31) // 255)
+    r5 = min(31, (r * 31 + 127) // 255)
+    g5 = min(31, (g * 31 + 127) // 255)
+    b5 = min(31, (b * 31 + 127) // 255)
     return (b5 << 10) | (g5 << 5) | r5
 
 
@@ -175,7 +285,7 @@ def load_yaml_palettes() -> dict:
     obj_keys = ['EnemyProjectile', 'SaraDragon', 'SaraWitch',
                 'SaraProjectileAndCrow', 'Hornets', 'OrcGround',
                 'Humanoid', 'Catfish']
-    palettes = {"BG": {}, "OBJ": {}, "BOSS": {}}
+    palettes = {"BG": {}, "OBJ": {}, "BOSS": {}, "JET": {}, "POWER": {}}
     for i, k in enumerate(bg_keys):
         entry = data.get('bg_palettes', {}).get(k, {})
         palettes["BG"][i] = entry.get('colors', ["7FFF", "5294", "2108", "0000"])
@@ -183,58 +293,99 @@ def load_yaml_palettes() -> dict:
         entry = data.get('obj_palettes', {}).get(k, {})
         palettes["OBJ"][i] = entry.get('colors', ["0000", "7C1F", "4C0F", "0000"])
     # Boss-palette override entries from YAML.
-    for ffbf, yaml_key, slot in BOSS_PAL_ENTRIES:
+    for ffbf, yaml_key, _slot in BOSS_PAL_ENTRIES:
         entry = data.get('boss_palettes', {}).get(yaml_key, {})
         palettes["BOSS"][ffbf] = entry.get('colors', ["0000", "7C1F", "4C0F", "0000"])
+    for slot, yaml_key in JET_PAL_ENTRIES:
+        entry = data.get('obj_palettes', {}).get(yaml_key, {})
+        palettes["JET"][slot] = entry.get(
+            'colors', ["0000", "7FE0", "4EC0", "2D80"]
+        )
+    for power, yaml_key in POWERUP_PAL_ENTRIES:
+        entry = data.get('powerup_palettes', {}).get(yaml_key, {})
+        palettes["POWER"][power] = entry.get(
+            'colors', ["0000", "03FF", "02BF", "019F"]
+        )
     palettes["BG_labels"] = bg_keys
     palettes["OBJ_labels"] = obj_keys
     return palettes
 
 
-def write_live_file(state: dict, preview_ffbf: int = 0, force_arena: dict = None,
-                    dx_teleport: int = 0):
+def write_live_file(
+    state: dict,
+    dirty: dict[str, set[int]],
+    *,
+    scene: str | None = None,
+    scene_request_id: int | None = None,
+) -> None:
     """Write the current state dict to LIVE_FILE in mGBA-readable format.
 
-    Optional `preview_ffbf`: forces FFBF every frame for boss palette preview.
-
-    Optional `force_arena`: dict with ffba/d880/ffb7 — forced every frame
-    (held state, no proper init).
-
-    Optional `dx_teleport`: 1-9 = one-shot DX teleport request. Lua writes
-    DF0A = this value, ROM-side hook in v3.01 colorize handler JPs to
-    bank2:0x4000 with FFBA = dx_teleport - 1.
+    Only explicitly edited base or guarded special palettes are emitted. This
+    lets a live edit survive the game's own palette reloads without
+    overwriting unrelated boss or scene-specific CRAM. `scene` is a one-shot,
+    whitelisted mGBA save-state load request; it never changes ROM control
+    flow. Its monotonically increasing request ID makes repeated clicks on the
+    same scene produce different bridge bytes so mGBA cannot mistake them for
+    an old request.
     """
-    lines = ["# Auto-generated by live_palette_editor.py"]
-    for kind in ("BG", "OBJ"):
-        for pal_idx, colors in state[kind].items():
-            entries = ",".join(f"{ci}={c.upper()}" for ci, c in enumerate(colors))
-            lines.append(f"{kind}{pal_idx}:{entries}")
-    if preview_ffbf:
-        slot = next((s for f, k, s in BOSS_PAL_ENTRIES if f == preview_ffbf), 6)
-        yaml_key = next((k for f, k, s in BOSS_PAL_ENTRIES if f == preview_ffbf), "?")
-        colors = state["BOSS"].get(preview_ffbf, ["0000"] * 4)
-        entries = ",".join(f"{ci}={c.upper()}" for ci, c in enumerate(colors))
-        lines.append(f"# Boss palette preview: FFBF={preview_ffbf} ({yaml_key}) → OBJ slot {slot}")
-        lines.append(f"OBJ{slot}:{entries}")
-        lines.append(f"FFBF:{preview_ffbf}")
-    if force_arena:
-        if "ffba" in force_arena:
-            lines.append(f"FFBA:{force_arena['ffba']}")
-        if "d880" in force_arena:
-            lines.append(f"D880:0x{force_arena['d880']:02X}")
-        if "ffb7" in force_arena:
-            lines.append(f"FFB7:0x{force_arena['ffb7']:02X}")
-    if dx_teleport:
-        lines.append(f"# DX teleport: DF0A = {dx_teleport} → FFBA = {dx_teleport - 1}")
-        lines.append(f"DX:{dx_teleport}")
-    LIVE_FILE.write_text("\n".join(lines) + "\n")
+    with STATE_LOCK:
+        lines = ["# Auto-generated by live_palette_editor.py"]
+        for kind in ("BG", "OBJ"):
+            for pal_idx in sorted(dirty[kind]):
+                colors = state[kind][pal_idx]
+                entries = ",".join(
+                    f"{ci}={c.upper()}" for ci, c in enumerate(colors)
+                )
+                lines.append(f"{kind}{pal_idx}:{entries}")
+        for ffbf in sorted(dirty["BOSS"]):
+            colors = state["BOSS"][ffbf]
+            slot = next(
+                slot
+                for entry_ffbf, _key, slot in BOSS_PAL_ENTRIES
+                if entry_ffbf == ffbf
+            )
+            entries = ",".join(
+                f"{ci}={color.upper()}"
+                for ci, color in enumerate(colors)
+            )
+            lines.append(f"BOSS{ffbf}@{slot}:{entries}")
+        for slot in sorted(dirty["JET"]):
+            colors = state["JET"][slot]
+            entries = ",".join(
+                f"{ci}={color.upper()}"
+                for ci, color in enumerate(colors)
+            )
+            lines.append(f"JET{slot}:{entries}")
+        for power in sorted(dirty["POWER"]):
+            colors = state["POWER"][power]
+            entries = ",".join(
+                f"{ci}={color.upper()}"
+                for ci, color in enumerate(colors)
+            )
+            lines.append(f"POWER{power}:{entries}")
+        if scene is not None:
+            if scene not in SCENE_KEYS:
+                raise ValueError(f"unknown scene preset: {scene}")
+            if scene_request_id is None:
+                raise ValueError("scene request ID is required")
+            lines.append(f"# SCENE_REQUEST:{scene_request_id}")
+            lines.append(f"SCENE:{scene}")
+        LIVE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temporary = LIVE_FILE.with_suffix(LIVE_FILE.suffix + ".tmp")
+        temporary.write_text("\n".join(lines) + "\n")
+        temporary.replace(LIVE_FILE)
 
 
 # Global state
 STATE = load_yaml_palettes()
-PREVIEW_FFBF = 0  # 0 = no preview, 3..8 = preview this boss palette
-FORCE_ARENA = None  # None or {ffba, d880, ffb7} when teleporting
-write_live_file(STATE)
+DIRTY: dict[str, set[int]] = {
+    "BG": set(),
+    "OBJ": set(),
+    "BOSS": set(),
+    "JET": set(),
+    "POWER": set(),
+}
+write_live_file(STATE, DIRTY)
 
 
 def render_index():
@@ -263,37 +414,38 @@ button:hover { background: #666; }
 <h1>Penta Dragon DX — Live Palette Editor</h1>
 <p>Edits apply to running mGBA within ~0.5s.
 Make sure mGBA was launched with <code>--script scripts/lua/live_palettes.lua</code>.</p>
-<button onclick="reload()">Reload from YAML</button>
+<button onclick="reload()">Reset live colors from YAML</button>
 <button onclick="save()">Save to YAML</button>
 <button onclick="copyState()">Copy current as JSON</button>
 """]
 
-    # DX Teleport section. Writes DX:N to /tmp/live_palettes.txt → Lua
-    # writes DF0A = N → ROM-side teleport hook consumes it (when wired).
-    # Lua workaround (2026-06-03): instead of writing DF0A for a ROM
-    # consumer, Lua simulates the SELECT+START combo: pre-write FFBA so
-    # the ROM's INC lands on the target, then pulse FF93=0x0C for ~6 frames
-    # via emu:setKeys. Bypasses the v17 freeze entirely.
-    # Requires: rom/working/penta_dragon_dx_teleport.gb (v16, tag
-    # v3.01-teleport-all-bosses). Tested working in mgba 0.10.5.
-    html_parts.append('<div class="section"><h2>DX Teleport</h2>')
-    html_parts.append('<p style="font-size:0.85em;color:#888;">'
-                      'Click any boss → Lua pre-writes FFBA and pulses SELECT+START '
-                      '→ ROM combo handler does INC + arena init. Requires the v16 '
-                      '<code>penta_dragon_dx_teleport.gb</code> ROM and dungeon state '
-                      '(D880=0x02). Cycles cleanly through all 9 bosses.</p>')
+    # Release-safe scene navigation. These buttons load curated emulator states;
+    # they do not patch game memory or invoke the retired in-ROM teleport.
+    html_parts.append('<div class="section"><h2>Stream Scene Deck</h2>')
+    html_parts.append('<p style="font-size:0.85em;color:#aaa;">'
+                      'Jump between representative actors and screens by loading '
+                      'curated mGBA states. This is emulator-only navigation on '
+                      '<code>FIXED.gb</code>; it cannot trigger the retired '
+                      'SELECT+START stack redirect.</p>')
+    html_parts.append('<p style="font-size:0.85em;color:#aaa;">'
+                      'The first title option is the story intro; DOWN selects '
+                      'the actual GAME START option. Story-art buttons marked '
+                      'BG1–BG7 preview that palette on the artwork only. The '
+                      'separator, dialogue border, and text stay on neutral BG0.'
+                      ' Credits, END, and epilogue buttons use independent '
+                      'ending-phase guards and preview BG1, BG2, and BG3.'
+                      '</p>')
     html_parts.append('<div style="display:flex;flex-wrap:wrap;gap:0.3em;">')
-    for ffba, name, _d880, _hint in STAGE_BOSSES:
+    for key, label, _state in SCENE_PRESETS:
         html_parts.append(
-            f'<button onclick="dxTeleport({ffba + 1})">'
-            f'{name}<br><span style="font-size:0.7em;color:#aaa;">DF0A={ffba + 1}</span></button>'
+            f'<button onclick="loadScene(\'{key}\')">{label}</button>'
         )
     html_parts.append("</div></div>")
 
     # ─── Per-stage-boss body palette editor ───
     # Shows the BG palette indices each boss's bg_table assigns to body
     # regions (mirrors _bg_table_<boss>() in build_v301_teleport.py).
-    # Editing the colors here writes to live CRAM via /tmp/live_palettes.txt.
+    # Editing the colors here writes selected overrides to live CRAM.
     html_parts.append('<div class="section"><h2>Stage Boss Body Palettes</h2>')
     html_parts.append('<p style="font-size:0.85em;color:#888;">'
                       'Each boss\'s body is drawn with a few BG palette indices (assigned by '
@@ -307,9 +459,6 @@ Make sure mGBA was launched with <code>--script scripts/lua/live_palettes.lua</c
         html_parts.append(f'<summary style="cursor:pointer;font-weight:bold;">{name} '
                           f'<span style="font-weight:normal;color:#aaa;">'
                           f'(uses BG ' + ', '.join(str(p) for p, _ in parts) + ')</span></summary>')
-        html_parts.append('<div style="margin-top:0.6em;">'
-                          f'<button onclick="dxTeleport({ffba + 1})" style="margin-bottom:0.4em;">'
-                          f'Teleport to {name}</button></div>')
         for pal_idx, body_part in parts:
             colors = STATE["BG"].get(pal_idx, ["0000"] * 4)
             html_parts.append('<div class="pal" style="margin:0.3em 0;padding:0.3em;background:#1a1a1a;">')
@@ -328,54 +477,88 @@ Make sure mGBA was launched with <code>--script scripts/lua/live_palettes.lua</c
         html_parts.append("</details>")
     html_parts.append("</div>")
 
-    # ─── Soft state-byte hold (legacy fallback if DX hook not present) ───
-    html_parts.append('<div class="section"><h2>State-byte Hold (legacy)</h2>')
-    html_parts.append('<p style="font-size:0.85em;color:#888;">'
-                      'Holds FFBA + D880 + FFB7 every frame WITHOUT calling the arena '
-                      'routine. Does NOT load boss tile data — visual will be wrong. '
-                      'Use only if DX teleport above doesn\'t work (e.g., older ROM).</p>')
-    current = f"FFBA={FORCE_ARENA['ffba']}, D880=0x{FORCE_ARENA['d880']:02X}" if FORCE_ARENA else "none"
-    html_parts.append(f'<div style="margin-bottom:0.5em;color:#cc4;">Holding: {current}</div>')
-    html_parts.append('<div style="display:flex;flex-wrap:wrap;gap:0.3em;">')
-    html_parts.append('<button onclick="teleport(-1, 0)">Clear hold</button>')
-    for ffba, name, d880, _hint in STAGE_BOSSES:
-        active = " style=\"background:#284;\"" if FORCE_ARENA and FORCE_ARENA.get("ffba") == ffba else ""
-        html_parts.append(
-            f'<button{active} onclick="teleport({ffba}, 0x{d880:02X})">'
-            f'{name}<br><span style="font-size:0.7em;color:#aaa;">FFBA={ffba} D880=0x{d880:02X}</span></button>'
-        )
-    html_parts.append("</div></div>")
-
-    # ─── Boss palette overrides (FFBF mechanism) ───
-    # The boss_palette_table entries (Boss3_Crimson..Angela) are
-    # FFBF-based overrides that v3.01's palette_loader writes to OBJ
-    # slot when FFBF != 0. Their direct correspondence to in-game
-    # named bosses is unverified — these are just 6 color presets
-    # that get applied when their FFBF value is active.
-    html_parts.append('<div class="section"><h2>Boss Palette Overrides (FFBF 3-8)</h2>')
-    html_parts.append('<p style="font-size:0.85em;color:#888;">'
-                      'These are the boss_palette_table entries in the ROM. When FFBF=N (1-8) is active, '
-                      'v3.01\'s palette_loader writes the matching entry to OBJ slot per boss_slot_table = [6,7,6,7,6,7,4,5]. '
-                      'FFBF 1-2 are mini-bosses (Gargoyle, Spider) — excluded. '
-                      '<strong>Preview</strong> forces FFBF every frame so the boss palette code path runs.</p>')
-    html_parts.append(f'<div><label><input type="radio" name="preview" value="0" {"checked" if PREVIEW_FFBF == 0 else ""} onchange="setPreview(0)"> No preview</label></div>')
+    html_parts.append(
+        '<div class="section"><h2>Miniboss / Boss Override Palettes</h2>'
+    )
+    html_parts.append(
+        '<p style="font-size:0.85em;color:#888;">'
+        'These are the exact YAML palettes loaded when <code>FFBF=1..8</code>. '
+        'Each override is applied live only while its matching flag is active, '
+        'then saved back to the same builder entry. FFBF 1 and 2 are the '
+        'verified Gargoyle and Spider minibosses; 3–8 retain their legacy '
+        'builder labels.</p>'
+    )
     for ffbf, yaml_key, slot in BOSS_PAL_ENTRIES:
-        colors = STATE["BOSS"].get(ffbf, ["0000"] * 4)
-        checked = "checked" if PREVIEW_FFBF == ffbf else ""
-        html_parts.append(f'<div class="pal" style="display:block;margin:0.5em 0;">')
-        html_parts.append(f'<div style="display:flex;align-items:center;gap:0.5em;">')
-        html_parts.append(f'<label><input type="radio" name="preview" value="{ffbf}" {checked} onchange="setPreview({ffbf})"> Preview</label>')
-        html_parts.append(f'<span class="pal-name">{yaml_key} (FFBF={ffbf}, → OBJ slot {slot})</span>')
-        html_parts.append(f'</div>')
-        html_parts.append('<div class="color-row" style="margin-top:0.3em;">')
-        for ci, c in enumerate(colors):
-            val15 = int(c, 16)
-            rgb = bgr555_to_rgb888(val15)
+        colors = STATE["BOSS"][ffbf]
+        html_parts.append(
+            '<div class="pal">'
+            f'<div class="pal-name">FFBF {ffbf}: {yaml_key} → OBJ{slot}</div>'
+            '<div class="color-row">'
+        )
+        for color_index, color in enumerate(colors):
+            rgb = bgr555_to_rgb888(int(color, 16))
             html_parts.append(
                 f'<div><input type="color" value="{rgb}" '
-                f'data-kind="BOSS" data-pal="{ffbf}" data-color="{ci}" '
-                f'onchange="updateColor(this)">'
-                f'<div class="bgr" id="bgr-BOSS-{ffbf}-{ci}">{c.upper()}</div></div>'
+                f'data-kind="BOSS" data-pal="{ffbf}" '
+                f'data-color="{color_index}" onchange="updateColor(this)">'
+                f'<div class="bgr" '
+                f'id="bgr-BOSS-{ffbf}-{color_index}">'
+                f'{color.upper()}</div></div>'
+            )
+        html_parts.append("</div></div>")
+    html_parts.append("</div>")
+
+    html_parts.append('<div class="section"><h2>Jet Form Palettes</h2>')
+    html_parts.append(
+        '<p style="font-size:0.85em;color:#888;">'
+        'These replace Sara Dragon/Witch in the secret stage only while '
+        '<code>FFD0=1</code>, and save directly to their alternate OBJ YAML '
+        'entries.</p>'
+    )
+    for slot, yaml_key in JET_PAL_ENTRIES:
+        colors = STATE["JET"][slot]
+        html_parts.append(
+            '<div class="pal">'
+            f'<div class="pal-name">{yaml_key} → OBJ{slot}</div>'
+            '<div class="color-row">'
+        )
+        for color_index, color in enumerate(colors):
+            rgb = bgr555_to_rgb888(int(color, 16))
+            html_parts.append(
+                f'<div><input type="color" value="{rgb}" '
+                f'data-kind="JET" data-pal="{slot}" '
+                f'data-color="{color_index}" onchange="updateColor(this)">'
+                f'<div class="bgr" id="bgr-JET-{slot}-{color_index}">'
+                f'{color.upper()}</div></div>'
+            )
+        html_parts.append("</div></div>")
+    html_parts.append("</div>")
+
+    html_parts.append(
+        '<div class="section"><h2>Powerup Projectile Palettes</h2>'
+    )
+    html_parts.append(
+        '<p style="font-size:0.85em;color:#888;">'
+        'These replace OBJ0 only while the exact <code>FFC0</code> powerup '
+        'value is active. Spiral and Shield have curated scene buttons; Turbo '
+        'remains builder-tunable even though no natural FFC0=3 state is '
+        'currently available.</p>'
+    )
+    for power, yaml_key in POWERUP_PAL_ENTRIES:
+        colors = STATE["POWER"][power]
+        html_parts.append(
+            '<div class="pal">'
+            f'<div class="pal-name">FFC0 {power}: {yaml_key} → OBJ0</div>'
+            '<div class="color-row">'
+        )
+        for color_index, color in enumerate(colors):
+            rgb = bgr555_to_rgb888(int(color, 16))
+            html_parts.append(
+                f'<div><input type="color" value="{rgb}" '
+                f'data-kind="POWER" data-pal="{power}" '
+                f'data-color="{color_index}" onchange="updateColor(this)">'
+                f'<div class="bgr" id="bgr-POWER-{power}-{color_index}">'
+                f'{color.upper()}</div></div>'
             )
         html_parts.append("</div></div>")
     html_parts.append("</div>")
@@ -406,9 +589,9 @@ function rgb888_to_bgr555(rgb) {
     const r = parseInt(s.substr(0, 2), 16);
     const g = parseInt(s.substr(2, 2), 16);
     const b = parseInt(s.substr(4, 2), 16);
-    const r5 = Math.min(31, Math.floor(r * 31 / 255));
-    const g5 = Math.min(31, Math.floor(g * 31 / 255));
-    const b5 = Math.min(31, Math.floor(b * 31 / 255));
+    const r5 = Math.min(31, Math.round(r * 31 / 255));
+    const g5 = Math.min(31, Math.round(g * 31 / 255));
+    const b5 = Math.min(31, Math.round(b * 31 / 255));
     return ((b5 << 10) | (g5 << 5) | r5).toString(16).padStart(4, '0').toUpperCase();
 }
 function updateColor(input) {
@@ -434,30 +617,12 @@ function updateColor(input) {
         body: JSON.stringify({kind, pal, color, bgr})
     });
 }
-function setPreview(ffbf) {
-    fetch('/preview', {
+function loadScene(scene) {
+    fetch('/load_scene', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ffbf})
-    });
-}
-function teleport(ffba, d880) {
-    fetch('/teleport', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ffba, d880})
-    }).then(r => r.text()).then(t => {
-        console.log('teleport:', t);
-        location.reload();
-    });
-}
-function dxTeleport(df0a) {
-    // df0a = 1..9 (FFBA + 1)
-    fetch('/dx_teleport', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({df0a})
-    }).then(r => r.text()).then(t => console.log('dx_teleport:', t));
+        body: JSON.stringify({scene})
+    }).then(r => r.text()).then(t => console.log('load_scene:', t));
 }
 function reload() {
     fetch('/reload', {method: 'POST'}).then(() => location.reload());
@@ -483,14 +648,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlparse(self.path)
         if url.path == "/" or url.path == "/index.html":
-            body = render_index().encode("utf-8")
+            with STATE_LOCK:
+                body = render_index().encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
         elif url.path == "/state":
-            body = json.dumps(STATE, indent=2).encode("utf-8")
+            with STATE_LOCK:
+                body = json.dumps(STATE, indent=2).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -501,7 +668,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_POST(self):
-        global STATE, PREVIEW_FFBF, FORCE_ARENA
+        global STATE, DIRTY, SCENE_REQUEST_ID
         url = urlparse(self.path)
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode("utf-8") if length > 0 else ""
@@ -512,117 +679,192 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pal = int(data["pal"])
                 color = int(data["color"])
                 bgr = data["bgr"].upper()
-                STATE[kind][pal][color] = bgr
-                write_live_file(STATE, preview_ffbf=PREVIEW_FFBF, force_arena=FORCE_ARENA)
+                if kind not in ("BG", "OBJ", "BOSS", "JET", "POWER"):
+                    raise ValueError(
+                        "kind must be BG, OBJ, BOSS, JET, or POWER, "
+                        f"got {kind!r}"
+                    )
+                valid_palettes = {
+                    "BG": range(8),
+                    "OBJ": range(8),
+                    "BOSS": range(1, 9),
+                    "JET": range(1, 3),
+                    "POWER": range(1, 4),
+                }[kind]
+                if pal not in valid_palettes:
+                    expected = {
+                        "BG": "0-7",
+                        "OBJ": "0-7",
+                        "BOSS": "1-8",
+                        "JET": "1-2",
+                        "POWER": "1-3",
+                    }[kind]
+                    raise ValueError(f"{kind} palette must be {expected}, got {pal}")
+                if color not in range(4):
+                    raise ValueError(f"color must be 0-3, got {color}")
+                if not re.fullmatch(r"[0-7][0-9A-F]{3}", bgr):
+                    raise ValueError(f"invalid BGR555 value: {bgr!r}")
+                with STATE_LOCK:
+                    STATE[kind][pal][color] = bgr
+                    DIRTY[kind].add(pal)
+                    write_live_file(STATE, DIRTY)
                 self.send_response(200)
                 self.end_headers()
             except Exception as e:
                 self.send_response(400)
                 self.end_headers()
                 self.wfile.write(f"error: {e}".encode())
-        elif url.path == "/preview":
+        elif url.path == "/load_scene":
             try:
                 data = json.loads(body)
-                PREVIEW_FFBF = int(data.get("ffbf", 0))
-                write_live_file(STATE, preview_ffbf=PREVIEW_FFBF, force_arena=FORCE_ARENA)
-                self.send_response(200)
-                self.end_headers()
-            except Exception as e:
-                self.send_response(400)
-                self.end_headers()
-                self.wfile.write(f"error: {e}".encode())
-        elif url.path == "/dx_teleport":
-            try:
-                data = json.loads(body)
-                df0a = int(data.get("df0a", 0))
-                if df0a < 1 or df0a > 9:
-                    raise ValueError(f"df0a must be 1-9, got {df0a}")
-                # One-shot write: write_live_file with dx_teleport=df0a.
-                # Lua picks up DX:N once, writes DF0A, clears.
-                write_live_file(STATE, preview_ffbf=PREVIEW_FFBF, force_arena=FORCE_ARENA, dx_teleport=df0a)
+                scene = str(data.get("scene", ""))
+                if scene not in SCENE_KEYS:
+                    raise ValueError(f"unknown scene preset: {scene!r}")
+                with STATE_LOCK:
+                    SCENE_REQUEST_ID += 1
+                    write_live_file(
+                        STATE,
+                        DIRTY,
+                        scene=scene,
+                        scene_request_id=SCENE_REQUEST_ID,
+                    )
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain")
                 self.end_headers()
-                self.wfile.write(f"DX teleport requested: DF0A={df0a} → FFBA={df0a-1}".encode())
-            except Exception as e:
-                self.send_response(400)
-                self.end_headers()
-                self.wfile.write(f"error: {e}".encode())
-        elif url.path == "/teleport":
-            try:
-                data = json.loads(body)
-                ffba = int(data.get("ffba", -1))
-                d880 = int(data.get("d880", 0))
-                if ffba < 0:
-                    # Clear teleport
-                    FORCE_ARENA = None
-                    msg = "teleport cleared"
-                else:
-                    # Hold arena state every frame.
-                    FORCE_ARENA = {
-                        "ffba": ffba,
-                        "d880": d880,
-                        "ffb7": d880,
-                    }
-                    msg = f"holding arena: FFBA={ffba}, D880=0x{d880:02X}, FFB7=0x{d880:02X}"
-                write_live_file(STATE, preview_ffbf=PREVIEW_FFBF, force_arena=FORCE_ARENA)
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain")
-                self.end_headers()
-                self.wfile.write(msg.encode())
+                self.wfile.write(f"scene load requested: {scene}".encode())
             except Exception as e:
                 self.send_response(400)
                 self.end_headers()
                 self.wfile.write(f"error: {e}".encode())
         elif url.path == "/reload":
-            STATE = load_yaml_palettes()
-            write_live_file(STATE, preview_ffbf=PREVIEW_FFBF, force_arena=FORCE_ARENA)
+            with STATE_LOCK:
+                STATE = load_yaml_palettes()
+                # Reset only palettes overridden during this session. Unrelated
+                # scene/boss CRAM remains owned by the game.
+                write_live_file(STATE, DIRTY)
             self.send_response(200)
             self.end_headers()
         elif url.path == "/save":
-            self.save_to_yaml()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            self.wfile.write(f"Saved to {YAML_PATH}".encode())
+            try:
+                with STATE_LOCK:
+                    changed, backup = self.save_to_yaml()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                if changed:
+                    message = f"Saved to {YAML_PATH}\nBackup: {backup}"
+                else:
+                    message = f"No palette changes; {YAML_PATH} is unchanged"
+                self.wfile.write(message.encode())
+            except Exception as error:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(f"error: {error}".encode())
         else:
             self.send_response(404)
             self.end_headers()
 
-    def save_to_yaml(self):
-        """Update the YAML file with current STATE colors."""
-        with open(YAML_PATH) as f:
-            data = yaml.safe_load(f)
-        bg_keys = STATE.get("BG_labels", [])
-        obj_keys = STATE.get("OBJ_labels", [])
-        for i, k in enumerate(bg_keys):
-            if k in data.get('bg_palettes', {}):
-                data['bg_palettes'][k]['colors'] = STATE["BG"][i]
-        for i, k in enumerate(obj_keys):
-            if k in data.get('obj_palettes', {}):
-                data['obj_palettes'][k]['colors'] = STATE["OBJ"][i]
-        # Boss-palette overrides
-        for ffbf, yaml_key, slot in BOSS_PAL_ENTRIES:
-            if yaml_key in data.get('boss_palettes', {}):
-                data['boss_palettes'][yaml_key]['colors'] = STATE["BOSS"][ffbf]
-        with open(YAML_PATH, "w") as f:
-            yaml.safe_dump(data, f, default_flow_style=None)
+    def save_to_yaml(self) -> tuple[bool, Path | None]:
+        """Update only palette color arrays while preserving YAML commentary."""
+        text = YAML_PATH.read_text()
+        replacements: dict[tuple[str, str], list[str]] = {}
+        for index, key in enumerate(STATE.get("BG_labels", [])):
+            replacements[("bg_palettes", key)] = STATE["BG"][index]
+        for index, key in enumerate(STATE.get("OBJ_labels", [])):
+            replacements[("obj_palettes", key)] = STATE["OBJ"][index]
+        for ffbf, yaml_key, _slot in BOSS_PAL_ENTRIES:
+            replacements[("boss_palettes", yaml_key)] = STATE["BOSS"][ffbf]
+        for slot, yaml_key in JET_PAL_ENTRIES:
+            replacements[("obj_palettes", yaml_key)] = STATE["JET"][slot]
+        for power, yaml_key in POWERUP_PAL_ENTRIES:
+            replacements[("powerup_palettes", yaml_key)] = STATE["POWER"][power]
+
+        lines = text.splitlines(keepends=True)
+        section = None
+        palette = None
+        replaced: set[tuple[str, str]] = set()
+        for index, line in enumerate(lines):
+            section_match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):\s*$", line)
+            if section_match:
+                section = section_match.group(1)
+                palette = None
+                continue
+            palette_match = re.match(r"^  ([A-Za-z_][A-Za-z0-9_]*):\s*$", line)
+            if palette_match:
+                palette = palette_match.group(1)
+                continue
+            key = (section, palette)
+            if key not in replacements:
+                continue
+            color_match = re.match(
+                r'^(\s*colors:\s*)\[[^\]]*\](\s*(?:#.*)?)((?:\r?\n)?)$',
+                line,
+            )
+            if not color_match:
+                continue
+            colors = ", ".join(f'"{value}"' for value in replacements[key])
+            lines[index] = (
+                f"{color_match.group(1)}[{colors}]"
+                f"{color_match.group(2)}{color_match.group(3)}"
+            )
+            replaced.add(key)
+
+        missing = set(replacements) - replaced
+        if missing:
+            names = ", ".join(f"{section}.{key}" for section, key in sorted(missing))
+            raise RuntimeError(f"palette entries not found in YAML: {names}")
+
+        updated = "".join(lines)
+        original_bytes = text.encode()
+        updated_bytes = updated.encode()
+        if updated_bytes == original_bytes:
+            return False, None
+
+        digest = hashlib.md5(original_bytes).hexdigest()
+        backup_name = (
+            f"{YAML_PATH.stem}.presave_{digest[:8]}.backup{YAML_PATH.suffix}"
+        )
+        YAML_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        backup = YAML_BACKUP_DIR / backup_name
+        if backup.exists():
+            if backup.read_bytes() != original_bytes:
+                raise RuntimeError(f"refusing mismatched palette backup: {backup}")
+        else:
+            backup_tmp = backup.with_suffix(backup.suffix + ".tmp")
+            backup_tmp.write_bytes(original_bytes)
+            backup_tmp.replace(backup)
+
+        temporary = YAML_PATH.with_suffix(YAML_PATH.suffix + ".tmp")
+        temporary.write_bytes(updated_bytes)
+        temporary.replace(YAML_PATH)
+        return True, backup
 
 
-def main():
+class PaletteHTTPServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    request_queue_size = 64
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--bind", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=PORT)
+    args = parser.parse_args()
+
     print(f"Live palette editor")
-    print(f"  Browser: http://localhost:{PORT}")
+    print(f"  Browser: http://{args.bind}:{args.port}")
     print(f"  mGBA Lua script: scripts/lua/live_palettes.lua")
     print(f"  Live file: {LIVE_FILE}")
     print(f"  YAML source: {YAML_PATH}")
+    print(f"  YAML backups: {YAML_BACKUP_DIR}")
     print()
     print(f"To launch mGBA with live update:")
-    print(f"  mgba-qt rom/working/penta_dragon_dx_v301.gb \\")
+    print(f"  mgba-qt rom/working/penta_dragon_dx_FIXED.gb \\")
     print(f"    --script scripts/lua/live_palettes.lua")
     print()
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", PORT), Handler) as srv:
-        srv.allow_reuse_address = True
+    with PaletteHTTPServer((args.bind, args.port), Handler) as srv:
         try:
             srv.serve_forever()
         except KeyboardInterrupt:

@@ -28,6 +28,9 @@ Usage:
     uv run python scripts/mister.py game_start                     # Macro: launch + DOWN→A→A→A to gameplay
     uv run python scripts/mister.py capture_gameplay [secs] [label] # Launch + play + periodic screenshots
     uv run python scripts/mister.py deploy_and_test [version]      # Build + deploy + launch + screenshot
+    uv run python scripts/mister.py release_sweep_start MANIFEST   # Start hash-bound physical release sweep
+    uv run python scripts/mister.py release_checkpoint HW NAME confirm
+    uv run python scripts/mister.py release_sweep_finish HW        # Seal pass after every confirmation
     uv run python scripts/mister.py list_states                    # List save states on MiSTer
     uv run python scripts/mister.py clean_old_roms                 # Remove old versioned ROMs from MiSTer
     uv run python scripts/mister.py cheats list                     # Show all available cheats
@@ -39,6 +42,14 @@ Environment:
     MISTER_HOST: MiSTer SSH hostname (default: MiSTer)
     MISTER_USER: MiSTer SSH user (default: root)
     BLACKMAGE_HOST: Backup host (default: struktured@blackmage)
+    MISTER_RESERVATION_ID: Active reservation identifier for this MiSTer
+    MISTER_RESERVATION_CHECKER: Local checker command that exits 0 only while
+        MISTER_RESERVATION_ID owns an active reservation for MISTER_HOST
+
+The reservation checker receives MISTER_RESERVATION_ID and
+MISTER_RESERVATION_HOST in its environment. Hardware commands fail closed
+before SSH/SCP unless the checker confirms the reservation. This script does
+not acquire reservations; use the shared reservation service first.
 """
 
 import struct
@@ -47,8 +58,10 @@ import sys
 import time
 import shlex
 import zipfile
+import hashlib
+import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # === Configuration ===
 
@@ -74,6 +87,25 @@ LOCAL_ROM = PROJECT_ROOT / "rom" / "working" / "penta_dragon_dx_FIXED.gb"
 LOCAL_TMP = PROJECT_ROOT / "tmp"
 LOCAL_SCREENSHOTS = LOCAL_TMP / "mister_screenshots"
 LOCAL_SAVESTATES = LOCAL_TMP / "mister_savestates"
+LOCAL_RELEASE_SWEEPS = LOCAL_TMP / "mister_release_sweeps"
+LOCAL_RELEASE_PATCH = PROJECT_ROOT / "rom" / "penta_dragon_dx.ips"
+RELEASE_PATCH_VERIFIER = (
+    PROJECT_ROOT / "scripts" / "diagnostics" / "verify_release_patch.py"
+)
+
+REQUIRED_HARDWARE_CHECKPOINTS = (
+    "gbc_core",
+    "deployed_rom_hash",
+    "title",
+    "opening_route",
+    "game_start_route",
+    "stage_intro",
+    "stage1_gameplay",
+    "item_menu",
+    "later_stage",
+    "boss_arena",
+    "death_gameover",
+)
 
 # Paths on blackmage
 BLACKMAGE_BACKUP_DIR = "~/penta-dragon-dx-backups"
@@ -107,8 +139,76 @@ KEY_MAP = {
 }
 
 
+class ReservationError(RuntimeError):
+    """Raised before MiSTer access when no active reservation is confirmed."""
+
+
+def require_mister_reservation() -> None:
+    """Fail closed unless an external checker confirms the active reservation.
+
+    The repository intentionally does not implement reservation acquisition:
+    that belongs to the shared reservation service. The configured checker is
+    invoked without a shell and receives the reservation ID and exact target
+    host in its environment. A zero exit status is the only success signal.
+    """
+    reservation_id = os.environ.get("MISTER_RESERVATION_ID", "").strip()
+    checker_spec = os.environ.get("MISTER_RESERVATION_CHECKER", "").strip()
+
+    missing = []
+    if not reservation_id:
+        missing.append("MISTER_RESERVATION_ID")
+    if not checker_spec:
+        missing.append("MISTER_RESERVATION_CHECKER")
+    if missing:
+        raise ReservationError(
+            "MiSTer reservation required; missing "
+            + " and ".join(missing)
+            + ". Acquire the shared MiSTer reservation, then configure its "
+              "checker. No MiSTer connection was attempted."
+        )
+
+    try:
+        checker_command = shlex.split(checker_spec)
+    except ValueError as exc:
+        raise ReservationError(
+            f"Invalid MISTER_RESERVATION_CHECKER: {exc}. "
+            "No MiSTer connection was attempted."
+        ) from exc
+    if not checker_command:
+        raise ReservationError(
+            "MISTER_RESERVATION_CHECKER is empty after parsing. "
+            "No MiSTer connection was attempted."
+        )
+
+    checker_env = os.environ.copy()
+    checker_env["MISTER_RESERVATION_ID"] = reservation_id
+    checker_env["MISTER_RESERVATION_HOST"] = MISTER_HOST
+    try:
+        result = subprocess.run(
+            checker_command,
+            cwd=str(PROJECT_ROOT),
+            env=checker_env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ReservationError(
+            f"MiSTer reservation checker could not run: {exc}. "
+            "No MiSTer connection was attempted."
+        ) from exc
+
+    if result.returncode != 0:
+        raise ReservationError(
+            "MiSTer reservation is absent, expired, owned by someone else, "
+            f"or does not cover host {MISTER_HOST!r}. "
+            "No MiSTer connection was attempted."
+        )
+
+
 def ssh(cmd: str, timeout: int = 30) -> subprocess.CompletedProcess:
     """Run a command on MiSTer via SSH."""
+    require_mister_reservation()
     full_cmd = ["ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=accept-new", f"{MISTER_USER}@{MISTER_HOST}", cmd]
     return subprocess.run(full_cmd, capture_output=True, text=True, timeout=timeout)
 
@@ -123,6 +223,7 @@ def ssh_check(cmd: str, timeout: int = 30) -> str:
 
 def scp_to_mister(local_path: Path, remote_path: str) -> None:
     """Copy a file to MiSTer."""
+    require_mister_reservation()
     cmd = ["scp", "-o", "StrictHostKeyChecking=accept-new", str(local_path), f"{MISTER_USER}@{MISTER_HOST}:{remote_path}"]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
@@ -132,6 +233,7 @@ def scp_to_mister(local_path: Path, remote_path: str) -> None:
 
 def scp_from_mister(remote_path: str, local_path: Path) -> None:
     """Copy a file from MiSTer."""
+    require_mister_reservation()
     local_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["scp", "-o", "StrictHostKeyChecking=accept-new", f"{MISTER_USER}@{MISTER_HOST}:{remote_path}", str(local_path)]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
@@ -226,8 +328,9 @@ def cmd_launch():
     if corename == "GBC":
         print("  Game launched successfully in GBC mode!")
     else:
-        print(f"  WARNING: Expected CORENAME=GBC, got {corename}")
-        print("  The game may not be running correctly.")
+        raise RuntimeError(
+            f"launch failed closed: expected CORENAME=GBC, got {corename!r}"
+        )
 
 
 def cmd_reload():
@@ -239,43 +342,38 @@ def cmd_reload():
 def cmd_screenshot(label: str = None):
     """Take a screenshot on MiSTer and fetch it locally."""
     corename = get_corename()
-    screenshot_dir = f"{MISTER_SCREENSHOTS_DIR}/{corename}"
+    alternate = "GAMEBOY" if corename == "GBC" else "GBC"
+    screenshot_dirs = [
+        f"{MISTER_SCREENSHOTS_DIR}/{corename}",
+        f"{MISTER_SCREENSHOTS_DIR}/{alternate}",
+    ]
 
-    # Get file list before
-    before = ssh(f"ls {screenshot_dir}/ 2>/dev/null").stdout.strip().split('\n')
-    before = set(f for f in before if f)
+    # Snapshot both plausible directories before capture. Falling back to an
+    # arbitrary old image can falsely make a failed release screenshot pass.
+    before_by_dir = {}
+    for directory in screenshot_dirs:
+        listing = ssh(f"ls {directory}/ 2>/dev/null").stdout.strip().split("\n")
+        before_by_dir[directory] = {name for name in listing if name}
 
     # Take screenshot
     mister_cmd("screenshot")
     time.sleep(2)
 
-    # Get file list after
-    after = ssh(f"ls {screenshot_dir}/ 2>/dev/null").stdout.strip().split('\n')
-    after = set(f for f in after if f)
+    candidates = []
+    for directory in screenshot_dirs:
+        listing = ssh(f"ls {directory}/ 2>/dev/null").stdout.strip().split("\n")
+        after = {name for name in listing if name}
+        candidates.extend((name, directory) for name in after - before_by_dir[directory])
 
-    new_files = after - before
-    if not new_files:
-        print("WARNING: No new screenshot detected")
-        # Try the other common directory
-        alt_corename = "GAMEBOY" if corename == "GBC" else "GBC"
-        alt_dir = f"{MISTER_SCREENSHOTS_DIR}/{alt_corename}"
-        alt_after = ssh(f"ls {alt_dir}/ 2>/dev/null").stdout.strip().split('\n')
-        alt_after = set(f for f in alt_after if f)
-        # Just pick the latest
-        if alt_after:
-            latest = sorted(alt_after)[-1]
-            new_files = {latest}
-            screenshot_dir = alt_dir
-
-    if not new_files:
+    if not candidates:
         print("ERROR: Could not capture screenshot")
         return None
 
-    remote_file = sorted(new_files)[-1]
+    remote_file, screenshot_dir = sorted(candidates)[-1]
     remote_path = f"{screenshot_dir}/{remote_file}"
 
     # Generate local filename
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     suffix = f"_{label}" if label else ""
     local_name = f"mister_{timestamp}{suffix}.png"
     local_path = LOCAL_SCREENSHOTS / local_name
@@ -417,6 +515,8 @@ print('Sent F{slot_num}')
 
 def cmd_backup(version: str = None):
     """Backup ROM, save states, and screenshots to blackmage."""
+    # Guard before creating anything on the backup host.
+    require_mister_reservation()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     version_str = f"_v{version}" if version else ""
     backup_name = f"penta_dragon_dx{version_str}_{timestamp}"
@@ -629,7 +729,7 @@ def cmd_game_start():
     Verified sequence (matches mgba Lua automation):
       1. Launch game via MGL (6s wait for core init)
       2. Wait 8s for title screen to appear
-      3. Press DOWN (move cursor from CONTINUE to GAME START)
+      3. Press DOWN (move cursor from OPENING START to GAME START)
       4. Press A (select GAME START → level select screen)
       5. Wait 2s for level select to load
       6. Press A (start level from level select)
@@ -676,7 +776,7 @@ def cmd_game_start():
     if path:
         print(f"\n=== Game started! Screenshot: {path} ===")
     else:
-        print("\n=== Game started (screenshot capture failed) ===")
+        raise RuntimeError("game-start verification screenshot capture failed")
 
 
 def cmd_capture_gameplay(seconds: str = "10", label: str = "gameplay"):
@@ -721,6 +821,8 @@ def cmd_deploy_and_test(version: str = None):
                  If not provided, skips the build step and just deploys
                  whatever ROM is currently in rom/working/.
     """
+    # Guard before an optional build or any hardware-facing pipeline step.
+    require_mister_reservation()
     print("=== Deploy and Test Pipeline ===")
 
     # Step 1: Build (if version provided)
@@ -767,10 +869,9 @@ def cmd_deploy_and_test(version: str = None):
         except Exception as e:
             print(f"  Backup failed (non-fatal): {e}")
 
-    if path:
-        print(f"\n=== Deploy and test complete! Screenshot: {path} ===")
-    else:
-        print(f"\n=== Deploy and test complete (screenshot capture failed) ===")
+    if not path:
+        raise RuntimeError("deploy-and-test screenshot capture failed")
+    print(f"\n=== Deploy and test complete! Screenshot: {path} ===")
 
 
 def cmd_fetch_screenshot():
@@ -912,6 +1013,10 @@ def cmd_cheats(action: str = "build"):
         deploy - Generate and deploy to MiSTer
         list   - Show all available cheats
     """
+    if action == "deploy":
+        # Guard before even creating the local deployment artifact.
+        require_mister_reservation()
+
     if action == "list":
         print("Available cheats for Penta Dragon DX:")
         for name, entries in CHEATS.items():
@@ -990,7 +1095,363 @@ def cmd_clean_old_roms():
     print(f"\n  Kept {kept} ROM(s), removed {removed} old ROM(s).")
 
 
+def sha256_file(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
+
+
+def md5_file(path: Path) -> str:
+    value = hashlib.md5()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def load_json_object(path: Path, label: str) -> dict:
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"could not read {label} {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError(f"{label} must contain one JSON object: {path}")
+    return value
+
+
+def write_json_atomic(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n")
+    temporary.replace(path)
+
+
+def verify_release_sweep_inputs(emulator_manifest_path: Path) -> tuple[dict, str]:
+    """Validate the exact local ROM/IPS/emulator evidence before hardware use."""
+    if not LOCAL_ROM.is_file():
+        raise RuntimeError(f"release ROM not found: {LOCAL_ROM}")
+    if not LOCAL_RELEASE_PATCH.is_file():
+        raise RuntimeError(f"release IPS not found: {LOCAL_RELEASE_PATCH}")
+    if not emulator_manifest_path.is_file():
+        raise RuntimeError(
+            f"emulator release manifest not found: {emulator_manifest_path}"
+        )
+
+    local_md5 = md5_file(LOCAL_ROM)
+    emulator = load_json_object(emulator_manifest_path, "emulator manifest")
+    required_values = {
+        "status": "emulator-pass",
+        "scope": "full",
+        "failures": 0,
+        "rom_md5": local_md5,
+        "source_rom_md5_after": local_md5,
+        "tested_rom_md5_after": local_md5,
+        "rom_hashes_intact": True,
+    }
+    for key, expected in required_values.items():
+        if emulator.get(key) != expected:
+            raise RuntimeError(
+                f"emulator manifest {key} does not match {expected!r}"
+            )
+
+    results = emulator.get("results")
+    if not isinstance(results, list) or len(results) != 30:
+        raise RuntimeError("hardware sweep requires all 30 emulator gate results")
+    incomplete = [
+        item.get("name", "<invalid>")
+        for item in results
+        if not isinstance(item, dict)
+        or item.get("status") != "passed"
+        or item.get("returncode") != 0
+    ]
+    if incomplete:
+        raise RuntimeError(f"emulator manifest has incomplete gates: {incomplete}")
+
+    patch_result = subprocess.run(
+        [
+            sys.executable,
+            str(RELEASE_PATCH_VERIFIER),
+            str(LOCAL_ROM),
+            "--patch",
+            str(LOCAL_RELEASE_PATCH),
+        ],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if patch_result.returncode != 0:
+        detail = patch_result.stdout.strip() or patch_result.stderr.strip()
+        raise RuntimeError(f"release IPS preflight failed: {detail}")
+    return emulator, local_md5
+
+
+def validate_local_png(path: Path) -> None:
+    try:
+        header = path.read_bytes()[:24]
+    except OSError as exc:
+        raise RuntimeError(f"could not read MiSTer screenshot {path}: {exc}") from exc
+    if len(header) != 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
+        raise RuntimeError(f"MiSTer screenshot is not a valid PNG: {path}")
+
+
+def find_checkpoint(manifest: dict, name: str) -> dict:
+    checkpoints = manifest.get("checkpoints")
+    if not isinstance(checkpoints, list):
+        raise RuntimeError("hardware manifest has no checkpoint list")
+    matches = [
+        item
+        for item in checkpoints
+        if isinstance(item, dict) and item.get("name") == name
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"hardware checkpoint {name!r} is absent or duplicated"
+        )
+    return matches[0]
+
+
+def verify_live_sweep_identity(manifest: dict) -> None:
+    """Recheck reservation, core, deployed ROM, and local evidence."""
+    require_mister_reservation()
+    if manifest.get("schema") != "penta-dragon-dx-mister-release-v1":
+        raise RuntimeError("unsupported MiSTer release manifest schema")
+    if manifest.get("status") not in {
+        "hardware-sweep-incomplete",
+        "hardware-pass",
+    }:
+        raise RuntimeError(
+            f"invalid hardware sweep status: {manifest.get('status')!r}"
+        )
+    if manifest.get("mister_host") != MISTER_HOST:
+        raise RuntimeError("hardware sweep is bound to a different MiSTer host")
+    if md5_file(LOCAL_ROM) != manifest.get("rom_md5"):
+        raise RuntimeError("local release ROM changed during the hardware sweep")
+    if sha256_file(LOCAL_ROM) != manifest.get("rom_sha256"):
+        raise RuntimeError("local release ROM SHA-256 changed during the sweep")
+    if sha256_file(LOCAL_RELEASE_PATCH) != manifest.get("release_patch_sha256"):
+        raise RuntimeError("release IPS changed during the hardware sweep")
+
+    emulator_path = Path(manifest.get("emulator_manifest", ""))
+    if (
+        not emulator_path.is_file()
+        or sha256_file(emulator_path)
+        != manifest.get("emulator_manifest_sha256")
+    ):
+        raise RuntimeError("emulator release manifest changed during the sweep")
+
+    corename = get_corename()
+    if corename != "GBC":
+        raise RuntimeError(
+            f"hardware sweep requires active CORENAME=GBC, got {corename!r}"
+        )
+    remote_md5 = get_rom_md5()
+    if remote_md5 != manifest.get("rom_md5"):
+        raise RuntimeError(
+            "MiSTer deployed ROM no longer matches the release candidate"
+        )
+
+
+def cmd_release_sweep_start(emulator_manifest: str = ""):
+    """Deploy and start a reservation-backed, hash-bound physical sweep."""
+    if not emulator_manifest:
+        raise RuntimeError(
+            "usage: mister.py release_sweep_start EMULATOR_MANIFEST"
+        )
+    emulator_path = Path(emulator_manifest).resolve()
+    emulator, local_md5 = verify_release_sweep_inputs(emulator_path)
+
+    # The main dispatcher already checked the reservation. Recheck at every
+    # hardware boundary through cmd_deploy/cmd_launch/cmd_screenshot as well.
+    cmd_deploy()
+    if get_rom_md5() != local_md5:
+        raise RuntimeError("MiSTer ROM hash differs immediately after deployment")
+    cmd_launch()
+    time.sleep(10)
+    title_screenshot = cmd_screenshot("release_title_unconfirmed")
+    if title_screenshot is None:
+        raise RuntimeError("release sweep could not capture the title screen")
+    validate_local_png(title_screenshot)
+
+    now = utc_now()
+    checkpoint_rows = [
+        {"name": name, "status": "pending"} for name in REQUIRED_HARDWARE_CHECKPOINTS
+    ]
+    for name, evidence in (
+        ("gbc_core", {"core": "GBC"}),
+        ("deployed_rom_hash", {"remote_md5": local_md5}),
+    ):
+        row = next(item for item in checkpoint_rows if item["name"] == name)
+        row.update({"status": "passed", "confirmed_at": now, "evidence": evidence})
+    title = next(item for item in checkpoint_rows if item["name"] == "title")
+    title.update(
+        {
+            "status": "captured-pending-human",
+            "captured_at": now,
+            "evidence": {
+                "screenshot": str(title_screenshot.resolve()),
+                "screenshot_sha256": sha256_file(title_screenshot),
+            },
+        }
+    )
+
+    reservation_id = os.environ["MISTER_RESERVATION_ID"].strip()
+    manifest = {
+        "schema": "penta-dragon-dx-mister-release-v1",
+        "status": "hardware-sweep-incomplete",
+        "started_at": now,
+        "finished_at": None,
+        "mister_host": MISTER_HOST,
+        "reservation_id_sha256": hashlib.sha256(
+            reservation_id.encode("utf-8")
+        ).hexdigest(),
+        "rom_md5": local_md5,
+        "rom_sha256": sha256_file(LOCAL_ROM),
+        "release_patch_sha256": sha256_file(LOCAL_RELEASE_PATCH),
+        "emulator_manifest": str(emulator_path),
+        "emulator_manifest_sha256": sha256_file(emulator_path),
+        "emulator_gates_passed": len(emulator["results"]),
+        "checkpoints": checkpoint_rows,
+        "instructions": (
+            "Navigate with the physical controller. Capture each checkpoint "
+            "with release_checkpoint and pass literal 'confirm' only after "
+            "visually inspecting the live MiSTer output."
+        ),
+    }
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    sweep_dir = LOCAL_RELEASE_SWEEPS / f"{timestamp}_{local_md5[:8]}"
+    manifest_path = sweep_dir / "manifest.json"
+    write_json_atomic(manifest_path, manifest)
+    print(f"PASS: MiSTer release sweep started: {manifest_path}")
+    print("PENDING: title visual confirmation and eight physical game checkpoints")
+    print(
+        "Next: python3 scripts/mister.py release_checkpoint "
+        f"{manifest_path} title confirm"
+    )
+
+
+def cmd_release_checkpoint(
+    hardware_manifest: str = "",
+    checkpoint_name: str = "",
+    confirmation: str = "",
+):
+    """Capture one physical checkpoint; pass 'confirm' after visual review."""
+    if not hardware_manifest or not checkpoint_name:
+        raise RuntimeError(
+            "usage: mister.py release_checkpoint "
+            "HARDWARE_MANIFEST CHECKPOINT [confirm]"
+        )
+    if confirmation and confirmation.lower() != "confirm":
+        raise RuntimeError("the only accepted confirmation token is 'confirm'")
+
+    path = Path(hardware_manifest).resolve()
+    manifest = load_json_object(path, "hardware manifest")
+    if manifest.get("status") != "hardware-sweep-incomplete":
+        raise RuntimeError("only an incomplete hardware sweep can be updated")
+    checkpoint = find_checkpoint(manifest, checkpoint_name)
+    if checkpoint_name in {"gbc_core", "deployed_rom_hash"}:
+        raise RuntimeError(f"{checkpoint_name} is verified automatically")
+
+    verify_live_sweep_identity(manifest)
+    screenshot = cmd_screenshot(f"release_{checkpoint_name}")
+    if screenshot is None:
+        raise RuntimeError(f"could not capture checkpoint {checkpoint_name}")
+    validate_local_png(screenshot)
+
+    now = utc_now()
+    checkpoint.clear()
+    checkpoint.update(
+        {
+            "name": checkpoint_name,
+            "status": "passed" if confirmation else "captured-pending-human",
+            "captured_at": now,
+            "evidence": {
+                "screenshot": str(screenshot.resolve()),
+                "screenshot_sha256": sha256_file(screenshot),
+            },
+        }
+    )
+    if confirmation:
+        checkpoint["confirmed_at"] = now
+        checkpoint["confirmation"] = "explicit-human"
+    manifest["last_updated_at"] = now
+    write_json_atomic(path, manifest)
+    print(
+        f"{'PASS' if confirmation else 'PENDING'}: checkpoint "
+        f"{checkpoint_name} captured at {screenshot}"
+    )
+    if not confirmation:
+        print("Re-run with the final argument 'confirm' after visual inspection.")
+
+
+def cmd_release_sweep_finish(hardware_manifest: str = ""):
+    """Seal hardware-pass only when every physical checkpoint is confirmed."""
+    if not hardware_manifest:
+        raise RuntimeError(
+            "usage: mister.py release_sweep_finish HARDWARE_MANIFEST"
+        )
+    path = Path(hardware_manifest).resolve()
+    manifest = load_json_object(path, "hardware manifest")
+    if manifest.get("status") != "hardware-sweep-incomplete":
+        raise RuntimeError("hardware sweep is not in an incomplete state")
+    verify_live_sweep_identity(manifest)
+
+    names = [
+        item.get("name")
+        for item in manifest.get("checkpoints", [])
+        if isinstance(item, dict)
+    ]
+    if len(names) != len(REQUIRED_HARDWARE_CHECKPOINTS) or set(names) != set(
+        REQUIRED_HARDWARE_CHECKPOINTS
+    ):
+        raise RuntimeError("hardware sweep checkpoint set is incomplete or altered")
+    incomplete = [
+        item.get("name")
+        for item in manifest["checkpoints"]
+        if item.get("status") != "passed"
+    ]
+    if incomplete:
+        raise RuntimeError(
+            f"cannot seal hardware pass; incomplete checkpoints: {incomplete}"
+        )
+    for item in manifest["checkpoints"]:
+        if item["name"] not in {"gbc_core", "deployed_rom_hash"}:
+            screenshot = Path(item.get("evidence", {}).get("screenshot", ""))
+            expected = item.get("evidence", {}).get("screenshot_sha256")
+            if not screenshot.is_file() or sha256_file(screenshot) != expected:
+                raise RuntimeError(
+                    f"checkpoint evidence changed or is missing: {item['name']}"
+                )
+
+    manifest["status"] = "hardware-pass"
+    manifest["finished_at"] = utc_now()
+    write_json_atomic(path, manifest)
+    print(f"PASS: sealed hash-bound MiSTer hardware manifest {path}")
+
+
 # === Main ===
+
+def command_requires_reservation(command: str, args: list[str]) -> bool:
+    """Return whether the CLI invocation can contact or affect MiSTer."""
+    if command == "reservation_check":
+        return False
+    if command == "cheats":
+        action = args[0].lower() if args else "build"
+        return action == "deploy"
+    return True
+
+
+def cmd_reservation_check():
+    """Validate the configured reservation without contacting MiSTer."""
+    require_mister_reservation()
+    print(f"MiSTer reservation verified for host {MISTER_HOST!r}.")
+
 
 def main():
     if len(sys.argv) < 2:
@@ -1023,11 +1484,28 @@ def main():
         "list_states": lambda: cmd_list_states(),
         "clean_old_roms": lambda: cmd_clean_old_roms(),
         "cheats": lambda: cmd_cheats(*args[:1]) if args else cmd_cheats(),
+        "reservation_check": lambda: cmd_reservation_check(),
+        "release_sweep_start": (
+            lambda: cmd_release_sweep_start(*args[:1])
+            if args
+            else cmd_release_sweep_start()
+        ),
+        "release_checkpoint": lambda: cmd_release_checkpoint(*args[:3]),
+        "release_sweep_finish": (
+            lambda: cmd_release_sweep_finish(*args[:1])
+            if args
+            else cmd_release_sweep_finish()
+        ),
     }
 
     if command in commands:
         try:
+            if command_requires_reservation(command, args):
+                require_mister_reservation()
             commands[command]()
+        except ReservationError as e:
+            print(f"RESERVATION BLOCKED: {e}", file=sys.stderr)
+            sys.exit(2)
         except Exception as e:
             print(f"ERROR: {e}")
             sys.exit(1)

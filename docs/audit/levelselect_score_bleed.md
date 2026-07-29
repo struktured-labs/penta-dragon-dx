@@ -1,4 +1,4 @@
-# Level-select / high-score screen "color bleed" — root cause (2026-06-14)
+# Level-select / high-score screen color bleed — resolved
 
 ## Symptom
 The "STAGE 01 / STAGE LOAD / ◆ TOP 3 / 1ST 9999 SEC …" screen shown when you pick
@@ -20,22 +20,40 @@ NN" letters (same tile shows palette 0 AND palette 1 on different cells).
 - **Confirmed**: manually clearing the attr plane (VBK=1, 0x9800-0x9FFF=0) on this
   screen makes the letters uniform p0. So the fix is "clear attrs here".
 
-## Why it's hard
-- The screen is colorizer-dark (own DI'd loop), so all colorize-handler /
-  scene_detect-side fixes (which run in our VBlank chain) do NOT reach it. (My
-  D880=0x18 splash fix and a D880=0x00 cleaner re-arm both missed it for this
-  reason — the only verified win so far is the *OPENING START* brief "STAGE NN"
-  splash at D880=0x18, a different screen.)
-- A real fix must inject an attr-plane clear into the level-select path itself
-  (e.g., repoint `JP NZ 0x7393` through an LCD-off attr-clear, then JP 0x7393).
-- **No free space in bank 0 or bank 1** (both packed; largest single-byte runs
-  are tile data, not padding; the previously-noted "0x431C gap" is actually a
-  STAT-wait copy loop). The clear routine must live in a mapped bank (0 or 1) to
-  be reachable from the level-select, so injection requires reclaiming bytes from
-  existing code/data — careful, verifiable, but risky.
+## Implemented fix
+
+The release builder copies a 36-byte routine from bank 13:`0x53C2` to
+WRAM `0xCFAA` during cold boot and redirects the original conditional jump at
+bank 0:`0x3B47` to it. The routine:
+
+1. preserves the registers consumed by the original menu path;
+2. briefly disables the LCD during the existing screen transition;
+3. clears `0x9800–0x9FFF` in VRAM bank 1;
+4. restores VRAM bank 0 and LCDC; and
+5. publishes the out-of-range palette phase `$A0`, then jumps to the untouched
+   level-select routine at bank 1:`0x7393`.
+
+This reaches the screen before its interrupt-disabled loop, where a VBlank
+cleaner cannot. The title palette helper recognizes `$A0` and yields instead
+of repeatedly writing CRAM over the selector. Natural Stage 1 entry replaces
+the marker with the normal palette phase `$11`, so it cannot leak into
+gameplay or a later returned title. The marker uses no stock state and does
+not touch the title/reel timing counters.
+
+## Verification
+
+`scripts/diagnostics/verify_levelselect_screen.py` boots in mGBA, forces a
+save (`DCFD=1`), presses DOWN to move from the default OPENING START to
+GAME START, and waits for the score rows. At frame 283:
+
+- the original colorizer-dark state is active (`D880=0`, `FFC1=0`);
+- 55 score-screen cells are populated;
+- all 360 visible attribute cells are palette 0; and
+- the WRAM-copy sentinel is present (`DF0E=0x5A`).
 
 ## Note
 OPENING START (DCFD==0) bypasses the level-select and is clean. The bleed is
 only on the GAME-START/continue path.
 
-Probes: probe_scorescreen.lua, probe_levelselect2.lua, probe_scorefix_diag.lua.
+Historical probes: `probe_scorescreen.lua`, `probe_levelselect2.lua`, and
+`probe_scorefix_diag.lua`.

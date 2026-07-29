@@ -1,0 +1,659 @@
+{
+  "status": "emulator-pass",
+  "scope": "full",
+  "started_at": "2026-07-26T14:15:15.663102+00:00",
+  "finished_at": "2026-07-26T14:29:08.297701+00:00",
+  "source_rom": "/home/struktured/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_FIXED.gb",
+  "tested_rom": "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+  "rom_md5": "c0a29419e91b57462ab649b23b2deae7",
+  "rom_size": 262144,
+  "python": "3.12.11 (main, Oct  7 2025, 15:34:39) [Clang 20.1.4 ]",
+  "platform": "Linux-6.17.0-40-generic-x86_64-with-glibc2.42",
+  "mgba_qt": "/home/struktured/bin/mgba-qt",
+  "hardware_gate": "pending-reservation-backed-mister",
+  "selected_gates": [
+    "title_footer_integration",
+    "title_animation_frames",
+    "flash_attribution",
+    "title_color",
+    "title_showcase",
+    "title_visual_receipts",
+    "title_cursor",
+    "stage_intro_timing",
+    "menu_hud_and_combo",
+    "levelselect_screen",
+    "game_start_hardware_route",
+    "gameplay_speed_parity",
+    "gameplay_bg_palettes",
+    "stage1_no_color_bleed",
+    "gameplay_obj_palettes",
+    "miniboss_color",
+    "later_stage_integrity",
+    "later_stage_soak",
+    "boss_arenas",
+    "death_gameover",
+    "title_idle_reel",
+    "opening_cutscene",
+    "final_cutscene_mgba",
+    "ending_inventory_a",
+    "ending_inventory_b",
+    "ending_discriminators",
+    "scroll_stability",
+    "phantom_sound",
+    "live_palette_deck",
+    "story_attr_production",
+    "palette_build_roundtrip",
+    "release_ips_patch",
+    "mister_reservation_guard"
+  ],
+  "results": [
+    {
+      "name": "title_footer_integration",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_title_screen_integration.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 120.0,
+      "started_at": "2026-07-26T14:15:15.665772+00:00",
+      "finished_at": "2026-07-26T14:15:16.181477+00:00",
+      "duration_seconds": 0.516,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/title_footer_integration.log",
+      "blocked_by": []
+    },
+    {
+      "name": "title_animation_frames",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_title_animation_frames.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:15:16.182545+00:00",
+      "finished_at": "2026-07-26T14:15:17.301494+00:00",
+      "duration_seconds": 1.119,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/title_animation_frames.log",
+      "blocked_by": []
+    },
+    {
+      "name": "flash_attribution",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_flash_attribution.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 240.0,
+      "started_at": "2026-07-26T14:15:17.302585+00:00",
+      "finished_at": "2026-07-26T14:15:17.968810+00:00",
+      "duration_seconds": 0.666,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/flash_attribution.log",
+      "blocked_by": []
+    },
+    {
+      "name": "title_color",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_title_color.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 120.0,
+      "started_at": "2026-07-26T14:15:17.969720+00:00",
+      "finished_at": "2026-07-26T14:15:31.809092+00:00",
+      "duration_seconds": 13.839,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/title_color.log",
+      "blocked_by": []
+    },
+    {
+      "name": "title_showcase",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_title_showcase_mgba.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/title-showcase/title"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:15:31.810182+00:00",
+      "finished_at": "2026-07-26T14:15:33.527406+00:00",
+      "duration_seconds": 1.717,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/title_showcase.log",
+      "blocked_by": []
+    },
+    {
+      "name": "title_visual_receipts",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_title_visual_receipts.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/title-visual"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:15:33.528242+00:00",
+      "finished_at": "2026-07-26T14:15:35.547985+00:00",
+      "duration_seconds": 2.02,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/title_visual_receipts.log",
+      "blocked_by": []
+    },
+    {
+      "name": "title_cursor",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_title_cursor_pixels.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/title-cursor"
+      ],
+      "timeout_seconds": 120.0,
+      "started_at": "2026-07-26T14:15:35.549133+00:00",
+      "finished_at": "2026-07-26T14:15:36.015761+00:00",
+      "duration_seconds": 0.467,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/title_cursor.log",
+      "blocked_by": []
+    },
+    {
+      "name": "stage_intro_timing",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_stage_intro_timing.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:15:36.016895+00:00",
+      "finished_at": "2026-07-26T14:15:37.286018+00:00",
+      "duration_seconds": 1.269,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/stage_intro_timing.log",
+      "blocked_by": []
+    },
+    {
+      "name": "menu_hud_and_combo",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_menu_hud_and_combo.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 300.0,
+      "started_at": "2026-07-26T14:15:37.287145+00:00",
+      "finished_at": "2026-07-26T14:16:49.123430+00:00",
+      "duration_seconds": 71.836,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/menu_hud_and_combo.log",
+      "blocked_by": []
+    },
+    {
+      "name": "levelselect_screen",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_levelselect_screen.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--timeout",
+        "60"
+      ],
+      "timeout_seconds": 120.0,
+      "started_at": "2026-07-26T14:16:49.124585+00:00",
+      "finished_at": "2026-07-26T14:16:55.852844+00:00",
+      "duration_seconds": 6.728,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/levelselect_screen.log",
+      "blocked_by": []
+    },
+    {
+      "name": "game_start_hardware_route",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_hardware_gate.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 120.0,
+      "started_at": "2026-07-26T14:16:55.854002+00:00",
+      "finished_at": "2026-07-26T14:16:56.370062+00:00",
+      "duration_seconds": 0.516,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/game_start_hardware_route.log",
+      "blocked_by": []
+    },
+    {
+      "name": "gameplay_speed_parity",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_stage_speed_matrix.py",
+        "--dx-rom",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--original-rom",
+        "/home/struktured/projects/penta-dragon-dx-claude/rom/Penta Dragon (J).gb",
+        "--targets",
+        "0,4,6",
+        "--input-mode",
+        "right",
+        "--frames",
+        "600",
+        "--tolerance",
+        "0.10",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/gameplay-speed"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:16:56.371390+00:00",
+      "finished_at": "2026-07-26T14:17:05.108273+00:00",
+      "duration_seconds": 8.737,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/gameplay_speed_parity.log",
+      "blocked_by": []
+    },
+    {
+      "name": "gameplay_bg_palettes",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_gameplay_palette.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:17:05.109204+00:00",
+      "finished_at": "2026-07-26T14:17:22.722359+00:00",
+      "duration_seconds": 17.613,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/gameplay_bg_palettes.log",
+      "blocked_by": []
+    },
+    {
+      "name": "stage1_no_color_bleed",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_stage1_no_bleed.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--frames",
+        "1200",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/stage1-no-color-bleed"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:17:22.723330+00:00",
+      "finished_at": "2026-07-26T14:17:24.553796+00:00",
+      "duration_seconds": 1.83,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/stage1_no_color_bleed.log",
+      "blocked_by": []
+    },
+    {
+      "name": "gameplay_obj_palettes",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_gameplay_obj_palettes.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:17:24.555113+00:00",
+      "finished_at": "2026-07-26T14:17:28.535731+00:00",
+      "duration_seconds": 3.981,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/gameplay_obj_palettes.log",
+      "blocked_by": []
+    },
+    {
+      "name": "miniboss_color",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_miniboss_color.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 240.0,
+      "started_at": "2026-07-26T14:17:28.536687+00:00",
+      "finished_at": "2026-07-26T14:17:35.822872+00:00",
+      "duration_seconds": 7.286,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/miniboss_color.log",
+      "blocked_by": []
+    },
+    {
+      "name": "later_stage_integrity",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_later_stage_integrity.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--timeout",
+        "45"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:17:35.824172+00:00",
+      "finished_at": "2026-07-26T14:17:37.616351+00:00",
+      "duration_seconds": 1.792,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/later_stage_integrity.log",
+      "blocked_by": []
+    },
+    {
+      "name": "later_stage_soak",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_later_stage_soak.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--frames",
+        "8000",
+        "--timeout",
+        "60"
+      ],
+      "timeout_seconds": 360.0,
+      "started_at": "2026-07-26T14:17:37.617661+00:00",
+      "finished_at": "2026-07-26T14:17:50.096197+00:00",
+      "duration_seconds": 12.479,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/later_stage_soak.log",
+      "blocked_by": []
+    },
+    {
+      "name": "boss_arenas",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_boss_arena_palettes.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/boss-arenas"
+      ],
+      "timeout_seconds": 600.0,
+      "started_at": "2026-07-26T14:17:50.097621+00:00",
+      "finished_at": "2026-07-26T14:17:54.788240+00:00",
+      "duration_seconds": 4.691,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/boss_arenas.log",
+      "blocked_by": []
+    },
+    {
+      "name": "death_gameover",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_death_gameover.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/death-gameover"
+      ],
+      "timeout_seconds": 600.0,
+      "started_at": "2026-07-26T14:17:54.789519+00:00",
+      "finished_at": "2026-07-26T14:18:02.584257+00:00",
+      "duration_seconds": 7.795,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/death_gameover.log",
+      "blocked_by": []
+    },
+    {
+      "name": "title_idle_reel",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/inventory_attract_reel.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--frames",
+        "14000",
+        "--timeout",
+        "60",
+        "--keep",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/title-idle-reel"
+      ],
+      "timeout_seconds": 240.0,
+      "started_at": "2026-07-26T14:18:02.585278+00:00",
+      "finished_at": "2026-07-26T14:18:09.639753+00:00",
+      "duration_seconds": 7.054,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/title_idle_reel.log",
+      "blocked_by": []
+    },
+    {
+      "name": "opening_cutscene",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/inventory_opening_cutscene.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--expect-production",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/opening-cutscene"
+      ],
+      "timeout_seconds": 240.0,
+      "started_at": "2026-07-26T14:18:09.640821+00:00",
+      "finished_at": "2026-07-26T14:18:12.973051+00:00",
+      "duration_seconds": 3.332,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/opening_cutscene.log",
+      "blocked_by": []
+    },
+    {
+      "name": "final_cutscene_mgba",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_final_cutscene_mgba.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/final-cutscene-mgba"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:18:12.974217+00:00",
+      "finished_at": "2026-07-26T14:18:23.938387+00:00",
+      "duration_seconds": 10.964,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/final_cutscene_mgba.log",
+      "blocked_by": []
+    },
+    {
+      "name": "ending_inventory_a",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/inventory_final_cutscene.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--entry",
+        "post-final",
+        "--frames",
+        "32000",
+        "--expect-production",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/ending-inventory-a"
+      ],
+      "timeout_seconds": 300.0,
+      "started_at": "2026-07-26T14:18:23.939448+00:00",
+      "finished_at": "2026-07-26T14:18:30.881915+00:00",
+      "duration_seconds": 6.942,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/ending_inventory_a.log",
+      "blocked_by": []
+    },
+    {
+      "name": "ending_inventory_b",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/inventory_final_cutscene.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--entry",
+        "post-final",
+        "--frames",
+        "32000",
+        "--expect-production",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/ending-inventory-b"
+      ],
+      "timeout_seconds": 300.0,
+      "started_at": "2026-07-26T14:18:30.891510+00:00",
+      "finished_at": "2026-07-26T14:18:38.593562+00:00",
+      "duration_seconds": 7.702,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/ending_inventory_b.log",
+      "blocked_by": []
+    },
+    {
+      "name": "ending_discriminators",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/analyze_ending_page_discriminators.py",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/ending-inventory-a/manifest.json",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/ending-inventory-b/manifest.json",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/ending-discriminators.json"
+      ],
+      "timeout_seconds": 30.0,
+      "started_at": "2026-07-26T14:18:38.595011+00:00",
+      "finished_at": "2026-07-26T14:18:38.664735+00:00",
+      "duration_seconds": 0.07,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/ending_discriminators.log",
+      "blocked_by": []
+    },
+    {
+      "name": "scroll_stability",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_scroll_tearing.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 300.0,
+      "started_at": "2026-07-26T14:18:38.666292+00:00",
+      "finished_at": "2026-07-26T14:19:08.436413+00:00",
+      "duration_seconds": 29.77,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/scroll_stability.log",
+      "blocked_by": []
+    },
+    {
+      "name": "phantom_sound",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/probes/verify_phantom_d887.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 300.0,
+      "started_at": "2026-07-26T14:20:58.715166+00:00",
+      "finished_at": "2026-07-26T14:21:20.216277+00:00",
+      "duration_seconds": 21.501,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/phantom_sound.log",
+      "blocked_by": []
+    },
+    {
+      "name": "live_palette_deck",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_live_palette_session.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--timeout",
+        "45",
+        "--keep-story-states",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/story-states"
+      ],
+      "timeout_seconds": 360.0,
+      "started_at": "2026-07-26T14:22:58.961702+00:00",
+      "finished_at": "2026-07-26T14:25:10.873410+00:00",
+      "duration_seconds": 131.912,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/live_palette_deck.log",
+      "blocked_by": []
+    },
+    {
+      "name": "story_attr_production",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_story_attr_production.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--states",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/story-states",
+        "--output",
+        "/tmp/penta-c0a29419-full-matrix/artifacts/story-attr-production",
+        "--timeout",
+        "12"
+      ],
+      "timeout_seconds": 240.0,
+      "started_at": "2026-07-26T14:25:10.874787+00:00",
+      "finished_at": "2026-07-26T14:25:59.630299+00:00",
+      "duration_seconds": 48.756,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/story_attr_production.log",
+      "blocked_by": []
+    },
+    {
+      "name": "palette_build_roundtrip",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_palette_build_roundtrip.py",
+        "--candidate",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb",
+        "--timeout",
+        "60"
+      ],
+      "timeout_seconds": 180.0,
+      "started_at": "2026-07-26T14:22:00.551928+00:00",
+      "finished_at": "2026-07-26T14:22:01.070313+00:00",
+      "duration_seconds": 0.518,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/palette_build_roundtrip.log",
+      "blocked_by": []
+    },
+    {
+      "name": "release_ips_patch",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_release_patch.py",
+        "/tmp/penta-c0a29419-full-matrix/tested-rom/penta_dragon_dx_FIXED.gb"
+      ],
+      "timeout_seconds": 30.0,
+      "started_at": "2026-07-26T14:22:01.071627+00:00",
+      "finished_at": "2026-07-26T14:22:01.136046+00:00",
+      "duration_seconds": 0.064,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/release_ips_patch.log",
+      "blocked_by": []
+    },
+    {
+      "name": "mister_reservation_guard",
+      "status": "passed",
+      "command": [
+        "/home/struktured/.local/bin/python3",
+        "/home/struktured/projects/penta-dragon-dx-claude/scripts/diagnostics/verify_mister_reservation_guard.py"
+      ],
+      "timeout_seconds": 30.0,
+      "started_at": "2026-07-26T14:22:01.137014+00:00",
+      "finished_at": "2026-07-26T14:22:01.351479+00:00",
+      "duration_seconds": 0.214,
+      "returncode": 0,
+      "log": "/tmp/penta-c0a29419-full-matrix/logs/mister_reservation_guard.log",
+      "blocked_by": []
+    }
+  ],
+  "resumed_at": "2026-07-26T14:29:08.296766+00:00",
+  "failures": 0,
+  "source_rom_md5_after": "c0a29419e91b57462ab649b23b2deae7",
+  "tested_rom_md5_after": "c0a29419e91b57462ab649b23b2deae7",
+  "rom_hashes_intact": true
+}

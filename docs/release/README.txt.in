@@ -1,0 +1,57 @@
+PENTA DRAGON DX v3.01
+STRUK LABS
+=====================
+
+{release_notice}
+
+Penta Dragon DX is a Game Boy Color conversion of Penta Dragon. It adds
+scene-aware background and sprite palettes while preserving the original
+gameplay, music, story, and stage flow.
+
+Highlights
+----------
+- Colorized Stage 1, lava treatment in Stages 5 and 7, and individual color
+  tables for all nine boss arenas.
+- Per-monster colors in normal gameplay and the title-screen spotlight reel.
+- Colorized OPENING and final-story artwork with neutral dialogue areas.
+- Clean title animation, item-menu HUD, stage cards, death screen, GAME OVER,
+  score/level-select screen, and ending pages.
+- Exact title footer: DX V3.01 STRUK LABS.
+
+Important title-screen controls
+-------------------------------
+OPENING START is the first/default option and plays the story introduction.
+To begin the actual game, press DOWN to select GAME START, then confirm.
+
+Installation
+------------
+This archive contains an IPS patch only. It does not contain a ROM.
+
+1. Obtain your own legally acquired Japanese Penta Dragon Game Boy ROM.
+2. Confirm that the unmodified ROM matches:
+   Size: 262,144 bytes
+   MD5:  df43e0adfdc74b2829c7e95e91c71a28
+3. Apply Penta_Dragon_DX_v3.01.ips with an IPS-compatible patcher.
+4. Confirm that the patched ROM matches the output checksums in CHECKSUMS.txt.
+5. Run the result in Game Boy Color mode.
+
+Do not apply the patch to a headered, translated, overdumped, or otherwise
+modified ROM. If the output checksum does not match, stop and verify the base
+image before reporting a game bug.
+
+Verification
+------------
+The packaged patch reconstructs the exact ROM that passed all 33 isolated
+emulator release gates. Those gates cover the complete title cycle, GAME START
+route, stage-card timing and sound, item menu, ordinary enemies, later stages,
+all bosses, death/GAME OVER, title-idle reel, both story paths, ending phases,
+scroll stability, sound stability, and the live palette workflow.
+
+{hardware_notice}
+{palette_notice}
+
+Legal
+-----
+Penta Dragon is property of its respective copyright holders. This is an
+unofficial fan-made patch. No copyrighted ROM image is included. Please do not
+distribute patched or original ROM files.

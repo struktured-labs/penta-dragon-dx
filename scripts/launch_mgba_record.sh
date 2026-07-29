@@ -13,9 +13,7 @@ REC_PATH="$PROJECT_DIR/rl/bc_data/expert_human_${LABEL}.jsonl"
 
 if [ ! -f "$ROM" ]; then echo "ROM not found: $ROM"; exit 1; fi
 if [ ! -f "$SCRIPT" ]; then echo "Script not found: $SCRIPT"; exit 1; fi
-
-pkill -9 -f 'mgba-qt' 2>/dev/null || true
-sleep 1
+GUARDED_MGBA="$PROJECT_DIR/scripts/mgba-qt-singleflight"
 
 QTINI="$HOME/.config/mgba/qt.ini"
 if [ -f "$QTINI" ]; then
@@ -40,13 +38,6 @@ REC_PATH="$REC_PATH" \
 QT_QPA_PLATFORM=xcb \
 __GLX_VENDOR_LIBRARY_NAME=nvidia \
 VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json \
-  mgba-qt "$ROM" --script "$SCRIPT" &
+  "$GUARDED_MGBA" "$ROM" --script "$SCRIPT"
 
-sleep 3
-if pgrep -f mgba-qt > /dev/null; then
-    echo "Running. Watch for 'YOUR TURN' in the mgba console."
-    echo "After your run, JSONL will be at: $REC_PATH"
-else
-    echo "FAILED to start mgba-qt"
-    exit 1
-fi
+echo "Recording stopped. JSONL: $REC_PATH"

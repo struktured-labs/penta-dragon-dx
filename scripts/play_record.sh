@@ -34,10 +34,7 @@ SCRIPT="$PROJECT_DIR/scripts/probes/play_record.lua"
 [[ "$OUT" != /* ]] && OUT="$PROJECT_DIR/$OUT"
 
 if [ ! -f "$ROM" ]; then echo "ROM not found: $ROM"; exit 1; fi
-
-# Kill existing mgba
-pkill -9 -f 'mgba-qt' 2>/dev/null || true
-sleep 1
+GUARDED_MGBA="$PROJECT_DIR/scripts/mgba-qt-singleflight"
 
 # Ensure OpenGL display driver
 QTINI="$HOME/.config/mgba/qt.ini"
@@ -55,7 +52,7 @@ REC_PATH="$OUT" \
 QT_QPA_PLATFORM=xcb \
 __GLX_VENDOR_LIBRARY_NAME=nvidia \
 VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json \
-  mgba-qt "$ROM" --script "$SCRIPT"
+  "$GUARDED_MGBA" "$ROM" --script "$SCRIPT"
 
 echo ""
 echo "Recording stopped. Lines written:"

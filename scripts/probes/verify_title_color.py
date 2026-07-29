@@ -15,6 +15,11 @@ Exit codes:
 """
 from __future__ import annotations
 import os, sys, subprocess, tempfile, argparse
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MGBA_QT = PROJECT_ROOT / "scripts/mgba-qt-singleflight"
 
 
 def capture_title(rom_path: str, frame_at: int, lua_script: str) -> str:
@@ -28,7 +33,7 @@ def capture_title(rom_path: str, frame_at: int, lua_script: str) -> str:
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["SDL_AUDIODRIVER"] = "dummy"
     cmd = [
-        "mgba-qt", rom_path,
+        str(MGBA_QT), rom_path,
         "--script", lua_script,
         "-l", "0",
     ]

@@ -34,6 +34,12 @@ local measure_started = false
 local prev_d887 = 0
 local transitions = 0
 local trans_log = {}
+local command_pulses = 0
+local clear_pulses = 0
+local chained_commands = 0
+local nonzero_run = 0
+local max_nonzero_run = 0
+local command_values = {}
 local fired = false
 
 callbacks:add("frame", function()
@@ -78,10 +84,25 @@ callbacks:add("frame", function()
     local d887 = emu:read8(0xD887)
     if d887 ~= prev_d887 then
         transitions = transitions + 1
+        if prev_d887 == 0 and d887 ~= 0 then
+            command_pulses = command_pulses + 1
+            command_values[d887] = (command_values[d887] or 0) + 1
+        elseif prev_d887 ~= 0 and d887 == 0 then
+            clear_pulses = clear_pulses + 1
+        elseif prev_d887 ~= 0 and d887 ~= 0 then
+            chained_commands = chained_commands + 1
+            command_values[d887] = (command_values[d887] or 0) + 1
+        end
         if #trans_log < 200 then
             table.insert(trans_log, string.format("f=%d  D887: %02X -> %02X", f, prev_d887, d887))
         end
         prev_d887 = d887
+    end
+    if d887 ~= 0 then
+        nonzero_run = nonzero_run + 1
+        if nonzero_run > max_nonzero_run then max_nonzero_run = nonzero_run end
+    else
+        nonzero_run = 0
     end
 
     if elapsed >= MEASURE_FRAMES then
@@ -92,6 +113,21 @@ callbacks:add("frame", function()
             gameplay_at, MEASURE_FRAMES))
         fh:write(string.format("transitions=%d\n", transitions))
         fh:write(string.format("transitions_per_second=%.2f\n", transitions * 60 / MEASURE_FRAMES))
+        fh:write(string.format("command_pulses=%d\n", command_pulses))
+        fh:write(string.format("clear_pulses=%d\n", clear_pulses))
+        fh:write(string.format("chained_commands=%d\n", chained_commands))
+        fh:write(string.format("unpaired_commands=%d\n", command_pulses - clear_pulses))
+        fh:write(string.format("max_nonzero_run=%d\n", max_nonzero_run))
+        local values = {}
+        for value, count in pairs(command_values) do
+            table.insert(values, {value=value, count=count})
+        end
+        table.sort(values, function(a, b) return a.value < b.value end)
+        local value_parts = {}
+        for _, entry in ipairs(values) do
+            table.insert(value_parts, string.format("%02X:%d", entry.value, entry.count))
+        end
+        fh:write("command_values=" .. table.concat(value_parts, ",") .. "\n")
         fh:write("\n--- first 200 transitions ---\n")
         for _, l in ipairs(trans_log) do fh:write(l .. "\n") end
         fh:close()

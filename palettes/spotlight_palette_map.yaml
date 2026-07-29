@@ -1,0 +1,46 @@
+# Title-idle spotlight roster (stock table at ROM 0x522A).
+#
+# The reel reloads every actor into tiles 0x08-0x0F, so runtime tile IDs cannot
+# select a palette. `gameplay_tile` names the byte-identical 128-byte graphics
+# block's normal gameplay destination. The builder resolves that tile through
+# monster_palette_map.yaml, keeping the reel and gameplay on the same palette
+# families. Sara is dynamic in gameplay, so her two forms are explicit here.
+roster:
+  - {identity: 0,  resource_id: 0x02, gameplay_tile: 0x20, form: witch}
+  - {identity: 1,  resource_id: 0x03, gameplay_tile: 0x20, form: dragon}
+  - {identity: 2,  resource_id: 0x04, gameplay_tile: 0x30}
+  - {identity: 3,  resource_id: 0x05, gameplay_tile: 0x40}
+  - {identity: 4,  resource_id: 0x06, gameplay_tile: 0x50}
+  - {identity: 5,  resource_id: 0x07, gameplay_tile: 0x60}
+  - {identity: 6,  resource_id: 0x08, gameplay_tile: 0x70}
+  - {identity: 7,  resource_id: 0x09, gameplay_tile: 0x30}
+  - {identity: 8,  resource_id: 0x0A, gameplay_tile: 0x40}
+  - {identity: 9,  resource_id: 0x0B, gameplay_tile: 0x50}
+  - {identity: 10, resource_id: 0x0C, gameplay_tile: 0x60}
+  - {identity: 11, resource_id: 0x0D, gameplay_tile: 0x70}
+  - {identity: 12, resource_id: 0x0E, gameplay_tile: 0x30}
+  - {identity: 13, resource_id: 0x0F, gameplay_tile: 0x40}
+  - {identity: 14, resource_id: 0x10, gameplay_tile: 0x50}
+  - {identity: 15, resource_id: 0x11, gameplay_tile: 0x60}
+  - {identity: 16, resource_id: 0x12, gameplay_tile: 0x70}
+  - {identity: 17, resource_id: 0x13, gameplay_tile: 0x30}
+  - {identity: 18, resource_id: 0x14, gameplay_tile: 0x40}
+  - {identity: 19, resource_id: 0x15, gameplay_tile: 0x50}
+  - {identity: 20, resource_id: 0x16, gameplay_tile: 0x60}
+  - {identity: 21, resource_id: 0x17, gameplay_tile: 0x70}
+  - {identity: 22, resource_id: 0x18, gameplay_tile: 0x30}
+  - {identity: 23, resource_id: 0x19, gameplay_tile: 0x40}
+  - {identity: 24, resource_id: 0x1A, gameplay_tile: 0x50}
+  - {identity: 25, resource_id: 0x1B, gameplay_tile: 0x60}
+  - {identity: 26, resource_id: 0x22, gameplay_tile: 0x30}
+  - {identity: 27, resource_id: 0x23, gameplay_tile: 0x40}
+  - {identity: 28, resource_id: 0x24, gameplay_tile: 0x50}
+  - {identity: 29, resource_id: 0x25, gameplay_tile: 0x60}
+  - {identity: 30, resource_id: 0x26, gameplay_tile: 0x70}
+  - {identity: 31, resource_id: 0x28, gameplay_tile: 0x40}
+  - {identity: 32, resource_id: 0x29, gameplay_tile: 0x50}
+  - {identity: 33, resource_id: 0x2A, gameplay_tile: 0x60}
+  - {identity: 34, resource_id: 0x2B, gameplay_tile: 0x70}
+  - {identity: 35, resource_id: 0x2C, gameplay_tile: 0x30}
+  - {identity: 36, resource_id: 0x2D, gameplay_tile: 0x40}
+  - {identity: 37, resource_id: 0x2E, gameplay_tile: 0x50}

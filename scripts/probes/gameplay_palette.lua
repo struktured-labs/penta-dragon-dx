@@ -8,7 +8,10 @@
 
 local OUT = os.getenv("STATE_PATH") or "/tmp/penta_gameplay_pal.txt"
 local MAX_FRAMES = tonumber(os.getenv("MAX_FRAMES") or "1200")
-local SETTLE_FRAMES = tonumber(os.getenv("SETTLE_FRAMES") or "120")
+-- The room attribute repair is intentionally bounded across VBlanks. Wait
+-- long enough for the first semantic floor/wall pass instead of sampling the
+-- transient all-pal0 entry map.
+local SETTLE_FRAMES = tonumber(os.getenv("SETTLE_FRAMES") or "240")
 
 -- Auto-play sequence: DOWN to pick game start, then A several times to confirm
 -- Mirrors automated game-start sequence from MEMORY.md.
@@ -44,11 +47,14 @@ local function dump_state()
         end
         fh:write(line .. "\n")
     end
-    -- BG tile attribute table (VBK=1, 0x9800-0x9BFF = 1024 bytes)
+    -- Active BG tile attribute table (VBK=1, selected by LCDC bit 3).
+    -- The old probe always read 0x9800, which can be the inactive all-zero
+    -- map during real Stage 1 gameplay and falsely report broken colorization.
     -- Count distinct palette indices (low 3 bits of attr byte).
     local attr_counts = {[0]=0,[1]=0,[2]=0,[3]=0,[4]=0,[5]=0,[6]=0,[7]=0}
+    local attr_base = ((emu:read8(0xFF40) & 0x08) ~= 0) and 0x9C00 or 0x9800
     emu:write8(0xFF4F, 1)
-    for addr = 0x9800, 0x9BFF do
+    for addr = attr_base, attr_base + 0x3FF do
         local a = emu:read8(addr)
         local pal_idx = a & 0x07
         attr_counts[pal_idx] = attr_counts[pal_idx] + 1
@@ -58,6 +64,7 @@ local function dump_state()
     for i = 0, 7 do
         fh:write(string.format("attr_pal%d=%d\n", i, attr_counts[i]))
     end
+    fh:write(string.format("attr_base=0x%04X\n", attr_base))
     -- State for debug
     fh:write(string.format("FFC1=%d\n", emu:read8(0xFFC1)))
     fh:write(string.format("D880=0x%02X\n", emu:read8(0xD880)))

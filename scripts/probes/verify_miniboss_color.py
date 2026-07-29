@@ -22,10 +22,16 @@ load failed for OBJ region.
 from __future__ import annotations
 import os, sys, subprocess, tempfile, argparse
 
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+MGBA_QT = os.path.join(ROOT, "scripts", "mgba-qt-singleflight")
+DEFAULT_STATE = os.path.join(
+    ROOT, "save_states_for_claude", "level1_sara_w_gargoyle_mini_boss.ss0"
+)
 
 PROBE = r"""
 local OUT = os.getenv("STATE_PATH")
 local FORCE_SPAWN = (os.getenv("FORCE_SPAWN") or "1") == "1"
+local STATE_LOADED = (os.getenv("STATE_LOADED") or "0") == "1"
 local KEY_A     = 0x01
 local KEY_DOWN  = 0x80
 local KEY_RIGHT = 0x10
@@ -42,10 +48,16 @@ local f = 0
 local gameplay_at = -1
 local miniboss_at = -1
 local fired = false
+local boss_attr_checked = 0
+local boss_attr_mismatches = 0
 
 callbacks:add("frame", function()
     if fired then return end
     f = f + 1
+
+    if STATE_LOADED and gameplay_at < 0 then
+        gameplay_at = f
+    end
 
     if gameplay_at < 0 then
         local keys = 0
@@ -53,7 +65,10 @@ callbacks:add("frame", function()
             if f >= s[1] and f <= s[2] then keys = s[3]; break end
         end
         emu:setKeys(keys)
-        if emu:read8(0xFFC1) == 1 then gameplay_at = f end
+        local scene = emu:read8(0xD880)
+        if emu:read8(0xFFC1) == 1 and scene >= 0x02 and scene < 0x0C then
+            gameplay_at = f
+        end
         return
     end
 
@@ -67,18 +82,46 @@ callbacks:add("frame", function()
     -- If FORCE_SPAWN is disabled, let the game's section counter advance
     -- naturally — this exercises the spawn state machine end-to-end.
     local elapsed = f - gameplay_at
-    if FORCE_SPAWN and elapsed == 300 then emu:write8(0xDCB8, 2) end
+    -- A one-frame write races the section updater and became flaky as VBlank
+    -- timing changed. Hold the requested section until the boss flag publishes.
+    if FORCE_SPAWN and elapsed >= 300 and elapsed < 420
+        and emu:read8(0xFFBF) == 0 then
+        emu:write8(0xDCB8, 2)
+    end
 
     -- Detect mini-boss active: FFBF != 0
     if miniboss_at < 0 and emu:read8(0xFFBF) ~= 0 then
         miniboss_at = f
     end
 
-    if miniboss_at > 0 and f >= miniboss_at + 60 then
+    -- Gargoyle/Spider alternate composed-sprite pages every few animation
+    -- beats. Check the full $30-$4F footprint over several seconds so a
+    -- periodic OBJ5/OBJ6/OBJ7 color flip cannot hide behind one snapshot.
+    if miniboss_at > 0 and f >= miniboss_at + 30 then
+        local boss_id = emu:read8(0xFFBF)
+        local expected_slot = (boss_id % 2 == 1) and 6 or 7
+        for sprite = 0, 39 do
+            local base = 0xFE00 + sprite * 4
+            local y = emu:read8(base); local x = emu:read8(base + 1)
+            local tile = emu:read8(base + 2)
+            if y > 0 and y < 160 and x > 0 and x < 168
+                and tile >= 0x30 and tile < 0x50 then
+                boss_attr_checked = boss_attr_checked + 1
+                if (emu:read8(base + 3) & 0x07) ~= expected_slot then
+                    boss_attr_mismatches = boss_attr_mismatches + 1
+                end
+            end
+        end
+    end
+
+    if miniboss_at > 0 and f >= miniboss_at + 300 then
         fired = true
         local fh = io.open(OUT, "w")
-        fh:write(string.format("FFBF=%d D880=0x%02X DCB8=%d\n",
-            emu:read8(0xFFBF), emu:read8(0xD880), emu:read8(0xDCB8)))
+        fh:write(string.format(
+            "FFBF=%d\nD880=0x%02X\nDCB8=%d\nDD09=%d\n"
+                .. "boss_attr_checked=%d\nboss_attr_mismatches=%d\n",
+            emu:read8(0xFFBF), emu:read8(0xD880), emu:read8(0xDCB8),
+            emu:read8(0xDD09), boss_attr_checked, boss_attr_mismatches))
         -- Dump OBJ palette RAM (FF6A index, FF6B data)
         fh:write("# OBJ palette RAM:\n")
         for p = 0, 7 do
@@ -127,16 +170,24 @@ end)
 """
 
 
-def run_probe(rom_path: str, force_spawn: bool = True) -> dict:
+def run_probe(
+    rom_path: str,
+    force_spawn: bool = True,
+    state_path: str | None = None,
+) -> dict:
     out = tempfile.NamedTemporaryFile(suffix=".txt", delete=False).name
     lua = tempfile.NamedTemporaryFile(suffix=".lua", delete=False, mode="w")
     lua.write(PROBE); lua.close()
     env = os.environ.copy()
     env["STATE_PATH"] = out
     env["FORCE_SPAWN"] = "1" if force_spawn else "0"
+    env["STATE_LOADED"] = "1" if state_path else "0"
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["SDL_AUDIODRIVER"] = "dummy"
-    cmd = ["mgba-qt", rom_path, "--script", lua.name, "-l", "0"]
+    cmd = [MGBA_QT]
+    if state_path:
+        cmd.extend(["-t", state_path])
+    cmd.extend([rom_path, "--script", lua.name, "-l", "0"])
     # Natural-spawn mode runs the in-game state machine for thousands of
     # frames; bump the wall-clock budget proportionally.
     timeout = 600 if not force_spawn else 180
@@ -168,9 +219,27 @@ def main():
                     help="Let DCB8 advance via the game's spawn state machine "
                          "instead of force-writing DCB8=2. Slower but catches "
                          "spawn-mechanism regressions.")
+    ap.add_argument(
+        "--boot",
+        action="store_true",
+        help="boot and force the miniboss instead of loading the checked-in "
+             "real Gargoyle state",
+    )
+    ap.add_argument(
+        "--state",
+        default=DEFAULT_STATE,
+        help="real miniboss savestate used by the deterministic default path",
+    )
     args = ap.parse_args()
 
-    r = run_probe(args.rom, force_spawn=not args.natural)
+    state_path = None if args.boot or args.natural else args.state
+    if state_path and not os.path.isfile(state_path):
+        raise SystemExit(f"FAIL: miniboss savestate not found: {state_path}")
+    r = run_probe(
+        args.rom,
+        force_spawn=not args.natural,
+        state_path=state_path,
+    )
     print(f"ROM: {args.rom}")
     print(f"State: {r['state']}")
     print(f"OBJ palette usage: {r['obj_pal_usage']}")
@@ -183,6 +252,11 @@ def main():
     if r['state'].get('FFBF', '-1') == '-1':
         failures.append("never reached mini-boss")
     else:
+        if state_path and r['state'].get('DD09') != '0':
+            failures.append(
+                f"real miniboss has DD09={r['state'].get('DD09')} "
+                "instead of gameplay value 0"
+            )
         distinct_obj_pal_words = len(set(w for pal in r['obj_palettes'] for w in pal))
         if distinct_obj_pal_words < 3:
             failures.append(f"OBJ palette has only {distinct_obj_pal_words} distinct words "
@@ -190,6 +264,13 @@ def main():
         non_zero_obj_pal_usage = sum(1 for c in r['obj_pal_usage'].values() if c > 0)
         if non_zero_obj_pal_usage < 1:
             failures.append("no visible sprites → can't verify boss colorization")
+        if int(r['state'].get('boss_attr_checked', '0')) <= 0:
+            failures.append("no $30-$4F miniboss animation attributes sampled")
+        if int(r['state'].get('boss_attr_mismatches', '-1')) != 0:
+            failures.append(
+                f"{r['state'].get('boss_attr_mismatches')} miniboss "
+                "animation samples used the wrong boss slot"
+            )
 
     if failures:
         print("\nFAIL:")

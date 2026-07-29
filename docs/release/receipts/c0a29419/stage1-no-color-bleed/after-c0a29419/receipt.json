@@ -1,0 +1,186 @@
+{
+  "schema": "penta-dragon-dx-stage1-no-bleed-v1",
+  "status": "pass",
+  "rom": "/home/struktured/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_FIXED.gb",
+  "rom_md5": "c0a29419e91b57462ab649b23b2deae7",
+  "rom_sha256": "324c89fb03f84b9932e98666cf99b702e95b4ab57d3245e1769335ad9ed9b9ab",
+  "route": {
+    "source": "cold boot; native Stage 1 selection; continuous input",
+    "mode": "right",
+    "play_frames_requested": 1200,
+    "emulated_seconds": 20.091
+  },
+  "stage1_table_histogram": {
+    "0": 219,
+    "6": 37
+  },
+  "probe": {
+    "captures": [
+      {
+        "play_frame": 120,
+        "elapsed_seconds": 2.009,
+        "screenshot": "play-0120.png",
+        "attribute_histogram": {
+          "0": 332,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 28,
+          "7": 0
+        },
+        "palette_1_cells": 0,
+        "unexpected_palette_cells": 0,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "b27ff0baf7b8e53d07c29fdc608f43b3dcf4a604bba52346fe2906c19fe69cb3",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 360,
+        "elapsed_seconds": 6.027,
+        "screenshot": "play-0360.png",
+        "attribute_histogram": {
+          "0": 340,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 20,
+          "7": 0
+        },
+        "palette_1_cells": 0,
+        "unexpected_palette_cells": 0,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "d45badd28809dc6e34aaeedb618945fb9aed5beea965add165e0ad1ee7b92b9f",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 600,
+        "elapsed_seconds": 10.046,
+        "screenshot": "play-0600.png",
+        "attribute_histogram": {
+          "0": 332,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 28,
+          "7": 0
+        },
+        "palette_1_cells": 0,
+        "unexpected_palette_cells": 0,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "ec93a1e8110cfb799c247bee62dcda3b2ab37510d060fec8d62e7bf9003c73f9",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 840,
+        "elapsed_seconds": 14.064,
+        "screenshot": "play-0840.png",
+        "attribute_histogram": {
+          "0": 340,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 20,
+          "7": 0
+        },
+        "palette_1_cells": 0,
+        "unexpected_palette_cells": 0,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "ef2c07a2eefb2eabc13271ba188f58fc1766956674ba103e3f976bd6eac0b843",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 1080,
+        "elapsed_seconds": 18.082,
+        "screenshot": "play-1080.png",
+        "attribute_histogram": {
+          "0": 340,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 20,
+          "7": 0
+        },
+        "palette_1_cells": 0,
+        "unexpected_palette_cells": 0,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "b40f817f69a9c258606855a2e0ebb094e67cc52458a8698cf58bae7be42b6368",
+        "native_size": [
+          160,
+          144
+        ]
+      },
+      {
+        "play_frame": 1200,
+        "elapsed_seconds": 20.091,
+        "screenshot": "play-1200.png",
+        "attribute_histogram": {
+          "0": 340,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 20,
+          "7": 0
+        },
+        "palette_1_cells": 0,
+        "unexpected_palette_cells": 0,
+        "unsafe_attribute_cells": 0,
+        "screenshot_sha256": "e80623608565355793c393e2f29d328bcddcde5205a613f05c990c1ca7d92a25",
+        "native_size": [
+          160,
+          144
+        ]
+      }
+    ],
+    "frames": 1206,
+    "sampled_frames": 1206,
+    "checked_cells": 434808,
+    "pal1_cells": 0,
+    "unexpected_cells": 0,
+    "unsafe_cells": 0,
+    "first_pal1_frame": -1,
+    "first_unexpected_frame": -1,
+    "scene_frames": 1206,
+    "active_frames": 1206,
+    "scroll_changes": 15,
+    "final_scene": 2,
+    "final_ffc1": 1,
+    "capture_count": 6
+  },
+  "checks": {
+    "1200+ continuous actual gameplay frames": true,
+    "every actual-play frame sampled": true,
+    "route visibly scrolled": true,
+    "no visible red BG1 cells": true,
+    "no unexpected visible BG palettes": true,
+    "no tile-bank/flip/priority leakage": true,
+    "six native screenshots": true,
+    "final state remains Stage 1 gameplay": true
+  },
+  "contact_sheet": "actual-play-stage1.png",
+  "contact_sheet_sha256": "a07d61093efa4a6a46ad5cf2bf143697d2e333308d561b4ebf03f80a6c15a97a",
+  "failures": []
+}

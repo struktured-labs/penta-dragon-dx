@@ -1,8 +1,132 @@
--- Live palette editor — polls /tmp/live_palettes.txt and writes CGB CRAM
+-- Live palette editor — polls a local override file and writes CGB CRAM.
+-- Scene buttons load whitelisted mGBA states; no in-ROM teleport is used.
 local f = 0
 local last_hash = 0
-local PAL_FILE = "/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes.txt"
-local SENTINEL = "/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_lua.log"
+local ROOT = "/home/struktured/projects/penta-dragon-dx-claude"
+local PAL_FILE = os.getenv("LIVE_PALETTE_FILE") or
+    (ROOT .. "/rom/working/live_palettes.txt")
+local SENTINEL = os.getenv("LIVE_PALETTE_LOG") or
+    (ROOT .. "/rom/working/live_palettes_lua.log")
+local SMOKE_OUT = os.getenv("LIVE_PALETTE_SMOKE_OUT")
+local SCENE_AUDIT_OUT = os.getenv("LIVE_PALETTE_SCENE_AUDIT_OUT")
+local SPECIAL_AUDIT_OUT = os.getenv("LIVE_PALETTE_SPECIAL_AUDIT_OUT")
+local STATE_ROOT = ROOT .. "/save_states_for_claude"
+local STAGE_STATE_DIR = os.getenv("LIVE_PALETTE_STAGE_STATE_DIR") or
+    (ROOT .. "/tmp/palette_session/states")
+local BOSS_STATE_DIR = os.getenv("LIVE_PALETTE_BOSS_STATE_DIR") or
+    (ROOT .. "/tmp/palette_session/boss_states")
+local STORY_STATE_DIR = os.getenv("LIVE_PALETTE_STORY_STATE_DIR") or
+    (ROOT .. "/tmp/palette_session/story_states")
+
+local SCENE_FILES = {
+    title = STATE_ROOT .. "/title_screen.ss0",
+    opening = STORY_STATE_DIR .. "/opening.ss0",
+    opening_book = STORY_STATE_DIR .. "/opening_book.ss0",
+    opening_sara = STORY_STATE_DIR .. "/opening_sara.ss0",
+    opening_dragon_eye = STORY_STATE_DIR .. "/opening_dragon_eye.ss0",
+    pre_final_story = STORY_STATE_DIR .. "/pre_final.ss0",
+    pre_final_sara = STORY_STATE_DIR .. "/pre_final_sara.ss0",
+    post_final_story = STORY_STATE_DIR .. "/post_final.ss0",
+    post_final_lisa = STORY_STATE_DIR .. "/post_final_lisa.ss0",
+    post_final_sara = STORY_STATE_DIR .. "/post_final_sara.ss0",
+    ending_credits = STORY_STATE_DIR .. "/ending_credits.ss0",
+    ending_end = STORY_STATE_DIR .. "/ending_end.ss0",
+    ending_epilogue = STORY_STATE_DIR .. "/ending_epilogue.ss0",
+    stage2 = STAGE_STATE_DIR .. "/stage2.ss0",
+    stage3 = STAGE_STATE_DIR .. "/stage3.ss0",
+    stage4 = STAGE_STATE_DIR .. "/stage4.ss0",
+    stage5 = STAGE_STATE_DIR .. "/stage5.ss0",
+    stage6 = STAGE_STATE_DIR .. "/stage6.ss0",
+    stage7 = STAGE_STATE_DIR .. "/stage7.ss0",
+    boss_shalamar = BOSS_STATE_DIR .. "/boss0_shalamar.ss0",
+    boss_riff = BOSS_STATE_DIR .. "/boss1_riff.ss0",
+    boss_crystal_dragon = BOSS_STATE_DIR .. "/boss2_crystal_dragon.ss0",
+    boss_cameo = BOSS_STATE_DIR .. "/boss3_cameo.ss0",
+    boss_ted = BOSS_STATE_DIR .. "/boss4_ted.ss0",
+    boss_troop = BOSS_STATE_DIR .. "/boss5_troop.ss0",
+    boss_faze = BOSS_STATE_DIR .. "/boss6_faze.ss0",
+    boss_angela = BOSS_STATE_DIR .. "/boss7_angela.ss0",
+    boss_penta_dragon = BOSS_STATE_DIR .. "/boss8_penta_dragon.ss0",
+    witch = STATE_ROOT .. "/level1_sara_w_alone.ss0",
+    dragon = STATE_ROOT .. "/level1_sara_d_alone.ss0",
+    crow = STATE_ROOT .. "/level1_sara_w_crow.ss0",
+    hornets = STATE_ROOT .. "/level1_sara_w_4_hornets.ss0",
+    orc = STATE_ROOT .. "/level1_sara_w_orc.ss0",
+    soldier = STATE_ROOT .. "/level1_sara_w_soldier.ss0",
+    mage = STATE_ROOT .. "/level1_sara_w_mage_health1_items.ss0",
+    mixed = STATE_ROOT .. "/level1_cat_fish_moth_spike_hazard_orb_item.ss0",
+    gargoyle = STATE_ROOT .. "/level1_sara_w_gargoyle_mini_boss.ss0",
+    spider = STATE_ROOT .. "/level1_sara_w_spier_miniboss.ss0",
+    spiral = STATE_ROOT ..
+        "/sara_d_special_spiral_weapon_activated_level1_v_2.31.ss0",
+    shield = STATE_ROOT .. "/level1_cat_fish_moth_spike_hazard_orb_item.ss0",
+    jet = STATE_ROOT .. "/level1_sara_w_in_jet_form_secret_stage.ss0",
+    menu = STATE_ROOT .. "/level1_square_cat_fish_menu_open.ss0",
+}
+local SCENE_ORDER = {
+    "title", "opening", "opening_book", "opening_sara",
+    "opening_dragon_eye", "pre_final_story", "pre_final_sara",
+    "post_final_story", "post_final_lisa", "post_final_sara",
+    "ending_credits", "ending_end", "ending_epilogue",
+    "stage2", "stage3", "stage4", "stage5", "stage6", "stage7",
+    "boss_shalamar", "boss_riff", "boss_crystal_dragon", "boss_cameo",
+    "boss_ted", "boss_troop", "boss_faze", "boss_angela",
+    "boss_penta_dragon",
+    "witch", "dragon", "crow", "hornets", "orc", "soldier", "mage",
+    "mixed", "gargoyle", "spider", "spiral", "shield", "jet", "menu",
+}
+
+-- Emulator-only cutscene preview. The stock ROM leaves all story tile
+-- attributes on BG0. For these ROM-matched, explicitly selected states only,
+-- color the top eight artwork rows with the matching BG1..BG7 palette while
+-- keeping the separator and dialogue box (rows 8-17) on BG0. The complete
+-- stock story discriminator is
+-- required so stale DCF0/DD07 bytes cannot color another scene.
+local STORY_ART_SCENES = {
+    opening_book = {
+        d880 = 0x15, sequence = 0x02, art = 0x01,
+    },
+    opening_sara = {
+        d880 = 0x15, sequence = 0x02, art = 0x02,
+    },
+    opening_dragon_eye = {
+        d880 = 0x15, sequence = 0x02, art = 0x03,
+    },
+    pre_final_story = {
+        d880 = 0x19, sequence = 0x04, art = 0x04,
+    },
+    pre_final_sara = {
+        d880 = 0x19, sequence = 0x04, art = 0x07,
+    },
+    post_final_story = {
+        d880 = 0x1A, sequence = 0x05, art = 0x05,
+    },
+    post_final_lisa = {
+        d880 = 0x1A, sequence = 0x05, art = 0x06,
+    },
+    post_final_sara = {
+        d880 = 0x1A, sequence = 0x05, art = 0x07,
+    },
+}
+
+-- The direct-written credits/END/epilogue retain stale portrait bytes, so
+-- they use the independent phase guards proved by the full ending inventory.
+-- Their whole 20x18 viewport is previewed on a dedicated BG palette because
+-- these are text/graphic pages without the story dialogue separator.
+local ENDING_TAIL_SCENES = {
+    ending_credits = {
+        d880 = 0x16, d889 = 0x01, dce2 = 0x00, fff9 = 0x00,
+        palette = 0x01,
+    },
+    ending_end = {
+        d880 = 0x16, d889 = 0x01, dce2 = 0x00, fff9 = 0x01,
+        palette = 0x02,
+    },
+    ending_epilogue = {
+        d880 = 0x00, d889 = 0x0C, dce2 = 0x01, fff9 = 0x01,
+        palette = 0x03,
+    },
+}
 
 -- Log to sentinel file (since mGBA print may not go to stdout)
 local function log(msg)
@@ -22,9 +146,9 @@ local function parse_color(s)
         local r = tonumber(s:sub(1,2), 16) or 0
         local g = tonumber(s:sub(3,4), 16) or 0
         local b = tonumber(s:sub(5,6), 16) or 0
-        local r5 = math.floor(r * 31 / 255)
-        local g5 = math.floor(g * 31 / 255)
-        local b5 = math.floor(b * 31 / 255)
+        local r5 = math.floor((r * 31 + 127) / 255)
+        local g5 = math.floor((g * 31 + 127) / 255)
+        local b5 = math.floor((b * 31 + 127) / 255)
         return (b5 << 10) | (g5 << 5) | r5
     elseif #s == 4 then
         return tonumber(s, 16) or 0
@@ -33,29 +157,39 @@ local function parse_color(s)
 end
 
 -- Parsed file contains:
---   writes:    list of palette overrides applied every frame
---   force:     {addr=value, ...} - HRAM/WRAM bytes to set every frame
---   dx_teleport: integer DF0A value (one-shot DX boss teleport request)
+--   writes: list of explicitly edited palette overrides, applied every frame
+--           (BOSS/POWER/JET writes are guarded by live state flags)
+--   scene:  optional whitelisted mGBA save-state key, consumed once
 local function load_palettes(path)
     local fh = io.open(path, "r")
     if not fh then return nil end
     local txt = fh:read("*all")
     fh:close()
-    local result = {writes = {}, force = {}, dx_teleport = nil}
+    local result = {writes = {}, scene = nil}
     for line in txt:gmatch("[^\r\n]+") do
         if line:sub(1,1) == "#" then
             -- comment, skip
-        elseif line:match("^DX:") then
-            -- DX teleport one-shot directive: "DX:N" sets DF0A=N once
-            local n = line:match("^DX:(%d+)")
-            if n then result.dx_teleport = tonumber(n) end
+        elseif line:match("^SCENE:") then
+            local scene = line:match("^SCENE:([a-z0-9_]+)$")
+            if scene and SCENE_FILES[scene] then result.scene = scene end
         else
+            local boss_idx, boss_slot, boss_colors =
+                line:match("^BOSS(%d)@(%d):(.+)$")
+            local jet_slot, jet_colors = line:match("^JET(%d):(.+)$")
+            local power_idx, power_colors = line:match("^POWER(%d):(.+)$")
             local kind, pal_idx, colors = line:match("^(OBJ)(%d):(.+)$")
             if not kind then
                 kind, pal_idx, colors = line:match("^(BG)(%d):(.+)$")
             end
+            if boss_idx then
+                kind, pal_idx, colors = "BOSS", boss_slot, boss_colors
+            elseif jet_slot then
+                kind, pal_idx, colors = "JET", jet_slot, jet_colors
+            elseif power_idx then
+                kind, pal_idx, colors = "POWER", 0, power_colors
+            end
             if kind and pal_idx then
-                local is_obj = kind == "OBJ"
+                local is_obj = kind ~= "BG"
                 pal_idx = tonumber(pal_idx)
                 for entry in colors:gmatch("[^,]+") do
                     local ci, cv = entry:match("^%s*(%d+)=(%w+)%s*$")
@@ -66,35 +200,10 @@ local function load_palettes(path)
                         table.insert(result.writes, {
                             is_obj = is_obj, idx = base,
                             lo = val15 & 0xFF, hi = (val15 >> 8) & 0xFF,
+                            boss = boss_idx and tonumber(boss_idx) or nil,
+                            jet = jet_slot and tonumber(jet_slot) or nil,
+                            power = power_idx and tonumber(power_idx) or nil,
                         })
-                    end
-                end
-            else
-                -- Try byte-write directives: FFBF:N, FFBA:N, D880:0xXX, FFB7:0xXX
-                local reg, val = line:match("^(%w+):(%S+)$")
-                if reg and val then
-                    local v
-                    if val:sub(1,2) == "0x" or val:sub(1,2) == "0X" then
-                        v = tonumber(val:sub(3), 16)
-                    else
-                        v = tonumber(val)
-                    end
-                    if v then
-                        local addr
-                        if reg == "FFBF" then addr = 0xFFBF
-                        elseif reg == "FFBA" then addr = 0xFFBA
-                        elseif reg == "FFB7" then addr = 0xFFB7
-                        elseif reg == "D880" then addr = 0xD880
-                        elseif reg == "FFBE" then addr = 0xFFBE
-                        elseif reg == "FFC0" then addr = 0xFFC0
-                        elseif reg == "FFC1" then addr = 0xFFC1
-                        elseif reg == "FFBD" then addr = 0xFFBD
-                        elseif reg == "FFD0" then addr = 0xFFD0
-                        elseif reg == "DF0A" then addr = 0xDF0A  -- DX teleport request
-                        end
-                        if addr then
-                            result.force[addr] = v & 0xFF
-                        end
                     end
                 end
             end
@@ -106,31 +215,158 @@ end
 local function apply_writes(writes)
     if not writes or #writes == 0 then return end
     for _, w in ipairs(writes) do
-        if w.is_obj then
-            emu:write8(0xFF6A, w.idx)
-            emu:write8(0xFF6B, w.lo)
-            emu:write8(0xFF6A, w.idx + 1)
-            emu:write8(0xFF6B, w.hi)
-        else
-            emu:write8(0xFF68, w.idx)
-            emu:write8(0xFF69, w.lo)
-            emu:write8(0xFF68, w.idx + 1)
-            emu:write8(0xFF69, w.hi)
+        local active = (
+            (not w.boss or emu:read8(0xFFBF) == w.boss)
+            and (not w.jet or emu:read8(0xFFD0) == 1)
+            and (not w.power or emu:read8(0xFFC0) == w.power)
+        )
+        if active then
+            if w.is_obj then
+                emu:write8(0xFF6A, w.idx)
+                emu:write8(0xFF6B, w.lo)
+                emu:write8(0xFF6A, w.idx + 1)
+                emu:write8(0xFF6B, w.hi)
+            else
+                emu:write8(0xFF68, w.idx)
+                emu:write8(0xFF69, w.lo)
+                emu:write8(0xFF68, w.idx + 1)
+                emu:write8(0xFF69, w.hi)
+            end
         end
     end
+end
+
+local function read_palette(is_obj, palette)
+    local index_reg = is_obj and 0xFF6A or 0xFF68
+    local data_reg = is_obj and 0xFF6B or 0xFF69
+    local old_index = emu:read8(index_reg)
+    local words = {}
+    for color = 0, 3 do
+        local offset = palette * 8 + color * 2
+        emu:write8(index_reg, offset)
+        local lo = emu:read8(data_reg)
+        emu:write8(index_reg, offset + 1)
+        local hi = emu:read8(data_reg)
+        words[#words + 1] = string.format("%04X", lo | (hi << 8))
+    end
+    emu:write8(index_reg, old_index)
+    return table.concat(words, ",")
+end
+
+local function story_art_guard(scene)
+    local spec = STORY_ART_SCENES[scene]
+    if not spec then return false, nil end
+    local committed = (
+        emu:read8(0xD880) == spec.d880
+        and emu:read8(0xFFC1) == 0
+        and emu:read8(0xDCE8) == spec.sequence
+        and emu:read8(0xDCEA) == 0x01
+        and emu:read8(0xDCF0) == spec.art
+        and ((emu:read8(0xDD07) + 1) & 0xFF) == spec.art
+    )
+    return committed, spec
+end
+
+local function apply_story_art_preview(scene)
+    local committed, spec = story_art_guard(scene)
+    if not committed then return false, 0, 0 end
+
+    local lcdc = emu:read8(0xFF40)
+    local scy = emu:read8(0xFF42)
+    local scx = emu:read8(0xFF43)
+    local base = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
+    local old_vbk = emu:read8(0xFF4F)
+    local top_target, dialogue_zero = 0, 0
+    emu:write8(0xFF4F, 1)
+    for row = 0, 17 do
+        local palette = (row <= 7) and spec.art or 0
+        for column = 0, 19 do
+            local map_y = ((scy + row * 8) >> 3) & 0x1F
+            local map_x = ((scx + column * 8) >> 3) & 0x1F
+            local address = base + map_y * 32 + map_x
+            local attr = emu:read8(address)
+            local updated = (attr & 0xF8) | palette
+            if updated ~= attr then emu:write8(address, updated) end
+            if row <= 7 and (updated & 0x07) == spec.art then
+                top_target = top_target + 1
+            elseif row >= 8 and (updated & 0x07) == 0 then
+                dialogue_zero = dialogue_zero + 1
+            end
+        end
+    end
+    emu:write8(0xFF4F, old_vbk)
+    return true, top_target, dialogue_zero
+end
+
+local function ending_tail_guard(scene)
+    local spec = ENDING_TAIL_SCENES[scene]
+    if not spec then return false, nil end
+    local committed = (
+        emu:read8(0xD880) == spec.d880
+        and emu:read8(0xFFC1) == 0
+        and emu:read8(0xFFE4) == 1
+        and emu:read8(0xD889) == spec.d889
+        and emu:read8(0xDCE2) == spec.dce2
+        and emu:read8(0xFFF9) == spec.fff9
+    )
+    return committed, spec
+end
+
+local function apply_ending_tail_preview(scene)
+    local committed, spec = ending_tail_guard(scene)
+    if not committed then return false, 0, 0 end
+
+    local lcdc = emu:read8(0xFF40)
+    local scy = emu:read8(0xFF42)
+    local scx = emu:read8(0xFF43)
+    local base = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
+    local old_vbk = emu:read8(0xFF4F)
+    local target = 0
+    emu:write8(0xFF4F, 1)
+    for row = 0, 17 do
+        for column = 0, 19 do
+            local map_y = ((scy + row * 8) >> 3) & 0x1F
+            local map_x = ((scx + column * 8) >> 3) & 0x1F
+            local address = base + map_y * 32 + map_x
+            local attr = emu:read8(address)
+            local updated = (attr & 0xF8) | spec.palette
+            if updated ~= attr then emu:write8(address, updated) end
+            if (updated & 0x07) == spec.palette then target = target + 1 end
+        end
+    end
+    emu:write8(0xFF4F, old_vbk)
+    return true, target, spec.palette
 end
 
 -- Cached parsed data — applied EVERY frame so the game's cond_pal
 -- can't override our changes when it triggers a palette reload on
 -- state change (room transition, miniboss spawn, etc.)
 local cached = nil
-
--- DX combo simulation (workaround for v17 freeze, see docs/HANDOFF_2026_06_01.md).
--- Strategy: pre-write FFBA so the ROM's INC lands on the target boss,
--- then pulse FF93=0x0C (SELECT+START) for several frames via emu:setKeys.
--- The ROM's existing combo handler at 0x6E80 reads FF93 and dispatches.
--- combo_state = {target = 0..8, phase = "pre"|"press"|"release", frames = N}
-local combo_state = nil
+local loaded_scene = ""
+local smoke_done = false
+local audit_index, audit_wait, audit_ok, audit_done = 1, 0, false, false
+local special_index, special_wait, special_ok, special_done = 1, 0, false, false
+local SPECIAL_AUDIT_SCENES = {
+    {name = "gargoyle", scene = "gargoyle"},
+    {name = "jet", scene = "jet"},
+    {name = "spiral", scene = "spiral"},
+    {name = "shield", scene = "shield"},
+    -- No natural FFC0=3 state exists in the checked-in library. This
+    -- diagnostic-only case forces the guard byte after loading Witch; the
+    -- production browser never writes game state.
+    {name = "turbo_guard", scene = "witch", force_power = 3},
+}
+if SCENE_AUDIT_OUT then
+    local audit = assert(io.open(SCENE_AUDIT_OUT, "w"))
+    audit:write("live palette scene deck audit\n")
+    audit:close()
+end
+if SPECIAL_AUDIT_OUT then
+    cached = load_palettes(PAL_FILE)
+    local audit = assert(io.open(SPECIAL_AUDIT_OUT, "w"))
+    audit:write("live palette guarded-special audit\n")
+    audit:close()
+end
 
 -- One-shot title autostart. If /tmp/live_palettes_autostart sentinel exists
 -- on Lua load, run the canonical DOWN→A→A→A→START→A title sequence at the
@@ -152,7 +388,108 @@ local last_shot_mtime = 0
 
 callbacks:add("frame", function()
     f = f + 1
-    if f == 30 then log("Lua frame=30, polling /tmp/live_palettes.txt") end
+
+    -- Test-only guarded palette audit. Production sessions never set
+    -- LIVE_PALETTE_SPECIAL_AUDIT_OUT and never write FFC0.
+    if SPECIAL_AUDIT_OUT then
+        if special_index > #SPECIAL_AUDIT_SCENES then
+            if not special_done then
+                local marker = assert(
+                    io.open(SPECIAL_AUDIT_OUT .. ".done", "w")
+                )
+                marker:write("ok\n")
+                marker:close()
+                special_done = true
+            end
+            return
+        end
+        local spec = SPECIAL_AUDIT_SCENES[special_index]
+        if special_wait == 0 then
+            special_ok = pcall(function()
+                return emu:loadStateFile(SCENE_FILES[spec.scene])
+            end)
+            emu:setKeys(0)
+            special_wait = 30
+        else
+            special_wait = special_wait - 1
+            if spec.force_power then emu:write8(0xFFC0, spec.force_power) end
+            if cached then apply_writes(cached.writes) end
+            if special_wait == 0 then
+                local screenshot =
+                    SPECIAL_AUDIT_OUT .. "." .. spec.name .. ".png"
+                emu:screenshot(screenshot)
+                local audit = assert(io.open(SPECIAL_AUDIT_OUT, "a"))
+                audit:write(string.format(
+                    "scene=%s ok=%s ffbf=%02X ffc0=%02X ffd0=%02X " ..
+                    "obj0=%s obj1=%s obj2=%s obj6=%s obj7=%s\n",
+                    spec.name, tostring(special_ok), emu:read8(0xFFBF),
+                    emu:read8(0xFFC0), emu:read8(0xFFD0),
+                    read_palette(true, 0), read_palette(true, 1),
+                    read_palette(true, 2), read_palette(true, 6),
+                    read_palette(true, 7)
+                ))
+                audit:close()
+                special_index = special_index + 1
+            end
+        end
+        return
+    end
+
+    -- Test-only walk through every curated state. Production sessions never
+    -- set LIVE_PALETTE_SCENE_AUDIT_OUT.
+    if SCENE_AUDIT_OUT then
+        if audit_index > #SCENE_ORDER then
+            if not audit_done then
+                local marker = assert(io.open(SCENE_AUDIT_OUT .. ".done", "w"))
+                marker:write("ok\n")
+                marker:close()
+                audit_done = true
+            end
+            return
+        end
+        local scene = SCENE_ORDER[audit_index]
+        if audit_wait == 0 then
+            local state_path = SCENE_FILES[scene]
+            audit_ok = pcall(function() return emu:loadStateFile(state_path) end)
+            emu:setKeys(0)
+            audit_wait = 30
+        else
+            audit_wait = audit_wait - 1
+            local story_preview, top_target, dialogue_zero =
+                apply_story_art_preview(scene)
+            local tail_preview, tail_cells, tail_palette =
+                apply_ending_tail_preview(scene)
+            if audit_wait == 0 then
+                local screenshot = SCENE_AUDIT_OUT .. "." .. scene .. ".png"
+                emu:screenshot(screenshot)
+                local audit = assert(io.open(SCENE_AUDIT_OUT, "a"))
+                audit:write(string.format(
+                    "scene=%s ok=%s d880=%02X ffc1=%d ffbf=%02X " ..
+                    "ffc0=%02X ffd0=%02X ffba=%02X ffe4=%d " ..
+                    "dce8=%02X dcea=%02X " ..
+                    "dcf0=%02X dd07=%02X story_preview=%s " ..
+                    "story_top=%d story_dialogue=%d d889=%02X " ..
+                    "dce2=%02X fff9=%02X tail_preview=%s " ..
+                    "tail_cells=%d tail_palette=%d\n",
+                    scene, tostring(audit_ok), emu:read8(0xD880),
+                    emu:read8(0xFFC1), emu:read8(0xFFBF),
+                    emu:read8(0xFFC0), emu:read8(0xFFD0),
+                    emu:read8(0xFFBA), emu:read8(0xFFE4),
+                    emu:read8(0xDCE8), emu:read8(0xDCEA),
+                    emu:read8(0xDCF0), emu:read8(0xDD07),
+                    tostring(story_preview), top_target, dialogue_zero,
+                    emu:read8(0xD889), emu:read8(0xDCE2),
+                    emu:read8(0xFFF9), tostring(tail_preview), tail_cells,
+                    tail_palette
+                ))
+                audit:close()
+                audit_index = audit_index + 1
+            end
+        end
+        return
+    end
+
+    if f == 30 then log("Lua frame=30, polling " .. PAL_FILE) end
 
     -- Title autostart: only while armed and within the documented window.
     if autostart_armed and f <= 500 then
@@ -197,72 +534,50 @@ callbacks:add("frame", function()
                 last_hash = hash
                 cached = load_palettes(PAL_FILE)
                 local nw = cached and #cached.writes or 0
-                local nf = 0
-                if cached and cached.force then
-                    for _ in pairs(cached.force) do nf = nf + 1 end
-                end
-                local nt = cached and cached.dx_teleport or 0
-                log(string.format("f%d: Loaded %d writes, %d forces, dx_teleport=%d", f, nw, nf, nt))
-                -- Queue combo simulation for DX teleport request
-                if cached and cached.dx_teleport then
-                    local target = cached.dx_teleport - 1   -- DF0A 1..9 → FFBA 0..8
-                    combo_state = {target = target, phase = "pre", frames = 0}
-                    cached.dx_teleport = nil  -- consume
+                local scene = cached and cached.scene or nil
+                log(string.format(
+                    "f%d: loaded %d palette writes, scene=%s",
+                    f, nw, tostring(scene)
+                ))
+                if scene then
+                    local state_path = SCENE_FILES[scene]
+                    local ok, result = pcall(function()
+                        return emu:loadStateFile(state_path)
+                    end)
+                    if ok then loaded_scene = scene end
+                    log(string.format(
+                        "f%d: loadStateFile scene=%s ok=%s result=%s",
+                        f, scene, tostring(ok), tostring(result)
+                    ))
+                    cached.scene = nil
                 end
             end
         end
     end
 
-    -- Apply palette overrides EVERY frame — EXCEPT during boss arenas.
-    -- Each boss arena (D880 0x0C..0x14) loads its OWN native CRAM; the editor
-    -- pushes the dungeon YAML palettes, which would clobber the arena's colors
-    -- (muted Ted's cyan dome/green tendrils to gray). Skip BG/OBJ pushes in
-    -- arenas so the live preview matches the real ROM. (Combo + force-writes
-    -- still run, so teleport keeps working.) Dungeon palette tuning unaffected.
-    local d880 = emu:read8(0xD880)
-    local in_arena = d880 >= 0x0C and d880 <= 0x14
-    if cached and not in_arena then apply_writes(cached.writes) end
-
-    -- Apply force writes EVERY frame (e.g., FFBF=3 for boss preview)
-    if cached and cached.force then
-        for addr, val in pairs(cached.force) do
-            emu:write8(addr, val)
-        end
+    -- Only palettes explicitly edited by the browser are cached, so applying
+    -- them in every scene is safe: unrelated arena/miniboss CRAM stays intact.
+    if cached then apply_writes(cached.writes) end
+    if loaded_scene ~= "" then
+        apply_story_art_preview(loaded_scene)
+        apply_ending_tail_preview(loaded_scene)
     end
 
-    -- DX combo simulator state machine.
-    -- The v16 teleport ROM (`penta_dragon_dx_teleport.gb`) checks FF93 for
-    -- 0x0C (SELECT+START) in its 0x6E80 routine and cycles FFBA via INC,
-    -- wrap-at-9. To land on target boss N: pre-set FFBA = (N - 1) mod 9
-    -- so the ROM's INC arrives at N. Wraps cleanly for N=0 → pre=8 → INC=9
-    -- → "CP 9; XOR A" → 0.
-    -- Note: this overrides player joypad input for ~10 frames. Acceptable
-    -- for a "click teleport in browser" feature; player likely isn't also
-    -- mashing buttons.
-    if combo_state then
-        if combo_state.phase == "pre" then
-            -- Pre-write FFBA so ROM's INC lands on target
-            local pre = combo_state.target - 1
-            if pre < 0 then pre = 8 end
-            emu:write8(0xFFBA, pre)
-            log(string.format("f%d: combo PRE target=%d, FFBA=%d", f, combo_state.target, pre))
-            combo_state.phase = "press"
-            combo_state.frames = 6  -- hold SELECT+START for 6 frames
-        elseif combo_state.phase == "press" then
-            emu:setKeys(0x0C)  -- SELECT + START
-            combo_state.frames = combo_state.frames - 1
-            if combo_state.frames <= 0 then
-                combo_state.phase = "release"
-                combo_state.frames = 6
-            end
-        elseif combo_state.phase == "release" then
-            emu:setKeys(0)
-            combo_state.frames = combo_state.frames - 1
-            if combo_state.frames <= 0 then
-                log(string.format("f%d: combo DONE D880=0x%02X FFBA=%d",
-                    f, emu:read8(0xD880), emu:read8(0xFFBA)))
-                combo_state = nil
-            end
-        end
+    -- Optional automated bridge gate. The production session never sets this.
+    if SMOKE_OUT and not smoke_done and loaded_scene ~= "" and f >= 180 then
+        -- Capture before publishing the marker. mGBA may finish encoding the
+        -- PNG after this callback returns, so keep the emulator alive until
+        -- the Python gate observes both files and terminates it.
+        emu:screenshot(SMOKE_OUT .. ".png")
+        local out = assert(io.open(SMOKE_OUT, "w"))
+        out:write(string.format(
+            "frame=%d scene=%s d880=%02X ffc1=%d ffbf=%02X " ..
+            "bg3=%s obj4=%s obj6=%s\n",
+            f, loaded_scene, emu:read8(0xD880), emu:read8(0xFFC1),
+            emu:read8(0xFFBF), read_palette(false, 3),
+            read_palette(true, 4), read_palette(true, 6)
+        ))
+        out:close()
+        smoke_done = true
     end
 end)

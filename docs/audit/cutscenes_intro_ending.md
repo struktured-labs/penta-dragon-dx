@@ -1,28 +1,84 @@
 # Audit: Cutscenes (Intro + Ending) — Render Paths & Colorization Feasibility
 
-Static analysis only (no emulator). Base ROM: `rom/Penta Dragon (J).gb` (DMG,
-CGB flag 0x00). DX working ROM: `rom/working/penta_dragon_dx_v301.gb`.
-Disassembler used: `tmp/gbdis.py` (full LR35902, written for this audit).
+Base ROM: `rom/Penta Dragon (J).gb` (DMG, CGB flag 0x00). DX working ROM:
+`rom/working/penta_dragon_dx_FIXED.gb`. Analysis combines `tmp/gbdis.py`
+static disassembly with mGBA/PyBoy scene and CGB-attribute captures.
+
+> **2026-07-23 correction:** The original version of this audit conflated
+> three different sequences. The first title option really is a long story
+> prologue (`D880=0x15`); pressing DOWN selects GAME START. The `0x54C0`
+> routine is a bridge around the final battle: it presents the Penta Dragon
+> transition, calls the bank-2 final-boss loop, and only after that call
+> returns does it enter the ending. The corrected map below supersedes older
+> “no intro” and “0x54C0 is all ending” wording.
 
 ---
 
 ## TL;DR
 
-| Cutscene | D880 | FFC1 | Tile gfx source | Tilemap commit path | Colorizes today? |
-|----------|------|------|-----------------|---------------------|------------------|
-| Title "intro" — logo/decor (D880=0x1B) | 0x1B | 0 | bank1 desc @0x4E63 → C1A0 buffer | **inline hook 0x42A7** (via `CALL 0x42A5`) | **YES** (bg_table lookup runs) |
-| Title — text rows / menu (D880=0x1C, cursor) | 0x1C / 0x01 | 0 | bank1 strings | **direct VRAM** via `0x0D27`/`0x3C72` | **NO** (no attr write) |
-| Victory ending (after Penta Dragon) | 0x19→0x1A→0x16 | 0 | **bank14:0x7800** → VRAM 0x9000; script **bank15:0x6F90** | **direct VRAM** via `0x3DDD`→decompress→`0x5559`→`0x2030` | **NO** (no attr write, attrs stay = palette 0) |
-| Death/game-over cinematic (reference) | 0x17 | n/a | bank14 → VRAM 0x9000 | window layer, direct | NO (see `gap_bank14_death_cinematic.md`) |
+| Sequence | D880 / FFC1 | Render identity | Current DX behavior |
+|----------|-------------|-----------------|---------------------|
+| **OPENING START story prologue** (default title option) | `0x15` / `0` | Japanese text, open book, Sara portrait, dragon eye | ROM-native BG1/BG2/BG3 artwork: 160 art cells above 200 BG0 dialogue cells |
+| GAME START | DOWN, then confirm | Skips the prologue and enters stage load | Separate path; do not use it to test the story |
+| Title attract/logo/menu | `0x00/01/1B/1C` / `0` | Logo, menu, animated banner | Title-specific paths described below |
+| **Penta Dragon pre-battle bridge** | `0x19`, then splash `0x18`, then arena `0x14` | Sets `FFBA=8`, shows Penta transition/speech, enters final boss | ROM-native BG4/BG7 art above BG0 dialogue; 50 mGBA samples with zero layout mismatches |
+| **Post-final ending** | after bank-2 loop returns: `0x1A→0x16→0x00` / `0` | Lisa/Sara ending, credits, END, epilogue | BG5/BG6/BG7 dialogue art, then full-screen BG1/BG2/BG3; two 139-panel inventories pass |
+| Death/game-over cinematic | `0x17` / `1` | bank14 illustration, then hardware window | ROM-native neutral BG0 containment on both physical maps; six natural boss routes pass |
 
-There is **no separate story-intro animation** between title and gameplay. Game
-start (`0x3B37`→`0x3B4D`, sets D880=0x15) jumps straight to the main loop
-(`JP 0x0162`) into stage-1 dungeon. The "intro cutscene" *is* the title screen
-sequence.
+## 1. OPENING START story prologue (confirmed live)
+
+The title cursor starts on **OPENING START**. Pressing A on the default option
+enters `D880=0x15`; pressing DOWN first selects **GAME START** instead. The
+automated capture in `scripts/diagnostics/inventory_opening_cutscene.py`
+reached the prologue at frame 258 and sampled 33 panels through frame 11778.
+
+Before the 2026-07-23 containment fix, scene dispatch treated `0x15` as a
+generic high scene and loaded the Stage 1 semantic dungeon table. Story art
+reuses tile IDs such as `0x80`, `0x8D`, and `0xD0` for unrelated image pieces,
+so the dungeon table painted large parts of the book, Sara, and dragon-eye
+panels red. This was palette-metadata collision, not corrupt graphics.
+
+The production builder now uses panel and screen-position semantics rather
+than a global tile-ID table. The uncommitted text preamble remains
+`attrs={0:360}`. Once each stock panel identity commits, the visible top eight
+rows use BG1 for the book, BG2 for Sara, or BG3 for the dragon eye; the
+separator, border, and dialogue remain exactly 200 BG0 cells. All 33 sampled
+panels pass with no unsafe attribute bits. One frame at an art-page boundary
+may still show the complete previous art layout while `DCF0` announces the
+next page; the next sample must commit it via `DD07+1==DCF0`.
 
 ---
 
-## 1. INTRO (title screen sequence)
+## Death / GAME OVER cinematic (production-contained)
+
+The stock death route publishes `D880=0x17`, renders its bank-14 illustration
+on the scrolled `0x9C00` background map, then enables a GAME OVER window backed
+by `0x9800` roughly 35 frames later. It writes tile IDs but does not establish
+fresh CGB attributes. Before containment, both maps therefore inherited the
+last dungeon or boss-arena attributes, producing the reported red lettering
+and scattered colored cells.
+
+The production wrapper services bank 13:`0x7100` before scene detection and
+skips the ordinary gameplay colorizer for `D880=0x17`. Each VBlank clears
+three rows and 24 columns on **both** physical maps to exact attribute byte
+zero. Seven phases cover row 31 and rows 0–19, including the scrolled
+illustration edge and the complete unscrolled window, without assuming which
+map LCDC currently assigns to BG or window. Exact zero selects BG0 and removes
+stale VRAM-bank, flip, and priority bits as well as the palette index.
+
+`verify_death_gameover.py` generates exact-ROM checkpoints and follows six
+stock boss routes naturally into death: Shalamar, Cameo, Ted, Troop, Faze, and
+Penta Dragon. It verifies the illustration, the first window-enable frame,
+and settled GAME OVER state with zero displayed non-BG0 or unsafe attributes.
+Riff, Crystal Dragon, and Angela use multi-phase boss-local HP semantics, so
+the generic checkpoint generator does not falsely force their transition;
+they share the same guarded `D880=0x17` runtime service.
+
+---
+
+## 2. TITLE ATTRACT / MENU (not the OPENING story)
+
+---
 
 ### Entry & top-level flow (bank 0/1, all resident)
 `0x39C3` is the title entry (re-entered each title loop via `JP 0x39C3` at 0x39E8):
@@ -79,11 +135,10 @@ colorized** (tile-ID writes only).
 the title descriptor at bank1 **0x4E63** (tile IDs 0xE0–0xFF, 0xCE/0xCF,
 0xDE/0xDF — the decorative title tiles). `CALL 0x42A5` then runs the **DX inline
 tile+attr copy** (`0x42A5: LD H,0x98 → 0x42A7`). Verified in DX ROM the patched
-body at 0x42AC contains `06 DA` (`LD B,0xDA`) and `0A` (`LD A,[BC]`) — i.e. it
-performs the `bg_table[tile_id]` lookup at WRAM 0xDA00 and writes the attr to
-VRAM bank 1. **So this path IS colorized** by whatever entries bg_table has for
-tile IDs 0xE0-0xFF (today: 0x88-0xDF → pal 1; 0xE0-0xFF → pal 0 in the dungeon
-table).
+body at 0x42AC contains `06 CC` (`LD B,0xCC`) and `0A` (`LD A,[BC]`) — i.e. it
+performs the `bg_table[tile_id]` lookup at WRAM 0xCC00 and writes the attr to
+VRAM bank 1. **So this path IS colorized** by whatever per-scene table is
+active. The release title/banner table is uniformly palette 0.
 
 ### Entry-point correction (vs `docs/inline_tile_attr_copy.md`)
 That doc lists 0x42A4=`LD H,0x98`, 0x42A6=`RET`. The actual bytes (vanilla AND
@@ -104,7 +159,7 @@ FFC1 gate, but the handler still calls bg_sweep *inside* its own FFC1 gate
 
 ---
 
-## 2. VICTORY ENDING (after defeating Penta Dragon)
+## 3. FINAL-BOSS BRIDGE + VICTORY ENDING
 
 ### Trigger — bank0 stage-complete dispatcher `0x1A60`
 ```
@@ -113,17 +168,18 @@ FFC1 gate, but the handler still calls bg_sweep *inside* its own FFC1 gate
 1A84: XOR A; LDH [FFDA],A
 1A87: LDH A,[FFBA]; CP 06
 1A8B:   JR C,1AA3        ; FFBA < 6 → normal next stage (INC FFBA; CALL 746A)
-1A8D:   JP Z,54C0        ; FFBA == 6 → **VICTORY ENDING**
+1A8D:   JP Z,54C0        ; FFBA == 6 → **PENTA DRAGON bridge**
 1A90:   (FFBA > 6)       → FFBA=5; FFFA=1; CALL 09CE/556C/09D6 (wrap)
 ```
-The corridor/stage counter **FFBA == 6** (final stage cleared = Penta Dragon
-defeated) dispatches to `JP 0x54C0`. (This FFBA is the level/corridor counter,
-distinct from the boss-arena FFBA index that is rewritten per-arena; see
-MEMORY.md "FFBA = level/boss counter 0-8".)
+The corridor/stage counter **FFBA == 6** means Faze / Stage 7 has just been
+cleared, not that Penta Dragon has already been defeated. This matches the
+published walkthrough ordering: Boss 07 Faze, then a Penta Dragon pre-battle
+speech, then Boss 08 Penta Dragon, then the Lisa/Sara ending. The routine
+rewrites FFBA to boss index 8 before entering the final arena.
 
-### Ending sequence — `0x54C0` (bank 1)
+### Combined pre-battle/post-battle routine — `0x54C0` (bank 1)
 ```
-54C0: LD A,19; LD [D880],A        ; D880 = 0x19  (ending scene 1)
+54C0: LD A,19; LD [D880],A        ; D880 = 0x19  (final-boss bridge)
 54C7: XOR A; LD [DCF0],A
 54CB: LD A,04; CALL 34CA          ; music set 4
 54D0: CALL 5016                   ; reset DMG palettes (FF47/48/49 = FF)
@@ -132,18 +188,34 @@ MEMORY.md "FFBA = level/boss counter 0-8".)
 54E6: LD A,08; LDH [FFBA],A       ; FFBA = 8 (Penta Dragon index — final)
 54EA: LD A,01; LDH [FFDA],A; LDH [FFE4],A
 54F0: CALL 16FD; CALL 174E        ; entity/scroll reset
-54FC: CALL 759B; CALL 1EC0; CALL 1296
-5505: LD B,30; CALL 4068          ; 48-frame delay
+54FC: CALL 759B                    ; FFBA=8 boss splash; publishes D880=0x18
+54FF: CALL 1EC0
+5502: CALL 1296                    ; bank 2:0x4000 FINAL-BOSS LOOP
+                                     (does not return until Penta is defeated)
+5505: LD B,30; CALL 4068          ; post-battle 48-frame delay
 550B: LDH [FFF4],A (=0)
-5514: LD A,1A; LD [D880],A        ; D880 = 0x1A  (ending scene 2)
+5514: LD A,1A; LD [D880],A        ; D880 = 0x1A  (post-final transition)
 551E: LD A,05; CALL 34CA          ; music set 5
 5526..: render syncs
-5530: LD A,16; LD [D880],A        ; D880 = 0x16  (ending scene 3 / "the end")
+5530: LD A,16; LD [D880],A        ; D880 = 0x16  (ending render setup)
 553C: CALL 3DB5                   ; <<< ENDING GRAPHIC + TEXT RENDER
 5545: LD A,06; CALL 3CAB          ; music set 6
 5553: CALL 0F33
 5556: JP 0150                     ; reboot → back to title
 ```
+
+`0x1296` is the control-flow boundary the earlier audit missed:
+
+```
+1296: LD A,02; CALL 0061          ; map ROM bank 2
+129B: CALL 4000                   ; run boss engine
+129E: RST 28; RET                ; restore bank only after boss loop returns
+```
+
+Within bank 2, the `FFBA=8` setup publishes `D880=0x14`, the established Penta
+Dragon arena scene. The pre-battle dialogue is therefore part of the final
+boss engine/transition, while `0x1A`, `0x16`, and the direct ending graphic are
+post-victory. Do not color-key all of `0x54C0` as one “ending” scene.
 
 ### Ending graphic render — `0x3DB5` (bank 1)
 ```
@@ -177,105 +249,112 @@ MEMORY.md "FFBA = level/boss counter 0-8".)
 ### Conclusion for the ending render path
 The ending tilemap reaches VRAM through `0x3DDD → 0x3E68/0x3E9E → 0x5559 →
 0x2030`, a **direct tile-ID-only copy that completely bypasses the inline hook
-(0x42A7) and bg_sweep.** No CGB attribute byte is ever written for the ending
-tilemap. With FFC1=0 throughout (`bg_sweep` skipped) and the cold-boot
-attr-cleaner long since finished, the ending BG tiles retain whatever attr is
-already in VRAM bank 1 — effectively **palette 0** (the cleaner zeroed them at
-boot). **The ending is therefore NOT colorized today and will not pick up
-bg_table entries** because it never flows through any attr-writing path.
+(0x42A7) and bg_sweep.** No CGB attribute byte is written by the ending
+tilemap routine itself.
 
-(Contrast: the title banner DOES flow through 0x42A7, so a bg_table entry would
-color it. The ending does NOT.)
+That did not make the old DX build safe. The attribute maps survive between
+screens, and the pre/post-final inline paths had already written Stage 1
+palette values into them. Before containment, `D880=0x19` and `0x1A` selected
+the dungeon table; the direct-written `0x16` credits and `D880=0x00` final
+graphic then inherited those stale red attributes. Captures measured visible
+palette-1 contamination in both branches.
+
+The release candidate handles this without changing the original tile
+renderer or story timing:
+
+1. `scene_detect` at bank 13:`0x6F90` selects a neutral active tile-ID table
+   for story scenes, preventing the Stage 1 semantic table from touching
+   dialogue. The active 256-byte table remains WRAM `0xCC00`.
+2. The ROM-native story sweep at bank 13:`0x7E40` applies committed page
+   identity by screen position: BG4/BG7 for pre-final art and BG5/BG6/BG7 for
+   post-final art, always above 200 BG0 separator/dialogue cells.
+3. The finite sweep writes five cells per VBlank quarter, completing three
+   32-column artwork passes plus four separator quarters. Its page key includes
+   `DCF0`, the active tilemap, and the eight-pixel `SCX/SCY` viewport shift, so
+   a scroll or map flip restarts the bounded pass instead of leaving stale
+   cells.
+4. The direct-written tail uses `D880/D889/DCE2/FFF9`, not stale portrait
+   bytes: credits are full BG1, END is full BG2, the epilogue preamble clears
+   to BG0, and epilogue text is full BG3.
+
+Every written attribute is an exact palette index with bank/flip/priority bits
+zero. There is no unbounded per-frame ending sweep; the original control flow
+and audio timing remain intact.
 
 ---
 
-## 3. Does cutscene BG flow through the inline hook / bg_sweep?
+## 4. Does cutscene BG flow through the inline hook / bg_sweep?
 
 | Path | Routine chain | Writes CGB attr? | Picks up bg_table? |
 |------|---------------|------------------|--------------------|
 | Title banner (D880=0x1B) | `0x1238`→C1A0→`CALL 0x42A5`→`0x42A7` | YES (inline hook attr phase) | YES |
 | Title logo/text (D880=0x1C) | `0x0D27`/`0x0D33` direct | NO | NO |
 | Title menu glyphs | `0x3C72`/`0x3BE2` direct | NO | NO |
-| **Ending tilemap** (D880=0x19/1A/16) | `0x3DDD`→`0x5559`→`0x2030` direct | **NO** | **NO** |
-| bg_sweep (any scene) | bank13:0x6CD0 | YES, but **gated by FFC1==1** | YES |
+| OPENING story (`D880=0x15`) | mixed inline/direct writers + DX position sweep | YES | BG1/BG2/BG3 art over BG0 dialogue |
+| Pre-final story (`D880=0x19`) | mixed inline/direct writers + DX position sweep | YES | BG4/BG7 art over BG0 dialogue |
+| Post-final dialogue (`D880=0x1A`) | mixed inline/direct writers + DX position sweep | YES | BG5/BG6/BG7 art over BG0 dialogue |
+| Credits/END/epilogue (`D880=0x16→0x00`, `FFE4=1`) | stock direct tile writer + DX ending sweep | Stock: **NO**; DX: **YES** | Full BG1/BG2/BG3 phase layouts |
+| Death/GAME OVER (`D880=0x17`) | stock bank14/direct window render + DX two-map neutralizer | Stock: **NO**; DX: **YES** | Exact BG0 on both physical maps |
+| bg_sweep | bank13:0x6CD0 | YES, but outer handler is **gated by FFC1==1** | Gameplay only |
 
-Both cutscenes run with FFC1=0, so bg_sweep is disabled for them. The only
-attr-writing path that touches cutscenes is the inline hook, and only the title
-banner uses it; the ending uses the direct `0x2030` copy exclusively.
+Both cutscenes run with FFC1=0, so the gameplay `bg_sweep` is disabled. The
+stock final graphic still uses the direct `0x2030` tile-ID copy exclusively;
+the separate DX story/ending service runs before the gameplay gate and owns
+the corresponding CGB attribute layout.
 
 ---
 
-## 4. Concrete plan to colorize both cutscenes
+## 5. ROM-native production colorization
 
-### 4a. Intro / title
-Two sub-cases:
-1. **Banner (D880=0x1B)** already colorizes via inline hook → just give the
-   banner tile IDs (0xE0-0xFF, 0xCE/0xCF, 0xDE/0xDF; see desc @bank1:0x4E63) the
-   desired palette in the active bg_table at WRAM 0xDA00. Simplest: add a
-   **per-scene table swap** keyed on D880 (see 4c) for the title states, OR just
-   set those tile IDs in the dungeon bg_table (cheap but those IDs may collide
-   with in-game item tiles 0x88-0xDF which are already pal 1).
-2. **Logo text / menu (direct-write paths 0x0D27/0x3C72/0x3BE2)** never write
-   attrs. Cheapest fix: **let bg_sweep run on the title.** The build already has
-   the bg_sweep gate machinery; change the colorize handler's FFC1 gate so that
-   bg_sweep (only — not OBJ/OAM) also runs when D880 ∈ {0x01,0x1B,0x1C} (title).
-   bg_sweep reads 0xDA00 and will color every visible tilemap row regardless of
-   which routine wrote the tile IDs. Combine with a title bg_table (4c). Cost:
-   ~one row/frame sweep (~600-900T), already budgeted in v3.00/MiSTer-tested.
+The position-aware artistic pass is now in the release ROM. It deliberately
+does not derive meaning from reused story tile IDs. A compact runtime key
+selects the committed panel and visible viewport, then a bounded quarter sweep
+writes exact palette indices into the active attribute map:
 
-### 4b. Ending — bg_sweep is the right lever (inline hook is not reachable)
-The ending never calls 0x42A7, so the only way to color it without invasive ROM
-surgery is **bg_sweep**. Plan:
-1. **Un-gate bg_sweep for ending scenes.** In `build_v301_gdma.py` colorize
-   handler, replace the single `LDH A,[FFC1]; OR A; JR Z` gate around bg_sweep
-   with a predicate that also passes when `D880 ∈ {0x19, 0x1A, 0x16}` (read
-   D880 from WRAM 0xD880). Keep OBJ colorizer + OAM-DMA still FFC1-gated (the
-   ending has no gameplay sprites to colorize and shadow_main expects gameplay
-   OAM layout).
-2. **Provide an ending bg_table.** Build a 256-byte table mapping the ending's
-   tile IDs to palettes. The ending uses (a) the font/text tiles (script
-   bank15:0x6F90 literals are < 0x4A, e.g. 0x1B/0x15/0x14/0x09/0x16/0x05 and the
-   0x40-0x4A range seen in the title-string sibling at bank1:0x6F90) and (b) the
-   bank14:0x7800 graphic tiles loaded to VRAM 0x9000 (VRAM tile slots 0x00-0x7F
-   of the 0x9000 block → map tile IDs 0x00-0x7F). Probe the actual on-screen
-   tilemap for the ending to get the exact IDs (see "probes needed").
-3. **Verify bg_sweep coverage matches the ending tilemap.** The ending commits
-   18 rows × 12 cols to 0x9800 (LCDC bit 3 cleared at 0x5559). bg_sweep already
-   sweeps the active tilemap (it reads LCDC bit 3 → base 0x98/0x9C), and rows are
-   driven by SCY/8 + DF04. The ending sets SCY=0 (FF42=0 in 0x3DDD), so rows
-   0-17 align — bg_sweep will cover the whole ending. Good.
+- bank 13:`0x7E40` owns the story sweep;
+- `0x6D6E` dispatches rows, `0x6C00` writes a five-cell quarter, and `0x6C80`
+  handles the separator quarters;
+- `0x6CC3` builds the viewport-aware key from the panel, active tilemap, and
+  eight-pixel `SCX/SCY` shift;
+- `0x6AB5` and `0x6AF5` handle the direct ending phase/column writes;
+- `0x6FF1` remains the generic uniform clear used outside these art layouts.
 
-### 4c. Per-scene table swap (recommended, mirrors arena scene_detect)
-Extend the teleport build's `build_scene_detect` (`scripts/build_v301_teleport.py`
-line 165) — which today maps D880=0x0C..0x14 → per-boss tables at 0x7200-0x7AFF
-and default → dungeon @0x7000 — to also handle cutscene states:
-```
-D880 == 0x01/0x1B/0x1C → TITLE  bg_table   (new, e.g. bank13:0x7B00)
-D880 == 0x19/0x1A/0x16 → ENDING bg_table   (new, e.g. bank13:0x7C00)
-D880 == 0x17           → DEATH  bg_table    (optional; see gap_bank14_death_cinematic.md)
-else                   → existing dispatch
-```
-scene_detect copies the matching 256-byte table to WRAM 0xDA00 on D880 change
-(~4100T one-shot, ~16T steady). Both the inline hook (title banner) and bg_sweep
-(title text + ending) then read the correct palettes from 0xDA00 automatically.
-Note `0x16` is reused as both "post-boss reload" and ending-scene-3; gate the
-ending table on the ending entry (e.g. also check FFE4=1 or a dedicated flag set
-at 0x54C0) to avoid mis-coloring mid-game stage reloads. Safer: trigger the
-ending table on D880=0x19 or 0x1A (unambiguous ending states) and keep it loaded.
+Three artwork passes cover all 32 tilemap columns without an infinite
+per-frame rewrite; four final quarters force the separator/dialogue boundary
+to BG0. High bits are always zero, so this service cannot accidentally select
+VRAM bank 1, flips, or priority.
 
-### Bank-13 space
-Production bank13 layout (build_v301_gdma.py): tables end ~0x7100 (attr_comp);
-teleport extends arena tables through 0x7AFF. **0x7B00-0x7FFF is free** for the
-title + ending (+ death) 256-byte cutscene tables.
+The direct-written tail has this verified runtime phase trajectory and never
+trusts the stale dialogue portrait bytes:
 
-### Effort & risk
-- Adding scene_detect cases + 2-3 tables + un-gating bg_sweep for ending states:
-  medium effort; the scene_detect + per-arena-table machinery already exists and
-  is mGBA-verified for 9 arenas.
-- Risk: D880=0x16 ambiguity (ending vs post-boss reload); the ending direct-write
-  to 0x9800 vs bg_sweep's active-tilemap selection (verify LCDC bit 3 state at
-  ending — 0x5559 does `RES 3` so base = 0x9800, and bg_sweep computes base from
-  LCDC bit3 → consistent); bg_sweep cost on the (short) ending is negligible.
+| Phase | Committed guard (`FFC1=0`, `FFE4=1` throughout) |
+|-------|--------------------------------------------------|
+| Post-final dialogue | `D880=1A`, `D889=01`, `DCE2=00`, `FFF9=00` |
+| Credits | `D880=16`, `D889=01`, `DCE2=00`, `FFF9=00` |
+| `END` page | `D880=16`, `D889=01`, `DCE2=00`, `FFF9=01` |
+| Epilogue preamble | `D880=00`, `D889=0C`, `DCE2=00`, `FFF9=01` |
+| Epilogue text | `D880=00`, `D889=0C`, `DCE2=01`, `FFF9=01` |
+
+Two independent full inventories completed the stock ending naturally and
+captured 139 panels each: 68 post-final dialogue, 23 credits, 2 END, 3
+epilogue-preamble, and 43 epilogue-text samples. The discriminator gate
+requires full BG1 credits, full BG2 END, a neutral BG0 epilogue preamble, and
+full BG3 epilogue text, while allowing only bounded two-phase transitions.
+
+The fallback remains BG0 for any unclassified or uncommitted panel. The
+`D880=0x00` epilogue additionally requires `FFC1=0`, `FFE4=1`, `D889=0x0C`,
+and `FFF9=1`, because title/boot reuse `D880=0x00`.
+
+Every artistic revision must rerun the mGBA pixel-pipeline gate in
+`verify_final_cutscene_mgba.py`, the story-production and ending-discriminator
+gates, plus the title, stage-timing, menu/HUD, later-stage, and boss-arena
+gates. The current exact ROM passes all 30 isolated emulator/local gates.
+PyBoy remains useful for deterministic inventory and control-flow coverage,
+but it is not the final timing/flicker authority.
+
+The title-idle actor spotlight is a separate OBJ problem and is already mapped
+from `palettes/monster_palette_map.yaml`; it should not be conflated with the
+background story panels.
 
 ---
 
@@ -285,53 +364,104 @@ title + ending (+ death) 256-byte cutscene tables.
 - Title banner tile descriptor: bank1 **0x4E63** (tile IDs 0xE0-0xFF,
   0xCE/0xCF, 0xDE/0xDF) → WRAM C1A0 → inline hook 0x42A5/0x42A7.
 - Direct tilemap writers (no attr): 0x0D27/0x0D33, 0x3C72, 0x3BE2, **0x2030**.
-- Ending trigger: bank0 0x1A8D `JP Z,0x54C0` (FFBA==6).
-- Ending sequence: bank1 0x54C0 (D880 0x19→0x1A→0x16), graphic at bank1 0x3DB5.
+- Death/GAME OVER attribute service: bank13 **0x7100**, first in the release
+  VBlank wrapper; clears both `0x9800` and `0x9C00` maps.
+- Final bridge trigger: bank0 0x1A8D `JP Z,0x54C0` after Faze (FFBA==6).
+- Pre-final: bank1 0x54C0 sets FFBA=8, calls splash 0x759B, then `0x1296`
+  enters bank2:0x4000 (Penta Dragon, D880=0x14).
+- Post-final: when bank2 returns, D880 goes 0x1A→0x16; graphic at bank1
+  0x3DB5 resets D880 to 0x00 while FFE4 remains 1.
 - Ending tile gfx: **bank14 (0x0E):0x7800** → VRAM 0x9000 (via 0x109E).
 - Ending tilemap script: **bank15 (0x0F):0x6F90** (via 0x3DDD).
 - Ending tilemap commit: 0x3DDD → 0x3E68/0x3E9E → 0x5559 → 0x2030 (direct, NO attr).
-- DX inline hook (colorizes): bank1 0x42A7, body 0x42AC (contains `06 DA`/`0A`
+- DX inline hook (colorizes): bank1 0x42A7, body 0x42AC (contains `06 CC`/`0A`
   bg_table lookup). Entries: 0x42A0 (H=0x9C), 0x42A5 (H=0x98).
-- DX bg_sweep: bank13 0x6CD0 (FFC1-gated in handler; reads bg_table@0xDA00).
-- DX colorize handler: bank13 0x6E00; bg_table@0x7000 → WRAM 0xDA00.
-- scene_detect (teleport build): bank13 0x6FB0; arena tables 0x7200-0x7AFF; free
-  space 0x7B00-0x7FFF for cutscene tables.
+- DX bg_sweep: bank13 0x6CD0 (outer FFC1 gate; reads active table at WRAM
+  0xCC00).
+- DX colorize handler: bank13 0x6E00; per-scene ROM table → WRAM 0xCC00.
+- Release `scene_detect`: bank13 0x6F90; uniform clear 0x6FF1; arena tables
+  0x7200-0x7AFF.
+- ROM-native story service: bank13 0x7E40; row dispatcher 0x6D6E; five-cell
+  quarter writer 0x6C00; separator quarter 0x6C80; viewport key 0x6CC3.
+- Direct-ending helpers: bank13 0x6AB5 and per-column writer 0x6AF5.
 
 ---
 
-## 5. ADDENDUM (2026-06-14): headless reach/verify of the ending — BLOCKED
+## 6. ADDENDUM (2026-07-23): deterministic headless verification — RESOLVED
 
-Empirical follow-up while implementing the lava + ending polish. Goal: reach the
-victory ending headlessly to capture tile IDs and verify a colorization.
+An ending save state is no longer required for regression coverage. Both
+harnesses enter the game's original bank-1 routines only after a normal title
+boot has initialized VRAM, CRAM, WRAM, interrupts, and the DX VBlank hook.
+They do not fabricate story frames or patch the ROM file.
 
-Findings:
-- **mgba Lua `emu:setRegister`/`readRegister` is NOT available** in this build —
-  cannot redirect PC directly.
-- **Cold-jumping to `0x54C0` does not run the ending.** Hijacking the title entry
-  `0x39C3` with `XOR A; LD[0x6000],A; LD[0x4000],A; LD A,1; LD[0x2100],A;
-  JP 0x54C0` (MBC1 forced to clean bank 1) fires when the title loops back to
-  `0x39C3` (~f2046, after the banner animation), but D880 then goes to **0x00**,
-  never `0x19/0x1A/0x16`, and FFE4 stays 0. So `0x54C0` entered outside the
-  natural stage-complete dispatcher (`0x1A60`→`0x1A8D`) does **not** execute the
-  ending sequence — it depends on game state the dispatcher sets up first.
-- **D880=0x00 ambiguity (showstopper for clean scene-keying):** the ending
-  *graphic* displays at **D880=0x00** (set by `0x3DB5`: `XOR A; LD [D880],A`),
-  which is the SAME scene byte as the title menu / boot / uninitialized state.
-  FFE4=1 (set at `0x54EA`) is the only discriminator. Any palette table keyed on
-  D880 alone for the ending would also recolor the title.
-- **Colorize-handler space:** the handler (build_v301_gdma.py) is exactly 128
-  bytes ending at 0x6E80 (teleport routine start in the teleport build); bg_sweep
-  is FFC1-gated there (lines 644-650) so it is skipped during the ending
-  (FFC1=0). Adding an ending bg_sweep gate needs space the handler doesn't have.
-  A workable but unverified path exists (per-frame `CALL` from the teleport
-  routine, like lava_override, gated on FFE4=1 + D880=0x00, loading an ending
-  table to 0xDA00 and calling bg_sweep) — but it cannot be verified without a way
-  to reach the ending.
+- **PyBoy inventory:** `inventory_final_cutscene.py` can set the emulated CPU
+  register file directly. After 600 normal boot frames it maps bank 1, supplies
+  the state that surrounds the chosen branch, and starts the original
+  `0x54C0` pre-final or `0x5514` post-final routine. The pre-final path reached
+  `0x19→0x18→0x14`. Two full post-final runs covered `0x1A→0x16→0x00`
+  and captured 139 panels apiece across the ROM-native dialogue, credits, END,
+  epilogue-preamble, and epilogue-text layouts.
+- **mGBA pixel pipeline:** `probe_final_cutscene_mgba.lua` modifies emulated
+  memory only: after the first title pass has begun, it replaces the
+  already-executed instruction at bank-0 `0x39C3` with a jump to a diagnostic
+  WRAM stub. The untouched title/attract loop initializes normally and takes
+  that branch when it returns around frame 2,046. The stub maps bank 1 and
+  jumps to `0x54C0` or the stack-balanced post-final entry at `0x5513`; the ROM
+  on disk is unchanged.
+- **Gate result:** `verify_final_cutscene_mgba.py` sampled 50 pre-final panels
+  and 15 post-final panels. Both branches had zero position-aware layout
+  mismatches, zero bad active-table samples, and valid 160×144 screenshots.
 
-Conclusion: colorizing the ending safely needs an **ending save state** (.ss0
-captured at the real victory) as an anchor — both to capture the exact tile IDs
-and to verify the change without risking the title screen (shared D880=0x00).
-Deferred pending that anchor. The ending currently renders via pal0 (the Dungeon
-palette: white/light-blue/teal), so it is monochrome-blue, not grayscale.
+This is deterministic original-control-flow coverage, not a claim that a human
+playthrough defeated Penta Dragon. A natural victory save state remains useful
+for future artistic panel timing, but it is no longer a blocker for the
+containment fix.
 
-Probes: scripts/diagnostics/probe_ending_trigger.lua, probe_ending_capture.lua.
+### Livestream research states
+
+`generate_stream_story_states.py` now turns that deterministic coverage into
+12 release-ROM-compatible palette-research states:
+
+| State | Stock identity | Live preview |
+|-------|----------------|--------------|
+| `opening.ss0` | Default first title option, initial text | neutral |
+| `opening_book.ss0` | `15/02/01/01/00` | BG1 |
+| `opening_sara.ss0` | `15/02/01/02/01` | BG2 |
+| `opening_dragon_eye.ss0` | `15/02/01/03/02` | BG3 |
+| `pre_final.ss0` | `19/04/01/04/03` | BG4 |
+| `pre_final_sara.ss0` | `19/04/01/07/06` | BG7 |
+| `post_final.ss0` | `1A/05/01/05/04` | BG5 |
+| `post_final_lisa.ss0` | `1A/05/01/06/05` | BG6 |
+| `post_final_sara.ss0` | `1A/05/01/07/06` | BG7 |
+| `ending_credits.ss0` | `16/01/00/00` | full-screen BG1 |
+| `ending_end.ss0` | `16/01/00/01` | full-screen BG2 |
+| `ending_epilogue.ss0` | `00/0C/01/01` | full-screen BG3 |
+
+For the eight artwork rows, the five-byte identity is
+`D880/DCE8/DCEA/DCF0/DD07`. `DCE8` distinguishes OPENING (`2`), pre-final
+(`4`), and post-final (`5`); `DCEA=1` means the story engine is initialized;
+and `DD07+1==DCF0` proves the requested artwork has actually committed rather
+than merely beginning a page transition. The OPENING route sends A only on the
+default first option and never sends DOWN, because DOWN selects GAME START.
+
+After capture, every final-story state is opened in a fresh mGBA process on
+the untouched `FIXED.gb` and must retain that complete identity and its exact
+160-art/200-dialogue production layout for 60 frames. They are safe one-click
+panels in the 42-button livestream scene deck.
+
+The ROM assigns the matching BG1–BG7 palette to screen tile rows 0–7
+(160 cells). Rows 8–17 (200 cells)—including the separator, dialogue border,
+and text—are explicitly held on BG0. Lua reasserts this identical mapping after
+research-state loads. A rendered audit caught and corrected the earlier row-8
+boundary before release: row 8 is already part of the dialogue frame, not
+artwork.
+
+Repeated full inventories produced the exact stock art sequences
+`[1,2,3]`, `[4,7,4]`, and `[5,7,6,7]`. This discriminator is valid only while
+`D880` remains in the corresponding dialogue scene. The bytes remain stale
+afterward, so the direct-written tail uses the independent
+`D880/D889/DCE2/FFF9` identity shown in the final three table rows. Each tail
+state is captured by advancing the stock post-final routine, then must retain
+its guard and production layout for 60 frames in a fresh mGBA process.
+Credits, END, and epilogue assign all 360 visible cells to BG1, BG2, or BG3;
+Lua only reasserts that same layout after loading the state.

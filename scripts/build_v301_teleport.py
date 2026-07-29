@@ -81,10 +81,11 @@ def build_obj_pal_table() -> bytes:
     lut = bytearray(256)
 
     # Default fill: matching old cascade behavior
-    #   0x00-0x01 → 3 (projectile)
+    #   0x00-0x01 → 0 (projectile/shared effects)
     #   0x02-0x0F → 0 (effects)
     #   0x10-0x2F → 0xFF (Sara dynamic)
-    #   0x30-0x4F → 3 (enemies)
+    #   0x30-0x3F → 3 (crow)
+    #   0x40-0x4F → 5 (orc)
     #   0x50-0x5F → 4 (hornets)
     #   0x60-0x6F → 5 (orc/ground)
     #   0x70-0x7F → 6 (humanoid)
@@ -169,6 +170,12 @@ LEVELSEL_STUB_ROM_ADDR = 0x53C2  # 36-byte free run in bank 13 (not contiguous
 LEVELSEL_STUB_WRAM = 0xCFAA      # 0xCF82 + 40 = 0xCFAA
 LEVELSEL_PATCH_ADDR = 0x3B47     # bank0 (always-mapped); JP NZ target
 LEVELSEL_STUB_MAX = 36           # size cap (the free run is 36 bytes)
+# The save-present selector publishes a value outside the palette scheduler's
+# valid 0x00..0x11 phase range.  Stage 1 entry replaces it with phase 0x11, so
+# the discriminator expires without borrowing stock state or a persistent
+# scratch byte.
+LEVELSEL_ACTIVE_ADDR = 0xDF4C
+LEVELSEL_ACTIVE_VALUE = 0xA0
 
 # ---- scene-aware bg_table (Phase 1b: all 9 boss arenas) ----
 # Scene-detect routine sits in the gap between landing pad and bg_table.
@@ -200,16 +207,16 @@ FAZE_TABLE_ADDR = 0x7800
 ANGELA_TABLE_ADDR = 0x7900
 PENTA_DRAGON_TABLE_ADDR = 0x7A00
 # ---- Lava colorization (later stages reuse stage-1 floor/wall tile IDs as a
-# molten field). scene_detect, after copying the dungeon table to WRAM 0xDA00,
+# molten field). scene_detect, after copying the dungeon table to WRAM 0xCC00,
 # tail-jumps to this helper which (in a lava stage, keyed on FFBA) over-writes
-# the molten tile IDs in 0xDA00 with pal5 (BG5 = orange/red lava CRAM). Lives in
+# the molten tile IDs in 0xCC00 with pal5 (BG5 = orange/red lava CRAM). Lives in
 # free bank-13 space above the (static) posmap blob. Verified: FFBA is stable at
 # the stage value during normal dungeon roaming (probe_lava_ffba.lua).
 LAVA_OVERRIDE_ADDR = 0x7E00
 # Uniform table for the STAGE-intro / boss-name splash (D880=0x18). The big
 # "STAGE NN" letters reuse mid-range tile IDs (0x2C/0x2D/0x3C/0x45/0x54/0x55…)
 # that the dungeon table colors p6/p5 (walls/spikes), so the letters render
-# multi-tone ("color bleed"). scene_detect swaps this all-pal0 table into 0xDA00
+# multi-tone ("color bleed"). scene_detect swaps this all-pal0 table into 0xCC00
 # on the splash so every splash tile resolves to one palette (clean letters).
 SPLASH_TABLE_ADDR = 0x7E40
 # Per-stage molten tile IDs (probe_lava_ffba.lua histograms + docs/audit/stage2_lava.md):
@@ -275,15 +282,23 @@ def _bg_table_penta_dragon() -> bytes:   return _table_from_dict("penta_dragon")
 
 
 def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
-                       splash_addr: int, title_addr: int | None = None) -> bytes:
-    """Detect D880 scene change, swap WRAM 0xDA00 with the right bg_table.
+                       splash_addr: int, title_addr: int | None = None,
+                       later_dungeon_addr: int | None = None,
+                       uniform_clear_addr: int | None = None,
+                       death_service_addr: int | None = None,
+                       scene_change_service_addr: int | None = None,
+                       cache_addr: int = DF23_PREV_SCENE,
+                       stage1_attr_cache_addrs: tuple[int, int] | None = None,
+                       ) -> bytes:
+    """Detect D880 scene change, swap WRAM 0xCC00 with the right bg_table.
 
     Reads D880 (WRAM scene state). Compares to DF23 (previous). If same,
     early RET. If different, dispatches:
       D880 < 0x02, when title_addr is supplied → title table
       D880 == 0x0C..0x14 (arena)               → arena_base + index*0x100
+      D880 < 0x0C and FFBA > 0, when supplied   → later-dungeon fallback
       else                                      → dungeon table (default)
-    Copies 256 bytes from ROM table → WRAM 0xDA00. Updates DF23.
+    Copies 256 bytes from ROM table → WRAM 0xCC00. Updates DF23.
 
     Called from the teleport routine (which runs every VBlank with bank
     13 mapped). Cost when scene unchanged: ~16T (read+compare+RET).
@@ -297,57 +312,128 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
 
     c = bytearray()
     c.extend([0xFA, 0x80, 0xD8])          # LD A, [D880]
-    c.extend([0x21, DF23_PREV_SCENE & 0xFF, (DF23_PREV_SCENE >> 8) & 0xFF])
+    if death_service_addr is not None:
+        # The release death/game-over neutralizer is serviced from the
+        # existing per-frame scene path. Preserve A so the original scene
+        # cache/dispatch logic below remains byte-for-byte equivalent.
+        c.extend([0xFE, 0x17])            # CP death scene
+        c.extend([
+            0xCC,
+            death_service_addr & 0xFF,
+            death_service_addr >> 8,
+        ])                                # CALL Z,death service
+    c.extend([0x21, cache_addr & 0xFF, (cache_addr >> 8) & 0xFF])
     c.extend([0xBE])                      # CP [HL]
     c.extend([0xC8])                      # RET Z (no change — fast path)
+
+    if scene_change_service_addr is not None:
+        # Release-only transition work runs once while A is the new D880 and
+        # HL still points to the old scene cache. The helper preserves both.
+        c.extend([
+            0xCD,
+            scene_change_service_addr & 0xFF,
+            (scene_change_service_addr >> 8) & 0xFF,
+        ])
 
     # Scene changed: save new value
     c.extend([0x77])                      # LD [HL], A   (DF23 = new D880)   (A still = D880)
 
-    # Release builds may supply an all-pal0 title table. Keep this optional so
-    # historical/debug builders retain their byte layout and behavior.
+    # Release builds may supply an all-pal0 title table.  The final release
+    # builder instead supplies ``uniform_clear_addr``: a tiny helper that
+    # zero-fills WRAM 0xCC00 and returns directly to our caller.  This preserves
+    # the exact table result while reclaiming the otherwise 256-byte zero blob.
+    # Keep both paths optional so historical/debug builders retain their layout.
     j_copy_title = None
     if title_addr is not None:
         c.extend([0xFE, 0x02])            # CP 2
         j_not_title = len(c) + 1
         c.extend([0x30, 0x00])            # JR NC, not_title
-        c.extend([0x21, title_addr & 0xFF, (title_addr >> 8) & 0xFF])
-        j_copy_title = len(c) + 1
-        c.extend([0x18, 0x00])            # JR copy
+        if uniform_clear_addr is not None:
+            c.extend([
+                0xC3,
+                uniform_clear_addr & 0xFF,
+                (uniform_clear_addr >> 8) & 0xFF,
+            ])                            # JP uniform_clear (helper RETs)
+        else:
+            c.extend([0x21, title_addr & 0xFF, (title_addr >> 8) & 0xFF])
+            j_copy_title = len(c) + 1
+            c.extend([0x18, 0x00])        # JR copy
         not_title_pos = len(c)
         c[j_not_title] = (not_title_pos - j_not_title - 1) & 0xFF
 
     # Transitional / title scenes -> uniform all-pal0 splash table. These are
     # direct-write/transient screens whose tile IDs span the whole 0x01-0xFF bank,
     # so the dungeon table's 0x80-0xDF->p1 (red font) rule floods them red:
+    #   0x15 = OPENING START story sequence (default first title-menu option;
+    #          GAME START is reached by pressing DOWN before confirming)
     #   0x18 = STAGE-intro / boss-name splash (big letters were bleeding p6/p5)
-    #   0x1B = animated PENTA DRAGON banner (red bands behind letters, red showcase
+    #   0x19 = pre-final story bridge
+    #   0x1A = post-final dialogue (large character art + dialogue text)
+    #   0x1B = title spotlight reel
+    #   0x1C = animated PENTA DRAGON banner (red bands behind letters, red showcase
     #          text + red JAM-logo line — fill tile 0xDF + border 0xCA-0xDE are p1)
     #   0x16 = post-boss reload (Riff/any boss defeat -> full VRAM tile-load shows
     #          high tile IDs -> ~246/360 cells flood red + slowdown looked broken)
-    # The menu scenes (0x00/0x1C) are intentionally left on the dungeon table (their
-    # red menu font is by design). Re-assert DF02=0x5A to beat the cold-boot copy.
+    # D880=0x00 is caught by the optional title branch above. Re-assert
+    # DF02=0x5A to beat the cold-boot copy.
+    c.extend([0xFE, 0x15])                # CP 0x15 (OPENING story)
+    j_s15 = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z, splash_body
     c.extend([0xFE, 0x18])                # CP 0x18 (splash)
     j_s18 = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z, splash_body
-    c.extend([0xFE, 0x1B])                # CP 0x1B (animated banner)
+    c.extend([0xFE, 0x19])                # CP 0x19 (pre-final story)
+    j_s19 = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z, story_body
+    c.extend([0xFE, 0x1A])                # CP 0x1A (post-final dialogue)
+    j_s1a = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z, story_body
+    c.extend([0xFE, 0x1B])                # CP 0x1B (spotlight)
     j_s1b = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z, splash_body
+    c.extend([0xFE, 0x1C])                # CP 0x1C (sliding banner)
+    j_s1c = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z, splash_body
     c.extend([0xFE, 0x16])                # CP 0x16 (post-boss reload)
     j_not_splash = len(c) + 1
     c.extend([0x20, 0x00])                # JR NZ, not_splash (none matched)
+    j_s16 = len(c) + 1
+    c.extend([0x18, 0x00])                # JR splash_body
+
+    # The final story screens run with FFC1=0, so the ordinary viewport sweep
+    # is intentionally dormant. Restart the existing 32-row, both-tilemaps
+    # cold-boot cleaner once on entry. Subsequent story tile writes use the
+    # all-pal0 table below, so no per-frame sweep (and no dialogue slowdown)
+    # is needed. D880=16 also serves ordinary post-boss reloads, so only the
+    # unambiguous pre/post-final story scenes reset the cleaner.
+    story_body = len(c)
+    c[j_s19] = (story_body - j_s19 - 1) & 0xFF
+    c[j_s1a] = (story_body - j_s1a - 1) & 0xFF
+    c.extend([0xAF, 0xEA, 0x08, 0xDF])    # XOR A; LD [DF08],A
+
     splash_body = len(c)
+    c[j_s15] = (splash_body - j_s15 - 1) & 0xFF
     c[j_s18] = (splash_body - j_s18 - 1) & 0xFF
     c[j_s1b] = (splash_body - j_s1b - 1) & 0xFF
+    c[j_s1c] = (splash_body - j_s1c - 1) & 0xFF
+    c[j_s16] = (splash_body - j_s16 - 1) & 0xFF
     c.extend([0x3E, 0x5A, 0xEA, 0x02, 0xDF])  # LD A,0x5A; LD [DF02],A
-    c.extend([0x21, splash_addr & 0xFF, (splash_addr >> 8) & 0xFF])  # LD HL, splash
-    j_copy_splash = len(c) + 1
-    c.extend([0x18, 0x00])                # JR copy
+    j_copy_splash = None
+    if uniform_clear_addr is not None:
+        c.extend([
+            0xC3,
+            uniform_clear_addr & 0xFF,
+            (uniform_clear_addr >> 8) & 0xFF,
+        ])                                # JP uniform_clear (helper RETs)
+    else:
+        c.extend([0x21, splash_addr & 0xFF, (splash_addr >> 8) & 0xFF])
+        j_copy_splash = len(c) + 1
+        c.extend([0x18, 0x00])            # JR copy
     not_splash_pos = len(c)
     c[j_not_splash] = (not_splash_pos - j_not_splash - 1) & 0xFF
     # (A is still = D880 here: CP above does not modify A)
 
-    # Compute arena_idx = D880 - 0x0C. If carry → too low → dungeon.
+    # Compute arena_idx = D880 - 0x0C. If carry → too low → dungeon family.
     # If result >= 9 → too high → dungeon. Else load arena table.
     c.extend([0xD6, 0x0C])                # SUB 0x0C
     j_dungeon_lo = len(c) + 1
@@ -359,7 +445,7 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
     # Arena: H = arena_base_high + A, L = 0
     c.extend([0xC6, arena_base_high])     # ADD A, arena_base_high
     c.extend([0x67])                      # LD H, A
-    # Suppress the colorize handler's cold-boot 0xDA00 copy IN ARENAS. The arena
+    # Suppress the colorize handler's cold-boot 0xCC00 copy IN ARENAS. The arena
     # init (0x1A2B) zeroes a WRAM block covering DF02 (cold-boot sentinel) AND
     # DF0D (this scene cache). scene_detect runs BEFORE colorize each frame, so
     # re-asserting DF02=0x5A here makes the (later, same-frame) cold-boot skip —
@@ -371,20 +457,61 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
     j_copy = len(c) + 1
     c.extend([0x18, 0x00])                # JR copy
 
-    # dungeon target
+    # Dungeon-family target. Later stage tilesets reuse Level 1 tile IDs for
+    # unrelated art, so release builders may route FFBA>0 to a conservative
+    # table rather than applying Level 1 wall/item semantics globally.
+    j_copy_later = None
+    j_stage1 = None
+    if later_dungeon_addr is not None:
+        dungeon_family_pos = len(c)
+        c[j_dungeon_lo] = (dungeon_family_pos - j_dungeon_lo - 1) & 0xFF
+        c.extend([0xF0, 0xBA])            # LDH A,[FFBA]
+        c.extend([0xB7])                  # OR A
+        j_stage1 = len(c) + 1
+        c.extend([0x28, 0x00])            # JR Z,dungeon (stage 1)
+        if uniform_clear_addr is not None:
+            c.extend([
+                0xC3,
+                uniform_clear_addr & 0xFF,
+                (uniform_clear_addr >> 8) & 0xFF,
+            ])                            # JP uniform_clear
+        else:
+            c.extend([0x21, later_dungeon_addr & 0xFF,
+                      (later_dungeon_addr >> 8) & 0xFF])
+            j_copy_later = len(c) + 1
+            c.extend([0x18, 0x00])        # JR copy
+
+    # Generic dungeon target. High non-arena scenes preserve the historical
+    # default; only the D880<0x0C dungeon-family branch considers FFBA.
+    # A Stage 1 scene entry invalidates both destination-map attribute keys.
+    # This sits on the FFBA==0 branch only; high non-arena scene fallbacks jump
+    # past it to the generic dungeon-table load.
+    stage1_pos = len(c)
+    if stage1_attr_cache_addrs is not None:
+        assert len(stage1_attr_cache_addrs) == 2
+        c.extend([0xAF])
+        for address in stage1_attr_cache_addrs:
+            c.extend([0xEA, address & 0xFF, address >> 8])
+
     dungeon_pos = len(c)
-    c[j_dungeon_lo] = (dungeon_pos - j_dungeon_lo - 1) & 0xFF
+    if later_dungeon_addr is None:
+        c[j_dungeon_lo] = (dungeon_pos - j_dungeon_lo - 1) & 0xFF
+    else:
+        c[j_stage1] = (stage1_pos - j_stage1 - 1) & 0xFF
     c[j_dungeon_hi] = (dungeon_pos - j_dungeon_hi - 1) & 0xFF
     c.extend([0x21, dungeon_addr & 0xFF, (dungeon_addr >> 8) & 0xFF])  # LD HL, dungeon
 
     # copy target
     copy_pos = len(c)
     c[j_copy] = (copy_pos - j_copy - 1) & 0xFF
-    c[j_copy_splash] = (copy_pos - j_copy_splash - 1) & 0xFF
+    if j_copy_splash is not None:
+        c[j_copy_splash] = (copy_pos - j_copy_splash - 1) & 0xFF
+    if j_copy_later is not None:
+        c[j_copy_later] = (copy_pos - j_copy_later - 1) & 0xFF
     if j_copy_title is not None:
         c[j_copy_title] = (copy_pos - j_copy_title - 1) & 0xFF
 
-    # Copy 256 bytes: HL → DE = 0xDA00
+    # Copy 256 bytes: HL → DE = 0xCC00
     c.extend([0x11, 0x00, 0xCC])          # LD DE, 0xCC00 (WRAM bank 0, always accessible)
     c.extend([0x06, 0x00])                # LD B, 0   (256 iterations)
     copy_loop = len(c)
@@ -395,8 +522,10 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
     return bytes(c)
 
 
-def build_lava_override(base_addr: int) -> bytes:
-    """Repaint molten tiles in WRAM 0xDA00 to pal5 (BG5 lava) for lava stages.
+def build_lava_override(base_addr: int,
+                        room_sweep_count_addr: int | None = None,
+                        room_attr_pending_addr: int | None = None) -> bytes:
+    """Repaint molten tiles in WRAM 0xCC00 to pal5 (BG5 lava) for lava stages.
 
     CALLed every frame from the teleport routine (right after scene_detect), not
     just on scene change: the stage-load WRAM clear re-zeroes the cold-boot
@@ -408,19 +537,36 @@ def build_lava_override(base_addr: int) -> bytes:
       - D880 must be a dungeon-family scene (0x02..0x0B). Arenas (0x0C+) and
         title/uninit (<0x02) early-RET, touching nothing (incl. DF02).
       - FFBA selects the molten ID list: 4 -> stage 5, 6 -> stage 7, else RET.
-    Then walks a 0xFF-terminated ID list and writes pal5 to 0xDA00[id] for each.
+    Then walks a 0xFF-terminated ID list and writes pal5 to 0xCC00[id] for each.
     The ID lists are appended to this blob; HL pointers patched to absolutes.
     """
     c = bytearray()
     # ---- guard: dungeon-family scene only ----
     c.extend([0xFA, 0x80, 0xD8])          # LD A, [D880]
-    c.extend([0xFE, 0x0C])                # CP 0x0C
-    c.extend([0xD0])                      # RET NC   (>= 0x0C -> arena/death/etc)
-    c.extend([0xFE, 0x02])                # CP 0x02
-    c.extend([0xD8])                      # RET C    (< 0x02 -> title/uninit)
+    c.extend([0xD6, 0x02])                # normalize dungeon $02..$0B to 0..9
+    c.extend([0xFE, 0x0A])
+    c.extend([0xD0])                      # RET NC (also catches $00/$01 wrap)
+    if room_sweep_count_addr is not None or room_attr_pending_addr is not None:
+        assert room_sweep_count_addr is not None
+        assert room_attr_pending_addr == room_sweep_count_addr + 1
+        # scene_detect has now installed the correct dungeon table. Native
+        # FFBD rearm writes pending=$A6; promote only that exact marker to
+        # ready=$A7 before the stage-specific override. The former count-only
+        # gate incremented DF4F again on every VBlank while count remained
+        # $12, producing A8/A9/... markers whenever tile copies were sparse.
+        c.extend([
+            0x21,
+            room_attr_pending_addr & 0xFF,
+            (room_attr_pending_addr >> 8) & 0xFF,
+            0x7E,                          # A = pending marker
+            0xFE, 0xA6,
+            0x20, 0x01,                    # JR NZ,skip ready promotion
+            0x34,                          # INC [HL]: $A6 pending -> $A7 ready
+        ])
     # ---- select molten ID list by FFBA (stage) ----
     c.extend([0xF0, 0xBA])                # LDH A, [FFBA]
     c.extend([0xFE, 0x04])                # CP 4 (stage 5)
+    c.extend([0xD8])                      # RET C (stages 1-4)
     j_set5 = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z, set5
     c.extend([0xFE, 0x06])                # CP 6 (stage 7)
@@ -435,7 +581,7 @@ def build_lava_override(base_addr: int) -> bytes:
     c[j_set5] = (set5_pos - j_set5 - 1) & 0xFF
     p_hl5 = len(c) + 1
     c.extend([0x21, 0x00, 0x00])          # LD HL, lava5
-    # apply: suppress the colorize handler's same-frame cold-boot 0xDA00 copy
+    # apply: suppress the colorize handler's same-frame cold-boot 0xCC00 copy
     # (it re-copies the DUNGEON table over our pal5 writes otherwise — the same
     # race that flooded the crystal arena red). scene_detect runs before the
     # colorize cold-boot, so DF02=0x5A here makes the later copy skip. Already a
@@ -443,7 +589,7 @@ def build_lava_override(base_addr: int) -> bytes:
     apply_pos = len(c)
     c[j_apply] = (apply_pos - j_apply - 1) & 0xFF
     c.extend([0x3E, 0x5A, 0xEA, 0x02, 0xDF])  # LD A,0x5A; LD [DF02],A
-    # walk 0xFF-terminated list, write pal5 to 0xDA00[id]
+    # walk 0xFF-terminated list, write pal5 to 0xCC00[id]
     loop_pos = len(c)
     c.extend([0x2A])                      # LD A, [HL+]   (tile id)
     c.extend([0xFE, 0xFF])                # CP 0xFF
@@ -491,7 +637,7 @@ def build_levelsel_attr_clear_stub() -> bytes:
     # Save LCDC, disable LCD (1-frame glitch acceptable in screen-switch)
     c.extend([0xF0, 0x40])                 # LDH A, [FF40]
     c.extend([0x47])                       # LD B, A (save LCDC)
-    c.extend([0xE6, 0x7F])                 # AND 0x7F (clear bit 7)
+    c.extend([0xAF])                       # XOR A (LCD fully off)
     c.extend([0xE0, 0x40])                 # LDH [FF40], A
     # VBK = 1
     c.extend([0x3E, 0x01])                 # LD A, 1
@@ -505,6 +651,11 @@ def build_levelsel_attr_clear_stub() -> bytes:
     c.extend([0xFE, 0xA0])                 # CP 0xA0
     off = clear_loop - (len(c) + 2)
     c.extend([0x20, off & 0xFF])           # JR NZ, clear_loop
+    # A=0xA0 here. Publish the out-of-range palette phase as the level-select
+    # discriminator at no byte cost versus the old entry-time marker.
+    c.extend([
+        0xEA, LEVELSEL_ACTIVE_ADDR & 0xFF, LEVELSEL_ACTIVE_ADDR >> 8,
+    ])
     # VBK = 0
     c.extend([0xAF])                       # XOR A
     c.extend([0xE0, 0x4F])                 # LDH [FF4F], A
@@ -573,7 +724,7 @@ def build_teleport_routine() -> bytes:
 
     # ---- Per-frame scene-detect: swap bg_table if D880 changed ----
     # Bank 13 is mapped (we're inside the colorize call chain). Reads
-    # D880, compares to DF23, copies the right table to WRAM 0xDA00 on
+    # D880, compares to DF23, copies the right table to WRAM 0xCC00 on
     # change. Fast path (~16T) when scene unchanged.
     c.extend([0xCD, SCENE_DETECT_ADDR & 0xFF, (SCENE_DETECT_ADDR >> 8) & 0xFF])
 
@@ -874,14 +1025,14 @@ def main():
     assert _verify_bad == 0, f"OBJ palette LUT has {_verify_bad} invalid entries after write!"
     print(f"  OBJ palette LUT: 256 bytes at bank13:0x{OBJ_PAL_TABLE_ADDR:04X} (per-monster-type, verified)")
 
-    # 2d. Re-patch bg_sweep to read the PER-SCENE WRAM table (0xDA00) instead
+    # 2d. Re-patch bg_sweep to read the PER-SCENE WRAM table (0xCC00) instead
     # of the ROM dungeon table (0x7000). The base build bakes the sweep with
     # the dungeon table, so in arenas the sweep wrote dungeon-palette attrs for
-    # boss tiles while the inline hook (which DOES read 0xDA00) wrote the
+    # boss tiles while the inline hook (which DOES read 0xCC00) wrote the
     # arena-band palette — the two writers disagreed and each boss cell flipped
     # every sweep pass. That is the measured arena alternation. scene_detect
-    # keeps 0xDA00 in sync with the current scene, so reading it is correct in
-    # every scene (in the dungeon 0xDA00 == the dungeon table, so dungeon
+    # keeps 0xCC00 in sync with the current scene, so reading it is correct in
+    # every scene (in the dungeon 0xCC00 == the dungeon table, so dungeon
     # behavior is unchanged). FFC1 prefix NOP'd to match the base build.
     sweep = bytearray(create_bg_sweep_viewport_gated(WRAM_BG_TABLE, BG_SWEEP_ADDR))
     assert sweep[:4] == bytearray([0xF0, 0xC1, 0xB7, 0xC8]), \

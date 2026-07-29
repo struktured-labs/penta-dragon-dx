@@ -1,96 +1,262 @@
 #!/usr/bin/env python3
-import os
-import sys
-import numpy as np
+"""Verify the real title cursor and the OPENING/GAME START option order.
+
+The retired probe hard-coded the teleport ROM and cropped copyright text,
+which made whitespace symmetry look like a letter-shaped cursor. This gate
+uses the release candidate, checks the exact 8x7 right-pointing marker through
+PyBoy's rendered pixel pipeline, and proves that DOWN moves it from the default
+OPENING START row to GAME START without leaving the title scene.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from PIL import Image
 from pyboy import PyBoy
 
-ROM_PATH = os.path.expanduser("~/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_teleport.gb")
 
-def check_cursor_visuals():
-    print("=== PROGRAMMATIC VISUAL VERIFICATION: TITLE SCREEN CURSOR ===")
-    
-    if not os.path.exists(ROM_PATH):
-        print(f"Error: ROM file {ROM_PATH} not found.")
-        sys.exit(1)
-        
-    # 1. Initialize PyBoy headlessly
-    print("Booting emulator core headlessly...")
-    pb = PyBoy(ROM_PATH, window="null", cgb=True)
-    pb.set_emulation_speed(0) # Run at maximum possible speed
-    
-    # 2. Advance emulator to the title screen (let menus and animations settle)
-    # The title screen settles around frame 180-200. We run for 250 frames.
-    print("Advancing emulator to title screen (250 frames)...")
-    for _ in range(250):
-        pb.tick(1, True)
-        
-    # 3. Capture the screen image as a numpy array
-    # PyBoy screen image is a PIL Image object
-    screen_image = pb.screen.image
-    screen_data = np.array(screen_image)
-    
-    # Bounding box of the cursor tile on the GBC screen
-    # In Penta Dragon, the title screen cursor is located at the left of 'GAME START'
-    # GBC screen resolution is 160x144. Let's crop the cursor tile.
-    # We'll dump a crop of the left-menu area to inspect pixel patterns.
-    # Typically, the cursor sits at: X around 24-32, Y around 88-96.
-    # Let's crop a 16x16 pixel area around the cursor and analyze the pixel density.
-    x_start, x_end = 20, 36
-    y_start, y_end = 84, 100
-    
-    crop = screen_data[y_start:y_end, x_start:x_end]
-    
-    # Save the crop to disk so the user can visually verify it if needed
-    os.makedirs("tmp/diagnostics", exist_ok=True)
-    crop_image_path = "tmp/diagnostics/title_cursor_crop.png"
-    screen_image.crop((x_start, y_start, x_end, y_end)).save(crop_image_path)
-    print(f"Captured cursor area crop saved to {crop_image_path}")
-    
-    # 4. First-principles analysis of the pixel data:
-    # A standard Game Boy Color pixel is [R, G, B, A] (or [R, G, B]).
-    # We can convert the crop to grayscale to count active (non-white) pixels.
-    grayscale = np.dot(crop[..., :3], [0.2989, 0.5870, 0.1140])
-    
-    # White is 255. Non-white (colored/black) pixels represent the drawn glyph.
-    active_pixels = grayscale < 200
-    
-    print("\nVisual Pixel Matrix Grid (16x16 crop around cursor position):")
-    for r in range(16):
-        row_chars = ""
-        for c in range(16):
-            row_chars += "# " if active_pixels[r, c] else ". "
-        print(row_chars)
-        
-    # 5. Programmatic Check for the Character 'A':
-    # An uppercase letter 'A' glyph in a standard 8x8 font has a specific pattern:
-    # - It has a hollow center/bridge in the middle rows.
-    # - It is symmetric.
-    # - It has a flat top or two points.
-    # A hand/arrow cursor (0x73) points to the right:
-    # - It is highly asymmetric (heavier on the left/middle, tapering to a point on the right).
-    # - The top rows are empty or diagonal.
-    #
-    # Let's inspect the vertical symmetry:
-    left_half = active_pixels[:, :8]
-    right_half = active_pixels[:, 8:]
-    # Flip right half to compare symmetry
-    right_half_flipped = np.fliplr(right_half)
-    
-    symmetry_match = np.mean(left_half == right_half_flipped)
-    print(f"\nVertical Symmetry Coefficient: {symmetry_match:.4f}")
-    
-    # Standard font 'A' is highly symmetric vertically (symmetry > 0.82)
-    # The arrow cursor (pointing right) is highly ASYMMETRIC (symmetry < 0.65)
-    
-    pb.stop(save=False)
-    
-    if symmetry_match > 0.80:
-        print("\n❌ VERIFICATION FAILURE: The cursor is rendering as a symmetric character glyph (likely the letter 'A').")
-        return False
-    else:
-        print("\n✅ VERIFICATION SUCCESS: The cursor is rendering with asymmetric arrow/hand geometry.")
-        return True
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
+DEFAULT_OUTPUT = Path("/tmp/penta-title-cursor-gate")
+
+D880 = 0xD880
+FFC1 = 0xFFC1
+TITLE_SCENE = 0x01
+
+CURSOR_X = 24
+CURSOR_WIDTH = 8
+CURSOR_HEIGHT = 7
+OPENING_Y = 65
+GAME_Y = 81
+
+# Native 8x7 right-pointing marker visible beside the title choices:
+#   ##......
+#   ####....
+#   ######..
+#   ########
+#   ######..
+#   ####....
+#   ##......
+EXPECTED_MARKER = (
+    "##......",
+    "####....",
+    "######..",
+    "########",
+    "######..",
+    "####....",
+    "##......",
+)
+EMPTY = tuple("." * CURSOR_WIDTH for _ in range(CURSOR_HEIGHT))
+
+
+def native_marker_phase(rows: tuple[str, ...]) -> bool:
+    """Accept the stock game's raster-visible blink transition.
+
+    The original ROM can expose one frame with only the top or bottom
+    contiguous portion of the marker visible while it blinks.  Each visible
+    row must still be the exact native row, and the visible rows may have only
+    one empty/non-empty boundary.
+    """
+
+    visible: list[bool] = []
+    for row, expected in zip(rows, EXPECTED_MARKER, strict=True):
+        if row == expected:
+            visible.append(True)
+        elif row == "." * CURSOR_WIDTH:
+            visible.append(False)
+        else:
+            return False
+    transitions = sum(a != b for a, b in zip(visible, visible[1:]))
+    return transitions <= 1
+
+
+def dark(pixel: tuple[int, ...]) -> bool:
+    return max(pixel[:3]) < 128
+
+
+def marker_rows(image: Image.Image, y_start: int) -> tuple[str, ...]:
+    rgb = image.convert("RGB")
+    return tuple(
+        "".join(
+            "#" if dark(rgb.getpixel((x, y))) else "."
+            for x in range(CURSOR_X, CURSOR_X + CURSOR_WIDTH)
+        )
+        for y in range(y_start, y_start + CURSOR_HEIGHT)
+    )
+
+
+def pulse(pyboy: PyBoy, button: str) -> None:
+    pyboy.button_press(button)
+    pyboy.tick(3, True)
+    pyboy.button_release(button)
+    # Let the release edge finish drawing before judging the stationary cursor.
+    # The first render immediately after DOWN is a legitimate one-frame move
+    # transition; the following three complete blink periods must retain the
+    # stock marker's exact row shapes, including its raster-visible partial
+    # draw/erase frame.
+    pyboy.tick(2, True)
+
+
+def observe_cursor(
+    pyboy: PyBoy,
+    output: Path,
+    stem: str,
+    expected_row: str,
+    frames: int = 180,
+) -> dict:
+    expected_marker_frames: list[int] = []
+    wrong_marker_frames: list[int] = []
+    unexpected_pattern_frames: list[int] = []
+    unexpected_patterns: list[dict[str, object]] = []
+    context_failures: list[str] = []
+    marker_image_saved = False
+    first_image_saved = False
+
+    for frame in range(frames):
+        image = pyboy.screen.image.copy()
+        opening = marker_rows(image, OPENING_Y)
+        game = marker_rows(image, GAME_Y)
+        if not first_image_saved:
+            image.save(output / f"{stem}.first.png")
+            first_image_saved = True
+
+        expected = opening if expected_row == "opening" else game
+        wrong = game if expected_row == "opening" else opening
+        if expected == EXPECTED_MARKER:
+            expected_marker_frames.append(frame)
+            if not marker_image_saved:
+                image.save(output / f"{stem}.marker.png")
+                marker_image_saved = True
+        if wrong != EMPTY:
+            wrong_marker_frames.append(frame)
+        if not native_marker_phase(opening) or not native_marker_phase(game):
+            unexpected_pattern_frames.append(frame)
+            unexpected_patterns.append(
+                {
+                    "frame": frame,
+                    "opening": opening,
+                    "game": game,
+                }
+            )
+            image.save(output / f"{stem}.unexpected-f{frame:03d}.png")
+
+        scene = pyboy.memory[D880]
+        gameplay = pyboy.memory[FFC1]
+        if scene != TITLE_SCENE or gameplay != 0:
+            context_failures.append(
+                f"f{frame}:D880={scene:02X}/FFC1={gameplay}"
+            )
+        if frame + 1 < frames:
+            pyboy.tick(1, True)
+
+    return {
+        "expected_row": expected_row,
+        "frames": frames,
+        "expected_marker_frames": expected_marker_frames,
+        "wrong_marker_frames": wrong_marker_frames,
+        "unexpected_pattern_frames": unexpected_pattern_frames,
+        "unexpected_patterns": unexpected_patterns,
+        "context_failures": context_failures,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    args = parser.parse_args()
+
+    rom = args.rom.resolve()
+    output = args.output.resolve()
+    if not rom.is_file():
+        parser.error(f"ROM not found: {rom}")
+    output.mkdir(parents=True, exist_ok=True)
+
+    pyboy = PyBoy(str(rom), window="null", cgb=True, sound=False)
+    pyboy.set_emulation_speed(0)
+    failures: list[str] = []
+    try:
+        pyboy.tick(300, True)
+        initial = observe_cursor(
+            pyboy, output, "default-opening", "opening"
+        )
+
+        pulse(pyboy, "down")
+        down = observe_cursor(
+            pyboy, output, "down-game-start", "game"
+        )
+
+        pulse(pyboy, "up")
+        restored = observe_cursor(
+            pyboy, output, "up-opening-restored", "opening"
+        )
+    finally:
+        pyboy.stop(save=False)
+
+    states = {
+        "default": initial,
+        "down": down,
+        "restored": restored,
+    }
+
+    for name, state in states.items():
+        if state["context_failures"]:
+            failures.append(
+                f"{name}: left title context at "
+                f"{', '.join(state['context_failures'])}"
+            )
+        if not state["expected_marker_frames"]:
+            failures.append(
+                f"{name}: cursor never appeared on {state['expected_row']}"
+            )
+        if state["wrong_marker_frames"]:
+            failures.append(
+                f"{name}: cursor appeared on the wrong row at frames "
+                f"{state['wrong_marker_frames']}"
+            )
+        if state["unexpected_pattern_frames"]:
+            failures.append(
+                f"{name}: non-native cursor pixels at frames "
+                f"{state['unexpected_pattern_frames']}"
+            )
+
+    report = {
+        "status": "failed" if failures else "ok",
+        "rom": str(rom),
+        "cursor_box": {
+            "x": CURSOR_X,
+            "width": CURSOR_WIDTH,
+            "height": CURSOR_HEIGHT,
+            "opening_y": OPENING_Y,
+            "game_y": GAME_Y,
+        },
+        "expected_marker": EXPECTED_MARKER,
+        "states": states,
+        "failures": failures,
+    }
+    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+
+    for name, state in states.items():
+        print(
+            f"{name:8s}: expected={state['expected_row']} "
+            f"visible={len(state['expected_marker_frames'])}/{state['frames']} "
+            f"wrong={len(state['wrong_marker_frames'])} "
+            f"other={len(state['unexpected_pattern_frames'])} "
+            f"context_bad={len(state['context_failures'])}"
+        )
+    if failures:
+        for failure in failures:
+            print(f"FAIL: {failure}")
+        return 1
+    print(
+        "PASS: the native right-pointing cursor defaults to OPENING START; "
+        "DOWN moves it to GAME START and UP restores it."
+    )
+    return 0
+
 
 if __name__ == "__main__":
-    success = check_cursor_visuals()
-    sys.exit(0 if success else 1)
+    raise SystemExit(main())

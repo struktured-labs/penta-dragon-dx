@@ -105,10 +105,10 @@ callbacks:add("frame", function()
         local original_vbk = emu:read8(0xFF4F)
         emu:write8(0xFF4F, 1)
         local signature = string.format(
-            "%02X/%04X/%02X%02X%02X/%02X",
+            "%02X/%04X/%02X%02X%02X",
             lcdc, window_map,
             emu:read8(window_map), emu:read8(window_map + 1),
-            emu:read8(window_map + 2), emu:read8(0xDF0F))
+            emu:read8(window_map + 2))
         emu:write8(0xFF4F, original_vbk)
         if signature ~= last_menu_attr_signature then
             table.insert(menu_attr_trace, string.format("f%d:%s", f, signature))

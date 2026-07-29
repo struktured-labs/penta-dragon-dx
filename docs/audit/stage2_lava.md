@@ -1,5 +1,11 @@
 # Stage-2+ Lava Dungeon — REACHED & TILE IDs IDENTIFIED
 
+> **Update 2026-07-23:** implemented with stricter containment than the
+> original shared-table proposal. Stages 2–4 and 6 use a neutral table; only
+> audited Stage 5/7 field IDs receive lava palette 5. Fresh visible-map probes
+> and 8,000-frame-per-stage soaks report zero unsafe attributes or lava
+> mismatches. The analysis below is retained as the discovery record.
+
 Date: 2026-06-14. Method: dynamic mGBA probe on `rom/working/penta_dragon_dx_teleport.gb`
 (built via `python3 scripts/build_v301_teleport.py`). This resolves the open
 blocker in `docs/audit/hazard_tile_colorization.md` §3/§6 (stage-2 lava tile

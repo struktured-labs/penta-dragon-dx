@@ -1,0 +1,1227 @@
+{
+  "schema": "penta-dragon-dx-deterministic-suite-v1",
+  "status": "passed",
+  "generated_at": "2026-07-29T02:18:06.526276+00:00",
+  "git_head_at_run": "0349208b8f434641bdecbe4cf214e05ef40f16de",
+  "source_fingerprint": "954239dea4bf6870f71811a2003eb9fc8c6707bee03b7d8c228fbe285cdf01d9",
+  "source_inputs": [
+    {
+      "path": ".claude/settings.json",
+      "sha256": "744c1ba15017e6eacc7476f724308a0b9d0a38c2edc88a2eac7d0c956a39aa6d",
+      "size": 360
+    },
+    {
+      "path": ".claude/skills/launch-game.md",
+      "sha256": "b14d99d8a8264ef422cb107f7dd8e368b74723b30c970e9977e77a883c6d2e8c",
+      "size": 1318
+    },
+    {
+      "path": ".githooks/pre-commit",
+      "sha256": "5fc657f0fe6c83f544afa2cdf6b2bcc7f729bceeb75bbca596d0c3d23da194a0",
+      "size": 142
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "4c8889a94f71ead17063b43ab4a66f3ca41664cc12e511b67d72ecec62293a29",
+      "size": 985
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "db0a829d94c0749baa2b4bfb53b04535e2c5bfca43c93782e30a6fa81e67e0f3",
+      "size": 1144
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "0b509b88fd4de476b6f489ab896dcd43774e245e0d9b70baf0e7a379bb9c7a92",
+      "size": 17344
+    },
+    {
+      "path": "mgba-qt.sh",
+      "sha256": "dcddf68310d82ab5e2ac86b46ab22fecc9e09cb2554184ba467bb9d8b8238a52",
+      "size": 228
+    },
+    {
+      "path": "palettes/bg_tile_categories.yaml",
+      "sha256": "4d8666a87e44259b5ed25347e352355e6a85af157505470f155f860210fbdb30",
+      "size": 14508
+    },
+    {
+      "path": "palettes/monster_palette_map.yaml",
+      "sha256": "238f5c37236141321778cedd4559a8a1622d725b58ca3ca25565abc9e2452328",
+      "size": 758
+    },
+    {
+      "path": "palettes/penta_palettes.yaml",
+      "sha256": "13f51fc83b0ca4335a1fe0a2bd64065d5941b6725648edfeb1bbb12ffebc77b6",
+      "size": 3473
+    },
+    {
+      "path": "palettes/penta_palettes_v097.yaml",
+      "sha256": "77bcc71bd8fcd88c541b735c3fe2bc85d026fdc43ea9057aca514b6b6ad7d8c2",
+      "size": 8799
+    },
+    {
+      "path": "palettes/spotlight_palette_map.yaml",
+      "sha256": "73d2a3bf6f55f44e363aa9b2cad2ffb61c94aaa2c26dfbddd2b8a3c7afb0046a",
+      "size": 2730
+    },
+    {
+      "path": "palettes/test_palette_A.yaml",
+      "sha256": "e237d023fe388510c3f34b8a79c86d4ddf4cc8f14d586cb3179a999f4be4daa5",
+      "size": 2082
+    },
+    {
+      "path": "palettes/test_palette_B.yaml",
+      "sha256": "da0e77cb9db28483aaa72b6ff9f352ad805aeb8127f183b98d44706c52e95e6a",
+      "size": 2173
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "7727fd9ac347f71c7901554888e52f2376ba96543ef32004d7c71ed57bc9022d",
+      "size": 533
+    },
+    {
+      "path": "scripts/arena_position.py",
+      "sha256": "ce1a1b78ccf8d0506971d210ecda1090310834b5838667c776f2b38225bc8048",
+      "size": 11680
+    },
+    {
+      "path": "scripts/bg_experiment.py",
+      "sha256": "42764e81f05269d88b3becc3cf1fa6297fb824dd30d56126dc77af2263d230d5",
+      "size": 43506
+    },
+    {
+      "path": "scripts/build_release_bundle.py",
+      "sha256": "da383fc477ddba7208f9bab3f80d3000a892cf410ee808d8f69eb3d6c0e2ffbd",
+      "size": 21071
+    },
+    {
+      "path": "scripts/build_v296_phantomsafe.py",
+      "sha256": "0d96033b7fa20d226a106e998ae9ef3dc5ce17ee07ba3ce08fc32519ce5d7a45",
+      "size": 12055
+    },
+    {
+      "path": "scripts/build_v301_gdma.py",
+      "sha256": "1392b493dbb439842a673af078d0a124fd85eb6cf81382734e3437614f300ef6",
+      "size": 69112
+    },
+    {
+      "path": "scripts/build_v301_teleport.py",
+      "sha256": "93c1958974ec7bd3e8ff996f26779f91c15369b98c29f4fb8233fd69d5fd7441",
+      "size": 65932
+    },
+    {
+      "path": "scripts/build_v302_title_fix.py",
+      "sha256": "62bbe191c5be09a254cfe82be48d6751f82bd13d50b1abc27bab3f20e6c01135",
+      "size": 150974
+    },
+    {
+      "path": "scripts/check_emulator_processes.sh",
+      "sha256": "c9531dc2a7d3f48d753a04c63d37168689f83be4ff75c0f603e992d4ae035b39",
+      "size": 647
+    },
+    {
+      "path": "scripts/create_vblank_colorizer_v288.py",
+      "sha256": "dc0a0fa5b2f3281c7e80b31b2ace951d76b2ca34d6d59a818c5ec268a236487e",
+      "size": 38079
+    },
+    {
+      "path": "scripts/diagnostics/analyze_ending_page_discriminators.py",
+      "sha256": "0f1802f991ab570fb03fce2167e211ada5ee1af95c6f04c94280e8f356593ab8",
+      "size": 8263
+    },
+    {
+      "path": "scripts/diagnostics/analyze_stage1_pickup_art.py",
+      "sha256": "5b0dde2c26cf0505e533d49d33e9b2ff8f33791c1a438bcf33be4dd921cb40e9",
+      "size": 3691
+    },
+    {
+      "path": "scripts/diagnostics/analyze_story_panel_discriminators.py",
+      "sha256": "2c604924cf75c85c58592ab93e50b072d034202cc09493fdb0b09490fbc12db0",
+      "size": 7195
+    },
+    {
+      "path": "scripts/diagnostics/capture_attract_reel.py",
+      "sha256": "cfc2060cfc21a59cde46f864dd3b9dbabe64fa5108cbed17fc64cbfb771a50ed",
+      "size": 6102
+    },
+    {
+      "path": "scripts/diagnostics/diagnose_stage1_freeze.py",
+      "sha256": "a64aa4be1892272c987ed7b4ef0437fc4af3039383739a7400fe32fe04e1aee8",
+      "size": 2231
+    },
+    {
+      "path": "scripts/diagnostics/generate_stream_boss_states.py",
+      "sha256": "12e789880b745a8f6284ad37e2daec71ac89256a0390445e432a0e0cb84451cc",
+      "size": 25190
+    },
+    {
+      "path": "scripts/diagnostics/generate_stream_stage_states.py",
+      "sha256": "e664c1657c8215ef1a82ab71c0d08afdee49e3ec48c0199b518b73157de0a076",
+      "size": 5853
+    },
+    {
+      "path": "scripts/diagnostics/generate_stream_story_states.py",
+      "sha256": "9d98ff8e1d6586cf7cf10d1f7a8f216da82498552ee341374e1b9ec63d425ca1",
+      "size": 20647
+    },
+    {
+      "path": "scripts/diagnostics/inventory_attract_reel.py",
+      "sha256": "f5288df1bc08c5b69287acbb3142f2f868a5948af7d4d90582b51f8045a667f0",
+      "size": 14010
+    },
+    {
+      "path": "scripts/diagnostics/inventory_final_cutscene.py",
+      "sha256": "f7cc0e5bd434ad9c3a0e8870b5e9fa621e5a201f2a4acf8adb0825bb58628420",
+      "size": 18677
+    },
+    {
+      "path": "scripts/diagnostics/inventory_opening_cutscene.py",
+      "sha256": "137db83862368f518611dd3dd0437aa3c20bea308b37fbd4d19b4b4e8c3cf6f5",
+      "size": 12074
+    },
+    {
+      "path": "scripts/diagnostics/inventory_savestate_scenes.py",
+      "sha256": "b47338486591b3aa0f10899808febbda404c46c991d042e1d3ae97d70ce656ec",
+      "size": 4446
+    },
+    {
+      "path": "scripts/diagnostics/inventory_spotlight_roster.py",
+      "sha256": "74161614139105320d744872b2a5e4035908728377d6620c065629111615e8dd",
+      "size": 7410
+    },
+    {
+      "path": "scripts/diagnostics/montage.py",
+      "sha256": "aa64762e6f980b306a0513f019981ba0cb1203cb197941cd62fb1ea11eee2ed2",
+      "size": 1615
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_alt_fullscan.lua",
+      "sha256": "9e7ed87bea8e14fa3e072d67895909d26ec90502c64ebc19653e1d5650fb223a",
+      "size": 4366
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_alternation_cause.lua",
+      "sha256": "e8814321dceaedc19ac4adbc2fa0636c7496a1d1d566525bf165367d06cda6ff",
+      "size": 2899
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_cycle.lua",
+      "sha256": "07283c5bb7098f91755f442b79fd98070cd16c70ed0d3f1c1e9d1fce19604198",
+      "size": 2576
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_dump.lua",
+      "sha256": "14bd44fc9ae306ffe8facb6874db2602424848cc589c2d44a71ed1b2c6ba4845",
+      "size": 3600
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_footprint.lua",
+      "sha256": "6dc063eccc4979fec73a5dcadda1f8f8f268822e891fd8e43938eb5819a5d850",
+      "size": 2867
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_longrun.lua",
+      "sha256": "7df0b10e10e4d5eef6b9936f85666325a0ea6c24b4cc8053e1a2659def0fa1ac",
+      "size": 3311
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_posmap_gen.lua",
+      "sha256": "837a9ac93ab9eeef9c5a56b8ecada4016e9bd03248149cf46ccdfb709a624613",
+      "size": 4179
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_timeseries.lua",
+      "sha256": "e475a2d80f95846e66d6afc3a0e8f085382a76d32b28abdf33f186fe450f42d1",
+      "size": 2850
+    },
+    {
+      "path": "scripts/diagnostics/probe_attract.lua",
+      "sha256": "1acf763a7e0733f34a257220a6865f363d1f49285af55ee0aed7dae69e90176b",
+      "size": 2045
+    },
+    {
+      "path": "scripts/diagnostics/probe_attract2.lua",
+      "sha256": "2218260f6626b04b9cfcbaf7801b3ccea8a7222beb017c9efb5be89c9c25c82d",
+      "size": 2328
+    },
+    {
+      "path": "scripts/diagnostics/probe_attract_reel_inventory.lua",
+      "sha256": "49cd5663fd8a9d10a81f1c8d4ab9b11b92fe46bc2d91ef76a693a933f460916e",
+      "size": 2797
+    },
+    {
+      "path": "scripts/diagnostics/probe_bg5_coldboot.lua",
+      "sha256": "e746aadea049ea95a09cefd9af8a1480a0db2eaf93a710c160d8e3f5f5cc4129",
+      "size": 1787
+    },
+    {
+      "path": "scripts/diagnostics/probe_bg5_realstate.lua",
+      "sha256": "b2cedee2a6725d5e3ffdcce37df376990ee094b994dd4d6b0efcdf67463c6483",
+      "size": 1777
+    },
+    {
+      "path": "scripts/diagnostics/probe_bgfix.lua",
+      "sha256": "64ec1418a7f0cde39cc1180b4afcb83af59a65c28ded8cc8bd5248001b6e046d",
+      "size": 2108
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_coord.lua",
+      "sha256": "c346071d4c1f6d34ff68ac1a0a9396a74172334e6a058bc0e1232da2a0b88219",
+      "size": 2087
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_state_receipt.lua",
+      "sha256": "40395cee2df052c3ec9e1561f4f307ecf10a6e8c37a24b9c1490a9c62a0ce128",
+      "size": 3310
+    },
+    {
+      "path": "scripts/diagnostics/probe_cram_accessor.lua",
+      "sha256": "9cd7a82208d787de3619bb51580ebdcfef2ebbe4a8f97e05453eac8fe22dada6",
+      "size": 1835
+    },
+    {
+      "path": "scripts/diagnostics/probe_cram_safe.lua",
+      "sha256": "15d0d26b535a15281b49517d5b9ed0c44a705cdb53f0da17759c03825eddd0c6",
+      "size": 2033
+    },
+    {
+      "path": "scripts/diagnostics/probe_crystal_debug.lua",
+      "sha256": "0af5e542b6879b07eb1212a28b533ddead59f2a54e9b59cdd1874f24fe49bea2",
+      "size": 2697
+    },
+    {
+      "path": "scripts/diagnostics/probe_cutscene_verify.lua",
+      "sha256": "37ee42e6398d2ff38719b7335ac3c87117bfcd11f251e19aba004400e74e9b5a",
+      "size": 3195
+    },
+    {
+      "path": "scripts/diagnostics/probe_da00_dump.lua",
+      "sha256": "4ff6fd0d64c87a90a212ba5a9da05f3e71e87455b54cbd3aafe2556ee4cf4d3a",
+      "size": 1713
+    },
+    {
+      "path": "scripts/diagnostics/probe_death_gameover.lua",
+      "sha256": "40b645f97ed3e081bdadcf264f6127ab8f2a42b98654806fe20edd61357f9575",
+      "size": 7746
+    },
+    {
+      "path": "scripts/diagnostics/probe_dungeon_fonttiles.lua",
+      "sha256": "9e95b5fd444da8b3f8ecafa43eb955c7049c411ecc971fb25b1535b6db054be3",
+      "size": 1245
+    },
+    {
+      "path": "scripts/diagnostics/probe_dungeon_shot.lua",
+      "sha256": "f2a5ecc4a510b7ec7e6d9d0de0203d859e11964fe003825b0a21216e3c2962ff",
+      "size": 1066
+    },
+    {
+      "path": "scripts/diagnostics/probe_early_cram.lua",
+      "sha256": "848a7e81f15bfce402753229101a7ad7ff54ae9baa3dc946ab6235df5dce730d",
+      "size": 1565
+    },
+    {
+      "path": "scripts/diagnostics/probe_ending_capture.lua",
+      "sha256": "a6668c4a1f62aee95d24ade20dd50e02ce29c59638df708a0856a0ef3b60e583",
+      "size": 2263
+    },
+    {
+      "path": "scripts/diagnostics/probe_ending_tail_state_integrity.lua",
+      "sha256": "085fe6d7d068993ab902664de7c2ac22c0bd258c954e4bd1d95423f72ffd6fb9",
+      "size": 3530
+    },
+    {
+      "path": "scripts/diagnostics/probe_ending_trigger.lua",
+      "sha256": "7506a246cdc19f9a11d1ed919a917579b9ddfb599f4dd3049867419b7f32a3e7",
+      "size": 1723
+    },
+    {
+      "path": "scripts/diagnostics/probe_final_cutscene_mgba.lua",
+      "sha256": "bea74f6349b6b4daadb11000ef77d0143a1321b067fedd90605106c2e4025e16",
+      "size": 14013
+    },
+    {
+      "path": "scripts/diagnostics/probe_final_story_state_integrity.lua",
+      "sha256": "a5a00acc4245289b298f8f1b71eba34cabd77a94fade0e80a259fc79c5a89a24",
+      "size": 3960
+    },
+    {
+      "path": "scripts/diagnostics/probe_frame_flicker.lua",
+      "sha256": "a7269febe3400e68719c476a81a6b8d08e0110a1ca778c038dbac28b2aca2691",
+      "size": 7820
+    },
+    {
+      "path": "scripts/diagnostics/probe_game_start_route.lua",
+      "sha256": "2efe52cf3f50692dd71852e6ab88135db24277f013e4a5beef1044772f3b51a3",
+      "size": 3953
+    },
+    {
+      "path": "scripts/diagnostics/probe_gameplay_cram.lua",
+      "sha256": "0193db93f646a3a9eedd8ed852e95b7f5e31ffd3e2604f9c549d8a8c209d3bf6",
+      "size": 1560
+    },
+    {
+      "path": "scripts/diagnostics/probe_gameplay_cram_v2.lua",
+      "sha256": "3caf14f6ec6f03877a1dc90638420fb4fbe7654cd9ebc3744393efde2f8d5772",
+      "size": 4656
+    },
+    {
+      "path": "scripts/diagnostics/probe_gameplay_cram_v3.lua",
+      "sha256": "4cc4725aac923fb05be0071f41c923d74a0239910116e7f9cb996e2df710c7a6",
+      "size": 2662
+    },
+    {
+      "path": "scripts/diagnostics/probe_gameplay_obj_palettes.lua",
+      "sha256": "cb359c5124bb76899dda8b152e282b6d04f5275117d68532c99bd22f54ecd287",
+      "size": 5025
+    },
+    {
+      "path": "scripts/diagnostics/probe_generate_boss_state.lua",
+      "sha256": "70e3d55258230769fc7650bcd20d0632d52eb79d233de508504388d42dbe7fab",
+      "size": 4340
+    },
+    {
+      "path": "scripts/diagnostics/probe_generate_ending_tail_state.lua",
+      "sha256": "ee20bd69b5ff9249a5933ff0a93ea83c6ac37b2a84cf39b6b85288bb623da428",
+      "size": 8459
+    },
+    {
+      "path": "scripts/diagnostics/probe_generate_opening_state.lua",
+      "sha256": "a377e65a4d40b47010fe539461e5786a8ae4dee56653a07bc0141530622db00c",
+      "size": 5403
+    },
+    {
+      "path": "scripts/diagnostics/probe_item_menu.lua",
+      "sha256": "d982e4f1fe6c8d232a12d55a9a52b299ee8633fa359ab4b1201cca58629a4017",
+      "size": 2553
+    },
+    {
+      "path": "scripts/diagnostics/probe_later_stage_soak.lua",
+      "sha256": "ead768f9f096d3a260446cdf159260bb46d77e4142b33625c7725de64d2ff384",
+      "size": 13889
+    },
+    {
+      "path": "scripts/diagnostics/probe_lava_ffba.lua",
+      "sha256": "803ad227623cfe98cc668b251cc57eb49734a41156fe3cee438cba5e547f8775",
+      "size": 3045
+    },
+    {
+      "path": "scripts/diagnostics/probe_lava_verify.lua",
+      "sha256": "54b63f700a28432f3d331f90ec140e8b4a01604de1fc396381ab00605bd4dcc9",
+      "size": 2831
+    },
+    {
+      "path": "scripts/diagnostics/probe_levelselect2.lua",
+      "sha256": "77b93443b42215ae2fd526a24f8a51bdaab1eeb6532043dc819d722db8ef454d",
+      "size": 2605
+    },
+    {
+      "path": "scripts/diagnostics/probe_levelselect_attrs.lua",
+      "sha256": "bcc1768a17c486e05b5c2a477ed6dd9d4a85613fb31952df05f836e03ed68c1c",
+      "size": 2093
+    },
+    {
+      "path": "scripts/diagnostics/probe_loadstate_shot.lua",
+      "sha256": "a7379cdf304f256d5d8ef21485722b0502badd0b012a3b91ab25fd382a2d6954",
+      "size": 1258
+    },
+    {
+      "path": "scripts/diagnostics/probe_menu_flicker.lua",
+      "sha256": "e13cb6f68897533da51440a1935a71aa2c0ee7179991603081be824a69b09673",
+      "size": 2980
+    },
+    {
+      "path": "scripts/diagnostics/probe_monster_capture.lua",
+      "sha256": "b46d21134531910053f9b107b77b08e956af4e37029dbda941df5b5167faabfe",
+      "size": 1567
+    },
+    {
+      "path": "scripts/diagnostics/probe_obj_cram_gameplay.lua",
+      "sha256": "3a0aa6a13ea015c5ea4458f4952faae251f90d2cf91f2f0a9ddcade6bc560998",
+      "size": 4064
+    },
+    {
+      "path": "scripts/diagnostics/probe_obj_palette_cram.lua",
+      "sha256": "9e9f93261629912a87795ae9608f2fe9b232bec9b2765c053b148681bb114da4",
+      "size": 1278
+    },
+    {
+      "path": "scripts/diagnostics/probe_objverify.lua",
+      "sha256": "815f4f2a60a160b2e93fa4dd8200305caee54fc679e5b2560a3208cab55a5fee",
+      "size": 1697
+    },
+    {
+      "path": "scripts/diagnostics/probe_palette_build_roundtrip.lua",
+      "sha256": "68792ebe5876b4f5d96e5f1c8cdccf693a8294ed7c154a6a5d426b9deafa56c5",
+      "size": 5880
+    },
+    {
+      "path": "scripts/diagnostics/probe_savestate_cram.lua",
+      "sha256": "741a9be10041cc8818a0492a71e32407d9b4381f343165a1c55267e47000b19b",
+      "size": 2465
+    },
+    {
+      "path": "scripts/diagnostics/probe_savestate_scene.lua",
+      "sha256": "711a531be56b654d3a7d9a5bc5b8502c599273b69e86215bbd5410bfabd8a9e7",
+      "size": 859
+    },
+    {
+      "path": "scripts/diagnostics/probe_scorefix_diag.lua",
+      "sha256": "70b46bb7e789ddba136339f70e5cc3a065cb975599b5c4e963a9d8a8c6aae709",
+      "size": 2461
+    },
+    {
+      "path": "scripts/diagnostics/probe_scorescreen.lua",
+      "sha256": "59ef43f98f08fe57b1f311a0ef05f4966177e194e01ea0b03153017c62aaf936",
+      "size": 2391
+    },
+    {
+      "path": "scripts/diagnostics/probe_screenshot.lua",
+      "sha256": "287ec16e5dd425142e7188b80bd0879b3d036c0ba9757e6aa7bf160def34c209",
+      "size": 840
+    },
+    {
+      "path": "scripts/diagnostics/probe_shal_multishot.lua",
+      "sha256": "f7c749d6dc35deb80481b9dc9cabf20094c2070e1a1553c7acf6ae1b1ffdca69",
+      "size": 2826
+    },
+    {
+      "path": "scripts/diagnostics/probe_slot1_trace.lua",
+      "sha256": "ed16d3ed994a040180fcc2550a90396e752ab938785d3f674bd9edb353dd3181",
+      "size": 1593
+    },
+    {
+      "path": "scripts/diagnostics/probe_splash_verify.lua",
+      "sha256": "f70b7854615d4161c9885dd50b1cd58c083d513c61a043738cbad0fccdc7e093",
+      "size": 1823
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_no_bleed.lua",
+      "sha256": "af088bfbe74a0f065a500a9f36387f33f384e3d9412ea428e25d69caa592210e",
+      "size": 11050
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_pickup_art.lua",
+      "sha256": "b54959a1f58f5367091f01d6db68b5ffe316acb2c9ef88061bbcafcf4316a96e",
+      "size": 2199
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage_integrity.lua",
+      "sha256": "709c706087b86e37b28dbec07d2a262852391a33c4b3745dd1e8653005fed2fb",
+      "size": 5119
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage_intro_menu.lua",
+      "sha256": "a136a856d81de4cb600dc8c47f3fc6cafde3fa986785d5d0a411d50e4e026b52",
+      "size": 2547
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage_speed.lua",
+      "sha256": "f8481b648ae7a609777daac7f97d98a5d74b79ca52bde647a9ef0cbf1fda5d6f",
+      "size": 10751
+    },
+    {
+      "path": "scripts/diagnostics/probe_story_attr_production.lua",
+      "sha256": "ca9704fe5eeefccfbaff062c2e154365577189cdf2604de57e70ee2599f162ab",
+      "size": 6384
+    },
+    {
+      "path": "scripts/diagnostics/probe_table_trace.lua",
+      "sha256": "7d9b884615858c1d0bc019f422a394858a825d959f442be288647e187a448eb4",
+      "size": 2303
+    },
+    {
+      "path": "scripts/diagnostics/probe_title_attr.lua",
+      "sha256": "48149e2d1fa92113255142af39e213cc4e71d839cb494289109c73e0af14ef27",
+      "size": 1427
+    },
+    {
+      "path": "scripts/diagnostics/probe_title_shot.lua",
+      "sha256": "276366c260ecd68657600bc1e8aaa7fb7b2e8ce1195519e7884f545e9eb72ba9",
+      "size": 808
+    },
+    {
+      "path": "scripts/diagnostics/probe_title_showcase_mgba.lua",
+      "sha256": "871e2dd93516a8580b8917dd20f0e131cdc627b706c5ee48d583d9233e657099",
+      "size": 6434
+    },
+    {
+      "path": "scripts/diagnostics/probe_vram_obj_inventory.lua",
+      "sha256": "81850f8d7d3eadb1c23cb4e711370def9ba90784fd17308cbd7a76f1d73a34fa",
+      "size": 1678
+    },
+    {
+      "path": "scripts/diagnostics/probe_wallflicker.lua",
+      "sha256": "b5c92066eaa876b161447cf4e49081e013f8e0d9e1facaf84eb5ca8293f11195",
+      "size": 1735
+    },
+    {
+      "path": "scripts/diagnostics/proto_position_blit_relative.lua",
+      "sha256": "f35f59b1a33a2e0affdc59382fd83173da5b66ae00052adb3ffd6836f879d1d1",
+      "size": 2887
+    },
+    {
+      "path": "scripts/diagnostics/render_stage_integrity.py",
+      "sha256": "7bddf27545b1269b38e5d28bd3fd03439fb9f41822a3c9133dbde7d7540d3b45",
+      "size": 3069
+    },
+    {
+      "path": "scripts/diagnostics/run_deterministic_suite.py",
+      "sha256": "407b950c0e3fa24923394d7df28038f12abbb2a2e94131db2015ea6a71f812b1",
+      "size": 18843
+    },
+    {
+      "path": "scripts/diagnostics/suite_contract.py",
+      "sha256": "60b1393541a1598675b8b90af118b8c79c7ab6433e4c93a7d558d449bb6df26a",
+      "size": 4696
+    },
+    {
+      "path": "scripts/diagnostics/trace_native_bgp_writes.lua",
+      "sha256": "91f3aa3b31584f1aed0e2de6dffeb22212330e91b24fbfd5204127d74edeed3f",
+      "size": 3156
+    },
+    {
+      "path": "scripts/diagnostics/trace_shadow_oam_writes.lua",
+      "sha256": "dbb8ff20de770a28f4c3bb503250793506197d34f5d6c7d734f7e03407f74696",
+      "size": 1872
+    },
+    {
+      "path": "scripts/diagnostics/verify_cram_loading.py",
+      "sha256": "7111fb0fe4f5a978de60e8e12dbdd1d3a334c521a8f9fa2e3ab92b2c3da6da7c",
+      "size": 8390
+    },
+    {
+      "path": "scripts/diagnostics/verify_death_gameover.py",
+      "sha256": "a6f48ba76905997d2fb92b5641335c848a6cb2dbb5b6baa0fe874b7673ae22e8",
+      "size": 10662
+    },
+    {
+      "path": "scripts/diagnostics/verify_final_cutscene_mgba.py",
+      "sha256": "b1d1d6dea32d4fa78679cd213c10448cb388c157e6184ef381ca282e750835c4",
+      "size": 5494
+    },
+    {
+      "path": "scripts/diagnostics/verify_frame_flicker.py",
+      "sha256": "8b5f0bdc1ea19d6c94d801fdc0d775f6c25f9aef47406af087d6d4e1435aa506",
+      "size": 19001
+    },
+    {
+      "path": "scripts/diagnostics/verify_game_start_routes.py",
+      "sha256": "3deece7fc621ff7b4c960a719a3f58ece53996e489c3f00c76236ce9bf566d56",
+      "size": 9170
+    },
+    {
+      "path": "scripts/diagnostics/verify_gameplay_obj_palettes.py",
+      "sha256": "9510e1fe3613a7f5c422578c9f1d55494eaff23e7f2ecabd53e0a4c52ca9650b",
+      "size": 6900
+    },
+    {
+      "path": "scripts/diagnostics/verify_hardware_gate.py",
+      "sha256": "00301afe5ab83a1402a91551fde044eec50c941325a778403175694366598193",
+      "size": 390
+    },
+    {
+      "path": "scripts/diagnostics/verify_later_stage_integrity.py",
+      "sha256": "7841dcedc2c23bf72614b8054719459436804befa10a277d8acc9ed6d7a9e688",
+      "size": 5362
+    },
+    {
+      "path": "scripts/diagnostics/verify_later_stage_soak.py",
+      "sha256": "6d1b1b0168e128428efb7c9d2a2a2d69cda05332cf2eaebf69dc7ea1a8aa1686",
+      "size": 6354
+    },
+    {
+      "path": "scripts/diagnostics/verify_levelselect_screen.py",
+      "sha256": "85180717c0d35fdcc5739b06c7626abe95c4795d1675516071b0a366f0b6afcf",
+      "size": 3411
+    },
+    {
+      "path": "scripts/diagnostics/verify_live_palette_session.py",
+      "sha256": "a6fcb4596d9783cd33b4933b8b23fe053c2f19d307c9e9846725d0862bd76753",
+      "size": 34365
+    },
+    {
+      "path": "scripts/diagnostics/verify_mgba_singleflight_guard.py",
+      "sha256": "454e36d3c2cffab41b8f4cb1b0487bc57e406660ccfeb3d819eb216e0f60a79b",
+      "size": 10458
+    },
+    {
+      "path": "scripts/diagnostics/verify_mister_release_workflow.py",
+      "sha256": "1c04d48d16afec505cdde7184b394437d9259ba1fec8cd72d403ed380d8b84e6",
+      "size": 4817
+    },
+    {
+      "path": "scripts/diagnostics/verify_mister_reservation_guard.py",
+      "sha256": "451ae4bd3d2331077b50637e587b26f361eb44b6e1fb03272e669ffc200373cc",
+      "size": 5319
+    },
+    {
+      "path": "scripts/diagnostics/verify_palette_build_roundtrip.py",
+      "sha256": "4f59d3aa29de0ba6f3acbf4fbaf0895c86fb13245c8075ca04bbdcb744f91233",
+      "size": 12727
+    },
+    {
+      "path": "scripts/diagnostics/verify_release_candidate.py",
+      "sha256": "bf4efb96de0c37c4a944d105f79c3f9215fa664f7d531f8502357331330732a2",
+      "size": 22237
+    },
+    {
+      "path": "scripts/diagnostics/verify_release_patch.py",
+      "sha256": "ce176e8e9e2f770a3da6eddb72e1534dbd1d0e32a53ffd85f86a2663eef34d4b",
+      "size": 3999
+    },
+    {
+      "path": "scripts/diagnostics/verify_sara_palette.py",
+      "sha256": "f7d7ff6f56e04887e34f7a8a8c3c78934e3c9ff549935315a4bfb496ee4fdb68",
+      "size": 7394
+    },
+    {
+      "path": "scripts/diagnostics/verify_sprite_flicker.py",
+      "sha256": "e0e2d6fb165e235bf6f9df7d9518bb849aafcbdea8893cc56eaa70fe4c5ad131",
+      "size": 4053
+    },
+    {
+      "path": "scripts/diagnostics/verify_stage1_no_bleed.py",
+      "sha256": "d80855439bcf3847f10d56a28050e7769fd17ba1a27aa6b4de37b8c94fa1295b",
+      "size": 11540
+    },
+    {
+      "path": "scripts/diagnostics/verify_stage_speed_matrix.py",
+      "sha256": "695407dc5f7ae5b0f8662cc30f66913ef76192414d314a7cd5ef286f3a953e18",
+      "size": 7513
+    },
+    {
+      "path": "scripts/diagnostics/verify_story_attr_production.py",
+      "sha256": "4ba3013bdf44f49807627468e812efe3cfc8ec05ad81b3ccb8f4960b90f76e34",
+      "size": 6239
+    },
+    {
+      "path": "scripts/diagnostics/verify_suite_receipt.py",
+      "sha256": "5545a311b2c6fa82d5669c0d94f8b8230a651113ac329caa6b2d52b917eb8db3",
+      "size": 5878
+    },
+    {
+      "path": "scripts/diagnostics/verify_title_cursor_pixels.py",
+      "sha256": "6201c82d06805ba99f46eeb548020f00a1d539e79cb4d97f206933e22d9a464b",
+      "size": 8185
+    },
+    {
+      "path": "scripts/diagnostics/verify_title_showcase_mgba.py",
+      "sha256": "42c1c6efe5e7d3e3b8d3b164e9657d4c75ddbcf9f47f81a5b332c19e0ceab49f",
+      "size": 8243
+    },
+    {
+      "path": "scripts/diagnostics/verify_title_visual_receipts.py",
+      "sha256": "2f62639258831f98a6bae5c767f9f8228333cad7b3d0575ef9d6ecac5443c835",
+      "size": 9800
+    },
+    {
+      "path": "scripts/hooks/guard_mgba_launch.py",
+      "sha256": "65fdca7d72e5889ef7988ae8e35b15301baedff3e1a8120ec974f56bdbb0b3ec",
+      "size": 2517
+    },
+    {
+      "path": "scripts/install_git_hooks.sh",
+      "sha256": "79376269084f2510bed386361ed15beb2af6f464a2359fecf535cd64e57bfa13",
+      "size": 204
+    },
+    {
+      "path": "scripts/inventory_probe.sh",
+      "sha256": "96350247e9052ffd15a653d564e700472add9138c97092ec623a771fec51c681",
+      "size": 769
+    },
+    {
+      "path": "scripts/launch_mgba.sh",
+      "sha256": "f0eaa1f770309a8167d5233892aea72048e7f3585a941c9499a303c79b967fe0",
+      "size": 1069
+    },
+    {
+      "path": "scripts/launch_mgba_record.sh",
+      "sha256": "b1d7d5f752fc36c560802ac42c18f5e04f6576b6b33ad3eab56cd90b4bdbd138",
+      "size": 1691
+    },
+    {
+      "path": "scripts/live_palette_editor.py",
+      "sha256": "b886baea5f634c7964d1545f02203297e3eff46a1aec9c6195feadd79aec57db",
+      "size": 35811
+    },
+    {
+      "path": "scripts/lua/live_palettes.lua",
+      "sha256": "86aa97ceab2717a03eaddcd213ec07a19b1df6af2e11eeb9fd90b22707e9ff9b",
+      "size": 23937
+    },
+    {
+      "path": "scripts/mgba-headless-singleflight",
+      "sha256": "4865c719f5d1a33f5f34b32c9ac06f32e46d9a6e7bc1d3d94393ad7d39326783",
+      "size": 157
+    },
+    {
+      "path": "scripts/mgba-qt-singleflight",
+      "sha256": "46fe5b57771627e9141e359bd93c9d821c2b873d34162e355dfec33896649570",
+      "size": 151
+    },
+    {
+      "path": "scripts/mgba_singleflight.py",
+      "sha256": "d01dbb412fca6e0ed1123cee02ff1ffe1137726c4ba7db0b4be4b724a6d2c35b",
+      "size": 3334
+    },
+    {
+      "path": "scripts/mister.py",
+      "sha256": "d49900b66dd32d9a668acc3cfd8d16c0acb7f49e146abab6cbc6058e95be8134",
+      "size": 56786
+    },
+    {
+      "path": "scripts/palette_session.sh",
+      "sha256": "d91d58faff4296b2d2f2424bcd644e799f64afd5c02f201e5e4c7188ed8532a1",
+      "size": 6701
+    },
+    {
+      "path": "scripts/play_record.sh",
+      "sha256": "2ccd268db3f8c5675dffbe8fdc6e686356e58c43b1508782cf65f38374631700",
+      "size": 2004
+    },
+    {
+      "path": "scripts/play_record_curriculum.sh",
+      "sha256": "74e30d305929b570ea9de796e6b069f736b2dc980b24402682d1cf2da0a8ac24",
+      "size": 2061
+    },
+    {
+      "path": "scripts/probes/autoplay_record.lua",
+      "sha256": "7d729d51ba8d0dcf0bb2ee20cdfd9ded266712a74bae9da07a7512e94e5970d8",
+      "size": 19185
+    },
+    {
+      "path": "scripts/probes/autoplay_v96_record.lua",
+      "sha256": "d853d0eaf5050d20a49f70d418fea12ff5e7c90f5080f14957d92ac4dcc32844",
+      "size": 47805
+    },
+    {
+      "path": "scripts/probes/dump_bg_palette.lua",
+      "sha256": "5a9330ee79f58df061a3fdb8c5edbebeaf820a7d17869044e324909b02747b2a",
+      "size": 1393
+    },
+    {
+      "path": "scripts/probes/full_verification_loop.sh",
+      "sha256": "d517b1b0e4e30531b719d0248d81808e7da105622fbfddd213188c8725bbad53",
+      "size": 4320
+    },
+    {
+      "path": "scripts/probes/full_verification_loop2.sh",
+      "sha256": "e474617d1e66a26a4338695b82128476bdcc4030236d0d33e87be5e9bd13f629",
+      "size": 4250
+    },
+    {
+      "path": "scripts/probes/full_verification_loop_minimal.sh",
+      "sha256": "62840d2b3f4897f656f639fb90b98fda84dd0f9a78c3e306a4534808302ea2bf",
+      "size": 2766
+    },
+    {
+      "path": "scripts/probes/gameplay_palette.lua",
+      "sha256": "23af8564043e2b4c7735ccaf8872c520ee3510f1650d82bfb62126042e1ae89e",
+      "size": 4058
+    },
+    {
+      "path": "scripts/probes/gameplay_screenshot.lua",
+      "sha256": "13a4138d198a7d2bb329d08fc08cd0b5d6a1814391c5138c49e41522a367f472",
+      "size": 1528
+    },
+    {
+      "path": "scripts/probes/inventory_probe.lua",
+      "sha256": "0273d4d86766288319353f70bed7f2de7a1c798d19f7360b8945a7bf48dcac0b",
+      "size": 3157
+    },
+    {
+      "path": "scripts/probes/menu_hud_and_combo.lua",
+      "sha256": "9556ed2c910e6f1f309f99d94b47623d05c6882c444c3426d587006f2c7c87ec",
+      "size": 6189
+    },
+    {
+      "path": "scripts/probes/phantom_d887.lua",
+      "sha256": "54b6db10db92d45026287122f262ea3d54a8b07657f461130d042822f2e543b7",
+      "size": 5236
+    },
+    {
+      "path": "scripts/probes/play_record.lua",
+      "sha256": "2e716e5b23a30afe905b34f6452b5c42255e213bdc4f48e980f241d9f71c87d1",
+      "size": 8356
+    },
+    {
+      "path": "scripts/probes/play_record_curriculum.lua",
+      "sha256": "1cfa6f49e6a7e3b4f9eef457ddc8c13f243f7b7b75b50b8b07c85a6d0a408460",
+      "size": 10487
+    },
+    {
+      "path": "scripts/probes/spin_shoot_test.lua",
+      "sha256": "b321e78318a83b591bf058259a74b0530ef7b3b2b31f1297e692c07f6cfa5617",
+      "size": 3496
+    },
+    {
+      "path": "scripts/probes/stage_intro_timing.lua",
+      "sha256": "21a22af52f9421b35b0b9ebdd1403351625cc7e10aa3b158281c67c06d27d398",
+      "size": 4830
+    },
+    {
+      "path": "scripts/probes/title_screenshot.lua",
+      "sha256": "f0afc1ecd6ac061bc399c64d08bf8b3425dea1c00f9b4c06cca4b7783dc727a1",
+      "size": 641
+    },
+    {
+      "path": "scripts/probes/vblank_cycles.lua",
+      "sha256": "07d55d530a88214367e7197ebae996a72f13066beb1a953222332c31e5cdeb4d",
+      "size": 3646
+    },
+    {
+      "path": "scripts/probes/vblank_timing.lua",
+      "sha256": "1a2796ccc05ae5f86da8f63adf6aff4cf512ae0096a126432f54be8b8799cd38",
+      "size": 2891
+    },
+    {
+      "path": "scripts/probes/verify_boss_arena_palettes.py",
+      "sha256": "a040322389239c4337c3293a237b0cf45d67d9c652879002b703cf3f0053244e",
+      "size": 10785
+    },
+    {
+      "path": "scripts/probes/verify_flash_attribution.py",
+      "sha256": "146290899b8daaddaca10f40142d919b0cbbf5e2ca6869c18dcb92af25bc2bd1",
+      "size": 6982
+    },
+    {
+      "path": "scripts/probes/verify_gameplay_palette.py",
+      "sha256": "d976fb04e5df6b317297d244d3b545d08daa088f62ac659dc5e5f41049c75951",
+      "size": 5569
+    },
+    {
+      "path": "scripts/probes/verify_menu_hud_and_combo.py",
+      "sha256": "f181c3f0f94b369fb12a56902924ad23a67b18b562c19a4f0028519bb872e0c5",
+      "size": 4171
+    },
+    {
+      "path": "scripts/probes/verify_miniboss_color.py",
+      "sha256": "d4aa43db98cf26efeaf346ec6eaf1bc8dde6ea42d10802009ec35b9acf94a212",
+      "size": 11084
+    },
+    {
+      "path": "scripts/probes/verify_phantom_d887.py",
+      "sha256": "2fb9d5a3b2de3580b892f9fabea91a79d5756cf7879fe3fb31d3e51ddb83e5a5",
+      "size": 9474
+    },
+    {
+      "path": "scripts/probes/verify_scroll_tearing.py",
+      "sha256": "ec2c0bb7bf43bacb50968f5101f3cafb0d1965868caf0f576f2b61d4314e4f10",
+      "size": 11422
+    },
+    {
+      "path": "scripts/probes/verify_stage_intro_timing.py",
+      "sha256": "bd9f7a0ee1538c980c41abd62dedf1fd2c2b955b21db21fb5ac39e324f159f89",
+      "size": 3311
+    },
+    {
+      "path": "scripts/probes/verify_title_animation_frames.py",
+      "sha256": "0b67bd1a3dcaa06bd9e0f218c155577ded12159e0eae74cf6d14b1323f8f5592",
+      "size": 4123
+    },
+    {
+      "path": "scripts/probes/verify_title_color.py",
+      "sha256": "06362441d6dcec36a2fed7393a2adf511374ee3815c69f7cc10ddf510c096216",
+      "size": 5748
+    },
+    {
+      "path": "scripts/probes/verify_title_screen_integration.py",
+      "sha256": "e50f83140d532e799ac9ab2a0f60d50e24dd6fb69f090da0a8c7f6386fe3885e",
+      "size": 8710
+    },
+    {
+      "path": "src/penta_dragon_dx/__init__.py",
+      "sha256": "75ad4f4c2943325f88064ad2beae890b59674be2bf0404b30afc5584dc4de4bb",
+      "size": 13
+    },
+    {
+      "path": "src/penta_dragon_dx/cli.py",
+      "sha256": "ee883f313a55fd7ab62e80e003d8165cc19df8c1719b1a60a2d74db2bf97f74d",
+      "size": 8935
+    },
+    {
+      "path": "src/penta_dragon_dx/display_patcher.py",
+      "sha256": "48f9c6ec63e1d67aa16cfe1249418b555a7f2bbf8ac00463dca283a162193582",
+      "size": 6348
+    },
+    {
+      "path": "src/penta_dragon_dx/injector.py",
+      "sha256": "c6f2126f5ac888b64f76f9c7a8ace43ef1142bdf9fac83f81e972a5c1b433459",
+      "size": 6398
+    },
+    {
+      "path": "src/penta_dragon_dx/palette_injector.py",
+      "sha256": "a90005cff3692766a51b2fe6364a0cbfbab06c9b5da75ef56b419b26c25f53c2",
+      "size": 14801
+    },
+    {
+      "path": "src/penta_dragon_dx/palette_loader.py",
+      "sha256": "cf9ee48c0a0630c21fb2da58aad334f346684f0668766fe6eff88b821c9c1a19",
+      "size": 3464
+    },
+    {
+      "path": "src/penta_dragon_dx/palette_wrapper.py",
+      "sha256": "c5f68bf4ba00b564a76ecdc2b7512fe9e8d549be834f7d1c6692e5fba876d823",
+      "size": 4658
+    },
+    {
+      "path": "src/penta_dragon_dx/patch_builder.py",
+      "sha256": "d1fe2a51f26498013bc09585d36e727293dc1618f26778fc8a26ae245f8b0d24",
+      "size": 3103
+    },
+    {
+      "path": "src/penta_dragon_dx/rom_utils.py",
+      "sha256": "cc508828a40ee08cbc7600cc9d81aad6ce63399943a3bee6011853a2d4d2ccb6",
+      "size": 6707
+    },
+    {
+      "path": "src/penta_dragon_dx/vblank_injector.py",
+      "sha256": "f5b5b8476572140abcdcd9a3a6eaab53aecea83b6c9f6a36511d0f94a21fa31e",
+      "size": 4720
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "52b63ff4d3a2fb4ed425f4f1bd242c4b95a977a5a46b7f280e36964ec9c3d846",
+      "size": 68306
+    }
+  ],
+  "candidate": {
+    "size": 262144,
+    "md5": "210c340bcfb261aa0337e19397eeead0",
+    "sha256": "29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784"
+  },
+  "deterministic_build": {
+    "passes": 2,
+    "byte_identical": true,
+    "build_a_sha256": "29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784",
+    "build_b_sha256": "29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784"
+  },
+  "matrix": {
+    "status": "emulator-pass",
+    "scope": "full",
+    "gate_count": 36,
+    "failures": 0,
+    "manifest_sha256": "028630a99ca3c6bb5cf615a482e9625c60e42108e25540de9baa1d896557f127",
+    "results": [
+      {
+        "name": "emulator_singleflight_guard",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.214
+      },
+      {
+        "name": "title_footer_integration",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.465
+      },
+      {
+        "name": "title_animation_frames",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 1.019
+      },
+      {
+        "name": "flash_attribution",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.516
+      },
+      {
+        "name": "title_color",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 15.402
+      },
+      {
+        "name": "title_showcase",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 2.72
+      },
+      {
+        "name": "title_visual_receipts",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 1.468
+      },
+      {
+        "name": "title_cursor",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.465
+      },
+      {
+        "name": "stage_intro_timing",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 2.969
+      },
+      {
+        "name": "menu_hud_and_combo",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 4.822
+      },
+      {
+        "name": "levelselect_screen",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 7.982
+      },
+      {
+        "name": "game_start_routes",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 31.13
+      },
+      {
+        "name": "gameplay_speed_parity",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 13.387
+      },
+      {
+        "name": "gameplay_bg_palettes",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 19.959
+      },
+      {
+        "name": "stage1_no_color_bleed",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 3.173
+      },
+      {
+        "name": "gameplay_obj_palettes",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 11.566
+      },
+      {
+        "name": "frame_flicker",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 12.937
+      },
+      {
+        "name": "miniboss_color",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 8.484
+      },
+      {
+        "name": "later_stage_integrity",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 1.58
+      },
+      {
+        "name": "later_stage_soak",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 8.03
+      },
+      {
+        "name": "boss_arenas",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 26.918
+      },
+      {
+        "name": "death_gameover",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 22.922
+      },
+      {
+        "name": "title_idle_reel",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 4.622
+      },
+      {
+        "name": "spotlight_full_roster",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 22.704
+      },
+      {
+        "name": "opening_cutscene",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 2.571
+      },
+      {
+        "name": "final_cutscene_mgba",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 8.628
+      },
+      {
+        "name": "ending_inventory_a",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 4.875
+      },
+      {
+        "name": "ending_inventory_b",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 4.624
+      },
+      {
+        "name": "ending_discriminators",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.032
+      },
+      {
+        "name": "scroll_stability",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 32.284
+      },
+      {
+        "name": "phantom_sound",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 23.659
+      },
+      {
+        "name": "live_palette_deck",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 80.344
+      },
+      {
+        "name": "story_attr_production",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 46.268
+      },
+      {
+        "name": "palette_build_roundtrip",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 1.617
+      },
+      {
+        "name": "candidate_ips_roundtrip",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.064
+      },
+      {
+        "name": "mister_reservation_guard",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.165
+      }
+    ]
+  },
+  "rom_committed": false,
+  "hardware_status": "pending-reservation-backed-mister"
+}

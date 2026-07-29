@@ -16,6 +16,7 @@ node_modules/
 # Build artifacts
 CMakeCache.txt
 CMakeFiles/
+/dist/
 
 # Temporary files
 tmp/
@@ -53,6 +54,7 @@ rom/working/*.png
 rom/working/*.sav
 rom/working/*.ss*
 rom/working/*.ram
+rom/working/live_palettes*
 
 # Letta agent workspace
 .letta/

@@ -1,0 +1,4 @@
+loaded_state=level1_sara_w_mage_health1_items.ss0
+post_load_frames=180
+rom_md5=c0a29419e91b57462ab649b23b2deae7
+expected_bg_palette_1_cells=0

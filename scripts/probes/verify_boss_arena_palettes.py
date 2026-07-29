@@ -1,261 +1,288 @@
 #!/usr/bin/env python3
-"""Verify all nine boss-arena palettes in the PyBoy teleport ROM.
+"""Verify all nine production boss arenas through mGBA.
 
-This is deliberately a PyBoy-only probe.  It boots into gameplay, uses the
-teleport ROM's SELECT+START combo to visit arenas 0-8, and writes screenshots,
-OAM dumps, and CGB BG palette-RAM dumps beneath ``tmp/boss_arena_palette_probe``.
-
-Exit status is zero only when every arena is reached and every arena has a
-non-zero, non-white, internally varied BG palette and a unique rendered color
-signature.  A completely white frame (the historical title-screen failure) is
-also an immediate failure.
+The verifier recaptures curated, visually valid arena fixtures under the
+untouched candidate ROM, then reloads every new state in a second mGBA process.
+Every receipt includes a rendered PNG, an exact $CC00 table dump, and all 64
+bytes of CGB BG palette RAM. Structurally trivial striped/white frames fail.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
+import subprocess
+import sys
+import time
 from collections import Counter
-from dataclasses import dataclass
 from pathlib import Path
 
-from pyboy import PyBoy
+from PIL import Image
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ROM = PROJECT_ROOT / "rom/working/penta_dragon_dx_teleport.gb"
-DEFAULT_OUTPUT = PROJECT_ROOT / "tmp/boss_arena_palette_probe"
-
-# Game/project constants.
-D880 = 0xD880
-FFBA = 0xFFBA
-FFC1 = 0xFFC1
-BGPI = 0xFF68
-BGPD = 0xFF69
-OAM_START = 0xFE00
-OAM_SIZE = 40 * 4
-ARENA_FIRST = 0
-ARENA_LAST = 8
-CGB_BLACK = 0x0000
-CGB_WHITE = 0x7FFF
-BG_CRAM_SIZE = 8 * 4 * 2
-WHITE_RGB = 0xFF
-
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
+DEFAULT_OUTPUT = ROOT / "tmp/boss_arena_palette_probe"
+GENERATOR = ROOT / "scripts/diagnostics/generate_stream_boss_states.py"
+RECEIPT_PROBE = ROOT / "scripts/diagnostics/probe_boss_state_receipt.lua"
+ROM_BANK_SIZE = 0x4000
+PALETTE_ROM_BANK = 13
+ARENA_TABLE_BASE = 0x7200
+BG_TABLE_SIZE = 0x100
 BOSS_NAMES = (
-    "Shalamar",
-    "Riff",
-    "Crystal_Dragon",
-    "Cameo",
-    "Ted",
-    "Troop",
-    "Faze",
-    "Angela",
-    "Penta_Dragon",
-)
-
-# Known-good title/game-entry schedule used by the project's teleport_mechanism_pyboy.py.
-# This is the PROVEN working schedule that navigates past the intro + title screen
-# into active gameplay. Verified by verify_sprite_flicker.py.
-BOOT_INPUTS = (
-    (180, 186, "down"),
-    (201, 207, "a"),
-    (261, 267, "a"),
-    (321, 327, "a"),
-    (381, 387, "start"),
-    (431, 437, "a"),
+    "shalamar",
+    "riff",
+    "crystal_dragon",
+    "cameo",
+    "ted",
+    "troop",
+    "faze",
+    "angela",
+    "penta_dragon",
 )
 
 
-@dataclass
-class ArenaResult:
-    cycle: int
-    observed: int
-    bg_cram: bytes
-    oam: bytes
-    colors: Counter[tuple[int, int, int]]
-    white_pixels: int
-    pixel_count: int
-    failures: list[str]
-
-    @property
-    def words(self) -> tuple[int, ...]:
-        return tuple(
-            self.bg_cram[i] | (self.bg_cram[i + 1] << 8)
-            for i in range(0, len(self.bg_cram), 2)
-        )
-
-    @property
-    def screen_signature(self) -> tuple[tuple[int, int, int], ...]:
-        # Counts are excluded so harmless sprite motion does not change the
-        # identity of an arena's rendered palette.
-        return tuple(sorted(self.colors))
+def fields(path: Path) -> dict[str, str]:
+    return dict(
+        field.split("=", 1)
+        for field in path.read_text().split()
+        if "=" in field
+    )
 
 
-def tick(pyboy: PyBoy, frames: int) -> None:
-    pyboy.tick(frames, True)
+def expected_table(rom: bytes, target: int) -> bytes:
+    offset = (
+        PALETTE_ROM_BANK * ROM_BANK_SIZE
+        + ARENA_TABLE_BASE
+        + target * BG_TABLE_SIZE
+        - ROM_BANK_SIZE
+    )
+    return rom[offset:offset + BG_TABLE_SIZE]
 
 
-def pulse(pyboy: PyBoy, *buttons: str, frames: int = 8) -> None:
-    for button in buttons:
-        pyboy.button_press(button)
-    tick(pyboy, frames)
-    for button in buttons:
-        pyboy.button_release(button)
+def palette_words(raw: bytes) -> tuple[int, ...]:
+    return tuple(
+        raw[index] | (raw[index + 1] << 8)
+        for index in range(0, len(raw), 2)
+    )
 
 
-def enter_gameplay(pyboy: PyBoy, timeout: int = 1800) -> None:
-    """Skip the title/menu and walk until the gameplay flag is set.
-    Uses the proven teleport_mechanism_pyboy.py schedule (1400 frames)."""
-    held: str | None = None
-    for frame in range(1, 1400):
-        wanted = next(
-            (button for start, end, button in BOOT_INPUTS if start <= frame < end),
-            None,
-        )
-        if wanted != held:
-            if held:
-                pyboy.button_release(held)
-            if wanted:
-                pyboy.button_press(wanted)
-            held = wanted
-        tick(pyboy, 1)
-    if held:
-        pyboy.button_release(held)
-
-
-def read_bg_cram(pyboy: PyBoy) -> bytes:
-    """Read all 64 bytes through the CGB BG palette index/data registers."""
-    memory = pyboy.memory
-    old_index = memory[BGPI]
-    values = bytearray()
-    try:
-        for index in range(BG_CRAM_SIZE):
-            memory[BGPI] = index
-            values.append(memory[BGPD])
-    finally:
-        memory[BGPI] = old_index
-    return bytes(values)
-
-
-def screen_colors(pyboy: PyBoy) -> tuple[Counter[tuple[int, int, int]], int, int]:
-    """Analyze PyBoy's current screen buffer (via its PIL image facade)."""
-    image = pyboy.screen.image.convert("RGB")
-    colors: Counter[tuple[int, int, int]] = Counter(image.getdata())
-    white = colors.get((WHITE_RGB, WHITE_RGB, WHITE_RGB), 0)
-    return colors, white, image.width * image.height
-
-
-def dump_capture(
-    output: Path, pyboy: PyBoy, arena: int, result: ArenaResult
+def audit_state(
+    mgba: str,
+    rom: Path,
+    state: Path,
+    prefix: Path,
+    target: int,
+    timeout: float,
 ) -> None:
-    stem = f"arena_{arena}_{BOSS_NAMES[arena].lower()}"
-    pyboy.screen.image.save(output / f"{stem}.png")
-    (output / f"{stem}_oam.bin").write_bytes(result.oam)
-    (output / f"{stem}_oam.txt").write_text(
-        "\n".join(
-            f"{slot:02d}: " + " ".join(f"{byte:02X}" for byte in result.oam[i:i + 4])
-            for slot, i in enumerate(range(0, OAM_SIZE, 4))
-        ) + "\n"
+    marker = Path(f"{prefix}.audit.done")
+    environment = os.environ.copy()
+    environment.update(
+        BOSS_RECEIPT_OUT=str(prefix),
+        BOSS_RECEIPT_FRAMES="60",
+        BOSS_TARGET=str(target),
+        QT_QPA_PLATFORM="offscreen",
+        SDL_AUDIODRIVER="dummy",
     )
-    (output / f"{stem}_bg_palette.bin").write_bytes(result.bg_cram)
-    (output / f"{stem}_bg_palette.txt").write_text(
-        "\n".join(
-            f"BG{palette}: "
-            + " ".join(f"{result.words[palette * 4 + color]:04X}" for color in range(4))
-            for palette in range(8)
-        ) + "\n"
+    process = subprocess.Popen(
+        [
+            mgba,
+            "--fastforward",
+            "-t",
+            str(state),
+            "-C",
+            f"savegamePath={prefix.parent}",
+            "-C",
+            f"savestatePath={prefix.parent}",
+            str(rom),
+            "--script",
+            str(RECEIPT_PROBE),
+        ],
+        cwd=ROOT,
+        env=environment,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
-
-
-def capture_arena(pyboy: PyBoy, cycle: int, output: Path) -> ArenaResult:
-    pulse(pyboy, "select", "start")
-    tick(pyboy, 200)  # wait for arena to fully load + debounce to clear
-    observed = pyboy.memory[FFBA]
-    bg_cram = read_bg_cram(pyboy)
-    oam = bytes(pyboy.memory[address] for address in range(OAM_START, OAM_START + OAM_SIZE))
-    colors, white_pixels, pixel_count = screen_colors(pyboy)
-    result = ArenaResult(
-        cycle, observed, bg_cram, oam, colors, white_pixels, pixel_count, []
-    )
-
-    words = result.words
-    distinct = set(words)
-    meaningful = distinct - {CGB_BLACK, CGB_WHITE}
-    if not ARENA_FIRST <= observed <= ARENA_LAST:
-        result.failures.append(f"FFBA={observed} is outside arena range 0-8")
-    if not any(words):
-        result.failures.append("BG palette RAM is entirely zero")
-    if not meaningful:
-        result.failures.append("BG palette RAM contains only black/white entries")
-    if len(distinct) < 2:
-        result.failures.append("BG palette RAM has no distinct entries")
-    if white_pixels == pixel_count:
-        result.failures.append("screen is pure white (title-screen regression)")
-
-    if ARENA_FIRST <= observed <= ARENA_LAST:
-        dump_capture(output, pyboy, observed, result)
-    return result
-
-
-def run_probe(rom: Path, output: Path) -> bool:
-    output.mkdir(parents=True, exist_ok=True)
-    pyboy = PyBoy(str(rom), window="null", cgb=True, sound=False)
-    pyboy.set_emulation_speed(0)
-    results: list[ArenaResult] = []
     try:
-        enter_gameplay(pyboy)
-        tick(pyboy, 60)
-        for cycle in range(ARENA_FIRST, ARENA_LAST + 1):
-            results.append(capture_arena(pyboy, cycle, output))
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if marker.is_file():
+                break
+            if process.poll() is not None:
+                raise RuntimeError(
+                    f"boss {target}: mGBA exited {process.returncode}"
+                )
+            time.sleep(0.05)
+        if not marker.is_file():
+            raise TimeoutError(f"boss {target}: receipt reload timed out")
     finally:
-        pyboy.stop(save=False)
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+    if marker.read_text().strip() != "ok":
+        raise RuntimeError(f"boss {target}: receipt reload failed")
 
-    # NOTE: BG CRAM is SHARED across all arenas — the game uses a single set
-    # of 8 BG palettes. Arenas differentiate through per-arena bg_table tile
-    # assignments (which tiles map to which palette indices). As a result,
-    # different arenas CAN render with the same color set when they use the
-    # same subset of palette indices. This is NOT a failure.
-    # The real tests are: each arena is reached (FFBA matches), palette entries
-    # are non-zero/non-white, and no arena shows a white-screen regression.
-    observed_counts = Counter(result.observed for result in results)
-    missing = set(range(9)) - set(observed_counts)
-    duplicates = {arena for arena, count in observed_counts.items() if count > 1}
-    for result in results:
-        if duplicates:
-            result.failures.append(f"duplicate arena(s) observed: {sorted(duplicates)}")
-        if missing:
-            result.failures.append(f"arena(s) not observed: {sorted(missing)}")
 
-    results.sort(key=lambda result: result.observed)
-
-    report = []
-    for result in results:
-        meaningful = set(result.words) - {CGB_BLACK, CGB_WHITE}
-        status = "PASS" if not result.failures else "FAIL"
-        white_ratio = result.white_pixels / result.pixel_count
-        print(
-            f"arena {result.observed} ({BOSS_NAMES[result.observed]}): {status} | "
-            f"FFBA={result.observed} distinct={len(set(result.words))} "
-            f"non-zero/non-white={len(meaningful)} white={white_ratio:.2%}"
+def run_probe(
+    rom: Path,
+    output: Path,
+    mgba: str,
+    timeout: float,
+    states: Path | None = None,
+) -> bool:
+    output.mkdir(parents=True, exist_ok=True)
+    states_root = states or output
+    if states is None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(GENERATOR),
+                str(rom),
+                "--output",
+                str(output),
+                "--mgba",
+                mgba,
+                "--timeout",
+                str(timeout),
+                "--force",
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=max(180.0, timeout * 12),
+            check=False,
         )
-        for failure in result.failures:
+        print(completed.stdout, end="")
+        if completed.returncode:
+            print(f"FAIL: boss-state generator exited {completed.returncode}")
+            return False
+
+    rom_bytes = rom.read_bytes()
+    report: list[dict[str, object]] = []
+    passed = True
+    for target, name in enumerate(BOSS_NAMES):
+        prefix = states_root / f"boss{target}_{name}"
+        receipt = prefix.with_suffix(".report")
+        screenshot = prefix.with_suffix(".png")
+        state = prefix.with_suffix(".ss0")
+        failures: list[str] = []
+        if not receipt.is_file():
+            failures.append("missing report")
+            data: dict[str, str] = {}
+        else:
+            data = fields(receipt)
+        try:
+            audit_state(mgba, rom, state, prefix, target, timeout)
+        except Exception as error:
+            failures.append(str(error))
+            audit: dict[str, str] = {}
+        else:
+            audit = fields(Path(f"{prefix}.audit.report"))
+
+        expected_scene = f"{0x0C + target:02X}"
+        if data.get("status") != "ok":
+            failures.append(f"status={data.get('status')}")
+        if data.get("d880") != expected_scene:
+            failures.append(
+                f"D880={data.get('d880')}, expected {expected_scene}"
+            )
+        if data.get("ffc1") != "1":
+            failures.append(f"FFC1={data.get('ffc1')}")
+        if not state.is_file() or state.stat().st_size < 1024:
+            failures.append("generated savestate is missing or trivial")
+        if audit.get("status") != "ok":
+            failures.append(f"reload status={audit.get('status')}")
+        if audit.get("d880") != expected_scene:
+            failures.append(
+                f"reload D880={audit.get('d880')}, expected {expected_scene}"
+            )
+        if audit.get("ffc1") != "1":
+            failures.append(f"reload FFC1={audit.get('ffc1')}")
+        try:
+            generated_lcdc = int(data.get("lcdc", "0"), 16)
+            audit_lcdc = int(audit.get("lcdc", "0"), 16)
+        except ValueError:
+            generated_lcdc = audit_lcdc = 0
+        if not generated_lcdc & 0x80:
+            failures.append(f"generated LCDC={generated_lcdc:02X}")
+        if not audit_lcdc & 0x80:
+            failures.append(f"reload LCDC={audit_lcdc:02X}")
+
+        try:
+            active_table = bytes.fromhex(audit.get("active_table", ""))
+        except ValueError:
+            active_table = b""
+        wanted_table = expected_table(rom_bytes, target)
+        table_mismatches = sum(
+            actual != expected
+            for actual, expected in zip(active_table, wanted_table)
+        ) + abs(len(active_table) - len(wanted_table))
+        if len(active_table) != 256 or any(value > 7 for value in active_table):
+            failures.append("active table is missing or contains invalid slots")
+
+        try:
+            bg_cram = bytes.fromhex(audit.get("bg_cram", ""))
+        except ValueError:
+            bg_cram = b""
+        words = palette_words(bg_cram) if len(bg_cram) == 64 else ()
+        meaningful = set(words) - {0x0000, 0x7FFF}
+        if len(bg_cram) != 64:
+            failures.append(f"BG CRAM bytes={len(bg_cram)}, expected 64")
+        if not meaningful:
+            failures.append("BG CRAM contains no non-black/non-white colors")
+
+        rendered_colors: Counter[tuple[int, int, int]] = Counter()
+        if not screenshot.is_file() or screenshot.stat().st_size < 1000:
+            failures.append("missing/structurally trivial rendered screenshot")
+        else:
+            with Image.open(screenshot) as source:
+                rendered_colors.update(source.convert("RGB").getdata())
+            if set(rendered_colors) == {(255, 255, 255)}:
+                failures.append("rendered frame is pure white")
+            # The known bad serialized landing is a five-color horizontal
+            # stripe field. Ted's valid early arena frame legitimately has
+            # six or seven colors before its animation exposes the full set;
+            # keep this consistent with the exact-state generator.
+            if len(rendered_colors) < 6:
+                failures.append(
+                    f"rendered frame has only {len(rendered_colors)} colors"
+                )
+
+        status = "PASS" if not failures else "FAIL"
+        print(
+            f"arena {target} ({name}): {status} | D880={data.get('d880')} "
+            f"recapture_frame={data.get('frame')} "
+            f"table_mismatches={table_mismatches} "
+            f"meaningful_cram={len(meaningful)} "
+            f"rendered_colors={len(rendered_colors)}"
+        )
+        for failure in failures:
             print(f"  - {failure}")
+        passed &= not failures
         report.append(
             {
-                "arena": result.observed,
-                "name": BOSS_NAMES[result.observed],
-                "observed_ffba": result.observed,
-                "palette_words": [f"{word:04X}" for word in result.words],
-                "distinct_words": len(set(result.words)),
-                "meaningful_words": len(meaningful),
-                "white_ratio": white_ratio,
-                "failures": result.failures,
+                "arena": target,
+                "name": name,
+                "scene": data.get("d880"),
+                "recapture_frame": data.get("frame"),
+                "active_table_mismatches": table_mismatches,
+                "meaningful_bg_cram_words": len(meaningful),
+                "rendered_colors": len(rendered_colors),
+                "screenshot": str(screenshot),
+                "state": str(state),
+                "failures": failures,
             }
         )
-    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
 
-    passed = len(results) == 9 and all(not result.failures for result in results)
-    print(f"\n{'PASS' if passed else 'FAIL'}: {sum(not r.failures for r in results)}/9 boss arenas passed")
+    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    print(f"{'PASS' if passed else 'FAIL'}: {sum(not r['failures'] for r in report)}/9 boss arenas")
     print(f"Artifacts: {output}")
     return passed
 
@@ -264,15 +291,32 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--states",
+        type=Path,
+        help="audit an already-generated exact-ROM nine-state directory",
+    )
+    parser.add_argument(
+        "--mgba", default=str(ROOT / "scripts/mgba-qt-singleflight")
+    )
+    parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
     if not args.rom.is_file():
-        print(f"FAIL: teleport ROM not found: {args.rom}")
-        return 1
+        parser.error(f"ROM not found: {args.rom}")
+    if not args.mgba:
+        parser.error("mgba-qt was not found")
     try:
-        return 0 if run_probe(args.rom.resolve(), args.output.resolve()) else 1
-    except Exception as exc:
-        print(f"FAIL: PyBoy harness error: {exc}")
+        passed = run_probe(
+            args.rom.resolve(),
+            args.output.resolve(),
+            args.mgba,
+            args.timeout,
+            args.states.resolve() if args.states else None,
+        )
+    except Exception as error:
+        print(f"FAIL: mGBA boss verifier error: {error}")
         return 1
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

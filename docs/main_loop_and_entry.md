@@ -84,8 +84,9 @@ JP NZ 0x7393 for level select)". The disassembly confirms:
         ...
 ```
 
-So pressing START on the title transitions D880 to 0x15 (game intro
-state), and from there the scene state machine takes over.
+This is the **GAME START** entry, not the default title choice. The cursor
+begins on **OPENING START**, which enters the `D880=0x15` story prologue.
+Press DOWN first, then confirm, to select GAME START and reach `0x3B37`.
 
 ## RST 10 is HL += A (NOT HUD print — earlier docs corrected)
 

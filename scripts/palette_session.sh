@@ -6,28 +6,29 @@
 #   ./palette_session.sh status
 #
 # Starts:
-#   1. mGBA-qt loading the ROM (default: penta_dragon_dx_teleport.gb, which
-#      includes the SELECT+START combo handler used by the live editor's
-#      DX Teleport buttons via Lua-side combo simulation) with the
-#      live_palettes.lua script attached so it reacts to colour changes
-#      and DX teleport requests.
+#   1. mGBA-qt loading the release-candidate FIXED.gb with live_palettes.lua.
+#      Browser scene changes load curated emulator states; the retired
+#      SELECT+START teleport is never enabled.
 #   2. Python HTTP server at localhost:8077 serving the colour-picker UI.
 #   3. Browser pointed at the UI (best-effort: tries xdg-open / open).
 #
 # Stops:
-#   - Kills mgba-qt and the live_palette_editor.py process.
+#   - Stops only the mGBA/editor processes started by this script.
 
 set -e
 
 PROJECT_DIR="/home/struktured/projects/penta-dragon-dx-claude"
-ROM_DEFAULT="rom/working/penta_dragon_dx_teleport.gb"
+ROM_DEFAULT="rom/working/penta_dragon_dx_FIXED.gb"
 LUA_SCRIPT="scripts/lua/live_palettes.lua"
 EDITOR_SCRIPT="scripts/live_palette_editor.py"
+STAGE_STATE_GENERATOR="scripts/diagnostics/generate_stream_stage_states.py"
+BOSS_STATE_GENERATOR="scripts/diagnostics/generate_stream_boss_states.py"
+STORY_STATE_GENERATOR="scripts/diagnostics/generate_stream_story_states.py"
 PORT=8077
 LOG_DIR="$PROJECT_DIR/tmp/palette_session"
 EDITOR_PID_FILE="$LOG_DIR/editor.pid"
+MGBA_PID_FILE="$LOG_DIR/mgba.pid"
 EDITOR_LOG="$LOG_DIR/editor.log"
-MGBA_LOG="$LOG_DIR/mgba.log"
 
 cmd="${1:-start}"
 
@@ -37,21 +38,47 @@ editor_running() {
     if [ -f "$EDITOR_PID_FILE" ]; then
         pid=$(cat "$EDITOR_PID_FILE" 2>/dev/null)
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            return 0
+            case "$(ps -p "$pid" -o args= 2>/dev/null)" in
+                *live_palette_editor.py*) return 0 ;;
+            esac
         fi
     fi
-    pgrep -f "live_palette_editor.py" >/dev/null 2>&1
+    return 1
 }
 
 mgba_running() {
-    pgrep -f "mgba-qt.*live_palettes.lua" >/dev/null 2>&1
+    if [ -f "$MGBA_PID_FILE" ]; then
+        pid=$(cat "$MGBA_PID_FILE" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            case "$(ps -p "$pid" -o args= 2>/dev/null)" in
+                *mgba-qt*live_palettes.lua*) return 0 ;;
+            esac
+        fi
+    fi
+    return 1
+}
+
+stop_owned_process() {
+    pid_file="$1"
+    expected="$2"
+    if [ ! -f "$pid_file" ]; then
+        return
+    fi
+    pid=$(cat "$pid_file" 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        args=$(ps -p "$pid" -o args= 2>/dev/null || true)
+        case "$args" in
+            *"$expected"*)
+                kill "$pid" 2>/dev/null || true
+                ;;
+        esac
+    fi
+    rm -f "$pid_file"
 }
 
 stop_all() {
-    pkill -9 -f "live_palette_editor.py" 2>/dev/null || true
-    pkill -9 -f "mgba-qt" 2>/dev/null || true
-    rm -f "$EDITOR_PID_FILE"
-    sleep 1
+    stop_owned_process "$MGBA_PID_FILE" "live_palettes.lua"
+    stop_owned_process "$EDITOR_PID_FILE" "live_palette_editor.py"
 }
 
 status() {
@@ -78,62 +105,71 @@ case "$cmd" in
             exit 1
         fi
 
-        echo "Starting palette-editor session..."
-        # Clean slate
+        # Stop this launcher's prior processes before touching cached states.
+        # An old mGBA must not load a state while its replacement is being
+        # regenerated.
         stop_all
 
+        echo "Starting palette-editor session..."
+        # Keep this script alive as the exact parent/guardian for both owned
+        # processes. Closing or interrupting it cleans up the session.
+        trap stop_all EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        echo "  states:  checking ROM-matched Stage 2-7 scene states"
+        python3 "$PROJECT_DIR/$STAGE_STATE_GENERATOR" "$rom"
+        echo "  states:  checking release-ROM boss-arena scene states"
+        python3 "$PROJECT_DIR/$BOSS_STATE_GENERATOR" "$rom"
+        echo "  states:  checking 12 intro/final/ending states"
+        python3 "$PROJECT_DIR/$STORY_STATE_GENERATOR" "$rom"
         # 1. Python editor in background
         cd "$PROJECT_DIR"
-        nohup python3 "$EDITOR_SCRIPT" > "$EDITOR_LOG" 2>&1 &
+        nohup python3 "$EDITOR_SCRIPT" --bind 127.0.0.1 --port "$PORT" \
+            > "$EDITOR_LOG" 2>&1 &
         editor_pid=$!
         echo "$editor_pid" > "$EDITOR_PID_FILE"
         echo "  editor:  PID $editor_pid → log $EDITOR_LOG"
 
         # Wait briefly for server to bind port
+        port_ready=false
         for _ in 1 2 3 4 5; do
             if ss -lnt 2>/dev/null | grep -q ":$PORT\b" || \
                netstat -lnt 2>/dev/null | grep -q ":$PORT\b"; then
+                port_ready=true
                 break
             fi
             sleep 0.3
         done
-
-        # 2. Ensure OpenGL driver setting (mirrors launch_mgba.sh)
-        qtini="$HOME/.config/mgba/qt.ini"
-        if [ -f "$qtini" ]; then
-            sed -i 's/^displayDriver=.*/displayDriver=1/' "$qtini"
+        if ! editor_running || ! $port_ready; then
+            echo "  editor:  failed to start; see $EDITOR_LOG"
+            stop_all
+            exit 1
         fi
 
-        # 3. mGBA with the live Lua script.
-        # Pick platform: xcb if DISPLAY is set (XWayland or X11 session,
-        # works with NVIDIA via __GLX_VENDOR_LIBRARY_NAME), else wayland.
-        # The Claude Code shell typically has only WAYLAND_DISPLAY, so
-        # default to wayland mode for compatibility with that path.
-        if [ -n "$DISPLAY" ]; then
-            QT_QPA_PLATFORM=xcb \
-            __GLX_VENDOR_LIBRARY_NAME=nvidia \
-            VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json \
-                nohup mgba-qt "$rom" --script "$LUA_SCRIPT" \
-                > "$MGBA_LOG" 2>&1 &
-            mgba_platform="xcb"
-        elif [ -n "$WAYLAND_DISPLAY" ]; then
-            QT_QPA_PLATFORM=wayland \
-            XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
-            WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-                nohup mgba-qt "$rom" --script "$LUA_SCRIPT" \
-                > "$MGBA_LOG" 2>&1 &
-            mgba_platform="wayland"
-        else
-            echo "  mgba:    no DISPLAY or WAYLAND_DISPLAY — cannot launch GUI"
-            mgba_pid=""
-        fi
-        if [ -n "${mgba_platform:-}" ]; then
-            mgba_pid=$!
-            echo "  mgba:    PID $mgba_pid platform=$mgba_platform → log $MGBA_LOG (ROM: $(basename "$rom"))"
+        # 2. mGBA with the same XWayland/NVIDIA environment as the verified
+        # headed game launch. Do not pipe or redirect this GUI process.
+        DISPLAY=:0 \
+        QT_QPA_PLATFORM=xcb \
+        __GLX_VENDOR_LIBRARY_NAME=nvidia \
+            "$PROJECT_DIR/scripts/mgba-qt-singleflight" \
+            "$rom" --script "$LUA_SCRIPT" &
+        mgba_pid=$!
+        echo "$mgba_pid" > "$MGBA_PID_FILE"
+        echo "  mgba:    PID $mgba_pid platform=xcb (ROM: $(basename "$rom"))"
+
+        # A background GUI launch can fail after the shell has already returned
+        # (for example, if Qt cannot create the requested display device).
+        # Refuse to advertise a usable session unless the exact owned mGBA
+        # process survives startup.
+        sleep 2
+        if ! mgba_running; then
+            echo "  mgba:    failed to start with the XWayland/xcb display"
+            echo "  check DISPLAY=:0 and the mGBA/Qt error shown in the terminal"
+            stop_all
+            exit 1
         fi
 
-        # 4. Best-effort browser open
-        sleep 1
+        # 3. Best-effort browser open
         url="http://localhost:$PORT"
         opened=false
         for opener in xdg-open open; do
@@ -149,11 +185,16 @@ case "$cmd" in
             echo "  browser: open this URL yourself → $url"
         fi
 
-        sleep 2
         echo
         status
         echo
-        echo "To stop:  $0 stop"
+        echo "This command remains the process guardian while the session is live."
+        echo "To stop from another shell:  $0 stop"
+        set +e
+        wait "$mgba_pid"
+        mgba_status=$?
+        set -e
+        exit "$mgba_status"
         ;;
     stop)
         echo "Stopping palette-editor session..."
