@@ -15,14 +15,18 @@ from build_v301_teleport import (
 )
 from build_v301_gdma import build_v301
 
-BASE_OUT = Path("rom/working/penta_dragon_dx_v301.gb")
+BASE_OUT = Path("rom/working/penta_dragon_dx_FIXED.gb")
 TP_OUT = Path("rom/working/penta_dragon_dx_teleport.gb")
 
-# WRAM allocations
-OBJ_PAL_WRAM = 0xD900
-OBJ_PAL_WRAM_HI = 0xD9
+# WRAM allocations — WRAM BANK 0 (always accessible, no FF70 switching needed)
+# 0xCE00-0xCEFF: OBJ palette LUT (256 bytes)
+# 0xCF00-0xCF81: trampolines (~130 bytes)
+# These reside in WRAM bank 0 (C000-CFFF) which is always readable regardless of
+# the FF70 WRAM bank select register.
+OBJ_PAL_WRAM = 0xCE00
+OBJ_PAL_WRAM_HI = 0xCE
 
-WRAM_TRAMP_BASE = 0xDB80
+WRAM_TRAMP_BASE = 0xCF00
 S1_TRAMP = WRAM_TRAMP_BASE       # site 1 at attr write (0x10E4)
 S2_TRAMP = WRAM_TRAMP_BASE + 48  # site 2 at tile write (0x3487)
 S3_TRAMP = WRAM_TRAMP_BASE + 96  # site 3 at attr write (bank1:0x5221)
@@ -124,9 +128,10 @@ def s3_tramp():
 
 
 def build_wrapper():
-    """VBlank wrapper WITHOUT stamper CALL."""
+    """VBlank wrapper WITHOUT stamper CALL.
+    Preserves AF, calls VRAM digit copy, and calls the teleport routine + sound engine."""
     c = _B()
-    c.extend([0xC5, 0xD5, 0xE5])  # push BC, DE, HL
+    c.extend([0xF5, 0xC5, 0xD5, 0xE5])  # push AF, BC, DE, HL
     # joypad read (8-debounce)
     c.extend([0x3E, 0x20, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00,
               0x2F, 0xE6, 0x0F, 0xCB, 0x37, 0x47])
@@ -135,10 +140,17 @@ def build_wrapper():
         c.extend([0xF0, 0x00])
     c.extend([0x2F, 0xE6, 0x0F, 0xB0, 0xE0, 0x93, 0x47])
     c.extend([0x3E, 0x30, 0xE0, 0x00, 0x78])
+    # CALL VRAM digit copy helper (copies digit 2bpp tiles during VBlank)
+    c.extend([0xCD, 0xC0, 0x6A])  # CALL 0x6AC0 (VRAM_DIGIT_COPY_ADDR)
     # CALL teleport (includes scene_detect + lava + colorize JP)
     c.extend([0xCD, TELEPORT_ADDR & 0xFF, (TELEPORT_ADDR >> 8) & 0xFF])
+    # Safe sound engine VBlank update (0xFF80): gated by DF0E sentinel
+    c.extend([0xFA, 0x0E, 0xDF])
+    c.extend([0xFE, 0x5A])
+    c.extend([0x20, 0x03])
+    c.extend([0xCD, 0x80, 0xFF])
     # NO stamper CALL
-    c.extend([0xE1, 0xD1, 0xC1, 0xC9])  # pop HL, DE, BC; RET
+    c.extend([0xE1, 0xD1, 0xC1, 0xF1, 0xC9])  # pop HL, DE, BC, AF; RET
     return bytes(c)
 
 
@@ -240,17 +252,15 @@ def main():
     lc.extend([0x21, OBJ_PAL_TABLE_ADDR & 0xFF, (OBJ_PAL_TABLE_ADDR >> 8) & 0xFF])
     lc.extend([0x11, OBJ_PAL_WRAM & 0xFF, (OBJ_PAL_WRAM >> 8) & 0xFF])
     lc.extend([0x06, 0x00])  # B=0 = 256
-    l = len(lc)
-    lc.extend([0x2A, 0x12, 0x13, 0x05, 0x20, (l - (len(lc) + 2)) & 0xFF])
+    lc.extend([0x2A, 0x12, 0x13, 0x05, 0x20, 0xFA])  # hardcoded -6 relative offset
     print(f"  LUT copy: {len(lc)} bytes")
 
-    # Build trampoline copy (6A70 -> DB80)
+    # Build trampoline copy (6A70 -> WRAM_TRAMP_BASE)
     tc = _B()
     tc.extend([0x21, TRAMP_ROM_SRC & 0xFF, (TRAMP_ROM_SRC >> 8) & 0xFF])
     tc.extend([0x11, WRAM_TRAMP_BASE & 0xFF, (WRAM_TRAMP_BASE >> 8) & 0xFF])
     tc.extend([0x06, len(blob)])
-    l = len(tc)
-    tc.extend([0x2A, 0x12, 0x13, 0x05, 0x20, (l - (len(tc) + 2)) & 0xFF])
+    tc.extend([0x2A, 0x12, 0x13, 0x05, 0x20, 0xFA])  # hardcoded -6 relative offset
     print(f"  Tramp copy: {len(tc)} bytes")
 
     # Insert before sentinel
@@ -283,13 +293,14 @@ def main():
     rom[off:off + len(lp)] = lp
 
     # === Fix VBlank hook CALL target (old WRAPPER_ADDR -> new) ===
-    old_wrapper = 0x6F40
+    # Scan for any old wrapper addresses (0x6F30, 0x6F40, 0x6F50) to be robust against compile-time address drift!
+    old_wrappers = [0x6F30, 0x6F40, 0x6F50]
     found_hook = False
     for i in range(len(rom) - 2):
         if rom[i] == 0xCD:
             tgt = rom[i+1] | (rom[i+2] << 8)
-            if tgt == old_wrapper:
-                print(f"  VBlank hook CALL at 0x{i:04X}: {old_wrapper:04X} -> {WRAPPER_ADDR:04X}")
+            if tgt in old_wrappers:
+                print(f"  VBlank hook CALL at 0x{i:04X}: {tgt:04X} -> {WRAPPER_ADDR:04X}")
                 rom[i+1] = WRAPPER_ADDR & 0xFF
                 rom[i+2] = (WRAPPER_ADDR >> 8) & 0xFF
                 found_hook = True

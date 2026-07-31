@@ -1,9 +1,9 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-07-29T02:18:06.526276+00:00",
-  "git_head_at_run": "0349208b8f434641bdecbe4cf214e05ef40f16de",
-  "source_fingerprint": "954239dea4bf6870f71811a2003eb9fc8c6707bee03b7d8c228fbe285cdf01d9",
+  "generated_at": "2026-07-31T01:42:31.244492+00:00",
+  "git_head_at_run": "eea1dc1c573006893f1b83acc53267cfacad7003",
+  "source_fingerprint": "2cbdbfdc937ebaa1e7486e390699b407a2ea821b4cf84e1b753b34a8a34250f6",
   "source_inputs": [
     {
       "path": ".claude/settings.json",
@@ -42,8 +42,8 @@
     },
     {
       "path": "palettes/bg_tile_categories.yaml",
-      "sha256": "4d8666a87e44259b5ed25347e352355e6a85af157505470f155f860210fbdb30",
-      "size": 14508
+      "sha256": "4d542aab21686fe96c9526e0bd9fb6d154d5a27f8f256a4310a532df9dca27ca",
+      "size": 14700
     },
     {
       "path": "palettes/monster_palette_map.yaml",
@@ -92,8 +92,8 @@
     },
     {
       "path": "scripts/build_release_bundle.py",
-      "sha256": "da383fc477ddba7208f9bab3f80d3000a892cf410ee808d8f69eb3d6c0e2ffbd",
-      "size": 21071
+      "sha256": "84ef14d09586015e55f5487d40042a564659cab002a0ed94aeb7ac86e38ee816",
+      "size": 21201
     },
     {
       "path": "scripts/build_v296_phantomsafe.py",
@@ -102,8 +102,8 @@
     },
     {
       "path": "scripts/build_v301_gdma.py",
-      "sha256": "1392b493dbb439842a673af078d0a124fd85eb6cf81382734e3437614f300ef6",
-      "size": 69112
+      "sha256": "91e64987697b684d351051835bf32bef4e16a97ea2f828356ba4e72a71b09eef",
+      "size": 71371
     },
     {
       "path": "scripts/build_v301_teleport.py",
@@ -112,8 +112,8 @@
     },
     {
       "path": "scripts/build_v302_title_fix.py",
-      "sha256": "62bbe191c5be09a254cfe82be48d6751f82bd13d50b1abc27bab3f20e6c01135",
-      "size": 150974
+      "sha256": "c6f4312f1282bd8fe7c74846f36783177a2fd9c364b9176e45fcca51f7f9c9ee",
+      "size": 155798
     },
     {
       "path": "scripts/check_emulator_processes.sh",
@@ -347,13 +347,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_frame_flicker.lua",
-      "sha256": "a7269febe3400e68719c476a81a6b8d08e0110a1ca778c038dbac28b2aca2691",
-      "size": 7820
+      "sha256": "e65382141e74a887679d30934b277d49f9849428b8a835d2f69d9059ae025624",
+      "size": 8940
     },
     {
       "path": "scripts/diagnostics/probe_game_start_route.lua",
-      "sha256": "2efe52cf3f50692dd71852e6ab88135db24277f013e4a5beef1044772f3b51a3",
-      "size": 3953
+      "sha256": "0169eff911b31b78e04a9134d8e0eca364728b2eeb459849a60f4693d8c01c48",
+      "size": 11027
     },
     {
       "path": "scripts/diagnostics/probe_gameplay_cram.lua",
@@ -397,8 +397,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_later_stage_soak.lua",
-      "sha256": "ead768f9f096d3a260446cdf159260bb46d77e4142b33625c7725de64d2ff384",
-      "size": 13889
+      "sha256": "792932361736bd6336e4602b1548e6ba9cec25ebf301f7e54d1ec256a4c8122b",
+      "size": 14043
     },
     {
       "path": "scripts/diagnostics/probe_lava_ffba.lua",
@@ -424,6 +424,11 @@
       "path": "scripts/diagnostics/probe_loadstate_shot.lua",
       "sha256": "a7379cdf304f256d5d8ef21485722b0502badd0b012a3b91ab25fd382a2d6954",
       "size": 1258
+    },
+    {
+      "path": "scripts/diagnostics/probe_manual_game_start.lua",
+      "sha256": "ef748a7e8def7cf5068fce45f6f722b1e5b85ed9af018e008faaf7fe7833e9ce",
+      "size": 4262
     },
     {
       "path": "scripts/diagnostics/probe_menu_flicker.lua",
@@ -497,13 +502,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage1_no_bleed.lua",
-      "sha256": "af088bfbe74a0f065a500a9f36387f33f384e3d9412ea428e25d69caa592210e",
-      "size": 11050
+      "sha256": "69df3143b7642f8d78ede4000a6794216824df7f801add6fe875cbff250f148a",
+      "size": 18774
     },
     {
       "path": "scripts/diagnostics/probe_stage1_pickup_art.lua",
       "sha256": "b54959a1f58f5367091f01d6db68b5ffe316acb2c9ef88061bbcafcf4316a96e",
       "size": 2199
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_vram_dump.lua",
+      "sha256": "5d072a8db0d3b78fc56ee18bb6e243007c2ade80ea619ed91439351a85890285",
+      "size": 1718
     },
     {
       "path": "scripts/diagnostics/probe_stage_integrity.lua",
@@ -602,13 +612,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_frame_flicker.py",
-      "sha256": "8b5f0bdc1ea19d6c94d801fdc0d775f6c25f9aef47406af087d6d4e1435aa506",
-      "size": 19001
+      "sha256": "fae17794a09b32bd4b475fb7d517039e6db8cbaa0cc762d22b8fff89df4decd3",
+      "size": 19516
     },
     {
       "path": "scripts/diagnostics/verify_game_start_routes.py",
-      "sha256": "3deece7fc621ff7b4c960a719a3f58ece53996e489c3f00c76236ce9bf566d56",
-      "size": 9170
+      "sha256": "7ca3afe6eb8cd7dd82110e1b42fd0d35b3c37814ba893a011b4a1515c4eb12a1",
+      "size": 16993
     },
     {
       "path": "scripts/diagnostics/verify_gameplay_obj_palettes.py",
@@ -627,8 +637,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_later_stage_soak.py",
-      "sha256": "6d1b1b0168e128428efb7c9d2a2a2d69cda05332cf2eaebf69dc7ea1a8aa1686",
-      "size": 6354
+      "sha256": "9d57828081cdf74409fcbe944f0ac3b6f7e02fc453fd74befbddcd720abb5b03",
+      "size": 6853
     },
     {
       "path": "scripts/diagnostics/verify_levelselect_screen.py",
@@ -662,8 +672,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_release_candidate.py",
-      "sha256": "bf4efb96de0c37c4a944d105f79c3f9215fa664f7d531f8502357331330732a2",
-      "size": 22237
+      "sha256": "83183a0e50bf0f39604c6605fd20a808f386e3dd251fa5094a921df0d2569cfa",
+      "size": 23177
     },
     {
       "path": "scripts/diagnostics/verify_release_patch.py",
@@ -682,8 +692,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_no_bleed.py",
-      "sha256": "d80855439bcf3847f10d56a28050e7769fd17ba1a27aa6b4de37b8c94fa1295b",
-      "size": 11540
+      "sha256": "35f68f2e3b3ff55333991b56b5639f9f0eaf5454118de81a06bf8622d340dbff",
+      "size": 20616
     },
     {
       "path": "scripts/diagnostics/verify_stage_speed_matrix.py",
@@ -988,189 +998,195 @@
   ],
   "candidate": {
     "size": 262144,
-    "md5": "210c340bcfb261aa0337e19397eeead0",
-    "sha256": "29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784"
+    "md5": "4f20b0cb7ab206c0216282a2f8fd113d",
+    "sha256": "78dc24cfc8111d359d1742e1744f824b6715fd7664ea54666a1126b2700f5f7a"
   },
   "deterministic_build": {
     "passes": 2,
     "byte_identical": true,
-    "build_a_sha256": "29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784",
-    "build_b_sha256": "29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784"
+    "build_a_sha256": "78dc24cfc8111d359d1742e1744f824b6715fd7664ea54666a1126b2700f5f7a",
+    "build_b_sha256": "78dc24cfc8111d359d1742e1744f824b6715fd7664ea54666a1126b2700f5f7a"
   },
   "matrix": {
     "status": "emulator-pass",
     "scope": "full",
-    "gate_count": 36,
+    "gate_count": 37,
     "failures": 0,
-    "manifest_sha256": "028630a99ca3c6bb5cf615a482e9625c60e42108e25540de9baa1d896557f127",
+    "manifest_sha256": "a258a2b3fc16b4341bfea3634735073386f84057f4c4feeef2c9e069512b82b8",
     "results": [
       {
         "name": "emulator_singleflight_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.214
+        "duration_seconds": 0.264
       },
       {
         "name": "title_footer_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.465
+        "duration_seconds": 0.467
       },
       {
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.019
+        "duration_seconds": 1.067
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.516
+        "duration_seconds": 0.666
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.402
+        "duration_seconds": 15.348
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.72
+        "duration_seconds": 2.869
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.468
+        "duration_seconds": 1.517
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.465
+        "duration_seconds": 0.515
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.969
+        "duration_seconds": 3.171
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.822
+        "duration_seconds": 5.024
       },
       {
         "name": "levelselect_screen",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.982
+        "duration_seconds": 8.08
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 31.13
+        "duration_seconds": 115.958
+      },
+      {
+        "name": "game_start_after_attract",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 5.175
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 13.387
+        "duration_seconds": 13.894
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 19.959
+        "duration_seconds": 19.957
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.173
+        "duration_seconds": 7.127
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.566
+        "duration_seconds": 12.091
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.937
+        "duration_seconds": 14.937
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.484
+        "duration_seconds": 8.481
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.58
+        "duration_seconds": 1.581
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.03
+        "duration_seconds": 8.131
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 26.918
+        "duration_seconds": 28.471
       },
       {
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.922
+        "duration_seconds": 25.066
       },
       {
         "name": "title_idle_reel",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.622
+        "duration_seconds": 4.573
       },
       {
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.704
+        "duration_seconds": 22.605
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.571
+        "duration_seconds": 2.569
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.628
+        "duration_seconds": 8.931
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.875
+        "duration_seconds": 4.674
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.624
+        "duration_seconds": 4.721
       },
       {
         "name": "ending_discriminators",
@@ -1182,31 +1198,31 @@
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 32.284
+        "duration_seconds": 32.426
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.659
+        "duration_seconds": 24.116
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 80.344
+        "duration_seconds": 83.027
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 46.268
+        "duration_seconds": 46.915
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.617
+        "duration_seconds": 1.817
       },
       {
         "name": "candidate_ips_roundtrip",
@@ -1218,7 +1234,7 @@
         "name": "mister_reservation_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.165
+        "duration_seconds": 0.215
       }
     ]
   },

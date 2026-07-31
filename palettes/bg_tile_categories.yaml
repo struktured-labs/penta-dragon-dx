@@ -65,10 +65,13 @@ bg_table:
       palette: 1
       description: |
         The old blanket 0x80-0xDF + 0xF0-0xFF rule painted font and reused
-        background tiles red. Actual 2x2 pickup art occupies alternating
-        eight-tile bands in the Stage 1 tileset. Color only those confirmed
-        bands; keep the interleaved font/background bands neutral. Title,
+        background tiles red. Most 2x2 pickup art occupies alternating
+        eight-tile bands in the Stage 1 tileset. Two additional pickup blocks
+        were identified from a headed native capture as
+        A0/A1/B0/B1 and A6/A7/B6/B7. Color only those confirmed tiles; keep
+        the remaining interleaved font/background tiles neutral. Title,
         footer, and item-menu attributes remain scene/window-specific BG0.
+      tiles: [0xA0, 0xA1, 0xA6, 0xA7, 0xB0, 0xB1, 0xB6, 0xB7]
       tile_ranges:
         - [0x88, 0x8F]
         - [0x98, 0x9F]
@@ -85,8 +88,8 @@ bg_table:
       tile_ranges:
         - [0x80, 0x87]
         - [0x90, 0x97]
-        - [0xA0, 0xA7]
-        - [0xB0, 0xB7]
+        - [0xA2, 0xA5]
+        - [0xB2, 0xB5]
         - [0xC0, 0xC7]
         - [0xD0, 0xD7]
         - [0xF0, 0xFF]

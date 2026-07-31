@@ -102,10 +102,13 @@ if TRACE_ADDRS ~= "" then
     if address then
       local callback = function()
         log(string.format(
-          "breakpoint=%04X segment=%s pc=%04X scene=%02X room=%02X scx=%02X scy=%02X " ..
+          "breakpoint=%04X segment=%s pc=%04X scene=%02X room=%02X " ..
+          "dcfd=%02X dd09=%02X a=%02X f=%02X scx=%02X scy=%02X " ..
           "decision=%02X bank=%02X svbk=%02X mapped4C54=%02X",
           address, tostring(segment), address, emu:read8(0xD880),
-          emu:read8(0xFFBD), emu:read8(0xFF43), emu:read8(0xFF42),
+          emu:read8(0xFFBD), emu:read8(0xDCFD), emu:read8(0xDD09),
+          emu:readRegister("A"), emu:readRegister("F"),
+          emu:read8(0xFF43), emu:read8(0xFF42),
           emu:read8(0xFFE0), emu:read8(0xFF99), emu:read8(0xFF70),
           emu:read8(0x4C54)))
       end

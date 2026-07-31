@@ -4,7 +4,7 @@
 -- Environment:
 --   STAGE1_BLEED_OUT       output directory
 --   STAGE1_BLEED_FRAMES    actual gameplay frames (default 1200)
---   STAGE1_BLEED_MODE      right or patrol (default right)
+--   STAGE1_BLEED_MODE      right, patrol, vertical, or box (default box)
 
 local OUT = assert(os.getenv("STAGE1_BLEED_OUT"))
 local LUT_PATH = assert(os.getenv("STAGE1_BLEED_LUT"))
@@ -13,12 +13,13 @@ local lut = assert(lut_file:read("*a"))
 lut_file:close()
 assert(#lut == 256)
 local LIMIT = tonumber(os.getenv("STAGE1_BLEED_FRAMES") or "1200")
-local INPUT_MODE = os.getenv("STAGE1_BLEED_MODE") or "right"
+local INPUT_MODE = os.getenv("STAGE1_BLEED_MODE") or "box"
 local RESULT = OUT .. "/probe.txt"
 local DONE = OUT .. "/DONE"
 
 local KEY_A, KEY_START = 0x01, 0x08
 local KEY_RIGHT, KEY_LEFT = 0x10, 0x20
+local KEY_UP, KEY_DOWN = 0x40, 0x80
 local EXPECTED_SCENE = 0x02
 local CAPTURE_FRAMES = {
   [120] = true,
@@ -37,17 +38,44 @@ local pal1_cells, unexpected_cells, unsafe_cells = 0, 0, 0
 local pal1_tiles = {}
 local first_pal1_frame, first_unexpected_frame = -1, -1
 local scene_frames, active_frames = 0, 0
-local previous_scx, scroll_changes = -1, 0
+local previous_scx, previous_scy = -1, -1
+local scroll_changes, scx_changes, scy_changes = 0, 0, 0
 local previous_source_signature, source_signature_changes = -1, 0
 local captures = {}
+local raster_captures = {}
+local raster_window = 0
+local helper_events = {}
 local first_unexpected_path = ""
 local first_unexpected_details = ""
 local debug_copy_hits, debug_atomic_hits, debug_pure_hits = 0, 0, 0
 local debug_main_hits, debug_last_address = 0, -1
 local debug_atomic = tonumber(os.getenv("STAGE1_DEBUG_ATOMIC") or "0")
 local debug_pure = tonumber(os.getenv("STAGE1_DEBUG_PURE") or "0")
+local trace_layouts = tonumber(os.getenv("STAGE1_TRACE_LAYOUTS") or "0") ~= 0
+local layout_records, layout_seen = {}, {}
+local debug_destination = 0
+local packed_signatures
+local previous_pickup_rects, previous_oam_rects = "", ""
+
+local function register_layout(raw_layout, attr_layout)
+  if not trace_layouts then return 0 end
+  if not layout_seen[raw_layout] then
+    layout_records[#layout_records + 1] = {
+      raw = raw_layout,
+      attr = attr_layout,
+    }
+    layout_seen[raw_layout] = #layout_records
+  end
+  return layout_seen[raw_layout]
+end
 
 pcall(function()
+  emu:setBreakpoint(function()
+    debug_destination = 0x9C
+  end, 0x42A0)
+  emu:setBreakpoint(function()
+    debug_destination = 0x98
+  end, 0x42A5)
   emu:setBreakpoint(function()
     debug_copy_hits = debug_copy_hits + 1
     debug_last_address = 0x42A7
@@ -68,6 +96,30 @@ pcall(function()
       debug_last_address = debug_pure
     end, debug_pure)
   end
+  emu:setBreakpoint(function()
+    if phase == "play" and #helper_events < 1024 then
+      local h_ok, h = pcall(function() return emu:getRegister("H") end)
+      local a_ok, a = pcall(function() return emu:getRegister("A") end)
+      local raw_hash, attr_hash, raw_layout, attr_layout =
+          packed_signatures()
+      helper_events[#helper_events + 1] = {
+        frame = play_frames,
+        h = h_ok and h or -1,
+        a = a_ok and a or -1,
+        destination = debug_destination,
+        lcdc = emu:read8(0xFF40),
+        scx = emu:read8(0xFF43),
+        scy = emu:read8(0xFF42),
+        dc00 = emu:read8(0xDC00),
+        cache9800 = emu:read8(0xDF53),
+        cache9c00 = emu:read8(0xDF57),
+        raw_hash = raw_hash,
+        attr_hash = attr_hash,
+        layout_id = register_layout(raw_layout, attr_layout),
+        room = emu:read8(0xFFBD),
+      }
+    end
+  end, 0x3485)
 end)
 
 local function seed_sram()
@@ -147,6 +199,66 @@ local function hist_text(hist)
   return table.concat(parts, ",")
 end
 
+local function active_oam_rects()
+  local height = ((emu:read8(0xFF40) & 0x04) ~= 0) and 16 or 8
+  local parts = {}
+  for slot = 0, 39 do
+    local base = 0xFE00 + slot * 4
+    local y = emu:read8(base) - 16
+    local x = emu:read8(base + 1) - 8
+    if x < 160 and x + 8 > 0 and y < 144 and y + height > 0 then
+      parts[#parts + 1] = string.format(
+        "%d,%d,%d,%d", x, y, x + 7, y + height - 1)
+    end
+  end
+  return table.concat(parts, ";")
+end
+
+local function active_pickup_rects()
+  local old_vbk = emu:read8(0xFF4F)
+  local lcdc = emu:read8(0xFF40)
+  local base = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
+  local scx, scy = emu:read8(0xFF43), emu:read8(0xFF42)
+  local first_col, first_row = math.floor(scx / 8), math.floor(scy / 8)
+  local x_offset, y_offset = scx % 8, scy % 8
+  local parts = {}
+  emu:write8(0xFF4F, 1)
+  for screen_row = 0, 18 do
+    local row = (first_row + screen_row) % 32
+    local y = screen_row * 8 - y_offset
+    for screen_col = 0, 20 do
+      local col = (first_col + screen_col) % 32
+      local x = screen_col * 8 - x_offset
+      local attr = emu:read8(base + row * 32 + col)
+      if (attr & 0x07) == 1 then
+        parts[#parts + 1] = string.format(
+          "%d,%d,%d,%d", x, y, x + 7, y + 7)
+      end
+    end
+  end
+  emu:write8(0xFF4F, old_vbk)
+  return table.concat(parts, ";")
+end
+
+packed_signatures = function()
+  local raw_hash, attr_hash = 0xA55A, 0x5AA5
+  local raw_parts, attr_parts = {}, {}
+  for offset = 0, 0x23F do
+    local tile = emu:read8(0xC1A0 + offset)
+    local attr = string.byte(lut, tile + 1) & 0x07
+    raw_hash = ((raw_hash * 257) ~ tile) & 0xFFFF
+    attr_hash = ((attr_hash * 257) ~ attr) & 0xFFFF
+    if trace_layouts then
+      raw_parts[#raw_parts + 1] = string.char(tile)
+      attr_parts[#attr_parts + 1] = string.char(attr)
+    end
+  end
+  if trace_layouts then
+    return raw_hash, attr_hash, table.concat(raw_parts), table.concat(attr_parts)
+  end
+  return raw_hash, attr_hash, nil, nil
+end
+
 local function finish()
   if finished then return end
   finished = true
@@ -163,6 +275,8 @@ local function finish()
   handle:write(string.format("scene_frames=%d\n", scene_frames))
   handle:write(string.format("active_frames=%d\n", active_frames))
   handle:write(string.format("scroll_changes=%d\n", scroll_changes))
+  handle:write(string.format("scx_changes=%d\n", scx_changes))
+  handle:write(string.format("scy_changes=%d\n", scy_changes))
   handle:write(string.format(
     "source_signature_changes=%d\n", source_signature_changes))
   handle:write(string.format("final_scene=%d\n", emu:read8(0xD880)))
@@ -178,6 +292,9 @@ local function finish()
   handle:write(string.format("debug_main_hits=%d\n", debug_main_hits))
   handle:write(string.format("debug_last_address=%d\n", debug_last_address))
   handle:write(string.format("capture_count=%d\n", #captures))
+  handle:write(string.format("raster_capture_count=%d\n", #raster_captures))
+  handle:write(string.format("helper_event_count=%d\n", #helper_events))
+  handle:write(string.format("layout_record_count=%d\n", #layout_records))
   handle:write("first_unexpected_screenshot=" .. first_unexpected_path .. "\n")
   handle:write("first_unexpected_details=" .. first_unexpected_details .. "\n")
   local tile_parts = {}
@@ -200,7 +317,56 @@ local function finish()
     handle:write(string.format(
       "pal1_capture=%d|%s\n", capture.frame, capture.pal1_details))
   end
+  for _, capture in ipairs(raster_captures) do
+    handle:write(string.format(
+      "raster_capture=%d|%s|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%s|%s|%s\n",
+      capture.frame,
+      capture.path,
+      capture.lcdc,
+      capture.scx,
+      capture.scy,
+      capture.signature,
+      capture.dc00,
+      capture.dc01,
+      capture.dc02,
+      capture.dc03,
+      capture.cache9800,
+      capture.cache9c00,
+      capture.c1a4,
+      capture.raw_hash,
+      capture.attr_hash,
+      capture.layout_id,
+      capture.source,
+      capture.pickups,
+      capture.oam))
+  end
+  for _, event in ipairs(helper_events) do
+    handle:write(string.format(
+      "helper_event=%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d\n",
+      event.frame,
+      event.h,
+      event.a,
+      event.destination,
+      event.lcdc,
+      event.scx,
+      event.scy,
+      event.dc00,
+      event.cache9800,
+      event.cache9c00,
+      event.raw_hash,
+      event.attr_hash,
+      event.layout_id,
+      event.room))
+  end
   handle:close()
+  if trace_layouts then
+    local layouts = assert(io.open(OUT .. "/layouts.bin", "wb"))
+    for _, record in ipairs(layout_records) do
+      layouts:write(record.raw)
+      layouts:write(record.attr)
+    end
+    layouts:close()
+  end
   local marker = assert(io.open(DONE, "w"))
   marker:write("OK\n")
   marker:close()
@@ -248,6 +414,7 @@ callbacks:add("frame", function()
       if stable_frames >= 120 then
         phase = "play"
         previous_scx = emu:read8(0xFF43)
+        previous_scy = emu:read8(0xFF42)
       end
     else
       stable_frames = 0
@@ -265,6 +432,14 @@ callbacks:add("frame", function()
   local movement
   if INPUT_MODE == "patrol" then
     movement = ((play_frames % 240) < 120) and KEY_RIGHT or KEY_LEFT
+  elseif INPUT_MODE == "vertical" then
+    movement = ((play_frames % 240) < 120) and KEY_DOWN or KEY_UP
+  elseif INPUT_MODE == "box" then
+    local leg = math.floor((play_frames % 480) / 120)
+    if leg == 0 then movement = KEY_RIGHT
+    elseif leg == 1 then movement = KEY_DOWN
+    elseif leg == 2 then movement = KEY_LEFT
+    else movement = KEY_UP end
   else
     movement = KEY_RIGHT
   end
@@ -273,17 +448,30 @@ callbacks:add("frame", function()
   emu:setKeys(movement)
 
   local scx = emu:read8(0xFF43)
-  if scx ~= previous_scx then scroll_changes = scroll_changes + 1 end
+  local scx_changed = scx ~= previous_scx
+  if scx_changed then
+    scx_changes = scx_changes + 1
+    scroll_changes = scroll_changes + 1
+  end
   previous_scx = scx
+  local scy = emu:read8(0xFF42)
+  local scy_changed = scy ~= previous_scy
+  if scy_changed then
+    scy_changes = scy_changes + 1
+    scroll_changes = scroll_changes + 1
+  end
+  previous_scy = scy
   local source_signature = (
-    emu:read8(0xFF43)
-    ~ emu:read8(0xFF42)
+    scx
+    ~ scy
     ~ emu:read8(0xC1A4)
   ) & 0xFE
-  if source_signature ~= previous_source_signature then
+  local signature_changed = source_signature ~= previous_source_signature
+  if signature_changed then
     source_signature_changes = source_signature_changes + 1
   end
   previous_source_signature = source_signature
+  if scx_changed or scy_changed or signature_changed then raster_window = 12 end
 
   local hist, frame_pal1, frame_unexpected, frame_unsafe,
       frame_pal1_details, frame_unexpected_now = scan_visible()
@@ -305,6 +493,56 @@ callbacks:add("frame", function()
       pal1_details = frame_pal1_details,
     }
   end
+  if raster_window > 0 then
+    local raw_hash, attr_hash, raw_layout, attr_layout = packed_signatures()
+    local layout_id = 0
+    layout_id = register_layout(raw_layout, attr_layout)
+    local current_pickups = active_pickup_rects()
+    local current_oam = active_oam_rects()
+    local path = string.format("%s/raster-%04d.png", OUT, play_frames)
+    emu:screenshot(path)
+    raster_captures[#raster_captures + 1] = {
+      frame = play_frames,
+      path = path,
+      lcdc = emu:read8(0xFF40),
+      scx = scx,
+      scy = scy,
+      signature = source_signature,
+      dc00 = emu:read8(0xDC00),
+      dc01 = emu:read8(0xDC01),
+      dc02 = emu:read8(0xDC02),
+      dc03 = emu:read8(0xDC03),
+      cache9800 = emu:read8(0xDF53),
+      cache9c00 = emu:read8(0xDF57),
+      c1a4 = emu:read8(0xC1A4),
+      raw_hash = raw_hash,
+      attr_hash = attr_hash,
+      layout_id = layout_id,
+      source = string.format(
+        "%02X,%02X,%02X,%02X,%02X,%02X,%02X,%02X",
+        emu:read8(0xC1A0),
+        emu:read8(0xC1A1),
+        emu:read8(0xC1A2),
+        emu:read8(0xC1A3),
+        emu:read8(0xC1A4),
+        emu:read8(0xC1A5),
+        emu:read8(0xC1A6),
+        emu:read8(0xC1A7)),
+      pickups = (
+        previous_pickup_rects ~= ""
+        and (previous_pickup_rects .. ";" .. current_pickups)
+        or current_pickups
+      ),
+      oam = (
+        previous_oam_rects ~= ""
+        and (previous_oam_rects .. ";" .. current_oam)
+        or current_oam
+      ),
+    }
+    raster_window = raster_window - 1
+  end
+  previous_pickup_rects = active_pickup_rects()
+  previous_oam_rects = active_oam_rects()
 
   -- Leave several rendered frames after the final screenshot before exiting.
   if play_frames >= LIMIT + 6 then finish() end

@@ -155,7 +155,14 @@ NATIVE_GAMEPLAY_BGP_ROUTINE_ADDR = 0x281C
 # Its exact 33-byte cave hosts the cache/lava decision helper used by the
 # register-staged, stock-width atomic map copier.
 INLINE_ATTR_DECISION_HELPER_ADDR = 0x3482
+STAGE1_ATOMIC_WRAP_ADDR = INLINE_ATTR_DECISION_HELPER_ADDR + 11
 NATIVE_DMG_FADE_DISPATCH_ADDR = 0x10D5
+STAGE1_DEMO_DELAY_ADDR = NATIVE_DMG_FADE_DISPATCH_ADDR + 18
+# The stock attract recording is sensitive to the tile copier's scanline
+# phase. Align its Stage-1 cache misses to the first visible line. DCFD, not
+# DD09, distinguishes this route: attract keeps DCFD=0, while natural GAME
+# START publishes DCFD=1 before Stage 1 even though both briefly use DD09=1.
+STAGE1_DEMO_WAIT_LINE = 0
 LEVELSEL_STUB_MAX = 36
 # Keep a guard gap after the RC3 wrapper while retaining ample room below the
 # 0x7000 dungeon table.
@@ -185,7 +192,7 @@ POSMAP_PTR_TABLE = 0x7FE0
 # The position-sweep RLE blob and pointer table had no production caller.
 # Reclaim that dead region for main-loop semantic OAM and lava helpers.
 OAM_PALETTE_RESOLVER_ADDR = 0x7B00
-OAM_BOSS_LUT_SERVICE_ADDR = 0x7B20
+OAM_BOSS_LUT_SERVICE_ADDR = 0x7B21
 OAM_CENTRAL_EMITTER_ADDR = 0x7B60
 OAM_FREE_EMITTER_ADDR = 0x7BE0
 LAVA_ATTR_STAGE5_SIGNATURE_ADDR = 0x7C13
@@ -213,11 +220,11 @@ LAVA_ATTR_STAGE7_SOURCE_B_ADDR = 0x7C4D
 LAVA_ATTR_DECISION_HRAM = 0xE0
 LAVA_ATTR_STAGE5_9800_META_ADDR = 0xDF53
 LAVA_ATTR_STAGE5_9C00_META_ADDR = 0xDF56
-# Stage 1 reuses the first two Stage-5 metadata bytes while its own scene is
-# active. Scene detection clears them on every Stage 1 entry; its keys can
-# never publish the A7 validity marker consumed later by Stage 5.
+# Stage 1 reuses one signature byte from each Stage-5 metadata record while
+# its own scene is active. Scene detection clears them on every Stage 1 entry;
+# its keys can never publish the A7 validity marker consumed later by Stage 5.
 STAGE1_ATTR_CACHE_9800_ADDR = LAVA_ATTR_STAGE5_9800_META_ADDR
-STAGE1_ATTR_CACHE_9C00_ADDR = LAVA_ATTR_STAGE5_9800_META_ADDR + 1
+STAGE1_ATTR_CACHE_9C00_ADDR = LAVA_ATTR_STAGE5_9C00_META_ADDR + 1
 # Raw-tile XOR discriminators covered by the moving/stationary/patrol traces
 # plus the multi-room corruption routes.  These keys are injective across all
 # captured desired-palette layouts and stable across every duplicate raw-tile
@@ -228,11 +235,18 @@ LAVA_ATTR_STAGE7_SAMPLES = (6, 69, 169, 452)
 OAM_WRAM_BASE = 0xDA00
 OAM_PALETTE_LUT_WRAM = 0xD900
 OAM_PALETTE_RESOLVER_RUNTIME_ADDR = OAM_WRAM_BASE
-OAM_CENTRAL_EMITTER_RUNTIME_ADDR = OAM_WRAM_BASE + 0x20
+OAM_CENTRAL_EMITTER_RUNTIME_ADDR = OAM_WRAM_BASE + 0x21
 LAVA_ATTR_STAGE7_RUNTIME_ADDR = OAM_WRAM_BASE + 0x60
 # The Stage 7 runtime ends at $DABC. Its verified-unused padding before the
 # two destination metadata records hosts a common Stage 5/7 scene dispatcher.
 LAVA_ATTR_SCENE_DISPATCH_ADDR = OAM_WRAM_BASE + 0xBC
+# The direct-result Stage-7 dispatcher ends at DAD3. Stage 1 uses the remaining
+# gap before the existing Stage-7 metadata for a vertical-safe, per-map cache;
+# the pickup-first atomic setup rides in the verified resolver-copy gap at
+# DA13 instead of competing with it.
+STAGE1_ATTR_RUNTIME_ADDR = OAM_WRAM_BASE + 0xD5
+STAGE1_ATOMIC_SETUP_ADDR = OAM_WRAM_BASE + 0x13
+STAGE1_ATOMIC_GROUP_WIDTH = 4
 LAVA_ATTR_STAGE7_9800_META_ADDR = OAM_WRAM_BASE + 0xFA
 LAVA_ATTR_STAGE7_9C00_META_ADDR = OAM_WRAM_BASE + 0xFD
 OAM_WRAM_SENTINEL_ADDR = 0xDF51
@@ -1344,6 +1358,88 @@ def build_lava_attr_scene_dispatcher() -> bytes:
     return a.finish()
 
 
+def build_stage1_attr_runtime() -> bytes:
+    """Return NZ while Stage 1 needs an atomic attribute-plane refresh.
+
+    DC00 is sufficient for the horizontally scrolling path, but it settles
+    before C1A0 finishes rebuilding during vertical movement. Force an atomic
+    refresh whenever Up/Down is held and clear that destination's cache. The
+    first post-release call consequently performs one final settling refresh;
+    horizontal-only play retains the receipt-proven fast DC00 cache.
+    """
+    a = _Asm()
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x02)     # load D880 without borrowing B
+    a.jr(0x20, "other_scene")
+    a.db(
+        0x7C,                               # A = destination H ($98/$9C)
+        0xEE, 0xCB,                         # low cache = H XOR $CB
+        0x5F,                               # E = $53/$57; D is preset $DF
+    )
+    a.db(
+        0xF0, 0x93,                         # active-high joypad state
+        0xE6, 0xC0,                         # Up/Down
+    )
+    a.jr(0x28, "cached_horizontal")
+    a.db(
+        0xAF, 0x12,                         # invalidate this map's cache
+        0x3C, 0xC9,                         # A=1/NZ: refresh atomically
+    )
+    a.label("cached_horizontal")
+    a.db(
+        0xFA, 0x00, 0xDC, 0x3C,            # camera phase + valid bit
+        0x47,                               # B = current key
+        0x1A,                               # A = cached key
+        0xB8,                               # cached CP current
+        0xC8,                               # cache hit -> Z
+        0x78, 0x12, 0xC9,                   # publish key; retain NZ
+    )
+    a.label("other_scene")
+    a.db(
+        0xC3,
+        LAVA_ATTR_SCENE_DISPATCH_ADDR & 0xFF,
+        LAVA_ATTR_SCENE_DISPATCH_ADDR >> 8,
+    )
+    code = a.finish()
+    assert len(code) == 35
+    assert STAGE1_ATTR_RUNTIME_ADDR + len(code) <= LAVA_ATTR_STAGE7_9800_META_ADDR
+    return code
+
+
+def build_stage1_atomic_setup() -> bytes:
+    """Select pickup-first rows and preserve the attract recording's cadence.
+
+    DD09 is not a demo discriminator: natural GAME START also holds it at one
+    during the first Stage 1 frames. DCFD is zero throughout the attract route
+    and one before natural GAME START enters Stage 1. Live play returns the
+    exact A=0/Z/C=0 contract; attract play enters the receipt-proven scanline
+    phase wait that keeps its prerecorded input synchronized.
+    """
+    code = bytes([
+        0x11, 0x00, 0xC2,                   # packed source row 4
+        0x06, 0x14,                         # rows 4..23
+        0xFA, 0xFD, 0xDC,                   # GAME START/save marker
+        0xEE, 0x01,                         # live 1 -> exact A=0/Z/C=0
+        0xC8,                               # live GAME START
+        0xC3,
+        STAGE1_DEMO_DELAY_ADDR & 0xFF,
+        STAGE1_DEMO_DELAY_ADDR >> 8,
+    ])
+    assert len(code) == 14
+    return code
+
+
+def build_stage1_demo_delay() -> bytes:
+    """Phase-align only title-demo Stage-1 cache misses to scanline zero."""
+    code = bytes([
+        0xF0, 0x44,                         # LDH A,[LY]
+        0xFE, STAGE1_DEMO_WAIT_LINE,
+        0x20, 0xFA,                         # JR NZ,-6
+        0xC9,
+    ])
+    assert len(code) == 7
+    return code
+
+
 def build_lava_attr_stage7_runtime() -> bytes:
     """Build the always-mapped WRAM Stage 7 decider.
 
@@ -1394,16 +1490,18 @@ def build_lava_attr_stage7_runtime() -> bytes:
     dispatcher = build_lava_attr_scene_dispatcher()
     assert (
         LAVA_ATTR_SCENE_DISPATCH_ADDR + len(dispatcher)
-        <= LAVA_ATTR_STAGE7_9800_META_ADDR
+        == STAGE1_ATTR_RUNTIME_ADDR
     )
+    stage1_runtime = build_stage1_attr_runtime()
     padding_before_metadata = bytes(
         LAVA_ATTR_STAGE7_9800_META_ADDR
-        - (LAVA_ATTR_SCENE_DISPATCH_ADDR + len(dispatcher))
+        - (STAGE1_ATTR_RUNTIME_ADDR + len(stage1_runtime))
     )
     blob = (
         code
         + padding_before_dispatch
         + dispatcher
+        + stage1_runtime
         + padding_before_metadata
         + bytes(6)
     )
@@ -1429,53 +1527,52 @@ def build_lava_attr_decider_bank0() -> bytes:
     return code
 
 
-def build_inline_attr_decision_helper() -> bytes:
+def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     """Title-timed prefix plus gameplay attribute decision helper.
 
-    The first two bytes provide the title entry's 20T Z return. Its inline
-    caller supplies the remaining title-only delay, exactly matching the
-    retired $9800 decision path. Gameplay calls the following entry.
+    The first three bytes provide the title entry's 28T Z-preserving return.
+    Its inline caller supplies the matching shorter setup, exactly preserving
+    retired $9800 decision path. Gameplay calls the following readiness
+    trampoline and enters the expanded WRAM helper.
+    Old combat states can resume before the room-change slow path initializes
+    WRAM, so legacy states return Z without entering an uncopied routine.
 
-    A enters with D880 and H with the destination map high byte. Live play
-    alternates between $9800 and $9C00, so Stage 1 keeps an independent
-    camera-phase+valid cache for each map. DC00 advances in four-unit phases,
-    making INC A an exact compact valid-bit operation that cannot alias a
-    zeroed cache. Other scenes tail-call the receipt-proven Stage 5/7 WRAM
-    dispatcher only after its A7 readiness sentinel; old combat states can
-    resume before the room-change slow path has initialized WRAM. The caller
-    presets D=$DF, while C and E are scratch; the inline copier replaces DE
-    with the packed source after this call.
+    The caller presets D=$DF. The readiness path preserves B because neutral
+    scenes take the pure copier without reinitializing it; the WRAM helper
+    reloads D880 itself. C and E remain scratch on Stage 1 cache decisions.
     """
     a = _Asm()
-    a.db(0xAF, 0xC9)                        # title: 20T Z return
-    a.db(0xFE, 0x02)
-    a.jr(0x20, "other_scene")
-    a.db(
-        0x1E, STAGE1_ATTR_CACHE_9800_ADDR & 0xFF,  # LD E,$53; D is $DF
-    )
-    a.db(
-        0xCB, 0x54,                         # BIT 2,H: $9800 or $9C00
-    )
-    a.jr(0x28, "cache_selected")
-    a.db(0x1C)                              # $9C00 uses the adjacent cache
-    a.label("cache_selected")
-    a.db(
-        0x1A, 0x4F,                         # C = cached key
-        0xFA, 0x00, 0xDC, 0x3C,            # camera phase + valid bit
-        0xB9,                               # new key CP cached
-        0xC8,                               # cache hit -> Z
-        0x12, 0xC9,                         # publish A key; retain NZ flags
-    )
-    a.label("other_scene")
+    a.db(0x18, 0x00, 0xC9)                  # title: 28T, preserve A=0/Z
     a.db(
         0xFA,
         OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xFE, ROOM_ATTR_READY_VALUE,
-        0xCA,
-        LAVA_ATTR_SCENE_DISPATCH_ADDR & 0xFF,
-        LAVA_ATTR_SCENE_DISPATCH_ADDR >> 8,
-        0xAF, 0xC9,                         # legacy state: Z, no WRAM call
+        0xB7,                               # sentinel is controlled 00/A7
+        0xC2,
+        STAGE1_ATTR_RUNTIME_ADDR & 0xFF,
+        STAGE1_ATTR_RUNTIME_ADDR >> 8,
+        0xC9,                               # zero legacy state: return Z
+    )
+    assert (
+        INLINE_ATTR_DECISION_HELPER_ADDR + len(a.finish())
+        == STAGE1_ATOMIC_WRAP_ADDR
+    )
+    a.db(
+        0xB7,                               # row loop leaves A=final L
+    )
+    a.jr(0x28, "wrap")
+    a.db(
+        0x24, 0x24, 0x24,                   # stock final H = base+$03
+        0xD1,                               # restore stock final DE=$C3E0
+        0xAF, 0x6F, 0xC9,                   # stock final L=0, A=0/Z
+    )
+    a.label("wrap")
+    a.db(
+        0x25, 0x25, 0x25,                   # restore destination map H
+        0xD5,                               # retain stock final source DE
+        0x11, 0xA0, 0xC1,                   # packed source row 0
+        0x06, 0x04,                         # rows 0..3
+        0xC3, atomic_row_addr & 0xFF, atomic_row_addr >> 8,
     )
     code = a.finish()
     assert len(code) == 33
@@ -1744,6 +1841,7 @@ def build_oam_wram_copy() -> bytes:
     every Stage 7 tilemap copy.
     """
     resolver = build_oam_palette_resolver()
+    stage1_setup = build_stage1_atomic_setup()
     central = build_oam_central_emitter()
     stage7 = build_lava_attr_stage7_runtime()
     first_capacity = OAM_FREE_EMITTER_ADDR - LAVA_ATTR_STAGE7_SOURCE_A_ADDR
@@ -1757,7 +1855,7 @@ def build_oam_wram_copy() -> bytes:
         (
             OAM_PALETTE_RESOLVER_ADDR,
             OAM_PALETTE_RESOLVER_RUNTIME_ADDR,
-            len(resolver),
+            len(resolver) + len(stage1_setup),
         ),
         (
             OAM_CENTRAL_EMITTER_ADDR,
@@ -2030,9 +2128,17 @@ def build_colorize_prelude() -> bytes:
 
     c.extend([0xCD, LAVA_OVERRIDE_ADDR & 0xFF, LAVA_OVERRIDE_ADDR >> 8])
 
-    # One-time level-select WRAM stub copy. The former DF0E block also copied
-    # the teleport landing pad; only the level-select stub is still required.
-    c.extend([0xFA, 0x0E, 0xDF, 0xFE, 0x5A])
+    # Level-select WRAM stub copy. Stock attract-mode teardown overwrites CFAA
+    # without touching the historical DF0E sentinel, which made first-process
+    # GAME START jump into data after one demo cycle. Validate the executable
+    # entry byte itself before trusting it; the deterministic attract overwrite
+    # changes it from the stub's PUSH HL ($E5) to $12.
+    levelsel_stub = build_levelsel_attr_clear_stub()
+    assert len(levelsel_stub) == LEVELSEL_STUB_MAX
+    c.extend([
+        0xFA, LEVELSEL_STUB_WRAM & 0xFF, LEVELSEL_STUB_WRAM >> 8,
+        0xFE, levelsel_stub[0],
+    ])
     j_stub_ready = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z, stub_ready
     c.extend([
@@ -2131,14 +2237,14 @@ def build_title_palette_fix() -> bytes:
 
     The stock cold-boot path can cross out of VBlank while loading CRAM, leaving
     either palette partially white. This helper runs in menu states $00/$01,
-    including the returned title where FFC1 remains set. The long menu dwell
-    repairs both palettes before $1C/$1B without taxing their animation cadence.
-    Gameplay still receives independently tuned YAML BG7.
+    including the returned title where stock leaves FFC1 set. The long menu
+    dwell repairs both palettes before $1C/$1B without taxing their animation
+    cadence. Gameplay still receives independently tuned YAML BG7.
     """
     c = bytearray()
     c.extend([0xFA, 0x80, 0xD8, 0xFE, 0x02, 0xD0])
-    # FFC1=1,D880=0 is also the normal GAME START transition. Do not mask its
-    # freshly loaded gameplay BG7.
+    # FFC1=1,D880=0 is also the normal GAME START transition. Do not mask that
+    # stock state as a returned title: only D880=1 owns returned-title repairs.
     c.extend([0x47, 0xF0, 0xC1, 0xB7])
     j_title = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z,title (cold title)
@@ -2192,21 +2298,14 @@ def build_native_dmg_fade_fixed_service() -> bytes:
     exposed the bad BGP value for a rendered frame.
 
     The RST vector has already performed the original write. During active
-    colorized play (FFC1 != 0), normalize every non-E4 table step back to E4
-    and return A=E4. This is intentional: preserving the stock terminal FF in
-    either BGP or A makes the CGB attract path cut the Gargoyle reel short,
-    while preserving A but not BGP makes it overrun. Returning the normalized
-    value follows the same control path as the normal table step and measures
-    within 10.4% of both OG demo segments. Title/menu fades (FFC1 == 0) retain
-    every stock BGP value and A byte.
+    colorized play, normalize every non-E4 step back to E4. The two HRAM gates
+    and unconditional RST dispatch preserve the exact 36/36 receipt-proven
+    attract cadence; changing even an equivalent-looking prefix desynchronizes
+    the prerecorded miniboss reel.
     """
     code = bytes([
-        0xF0, 0xC1,                         # LDH A,[FFC1]
-        0xB7,                               # OR A
-        0xC8,                               # RET Z: title/menu owns its fade
-        0xF0, 0xE4,                         # ending/death control-flow guard
-        0xB7,
-        0xC0,                               # RET NZ: keep its stock fade
+        0xF0, 0xC1, 0xB7, 0xC8,             # inactive title: RET Z
+        0xF0, 0xE4, 0xB7, 0xC0,             # native fade owner: RET NZ
         0xF0, 0x47,                         # LDH A,[BGP]
         0xFE, 0xE4,                         # already normal?
         0xC8,                               # RET Z
@@ -2214,9 +2313,6 @@ def build_native_dmg_fade_fixed_service() -> bytes:
         0xE0, 0x47,                         # LDH [BGP],A
         0xC9,                               # RET
     ])
-    # A six-byte D880 range check retimed the stock attract fade badly. The
-    # four-byte FFE4 guard preserves death/ending ownership with less impact;
-    # the full reel and death gates bind this compromise together.
     assert len(code) == 18
     return code
 
@@ -3226,7 +3322,10 @@ def main(
     )
     lava_attr_decider, lava_attr_decider_cont = build_lava_attr_decider()
     semantic_helpers = (
-        (OAM_PALETTE_RESOLVER_ADDR, build_oam_palette_resolver()),
+        (
+            OAM_PALETTE_RESOLVER_ADDR,
+            build_oam_palette_resolver() + build_stage1_atomic_setup(),
+        ),
         (OAM_BOSS_LUT_SERVICE_ADDR, build_oam_boss_lut_service()),
         (OAM_CENTRAL_EMITTER_ADDR, build_oam_central_emitter()),
         (OAM_FREE_EMITTER_ADDR, build_oam_free_emitter()),
@@ -3378,21 +3477,37 @@ def main(
     )
 
     # 13. INLINE HOOK: unchanged Stage 1 maps keep the native four-tiles-per-
-    # HBlank cadence. A per-map camera-phase change takes a precomputed atomic
-    # three-tile path exactly once, so departing pickup attrs are cleared beside
-    # their replacement tiles without taxing every redundant stock copy.
+    # HBlank cadence. A per-map future-phase change takes a precomputed atomic
+    # four-tile path exactly once. Cache-miss copies rotate rows 4..23 before
+    # rows 0..3, committing every pickup-bearing row before the hidden map is
+    # revealed without taxing redundant stock-width copies.
     # The fixed decision helper caches Stage 1 and dispatches exact Stage 5/7
     # lava signatures. Changed maps take the register-staged four-tile atomic
     # path; unchanged/neutral maps retain the stock-width pure path.
     inline_blob = create_inline_tile_copy_stage1_precomputed_attrs(
-        INLINE_ATTR_DECISION_HELPER_ADDR + 2,
+        INLINE_ATTR_DECISION_HELPER_ADDR + 3,
+        STAGE1_ATOMIC_SETUP_ADDR,
+        STAGE1_ATOMIC_WRAP_ADDR,
+        STAGE1_ATOMIC_GROUP_WIDTH,
     )
-    inline_attr_decision = build_inline_attr_decision_helper()
+    atomic_row_marker = bytes([
+        0x0E,
+        24 // STAGE1_ATOMIC_GROUP_WIDTH,
+        0xC5, 0xE5, 0x21, 0x30, 0xDF,
+    ])
+    atomic_row_offsets = [
+        index
+        for index in range(len(inline_blob) - len(atomic_row_marker) + 1)
+        if inline_blob[index:index + len(atomic_row_marker)] == atomic_row_marker
+    ]
+    assert len(atomic_row_offsets) == 1
+    atomic_row_addr = 0x42A7 + atomic_row_offsets[0]
+    inline_attr_decision = build_inline_attr_decision_helper(atomic_row_addr)
     available = 0x436D - 0x42A7 + 1
     assert len(inline_blob) <= available
-    title_pure_entry = 0x42A7 + len(inline_blob) - 12
-    assert inline_blob[-12:-3] == bytes.fromhex(
-        "26 98 2E 00 3E 00 CD 82 34"
+    title_pure_entry = 0x42A7 + len(inline_blob) - 10
+    assert inline_blob[-10:-3] == bytes.fromhex(
+        "26 98 AF 6F CD 82 34"
     )
     inline_padding = bytes(available - len(inline_blob))
     rom[0x42A7:0x436E] = inline_blob + inline_padding
@@ -3411,10 +3526,9 @@ def main(
     )
 
     # The original RST $08 vector jumps to $0000 and has no viable caller.
-    # Reuse it for the stock BGP write plus a fixed-bank dispatcher. At the
-    # The fixed-bank service restores the normal BGP mapping after every
-    # non-E4 active-play fade step. It lives in the proven unreachable
-    # semantic OAM tail.
+    # Reuse it for the stock BGP write plus a fixed-bank dispatcher. Keep the
+    # original unconditional dispatch cadence: the attract reel is sensitive
+    # even to equivalent-looking changes on the common E4 path.
     # RST $18 remains untouched.
     assert rom[0x0008:0x0010] == bytes.fromhex(
         "C3 00 00 FE FF 9F FF FF"
@@ -3434,10 +3548,16 @@ def main(
         0x00, 0x00, 0x00,
     ])
     native_fade_service = build_native_dmg_fade_fixed_service()
+    stage1_demo_delay = build_stage1_demo_delay()
+    assert (
+        NATIVE_DMG_FADE_DISPATCH_ADDR + len(native_fade_service)
+        == STAGE1_DEMO_DELAY_ADDR
+    )
+    fixed_services = native_fade_service + stage1_demo_delay
     rom[
         NATIVE_DMG_FADE_DISPATCH_ADDR:
         NATIVE_DMG_FADE_DISPATCH_ADDR + 25
-    ] = native_fade_service + bytes(25 - len(native_fade_service))
+    ] = fixed_services + bytes(25 - len(fixed_services))
     rom[
         NATIVE_DMG_FADE_SITE:NATIVE_DMG_FADE_SITE + 2
     ] = bytes([0xCF, 0x00])                 # RST $08; stock DEC B follows

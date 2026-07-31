@@ -115,9 +115,12 @@ LUAEOF
 echo "Test output: $TEST_OUTPUT"
 echo "Running mgba with fastforward and test script..."
 
-# Run mgba headlessly with xvfb and fastforward
+# Run mGBA through the project-wide single-flight guard.
 export SCREENSHOT_DIR="$TEST_OUTPUT/screenshots"
-timeout 30 xvfb-run -a mgba-qt --fastforward --script "$SCRIPT_PATH" "$ROM_PATH" 2>&1 || true
+QT_QPA_PLATFORM=offscreen \
+SDL_AUDIODRIVER=dummy \
+timeout 30 "$PROJECT_DIR/scripts/mgba-qt-singleflight" \
+    --fastforward --script "$SCRIPT_PATH" "$ROM_PATH" 2>&1 || true
 
 echo "Test complete. Results in $TEST_OUTPUT"
 ls -la "$TEST_OUTPUT/screenshots/" 2>/dev/null | head -20 || echo "No screenshots dir"

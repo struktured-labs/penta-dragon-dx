@@ -22,6 +22,10 @@ DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 FPS = 59.7275
 BANK13 = 13 * 0x4000
 DUNGEON_TABLE_OFFSET = BANK13 + (0x7000 - 0x4000)
+CAPTURED_PICKUP_TILES = {
+    0xA0, 0xA1, 0xA6, 0xA7,
+    0xB0, 0xB1, 0xB6, 0xB7,
+}
 
 
 def stop_owned_process_group(process: subprocess.Popen) -> None:
@@ -52,7 +56,11 @@ def digest(path: Path, algorithm: str = "sha256") -> str:
 
 
 def parse_probe(path: Path) -> dict:
-    result: dict[str, object] = {"captures": []}
+    result: dict[str, object] = {
+        "captures": [],
+        "raster_captures": [],
+        "helper_events": [],
+    }
     for line in path.read_text().splitlines():
         if not line:
             continue
@@ -71,6 +79,99 @@ def parse_probe(path: Path) -> dict:
                     "palette_1_cells": int(pal1),
                     "unexpected_palette_cells": int(unexpected),
                     "unsafe_attribute_cells": int(unsafe),
+                }
+            )
+        elif key == "raster_capture":
+            (
+                frame,
+                screenshot,
+                lcdc,
+                scx,
+                scy,
+                signature,
+                dc00,
+                dc01,
+                dc02,
+                dc03,
+                cache9800,
+                cache9c00,
+                c1a4,
+                raw_hash,
+                attr_hash,
+                layout_id,
+                source,
+                pickups,
+                oam,
+            ) = value.split("|", 18)
+            pickup_rectangles = []
+            for item in pickups.split(";"):
+                if item:
+                    pickup_rectangles.append(
+                        [int(part) for part in item.split(",")]
+                    )
+            rectangles = []
+            for item in oam.split(";"):
+                if item:
+                    rectangles.append([int(part) for part in item.split(",")])
+            result["raster_captures"].append(
+                {
+                    "play_frame": int(frame),
+                    "elapsed_seconds": round(int(frame) / FPS, 3),
+                    "screenshot": screenshot,
+                    "lcdc": int(lcdc),
+                    "scx": int(scx),
+                    "scy": int(scy),
+                    "source_signature": int(signature),
+                    "dc00": int(dc00),
+                    "dc01": int(dc01),
+                    "dc02": int(dc02),
+                    "dc03": int(dc03),
+                    "cache_9800": int(cache9800),
+                    "cache_9c00": int(cache9c00),
+                    "c1a4": int(c1a4),
+                    "raw_hash": int(raw_hash),
+                    "attr_hash": int(attr_hash),
+                    "layout_id": int(layout_id),
+                    "source_prefix": [
+                        int(part, 16) for part in source.split(",")
+                    ],
+                    "pickup_rectangles": pickup_rectangles,
+                    "oam_rectangles": rectangles,
+                }
+            )
+        elif key == "helper_event":
+            (
+                frame,
+                h,
+                a,
+                destination,
+                lcdc,
+                scx,
+                scy,
+                dc00,
+                cache9800,
+                cache9c00,
+                raw_hash,
+                attr_hash,
+                layout_id,
+                room,
+            ) = value.split("|")
+            result["helper_events"].append(
+                {
+                    "play_frame": int(frame),
+                    "h": int(h),
+                    "a": int(a),
+                    "destination": int(destination),
+                    "lcdc": int(lcdc),
+                    "scx": int(scx),
+                    "scy": int(scy),
+                    "dc00": int(dc00),
+                    "cache_9800": int(cache9800),
+                    "cache_9c00": int(cache9c00),
+                    "raw_hash": int(raw_hash),
+                    "attr_hash": int(attr_hash),
+                    "layout_id": int(layout_id),
+                    "room": int(room),
                 }
             )
         elif key == "pal1_tiles":
@@ -119,6 +220,91 @@ def create_contact_sheet(captures: list[dict], output: Path) -> None:
     sheet.save(output)
 
 
+def audit_rendered_red(capture: dict) -> dict:
+    """Reject Stage 1 red pixels outside raster-aligned BG1 pickup cells."""
+
+    source = Image.open(capture["screenshot"]).convert("RGB")
+    pixels = source.load()
+    width, height = source.size
+    excluded = [[False] * width for _ in range(height)]
+    for x0, y0, x1, y1 in capture["oam_rectangles"]:
+        for y in range(max(0, y0), min(height, y1 + 1)):
+            for x in range(max(0, x0), min(width, x1 + 1)):
+                excluded[y][x] = True
+    pickup_cell = [[False] * width for _ in range(height)]
+    for x0, y0, x1, y1 in capture["pickup_rectangles"]:
+        for y in range(max(0, y0), min(height, y1 + 1)):
+            for x in range(max(0, x0), min(width, x1 + 1)):
+                pickup_cell[y][x] = True
+
+    def is_red(pixel: tuple[int, int, int]) -> bool:
+        red, green, blue = pixel
+        return red >= 120 and green <= 8 and blue <= 8
+
+    background_red = []
+    stray = []
+    for y in range(height):
+        for x in range(width):
+            if excluded[y][x] or not is_red(pixels[x, y]):
+                continue
+            background_red.append((x, y))
+            if not pickup_cell[y][x]:
+                stray.append((x, y))
+
+    return {
+        "background_red_pixels": len(background_red),
+        "stray_background_red_pixels": len(stray),
+        "first_stray_coordinates": [list(point) for point in stray[:24]],
+    }
+
+
+def create_raster_contact_sheet(captures: list[dict], output: Path) -> None:
+    if not captures:
+        return
+    count = min(12, len(captures))
+    failures = [
+        capture
+        for capture in captures
+        if capture["raster_audit"]["stray_background_red_pixels"] > 0
+    ]
+    selected = failures[:4]
+    evenly_spaced = (
+        [captures[0]]
+        if count == 1
+        else [
+            captures[round(index * (len(captures) - 1) / (count - 1))]
+            for index in range(count)
+        ]
+    )
+    for capture in evenly_spaced:
+        if capture not in selected:
+            selected.append(capture)
+        if len(selected) >= count:
+            break
+    scale = 2
+    label_height = 22
+    columns = 4
+    rows = (len(selected) + columns - 1) // columns
+    cell_width, cell_height = 160 * scale, 144 * scale + label_height
+    sheet = Image.new("RGB", (cell_width * columns, cell_height * rows), "white")
+    draw = ImageDraw.Draw(sheet)
+    for index, capture in enumerate(selected):
+        source = Image.open(capture["screenshot"]).convert("RGB")
+        scaled = source.resize((160 * scale, 144 * scale), Image.Resampling.NEAREST)
+        x = (index % columns) * cell_width
+        y = (index // columns) * cell_height
+        sheet.paste(scaled, (x, y + label_height))
+        draw.text(
+            (x + 5, y + 5),
+            (
+                f"f{capture['play_frame']} sig={capture['source_signature']:02X} "
+                f"stray={capture['raster_audit']['stray_background_red_pixels']}"
+            ),
+            fill="black",
+        )
+    sheet.save(output)
+
+
 def run_probe(
     mgba: str,
     rom: Path,
@@ -132,9 +318,12 @@ def run_probe(
         output / "DONE",
         output / "receipt.json",
         output / "actual-play-stage1.png",
+        output / "stage1-raster-audit.png",
     ):
         stale.unlink(missing_ok=True)
     for stale in output.glob("play-*.png"):
+        stale.unlink()
+    for stale in output.glob("raster-*.png"):
         stale.unlink()
 
     environment = os.environ.copy()
@@ -201,7 +390,11 @@ def main() -> int:
         "--mgba", default=str(ROOT / "scripts/mgba-qt-singleflight")
     )
     parser.add_argument("--frames", type=int, default=1200)
-    parser.add_argument("--mode", choices=("right", "patrol"), default="right")
+    parser.add_argument(
+        "--mode",
+        choices=("right", "patrol", "vertical", "box"),
+        default="box",
+    )
     parser.add_argument("--timeout", type=float, default=90)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -227,10 +420,19 @@ def main() -> int:
             "Stage 1 ROM table contains palettes outside floor/pickup/wall "
             f"set {{0,1,6}}: {table_histogram}"
         )
-    if dungeon_table.count(1) != 48:
+    if dungeon_table.count(1) != 56:
         failures.append(
-            "Stage 1 ROM table should map exactly 48 confirmed pickup tile "
+            "Stage 1 ROM table should map exactly 56 confirmed pickup tile "
             f"IDs to red BG1, found {dungeon_table.count(1)}"
+        )
+    missing_captured_pickups = sorted(
+        tile for tile in CAPTURED_PICKUP_TILES
+        if dungeon_table[tile] != 1
+    )
+    if missing_captured_pickups:
+        failures.append(
+            "headed-capture pickup tiles are not mapped to BG1: "
+            + ", ".join(f"{tile:02X}" for tile in missing_captured_pickups)
         )
 
     try:
@@ -250,6 +452,30 @@ def main() -> int:
         capture["screenshot_sha256"] = digest(screenshot)
         capture["native_size"] = list(Image.open(screenshot).size)
 
+    raster_captures: list[dict] = probe["raster_captures"]
+    for capture in raster_captures:
+        screenshot = Path(capture["screenshot"])
+        if not screenshot.is_file() or screenshot.stat().st_size <= 100:
+            failures.append(f"missing rendered raster screenshot {screenshot}")
+            continue
+        capture["screenshot_sha256"] = digest(screenshot)
+        capture["native_size"] = list(Image.open(screenshot).size)
+        capture["raster_audit"] = audit_rendered_red(capture)
+
+    raster_audited = [
+        capture
+        for capture in raster_captures
+        if "raster_audit" in capture
+    ]
+    raster_background_red = sum(
+        capture["raster_audit"]["background_red_pixels"]
+        for capture in raster_audited
+    )
+    raster_stray_red = sum(
+        capture["raster_audit"]["stray_background_red_pixels"]
+        for capture in raster_audited
+    )
+
     checks = {
         "1200+ continuous actual gameplay frames": (
             probe.get("frames", 0) >= args.frames
@@ -260,17 +486,35 @@ def main() -> int:
             probe.get("sampled_frames", 0) >= args.frames
         ),
         "route visibly scrolled": probe.get("scroll_changes", 0) > 0,
-        "intentional red pickup cells observed": probe.get("pal1_cells", 0) > 0,
-        "every visible tile matches the compiled palette LUT on every frame": (
-            probe.get("unexpected_cells", -1) == 0
-            and probe.get("first_unexpected_frame", 0) == -1
+        "route exercised horizontal scrolling": (
+            args.mode == "vertical" or probe.get("scx_changes", 0) > 0
         ),
+        "route exercised vertical scrolling": (
+            args.mode in {"right", "patrol"}
+            or probe.get("scy_changes", 0) > 0
+        ),
+        "intentional red pickup cells observed": probe.get("pal1_cells", 0) > 0,
         "all six visual receipts match the compiled palette LUT": (
             len(captures) == 6
             and all(
                 capture["unexpected_palette_cells"] == 0
                 for capture in captures
             )
+        ),
+        "every sampled visible cell matches the compiled palette LUT": (
+            probe.get("unexpected_cells", -1) == 0
+        ),
+        "scroll/source transition raster windows captured": (
+            len(raster_captures) >= probe.get("source_signature_changes", 0)
+            and len(raster_captures) >= probe.get("scroll_changes", 0)
+        ),
+        "intentional pickup red is present in raster audit": (
+            raster_background_red > 0
+        ),
+        "no detached red blocks or floor-pattern bleed in rendered raster": (
+            bool(raster_audited)
+            and len(raster_audited) == len(raster_captures)
+            and raster_stray_red == 0
         ),
         "no tile-bank/flip/priority leakage": probe.get("unsafe_cells", -1) == 0,
         "six native screenshots": (
@@ -286,21 +530,27 @@ def main() -> int:
         if not passed:
             failures.append(name)
     print(
-        "INFO: tile/attribute mismatches across every frame="
-        f"{probe.get('unexpected_cells', 0)}; first visual receipt="
-        f"{probe.get('first_unexpected_screenshot', '')}"
+        "INFO: transient tile/attribute observations="
+        f"{probe.get('unexpected_cells', 0)}; rendered transition captures="
+        f"{len(raster_captures)}; detached rendered red pixels="
+        f"{raster_stray_red}"
     )
 
     contact_sheet = output / "actual-play-stage1.png"
     if captures and all(Path(c["screenshot"]).is_file() for c in captures):
         create_contact_sheet(captures, contact_sheet)
+    raster_contact_sheet = output / "stage1-raster-audit.png"
+    if raster_audited:
+        create_raster_contact_sheet(raster_audited, raster_contact_sheet)
 
     # Keep the JSON portable when a receipt directory is copied into docs/.
     for capture in captures:
         capture["screenshot"] = Path(capture["screenshot"]).name
+    for capture in raster_captures:
+        capture["screenshot"] = Path(capture["screenshot"]).name
 
     report = {
-        "schema": "penta-dragon-dx-stage1-no-bleed-v1",
+        "schema": "penta-dragon-dx-stage1-no-bleed-v3",
         "status": "pass" if not failures else "fail",
         "rom": str(rom),
         "rom_md5": digest(rom, "md5"),
@@ -318,6 +568,12 @@ def main() -> int:
         "contact_sheet_sha256": (
             digest(contact_sheet) if contact_sheet.is_file() else None
         ),
+        "raster_contact_sheet": raster_contact_sheet.name,
+        "raster_contact_sheet_sha256": (
+            digest(raster_contact_sheet)
+            if raster_contact_sheet.is_file()
+            else None
+        ),
         "failures": failures,
     }
     report_path = output / "receipt.json"
@@ -330,7 +586,8 @@ def main() -> int:
         return 1
     print(
         "PASS: Stage 1 completed 20+ seconds of continuous play with "
-        "every visible tile matching the compiled palette LUT."
+        "no detached red pixels across horizontal and vertical transition "
+        "windows."
     )
     return 0
 

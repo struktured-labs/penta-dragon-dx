@@ -13,7 +13,7 @@ bg_sweep retained as safety net (mini-boss probe timing dependency).
 
 Palette mapping (bg_table):
   - pal0 (floor/default):  floor, void, structure/transitions, hazards
-  - pal1 (pickup accents): confirmed alternating pickup bands only
+  - pal1 (pickup accents): confirmed pickup bands + two captured 2x2 blocks
   - pal0 (font/reused art): interleaved 0x80-0xDF bands and 0xF0-0xFF
   - pal6 (walls):          0x14-0x1E, 0x25-0x26, 0x34-0x38, 0x41-0x49,
                            0x54-0x57, 0x59 (slate blue-gray)
@@ -609,19 +609,22 @@ def create_inline_tile_copy_pure_tileonly(
 
 def create_inline_tile_copy_stage1_precomputed_attrs(
     external_decision_helper_addr: int | None = None,
+    external_atomic_setup_addr: int | None = None,
+    external_atomic_wrap_addr: int | None = None,
+    atomic_group_width: int = 4,
 ) -> bytes:
-    """Atomic Stage 1 attrs at the stock four-tiles-per-HBlank cadence.
+    """Atomic Stage 1 attrs with precomputed HBlank-sized tile groups.
 
     The older atomic copier looked up each tile's palette while the LCD was
     already in its short VRAM-accessible interval.  It therefore had to halve
     the group width to two tiles and made Stage 1 roughly 20% slower.
 
-    This variant performs the four WRAM LUT lookups *before* waiting for
-    HBlank, pushes the resulting attributes, then commits four tile IDs and
-    their four matching attributes in the same mode-0/mode-2 interval.  A
+    This variant performs three or four WRAM LUT lookups *before* waiting for
+    HBlank, pushes the resulting attributes, then commits each tile group and
+    its matching attributes in the same mode-0/mode-2 interval.  A
     departing pickup is therefore neutralized before its replacement floor
-    tile can be rendered, while the number of HBlank waits remains identical
-    to the stock tile-only copier.
+    tile can be rendered. Four-wide matches the stock tile-only cadence;
+    three-wide reserves extra PPU margin for vertically scrolling pickup rows.
 
     With no external helper, only D880=$02 uses the atomic path. When a fixed,
     always-mapped decision helper is supplied, it owns the Stage 1 cache and
@@ -665,21 +668,31 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         code[pos] = target & 0xFF
         code[pos + 1] = (target >> 8) & 0xFF
 
+    assert atomic_group_width in (3, 4)
+    assert 24 % atomic_group_width == 0
+
     # H is the caller-selected $98/$9C map base.
     emit([0x2E, 0x00])                     # LD L,$00
     if external_decision_helper_addr is None:
+        assert external_atomic_setup_addr is None
+        assert external_atomic_wrap_addr is None
         emit([0x11, 0xA0, 0xC1])           # DE = packed 24x24 source
         # Stage 1 owns the YAML tile attributes. All other scenes keep the
         # exact stock-speed, tile-only behavior.
         emit([0xFA, 0x80, 0xD8, 0xFE, 0x02])
         j_tileonly = emit_jp_fwd(0xC2)      # JP NZ,tileonly
     else:
-        # Pass the scene in A before initializing DE: the compact fixed-bank
-        # helper borrows E for Stage 1's destination-specific cache lookup.
-        # D=$DF selects the proven metadata page and is replaced by the packed
-        # source pointer immediately after the decision.
+        assert external_atomic_setup_addr is not None
+        assert external_atomic_wrap_addr is not None
+        # The fixed helper reloads the scene after its readiness check and
+        # borrows E for Stage 1's destination-specific cache lookup. D=$DF
+        # selects the proven metadata page and is replaced by the packed source
+        # pointer immediately after the decision.
         emit([
-            0xFA, 0x80, 0xD8,
+            # The WRAM helper reloads D880 after checking its sentinel. Keep
+            # the established 16T setup cadence without a redundant 3-byte
+            # load; 16-bit INC/DEC preserve both BC and flags.
+            0x03, 0x0B,
             0x16, 0xDF,
             0xCD,
             external_decision_helper_addr & 0xFF,
@@ -687,18 +700,25 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         ])
         mark("common_setup")
         emit([0x11, 0xA0, 0xC1])
-        j_tileonly = emit_jp_fwd(0xCA)      # JP Z,tileonly
-    emit([0x06, 0x18])                     # B = 24 rows
+        j_tileonly = emit_jr_fwd(0x28)      # Z -> stock tile-only path
+        emit([
+            0x2E, 0x80,                     # dirty path begins at row 4
+            0xCD,
+            external_atomic_setup_addr & 0xFF,
+            external_atomic_setup_addr >> 8,
+        ])
+    if external_decision_helper_addr is None:
+        emit([0x06, 0x18])                  # B = 24 rows
 
     mark("atomic_row")
-    emit([0x0E, 0x06])                     # six groups of four tiles
+    emit([0x0E, 24 // atomic_group_width])
 
     mark("atomic_group")
-    # Save the group counter, then stage four tile IDs in the statically idle
+    # Save the group counter, then stage the tile IDs in the statically idle
     # DF30..DF33 gap. Do not borrow ostensibly-unused HRAM here: the stock game
     # accesses several such bytes indirectly, which a rejected prototype
     # proved by suppressing Sara and scrolling despite a clean opcode census.
-    tile_scratch = (0xDF30, 0xDF31, 0xDF32, 0xDF33)
+    tile_scratch = (0xDF30, 0xDF31, 0xDF32, 0xDF33)[:atomic_group_width]
     emit([
         0xC5,                               # PUSH BC
         0xE5,                               # preserve destination HL
@@ -719,13 +739,19 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         emit([
             0x4F, 0x0A, 0xF5,               # C=tile; PUSH table[tile]
         ])
-    # Put attrs 4..2 into E,D,C and leave attr 1 on the stack. The group's
-    # saved BC retains the outer row count below the advanced source pointer.
-    emit([
-        0xF1, 0x5F,                         # E = attr 4
-        0xF1, 0x57,                         # D = attr 3
-        0xF1, 0x4F,                         # C = attr 2
-    ])
+    if atomic_group_width == 3:
+        # Put the trailing attrs in registers and leave attr 1 on the stack.
+        emit([
+            0xF1, 0x5F,                     # E = attr 3
+            0xF1, 0x4F,                     # C = attr 2
+        ])
+        # BC's outer values are already on the stack and D is not an attr
+        # register in the three-wide path. Hoist tiles 2/3 into B/D so only
+        # tile 1 needs a 16T absolute read after mode 0 begins.
+        emit([
+            0xFA, tile_scratch[1] & 0xFF, tile_scratch[1] >> 8, 0x47,
+            0xFA, tile_scratch[2] & 0xFF, tile_scratch[2] >> 8, 0x57,
+        ])
 
     # One wait per four tiles, matching the pure/stock cadence.
     emit([0xF3])                            # DI
@@ -737,17 +763,33 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     emit_jr_back(0x20, "atomic_stat0")
 
     # Tile IDs first in VBK0 even though DE currently holds attrs 3/4.
-    for address in tile_scratch:
-        emit([0xFA, address & 0xFF, address >> 8, 0x22])
+    if atomic_group_width == 3:
+        emit([
+            0xFA, tile_scratch[0] & 0xFF, tile_scratch[0] >> 8, 0x22,
+            0x78, 0x22,                     # tile 2 from B
+            0x7A, 0x22,                     # tile 3 from D
+        ])
+    else:
+        for address in tile_scratch[:-1]:
+            emit([0xFA, address & 0xFF, address >> 8, 0x22])
+        # DE still points at tile 4 because the attrs remain stacked.
+        emit([0x1A, 0x22])
 
-    # Then matching attrs in VBK1. The final attr store lands about 180T after
-    # mode 0 starts, safely below the path that occasionally lost its last
-    # store at ~204T during sprite-heavy patrol frames.
+    # Then matching attrs in VBK1.
     emit([0x3E, 0x01, 0xE0, 0x4F])
-    emit([0x7D, 0xD6, 0x04, 0x6F])          # L -= 4
-    emit([0xF1, 0x22])                      # POP AF attr 1; LD [HL+],A
-    for register in (0x79, 0x7A, 0x7B):
-        emit([register, 0x22])               # LD A,r; LD [HL+],A
+    if atomic_group_width == 4:
+        # Store attr 4 first so a departing pickup is neutralized before its
+        # replacement floor reaches the PPU, then walk backward to attr 1.
+        emit([0x2D])                         # DEC L -> tile 4 destination
+        for _ in range(3):
+            emit([0xF1, 0x32])              # attrs 4/3/2
+        emit([0xF1, 0x77])                   # attr 1 at group start
+        emit([0x7D, 0xC6, 0x04, 0x6F])      # restore group-end HL
+    else:
+        emit([0x7D, 0xD6, atomic_group_width, 0x6F])
+        emit([0xF1, 0x22])                  # attr 1
+        for register in (0x79, 0x7B):
+            emit([register, 0x22])           # attrs 2/3
     emit([0xAF, 0xE0, 0x4F])                # restore VBK0
     emit([
         0xD1,                               # restore advanced DE
@@ -760,12 +802,23 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         0x7D, 0xC6, 0x08, 0x6F,             # L += 8
         0x30, 0x01, 0x24,                   # carry -> INC H
         0x05,                               # DEC B
-        0xC8,                               # final atomic row -> RET Z
     ])
-    emit_jr_back(0x18, "atomic_row")
+    if external_atomic_wrap_addr is None:
+        emit([0xC8])                         # final atomic row -> RET Z
+        emit_jr_back(0x18, "atomic_row")
+    else:
+        emit_jr_back(0x20, "atomic_row")
+        emit([
+            0xC3,
+            external_atomic_wrap_addr & 0xFF,
+            external_atomic_wrap_addr >> 8,
+        ])
 
     # Pure tile-only path for every non-Stage-1 caller.
-    patch_jp_fwd(j_tileonly)
+    if external_decision_helper_addr is None:
+        patch_jp_fwd(j_tileonly)
+    else:
+        patch_jr_fwd(j_tileonly)
     mark("pure_setup")
     emit([0x3E, 0x18, 0xF5])               # stock-timed 24-row counter
 
@@ -795,18 +848,18 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     emit([0xC9])
 
     if external_decision_helper_addr is not None:
-        # Stock RST $30 enters here for title-family $9800 copies. LD A,$00,
-        # the 20T title helper, and the final JP exactly replace the old
-        # LD A,[D880] plus 28T BIT+RET decision. Gameplay falls directly into
-        # common_setup and no longer pays an unconditional jump.
+        # Stock RST $30 enters here for title-family $9800 copies. XOR A,
+        # LD L,A, the 28T title helper, and the final JP exactly replace the
+        # old title setup and decision cadence. Gameplay enters three bytes
+        # after the title-only helper and does not pay an unconditional jump.
         mark("title_pure_entry")
         emit([
             0x26, 0x98,
-            0x2E, 0x00,
-            0x3E, 0x00,                    # exact 8T title-only delay
+            0xAF,                           # A=0, Z; exact 4T title delay
+            0x6F,                           # L=0; exact 4T title delay
             0xCD,
-            (external_decision_helper_addr - 2) & 0xFF,
-            (external_decision_helper_addr - 2) >> 8,
+            (external_decision_helper_addr - 3) & 0xFF,
+            (external_decision_helper_addr - 3) >> 8,
         ])
         common_setup_addr = 0x42A7 + targets["common_setup"]
         emit([

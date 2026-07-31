@@ -5,17 +5,19 @@ emulator save/state files are never release artifacts in this repository.
 
 ## [Unreleased]
 
+## [v3.01-stream-rc4] - 2026-07-30
+
 ### Fixed
 
 - Add a committed deterministic release suite and pre-commit receipt hook.
   `run_deterministic_suite.py` builds the candidate twice, requires identical
-  bytes, runs all 36 emulator gates serially, verifies that its source inputs
+  bytes, runs all 37 emulator gates serially, verifies that its source inputs
   did not change, and writes `docs/release/verification/latest.json` only
   after a complete pass. The hook rejects a missing/stale receipt and any
-  staged ROM, save, RAM, or savestate. The final isolated run passed 36/36
+  staged ROM, save, RAM, or savestate. The final isolated run passed 37/37
   against two byte-identical SHA-256
-  `29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784`
-  builds and source fingerprint `954239dea4bf6870…`.
+  `78dc24cfc8111d359d1742e1744f824b6715fd7664ea54666a1126b2700f5f7a`
+  builds and source fingerprint `2cbdbfdc937ebaa1…`.
 - Make the deterministic-suite preflight fail closed when any mGBA process
   already owns the host slot. It reports the exact process and exits 75 rather
   than stacking Penta verification on another project's emulator workload.
@@ -28,11 +30,19 @@ emulator save/state files are never release artifacts in this repository.
   cleans up if any token-owned emulator survives a normally completed matrix.
 - Terminate the three independently sessioned speed, frame-flicker, and Stage
   1 color-bleed probes by their exact `xvfb`/mGBA process groups. Stopping only
-  the `xvfb-run` shell could orphan Qt; the successful 36-gate run leaves zero
+  the `xvfb-run` shell could orphan Qt; the successful 37-gate run leaves zero
   mGBA processes on the host.
 - Exercise both natural title-to-Stage-1 routes as a release gate. The probe
   presses the real title controls without injecting scene, level, PC, or SRAM
   state and requires stable nonwhite gameplay before the deadline.
+- Fix the true first-process, post-attract GAME START white-screen freeze.
+  Stock attract teardown overwrites the 36-byte level-select trampoline at
+  WRAM `$CFAA` but leaves its historical `$DF0E` sentinel set. The title
+  prelude now validates the trampoline's actual `$E5` entry byte and recopies
+  it when clobbered. Eight normal blank/saved × delayed/prompt × cold/reset
+  routes and the exact cold post-attract route all reach 120 stable gameplay
+  frames. The fix changes only three bytes versus the prior 36/36 ROM and
+  preserves its sample-406 Gargoyle return.
 - Keep the save-present level selector out of the title palette repair without
   borrowing a title/reel counter or stock state. Its existing 36-byte clear
   stub publishes the out-of-range palette phase `$A0`; natural Stage 1 entry
@@ -85,14 +95,28 @@ emulator save/state files are never release artifacts in this repository.
   title-showcase gate also requires renderer-visible spotlight header/name
   pixels, so a colored actor on a black background cannot false-pass.
 - Replace the broad red Stage 1 pickup mapping with six confirmed eight-tile
-  bands (`$88–8F` through `$D8–DF`). Their cherry-red accents remain
-  intentional; interleaved font/structural bands and `$F0–FF` stay BG0 so
-  pickup color cannot bleed into unrelated art.
-- Add a cold-boot Stage 1 play gate that drives 1,200+ continuous gameplay
-  frames, audits every visible BG cell against the exact compiled LUT on every
-  frame, and retains six native screenshot checkpoints. Stage 1 now keeps
-  independent camera-phase caches for physical maps `$9800` and `$9C00`;
-  alternating LCDC maps can no longer expose an uncolored or stale-red copy.
+  bands (`$88–8F` through `$D8–DF`) plus eight exact IDs attributed from a
+  headed native capture: `$A0/$A1/$B0/$B1` and `$A6/$A7/$B6/$B7`. All 56
+  confirmed pickup tiles use the cherry-red BG1 accent; remaining interleaved
+  font/structural tiles and `$F0–FF` stay BG0 so pickup color cannot bleed into
+  unrelated art.
+- Eliminate the transition-time Stage 1 pickup bleed visible in the headed
+  captures, including the vertical-only failure that survived the earlier
+  horizontal route. Up/Down now forces an atomic hidden-map refresh and
+  invalidates that destination's `$DC00` cache for one settling pass; ordinary
+  horizontal movement retains the fast future-map cache.
+- Commit rows 4–23 before wrapping through rows 0–3, and store each four-cell
+  attribute group from right to left after its tile IDs. A departing pickup's
+  red attribute is therefore neutralized before its replacement floor reaches
+  the PPU. The helper restores the stock final `HL`, `DE`, `A`, and zero-flag
+  contract, while the input-blocked title demo is phase-aligned separately.
+- Upgrade the cold-boot Stage 1 gate from a post-frame VRAM-only assertion to
+  a rendered-raster audit. It drives 1,200+ continuous gameplay frames,
+  drives a right/down/left/up route, captures 12-frame windows around every
+  scroll/source transition, masks current/previous pickup and OAM rectangles,
+  and requires every sampled visible cell to match the compiled LUT. The
+  fixed candidate passes 1,143 transition captures with zero mismatched cells
+  and zero detached red pixels.
 - Make the release harness resume already-passed hash-bound gates after an
   external runner interruption. Incomplete/running results are discarded on
   resume, the isolated ROM hash is rechecked, and only proven passes survive.
@@ -254,8 +278,8 @@ emulator save/state files are never release artifacts in this repository.
   now remain exact throughout the verification hold.
 - Replace the obsolete 274-byte distributable IPS, which reconstructed a
   months-old ROM differing from the release candidate in 5,934 bytes. The
-  deterministic 6,571-byte IPS now targets the supported Japanese base and
-  reconstructs the exact emulator-green working ROM.
+  deterministic 6,749-byte IPS now targets the supported Japanese base and
+  reconstructs the exact emulator-green RC4 ROM.
 - Add a deterministic, three-file release packager that independently rebuilds
   and applies the IPS, requires the successful full emulator manifest, and
   emits four distinct, decodable, nonblank native 160x144 submission
@@ -270,7 +294,7 @@ emulator save/state files are never release artifacts in this repository.
 - Add a Twitch stream runbook covering the verified xcb launcher, the
   OPENING-first title controls, a 42-scene audience-vote order, shared boss-BG
   palette caveats, safe save/recovery behavior, and the exact post-stream
-  build → IPS → 36-gate matrix → approval → MiSTer → final-package sequence.
+  build → IPS → 37-gate matrix → approval → MiSTer → final-package sequence.
 - Replace the permissive MiSTer deploy smoke test with a hash-bound physical
   release-sweep workflow. Wrong cores and failed screenshots now abort; stale
   images cannot be recycled as new evidence; every title/game/story/stage/menu/
@@ -318,8 +342,9 @@ emulator save/state files are never release artifacts in this repository.
   caused excess sound-engine transitions.
 - Move helper-readiness checks onto title-family branches so the returned
   banner keeps its exact native cadence while ordinary gameplay avoids the
-  old unconditional VBlank cost. The production sound trace is 20 D887
-  transitions versus vanilla's 18, below the release threshold of 27.
+  old unconditional VBlank cost. The production sound trace is 30 D887
+  transitions versus vanilla's cached 18, below the clean hard threshold of
+  36.
 - Make the later-stage soak trace record the exact `$9800/$9C00` destination
   selected by the two native tile-copy entries, retain first-mismatch source,
   map, attribute, and shadow dumps, and support immediate screenshots for
@@ -332,22 +357,24 @@ emulator save/state files are never release artifacts in this repository.
   matrix: each route waits for 120 consecutive stable gameplay frames and
   counts the stock main-loop entry at `$016C` for both vanilla and DX.
 
-### Current validation candidate (2026-07-28)
+### Current validation candidate (2026-07-30)
 
 - Two independent source builds reproduced MD5
-  `210c340bcfb261aa0337e19397eeead0` (SHA-256
-  `29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784`)
-  byte-for-byte. The isolated 36/36 receipt binds it to source fingerprint
-  `954239dea4bf6870f71811a2003eb9fc8c6707bee03b7d8c228fbe285cdf01d9`.
-  This ROM remains an unpromoted `/tmp` candidate; the repository ROM and
-  checked-in IPS were not changed.
+  `4f20b0cb7ab206c0216282a2f8fd113d` (SHA-256
+  `78dc24cfc8111d359d1742e1744f824b6715fd7664ea54666a1126b2700f5f7a`)
+  byte-for-byte. The isolated 37/37 receipt binds it to source fingerprint
+  `2cbdbfdc937ebaa1e7486e390699b407a2ea821b4cf84e1b753b34a8a34250f6`.
+  The deterministic checked-in IPS reconstructs this exact candidate without
+  committing or distributing the copyrighted ROM.
 - Title/footer/banner and all 38 spotlight actors pass with zero unsafe/red
   title cells and YAML-derived actor palettes. The spotlight name cards remain
   visible.
-- Stage 1 completed 1,200+ continuous frames with every visible cell matching
-  the compiled LUT. The ordinary OBJ audit sampled 6,150 hardware-OAM entries
-  across seven active combat anchors with zero mismatches; the Gargoyle
-  miniboss and all nine boss arenas pass separately.
+- Stage 1 completed 1,206 continuous frames with 1,143 transition-window
+  raster captures, six settled receipts, zero tile/attribute mismatches, and
+  zero detached red pixels across horizontal and vertical movement. The
+  ordinary OBJ audit sampled 6,290 hardware-OAM entries across seven active
+  combat anchors with zero mismatches; the Gargoyle miniboss and all nine boss
+  arenas pass separately.
 - Stages 2–7 completed 48,000 aggregate soak frames across rooms 1, 3, 5, and
   7 with zero unexpected attributes, unsafe bits, or lava mismatches.
 - All six natural death carryover shapes reach neutral fades and GAME OVER
@@ -355,7 +382,7 @@ emulator save/state files are never release artifacts in this repository.
   post-final, credits, END, and epilogue anchors retain their production
   BG1–BG7 layouts.
 - Controlled speed routes pass the ten-percent release tolerance: Stage 1
-  135/141 (95.7%), Stage 5 159/164 (97.0%), and Stage 7 153/167 (91.6%) stock
+  136/141 (96.5%), Stage 5 160/164 (97.6%), and Stage 7 153/167 (91.6%) stock
   main-loop entries. Gameplay/demo flicker, scroll, menu/input, stage-card
   timing, sound pulse shape, deterministic palette rebuild, and all 42
   livestream scene buttons pass.
@@ -364,24 +391,22 @@ emulator save/state files are never release artifacts in this repository.
 
 - The retired `3c0bef5d37ae178504b00823314e467c` build ran only 56 stock
   main-loop entries versus vanilla's 120 and felt 25–50% slower in headed
-  play. Promoted candidate `c0a29419e91b57462ab649b23b2deae7`
-  reaches 139/141 Stage 1 loop entries (98.6%), 156/164 in Stage 5 (95.1%),
-  and 153/167 in Stage 7 (91.6%) over identical 600-frame rightward routes.
-  Stationary Stage 5/7 reaches 97.1%/100%; the adversarial Stage 5 patrol is
-  the remaining worst case at 80.1% because it commits 40 real lava-layout
-  changes.
+  play. RC4 reaches 136/141 Stage 1 loop entries (96.5%), 160/164 in Stage 5
+  (97.6%), and 153/167 in Stage 7 (91.6%) over identical 600-frame rightward
+  routes. The older stationary and patrol matrix remains recorded as an
+  adversarial baseline.
 
 ### Verified
 
 - A one-command release harness copies the candidate to `/tmp`, runs all
   current emulator gates sequentially, retains per-gate logs and rendered
-  artifacts, and checks both ROM hashes after every gate. All 33 emulator
-  gates pass with source and isolated-copy MD5
-  `c0a29419e91b57462ab649b23b2deae7`. MiSTer remains the separate
+  artifacts, and checks both ROM hashes after every gate. All 37 serial gates
+  pass with source and isolated-copy MD5
+  `4f20b0cb7ab206c0216282a2f8fd113d`. MiSTer remains the separate
   reservation-backed hardware requirement.
-- The deterministic 6,571-byte IPS (MD5
-  `eb8544fcdea2ea0be0ad480bdcfc327d`) reconstructs exact candidate
-  `c0a29419…` from supported base MD5
+- The deterministic 6,749-byte IPS (MD5
+  `f32b2293dd3cd5d63852fbb08ebb13a7`) reconstructs exact candidate
+  `4f20b0cb…` from supported base MD5
   `df43e0adfdc74b2829c7e95e91c71a28`.
 - Two independent packaging runs produced the same archive SHA-256, contained
   only IPS/readme/checksum files, preserved fixed ZIP timestamps, and rejected
@@ -391,7 +416,7 @@ emulator save/state files are never release artifacts in this repository.
   sets cannot seal, and only an intact fully confirmed manifest reaches
   `hardware-pass`. It makes no MiSTer connection.
 - The current production palette YAML rebuilt twice through independent
-  temporary outputs to MD5 `c0a29419e91b57462ab649b23b2deae7`,
+  temporary outputs to MD5 `4f20b0cb7ab206c0216282a2f8fd113d`,
   byte-for-byte equal to the promoted working candidate, validating
   deterministic reproduction without falsely recording an audience vote.
 - A tuned-YAML build gate changes BG0, BG7, OBJ2/Sara Witch, both jet forms,
@@ -431,7 +456,7 @@ emulator save/state files are never release artifacts in this repository.
   audio/timing, Stage 1 palette, menu HUD, `SELECT+START`, speed, later-stage
   integrity/soak, scroll stability, both story paths, both ending inventories,
   live palette deck, deterministic rebuild, and IPS reconstruction in one
-  coherent 33/33 manifest.
+  coherent 37/37 manifest.
 - The title-default menu semantics are exercised explicitly: DOWN moves from
   OPENING START to GAME START, `DCFD=1` enters the original colorizer-dark
   level-select path, and all 360 visible cells are palette 0 after its 55 score
@@ -480,8 +505,9 @@ emulator save/state files are never release artifacts in this repository.
   both physical tilemaps.
 - Title, stage-intro timing, Stage 1 colorization, item-menu HUD,
   `SELECT+START`, scroll stability, and phantom-sound regressions still pass;
-  the phantom trace is 20 transitions versus vanilla's 18 (threshold 27).
-- Repaired output MD5: `c0a29419e91b57462ab649b23b2deae7`
+  the phantom trace is 30 transitions versus vanilla's cached 18 (threshold
+  36).
+- Repaired output MD5: `4f20b0cb7ab206c0216282a2f8fd113d`
   (informational only; the ROM itself is not committed).
 
 ## [v3.01-stream-rc3] - 2026-07-22

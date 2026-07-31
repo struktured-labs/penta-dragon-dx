@@ -16,23 +16,22 @@ with the exact title footer `DX V3.01 STRUK LABS`. The ROM is intentionally
 excluded from Git; the deterministic IPS patch, builder, probes, and
 documentation are versioned.
 
-The newest source-built validation candidate is intentionally still outside
-the repository at MD5 `210c340bcfb261aa0337e19397eeead0` and SHA-256
-`29a8acc31d1b5fca9c4c1125b4e40b46130f22f0d08161d806a067349d639784`.
+Release candidate `v3.01-stream-rc4` builds to MD5
+`4f20b0cb7ab206c0216282a2f8fd113d` and SHA-256
+`78dc24cfc8111d359d1742e1744f824b6715fd7664ea54666a1126b2700f5f7a`.
 Two independent builds reproduced it byte-for-byte, and the complete isolated
-matrix bound 36/36 passing gates to source fingerprint
-`954239dea4bf6870f71811a2003eb9fc8c6707bee03b7d8c228fbe285cdf01d9`.
-It is not yet promoted, tagged, or matched by the checked-in IPS; the older
-promoted `c0a29419…` receipts below remain historical release evidence until
-an explicit promotion.
+matrix bound 37/37 passing gates to source fingerprint
+`2cbdbfdc937ebaa1e7486e390699b407a2ea821b4cf84e1b753b34a8a34250f6`.
+The checked-in ROM-free IPS reconstructs those exact bytes from the supported
+Japanese ROM; no copyrighted ROM or emulator save/state is distributed.
 
 | Release gate | Probe | Current result |
 |--------------|-------|------------|
 | Emulator process safety | `verify_mgba_singleflight_guard.py` | PASS without launching mGBA: raw commands denied, concurrent launch returns 75, parent-death cleanup works, and the suite confirms random-token ownership plus exact process-group cleanup |
-| Latest focused regression sweep | Isolated mGBA/PyBoy gates | **PASS** on unpromoted MD5 `210c340bcfb261aa0337e19397eeead0`: title, spotlight, gameplay BG/OBJ, flicker, stages, bosses, death, story/ending, speed, sound, scroll, and 42-scene live deck |
-| Full deterministic suite | `run_deterministic_suite.py` | **PASS 36/36** with two byte-identical builds; source fingerprint `954239dea4bf…`, zero failures, zero emulator processes left; [committable receipt](docs/release/verification/latest.json) |
-| Candidate-only IPS round trip | `verify_release_patch.py --candidate-only` | **PASS** for MD5 `210c340b…`; no ROM or IPS was committed |
-| Checked-in distributable IPS | `verify_release_patch.py` | Historical promoted evidence: 6,571-byte IPS MD5 `eb8544fcdea2ea0be0ad480bdcfc327d` reconstructs ROM MD5 `c0a29419…` from the supported Japanese base |
+| Latest focused regression sweep | Isolated mGBA/PyBoy gates | **PASS** on MD5 `4f20b0cb7ab206c0216282a2f8fd113d`: title, spotlight, cold/post-attract GAME START, gameplay BG/OBJ, flicker, stages, bosses, death, story/ending, speed, sound, scroll, and 42-scene live deck |
+| Full deterministic suite | `run_deterministic_suite.py` | **PASS 37/37** with two byte-identical builds; source fingerprint `2cbdbfdc937e…`, zero failures, zero emulator processes left; [committable receipt](docs/release/verification/latest.json) |
+| Candidate-only IPS round trip | `verify_release_patch.py --candidate-only` | **PASS** for MD5 `4f20b0cb…`; deterministic in-memory patch reconstructs the exact candidate |
+| Checked-in distributable IPS | `verify_release_patch.py` | **PASS**: 6,749-byte IPS MD5 `f32b2293dd3cd5d63852fbb08ebb13a7` reconstructs ROM MD5 `4f20b0cb…` from the supported Japanese base |
 | MiSTer reservation guard | `verify_mister_reservation_guard.py` | PASS, unreserved hardware commands stop before SSH/SCP; local-only commands remain usable |
 | Audience palette → release ROM | `verify_palette_build_roundtrip.py` | PASS, edited base BG/OBJ, both jet forms, boss overrides, and all powerup bytes bake into a fresh ROM; base colors reach live mGBA CRAM |
 | Title footer and palette | `verify_title_screen_integration.py`, `verify_title_color.py` | PASS |
@@ -42,16 +41,17 @@ an explicit promotion.
 | `STAGE XX` timing/ditty | `verify_stage_intro_timing.py` | PASS, 156 frames; 232 versus vanilla's 233 timer ticks, no sound rewinds |
 | Item-menu HP/MEDICAL attributes | `verify_menu_hud_and_combo.py` | PASS, 0 contaminated cells |
 | Save-present GAME START score screen | `verify_levelselect_screen.py` | PASS, 360/360 visible attributes on palette 0 |
-| Vanilla gameplay-speed parity | `verify_stage_speed_matrix.py` | PASS on latest candidate after 600 exact-scene frames: Stage 1 135/141 (95.7%), Stage 5 159/164 (97.0%), Stage 7 153/167 (91.6%) |
-| Adversarial speed routes | `verify_stage_speed_matrix.py` | Stationary Stage 5/7: 97.1%/100%; right: 95.1%/91.6%; patrol: 80.1%/91.4% (Stage 5 patrol is the remaining worst case) |
+| Cold-process GAME START | `verify_game_start_routes.py` | PASS, eight blank/saved × delayed/prompt × cold/reset routes plus a first-process post-attract route all reach 120 stable Stage 1 frames; live play records 0 attract-wait hits |
+| Vanilla gameplay-speed parity | `verify_stage_speed_matrix.py` | PASS on latest candidate after 600 exact-scene frames: Stage 1 136/141 (96.5%), Stage 5 160/164 (97.6%), Stage 7 153/167 (91.6%) |
+| Adversarial speed routes | `verify_stage_speed_matrix.py` | Historical promoted baseline: stationary Stage 5/7 97.1%/100%; right 95.1%/91.6%; patrol 80.1%/91.4% (Stage 5 patrol remains the worst measured case) |
 | Headed live speed comparison | Manual user playtest | **PASS**, user reports speed is good on the promoted no-bleed build |
-| Ordinary gameplay enemy OBJ palettes | `verify_gameplay_obj_palettes.py` | PASS, 6,150 hardware-OAM samples / 0 mismatches across 7 active combat anchors; the eighth naturally entered its miniboss scene before sampling |
-| Idle actor spotlight reel | `inventory_spotlight_roster.py`, `inventory_attract_reel.py` | PASS, all 38 roster identities use their gameplay-YAML family; Sara W/Sara D/Dragonfly travel and 2,522 Gargoyle sprites have 0 palette mismatches; demo timing is 1,987/429 frames versus OG 1,856/395 |
+| Ordinary gameplay enemy OBJ palettes | `verify_gameplay_obj_palettes.py` | PASS, 6,290 hardware-OAM samples / 0 mismatches across 7 active combat anchors; the eighth naturally entered its miniboss scene before sampling |
+| Idle actor spotlight reel | `inventory_spotlight_roster.py`, `inventory_attract_reel.py` | PASS, all 38 roster identities use their gameplay-YAML family; Sara W/Sara D/Dragonfly travel and Gargoyle sprites have 0 palette mismatches; the exact flicker audit returns at sample 406 versus OG 396 |
 | ROM-native OPENING story palettes | `inventory_opening_cutscene.py --expect-production` | PASS, committed art is 160 page-palette cells above 200 neutral dialogue cells |
 | ROM-native final-story palettes | `verify_final_cutscene_mgba.py` | PASS, both branches; 0 position-aware layout mismatches or bad tables |
 | Complete ending phase map | `analyze_ending_page_discriminators.py`, `verify_story_attr_production.py` | PASS, credits/END/epilogue reach full BG1/BG2/BG3 layouts |
 | Stage 1 BG colorization | `verify_gameplay_palette.py` | PASS, active map uses floor BG0 + slate-wall BG6 |
-| Stage 1 pickup color containment | `verify_stage1_no_bleed.py` | **PASS**, 1,200 continuous gameplay frames across alternating `$9800/$9C00` maps; every visible cell exactly matches the compiled LUT, including only the 48 confirmed cherry-red pickup tiles; six native screenshots |
+| Stage 1 pickup color containment | `verify_stage1_no_bleed.py` | **PASS**, 1,206 continuous gameplay frames, 1,143 native transition-window raster captures, six settled receipts, zero mismatched cells, and zero detached red pixels across a right/down/left/up route |
 | Later-stage BG integrity | `verify_later_stage_integrity.py` | PASS, no cross-stage or unsafe attributes in Stages 2–7 |
 | Later-stage 48K-frame soak | `verify_later_stage_soak.py` | PASS, Stages 2–7; 0 unsafe attrs or lava mismatches |
 | All nine boss arenas | `verify_boss_arena_palettes.py` | PASS, 9/9 live tables exact and visibly colorized |
@@ -60,14 +60,12 @@ an explicit promotion.
 | Scroll stability | `verify_scroll_tearing.py` | PASS, 0.00 changes/s |
 | `SELECT+START` safety | `verify_menu_hud_and_combo.py` | PASS, no scene change or freeze |
 
-Tagged `v3.01-stream-rc3`; speed parity, title-reel DMA, miniboss stability,
-later-stage containment, story cleanup, and the complete gameplay OBJ pass are
-current post-tag working-candidate changes. Persistent receipts for the
-promoted build are in
-[`docs/release/receipts/c0a29419`](docs/release/receipts/c0a29419), including
-the 33-gate manifest and headed/automated Stage 1 before-and-after screenshot
-receipts. The prior `67cf1235` folder retains the six 8,000-frame soak reports
-and 48-panel stable-versus-candidate sheet.
+Release `v3.01-stream-rc4` is bound to the current
+[37-gate receipt](docs/release/verification/latest.json). Historical promoted
+receipts remain in
+[`docs/release/receipts/c0a29419`](docs/release/receipts/c0a29419), while the
+prior `67cf1235` folder retains the six 8,000-frame soak reports and 48-panel
+stable-versus-candidate sheet.
 
 ---
 
@@ -87,12 +85,18 @@ and 48-panel stable-versus-candidate sheet.
 - `scripts/launch_mgba.sh` is the only headed-play entrypoint. It never uses
   broad `pkill` or `killall`.
 
-### Stream-safe title, transitions, and HUD (v3.01-stream-rc3)
+### Stream-safe title, transitions, and HUD (v3.01-stream-rc4)
 
 - Exact `DX V3.01 STRUK LABS` release footer with a native-style period glyph.
 - Intentional white-to-blue-gray title palette with no accidental red text.
 - Vanilla-length `STAGE XX` card: the colorizer yields during the stock
   frame-synchronized wait, preventing the intro ditty from repeating.
+- Cold GAME START now survives a complete attract-demo cycle. Stock attract
+  teardown overwrites the 36-byte level-select trampoline at WRAM `$CFAA`
+  without clearing its old `$DF0E` sentinel; the prelude validates the actual
+  executable entry byte (`PUSH HL`, `$E5`) and recopies the trampoline when
+  necessary. The original 36/36 VBlank/fade cadence remains byte-for-byte
+  intact, preserving the sample-406 Gargoyle return.
 - The active-play fade shim normalizes the stock `$90/$F9` whole-background
   mappings to `$E4`, eliminating the white checker pulse without blackening
   CGB palette RAM. The complete gameplay/Gargoyle/title return remains within
@@ -109,13 +113,20 @@ and 48-panel stable-versus-candidate sheet.
   is written only with the LCD off, in VBlank, or during a fresh HBlank. This
   keeps audience-tuned palettes exact instead of producing mixed old/new rows.
 
-### Stage and pickup palette containment (unreleased)
+### Stage and pickup palette containment (v3.01-stream-rc4)
 
-- Stage 1 keeps its tuned semantic floor and wall table. Only six confirmed
-  eight-tile pickup bands (`$88–8F` through `$D8–DF`) use the cherry-red BG1
-  accent; the interleaved font/structural bands and `$F0–FF` remain neutral.
-  Every visible cell is checked against this exact LUT, so a red attribute
-  cannot survive after its pickup tile scrolls away.
+- Stage 1 keeps its tuned semantic floor and wall table. Six confirmed
+  eight-tile pickup bands (`$88–8F` through `$D8–DF`) plus the capture-attributed
+  blocks `$A0/$A1/$B0/$B1` and `$A6/$A7/$B6/$B7` use the cherry-red BG1
+  accent. The remaining interleaved font/structural tiles and `$F0–FF` stay
+  neutral.
+  On a hidden-map cache miss, rows 4–23 commit first and rows 0–3 wrap last,
+  settling the pickup-bearing rows before the map can be revealed.
+- The Stage 1 raster gate captures 12-frame windows around every scroll/source
+  transition, masks hardware OAM, and rejects red farther than two pixels from
+  a black pickup outline. This catches rendered bleed that a post-frame VRAM
+  comparison cannot see; the previous candidate is retained as a failing
+  negative control.
 - Stages 2–4 and 6 use a neutral baseline instead of misinterpreting reused
   tile IDs through the Stage 1 table.
 - Stages 5 and 7 retain only their captured and verified lava-field mappings.
@@ -171,9 +182,9 @@ The title-idle reel and ordinary gameplay intentionally use separate maps:
 
 ### Arena-Dispatched Inline Hook
 The inline hook at bank1:0x42A7 dispatches based on scene:
-- D880 `0x02` (Stage 1) → independent `$9800` and `$9C00` camera-phase
-  caches; changed maps copy tile+attribute atomically, while steady maps keep
-  the stock-width tile-only path
+- D880 `0x02` (Stage 1) → the stock `$DC00` future-map phase selects the
+  per-map cache; changed maps copy tile+attribute atomically in pickup-first
+  row order, while steady maps retain the exact stock-width tile-only path
 - D880 `0x06`/`0x08` (Stage 5/7 lava) → atomic tile+attribute copy when
   the packed tile source or camera signature changes
 - Other dungeon scenes → native tile copy with their neutral scene baseline
@@ -212,9 +223,9 @@ python3 scripts/diagnostics/verify_release_patch.py
 ```
 
 The patch accepts only the verified Japanese base ROM with MD5
-`df43e0adfdc74b2829c7e95e91c71a28`. The checked-in 6,571-byte IPS has MD5
-`eb8544fcdea2ea0be0ad480bdcfc327d` and reconstructs the current working ROM
-MD5 `c0a29419e91b57462ab649b23b2deae7`; copyrighted source and output ROMs are
+`df43e0adfdc74b2829c7e95e91c71a28`. The checked-in 6,749-byte IPS has MD5
+`f32b2293dd3cd5d63852fbb08ebb13a7` and reconstructs the RC4 ROM MD5
+`4f20b0cb7ab206c0216282a2f8fd113d`; copyrighted source and output ROMs are
 not distribution artifacts.
 
 ### Build the ROM-free pre-hardware bundle

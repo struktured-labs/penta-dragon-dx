@@ -201,6 +201,7 @@ def red_pixel_attribution(
 def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
     trace = output / f"{mode}.tsv"
     rows = list(csv.DictReader(trace.open(), delimiter="\t"))
+    delay_hits = int((output / f"{mode}.delay_hits").read_text().strip())
     frames: list[dict[str, object]] = []
     previous_image = None
     previous_obj: str | None = None
@@ -370,6 +371,15 @@ def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
         None,
     )
     failures = []
+    if mode == "demo" and delay_hits <= 0:
+        failures.append(
+            "attract Stage 1 never entered its cadence-only scanline wait"
+        )
+    if mode == "gameplay" and delay_hits != 0:
+        failures.append(
+            f"live Stage 1 entered the attract-only scanline wait "
+            f"{delay_hits} times"
+        )
     if mode == "demo" and (
         demo_return_sample is None
         or not 300 <= demo_return_sample <= 500
@@ -410,6 +420,7 @@ def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
         "rom_md5": md5(rom),
         "mode": mode,
         "samples": len(frames),
+        "demo_delay_hits": delay_hits,
         "near_white_min": min(white_values, default=0),
         "near_white_max": max(white_values, default=0),
         "delta_mean_max": max(delta_values, default=0),
@@ -500,6 +511,7 @@ def main() -> int:
                 f"tile_only_changes={receipt['tile_only_changes']} "
                 f"active_palette_changes="
                 f"{len(receipt['active_obj_palette_changes'])} "
+                f"demo_delay_hits={receipt['demo_delay_hits']} "
                 f"bgp_pulses={len(receipt['gameplay_bgp_pulses'])} "
                 f"lcd_off={len(receipt['lcd_off_samples'])}"
             )

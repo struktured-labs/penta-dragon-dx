@@ -87,6 +87,11 @@ def main() -> int:
     )
     parser.add_argument("--frames", type=int, default=8000)
     parser.add_argument("--timeout", type=float, default=12.0)
+    parser.add_argument(
+        "--stages",
+        default="2,3,4,5,6,7",
+        help="comma-separated stage numbers to exercise (default: 2..7)",
+    )
     parser.add_argument("--keep-dir", type=Path)
     parser.add_argument(
         "--screenshots", action="store_true",
@@ -110,6 +115,12 @@ def main() -> int:
     args = parser.parse_args()
     if args.capture_stable < 0:
         parser.error("--capture-stable must be non-negative")
+    try:
+        stages = [int(value) for value in args.stages.split(",") if value]
+    except ValueError:
+        parser.error("--stages must be a comma-separated list of integers")
+    if not stages or any(stage < 2 or stage > 7 for stage in stages):
+        parser.error("--stages entries must be between 2 and 7")
 
     temporary = None
     if args.keep_dir:
@@ -123,7 +134,8 @@ def main() -> int:
 
     failures: list[str] = []
     try:
-        for target in range(1, 7):
+        for stage in stages:
+            target = stage - 1
             try:
                 report = run_stage(
                     args.mgba, args.rom.resolve(), target, args.frames,

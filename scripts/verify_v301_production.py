@@ -3,7 +3,7 @@
 
 Runs autoplay stress test + screenshot capture and verifies:
   - FFC1 reaches 1 by frame 600
-  - D880 cycles 0x02 (dungeon) and at least one other state
+  - D880 remains in the Stage 1 dungeon scene while room IDs advance
   - FFBD cycles at least 2 of rooms {1, 3, 5, 7}
   - Screenshot at frame 1500 has visible content (>2KB PNG)
   - No 0x00 (stuck) state in D880
@@ -132,7 +132,7 @@ def main():
         checks = [
             ("FFC1 reaches 1 by f≤600", 0 < ffc1_first <= 600),
             ("D880 includes 0x02 (dungeon)", "02" in d880_states),
-            ("D880 cycles ≥2 states", len(d880_states) >= 2),
+            ("D880 stays in Stage 1 dungeon", d880_states == {"02"}),
             ("No D880=0x00 (stuck)", "00" not in d880_states),
             ("FFBD cycles ≥2 rooms in {1,3,5,7}", len(ffbd_rooms) >= 2),
             (f"Screenshot ≥ 2KB (got {screen_size})", screen_ok),

@@ -13,6 +13,14 @@ local MAX_FRAMES = tonumber(os.getenv("FLICKER_MAX_FRAMES") or "16000")
 local KEY_A, KEY_START, KEY_DOWN = 0x01, 0x08, 0x80
 local frame, target_frame, samples = 0, nil, 0
 local done = false
+local previous_scene = -1
+local demo_delay_hits = 0
+
+pcall(function()
+    emu:setBreakpoint(function()
+        demo_delay_hits = demo_delay_hits + 1
+    end, 0x10E7)
+end)
 
 local function scheduled_keys()
     if MODE ~= "gameplay" then return 0 end
@@ -162,6 +170,9 @@ end
 local function finish(status)
     if done then return end
     done = true
+    local hits = assert(io.open(OUT .. ".delay_hits", "w"))
+    hits:write(string.format("%d\n", demo_delay_hits))
+    hits:close()
     local marker = assert(io.open(OUT .. ".done", "w"))
     marker:write(status .. "\n")
     marker:close()
@@ -176,11 +187,37 @@ trace:write(
     "\tobj_cram\tbg_cram\tvisible_oam\n"
 )
 trace:close()
+local timeline = assert(io.open(OUT .. ".timeline.tsv", "w"))
+timeline:write(
+    "frame\td880\tffc1\tdcfd\tdd09\tsentinel\tdc00\tscx\tlcdc\tbgp\tly\n"
+)
+timeline:close()
 
 callbacks:add("frame", function()
     if done then return end
     frame = frame + 1
     emu:setKeys(scheduled_keys())
+
+    local scene = emu:read8(0xD880)
+    if scene ~= previous_scene then
+        local handle = assert(io.open(OUT .. ".timeline.tsv", "a"))
+        handle:write(string.format(
+            "%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\n",
+            frame,
+            scene,
+            emu:read8(0xFFC1),
+            emu:read8(0xDCFD),
+            emu:read8(0xDD09),
+            emu:read8(0xDF51),
+            emu:read8(0xDC00),
+            emu:read8(0xFF43),
+            emu:read8(0xFF40),
+            emu:read8(0xFF47),
+            emu:read8(0xFF44)
+        ))
+        handle:close()
+        previous_scene = scene
+    end
 
     if not target_frame and target_active() then target_frame = frame end
     if target_frame then

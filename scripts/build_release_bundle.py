@@ -37,8 +37,8 @@ DEFAULT_PALETTES = ROOT / "palettes/penta_palettes_v097.yaml"
 DEFAULT_OUTPUT = ROOT / "dist"
 README_TEMPLATE = ROOT / "docs/release/README.txt.in"
 SUPPORTED_BASE_MD5 = "df43e0adfdc74b2829c7e95e91c71a28"
-EXPECTED_GATE_COUNT = 36
 REQUIRED_GATES = {
+    "emulator_singleflight_guard",
     "title_footer_integration",
     "title_animation_frames",
     "flash_attribution",
@@ -50,16 +50,19 @@ REQUIRED_GATES = {
     "menu_hud_and_combo",
     "levelselect_screen",
     "game_start_routes",
+    "game_start_after_attract",
     "gameplay_speed_parity",
     "gameplay_bg_palettes",
     "stage1_no_color_bleed",
     "gameplay_obj_palettes",
+    "frame_flicker",
     "miniboss_color",
     "later_stage_integrity",
     "later_stage_soak",
     "boss_arenas",
     "death_gameover",
     "title_idle_reel",
+    "spotlight_full_roster",
     "opening_cutscene",
     "final_cutscene_mgba",
     "ending_inventory_a",
@@ -73,6 +76,7 @@ REQUIRED_GATES = {
     "candidate_ips_roundtrip",
     "mister_reservation_guard",
 }
+EXPECTED_GATE_COUNT = len(REQUIRED_GATES)
 REQUIRED_HARDWARE_CHECKPOINTS = {
     "gbc_core",
     "deployed_rom_hash",
@@ -109,11 +113,11 @@ SCREENSHOT_SPECS = (
     ),
     (
         "03_ted_boss.png",
-        "boss-arenas/arena_4_ted.png",
+        "boss-arenas/boss4_ted.png",
     ),
     (
         "04_penta_dragon_boss.png",
-        "boss-arenas/arena_8_penta_dragon.png",
+        "boss-arenas/boss8_penta_dragon.png",
     ),
 )
 
