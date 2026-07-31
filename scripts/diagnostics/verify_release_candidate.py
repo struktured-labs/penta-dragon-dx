@@ -204,6 +204,16 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             180,
         ),
         Gate(
+            "pickup_class_palettes",
+            script(
+                "scripts/diagnostics/verify_pickup_class_palettes.py",
+                r,
+                "--output",
+                str(artifacts / "pickup-class-palettes"),
+            ),
+            30,
+        ),
+        Gate(
             "stage1_no_color_bleed",
             script(
                 "scripts/diagnostics/verify_stage1_no_bleed.py",

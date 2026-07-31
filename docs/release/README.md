@@ -10,7 +10,7 @@ python3 scripts/diagnostics/run_deterministic_suite.py
 
 The command refuses to start while any mGBA process is active, builds twice
 under `/tmp`, requires byte-identical candidates, and runs the current
-36-gate matrix serially. Only a complete pass writes the ROM-free,
+38-gate matrix serially. Only a complete pass writes the ROM-free,
 source-fingerprint-bound receipt at
 `docs/release/verification/latest.json`.
 

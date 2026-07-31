@@ -53,6 +53,7 @@ REQUIRED_GATES = {
     "game_start_after_attract",
     "gameplay_speed_parity",
     "gameplay_bg_palettes",
+    "pickup_class_palettes",
     "stage1_no_color_bleed",
     "gameplay_obj_palettes",
     "frame_flicker",

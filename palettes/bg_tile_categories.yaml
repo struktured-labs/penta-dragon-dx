@@ -26,9 +26,12 @@ bg_table:
 
   # Palette legend (what each pal index renders as on the dungeon scene)
   legend:
-    0: "default / floor / void / structural transitions / BG pickup tiles"
-    1: "confirmed Stage 1 pickup art only (cherry-red item accents)"
-    5: "RESERVED for stage-2 LAVA path (not used in dungeon bg_table)"
+    0: "default / floor / void / structural transitions / text"
+    1: "health and restoration pickups (cherry red)"
+    2: "rare, life, score, and wildcard pickups (purple)"
+    3: "status-cure pickups (green)"
+    4: "shield, arrow, and teleport pickups (cyan)"
+    5: "attack and form-power pickups (gold/red); later scenes reuse the slot for lava"
     6: "walls + spike cylinders (slate/gunmetal metallic ramp)"
     7: "RESERVED — was deep-blue secret-stage intent; build override sets pal 7 CRAM to pal 0 colors to hide stale CGB boot-ROM attrs"
 
@@ -61,37 +64,78 @@ bg_table:
         LAVA. Excludes 0x47/0x57 — handled as wall corners.
       tiles: [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]
 
-    - name: pickup_tiles_targeted
+    - name: pickup_health_restore
       palette: 1
       description: |
-        The old blanket 0x80-0xDF + 0xF0-0xFF rule painted font and reused
-        background tiles red. Most 2x2 pickup art occupies alternating
-        eight-tile bands in the Stage 1 tileset. Two additional pickup blocks
-        were identified from a headed native capture as
-        A0/A1/B0/B1 and A6/A7/B6/B7. Color only those confirmed tiles; keep
-        the remaining interleaved font/background tiles neutral. Title,
-        footer, and item-menu attributes remain scene/window-specific BG0.
-      tiles: [0xA0, 0xA1, 0xA6, 0xA7, 0xB0, 0xB1, 0xB6, 0xB7]
-      tile_ranges:
-        - [0x88, 0x8F]
-        - [0x98, 0x9F]
-        - [0xA8, 0xAF]
-        - [0xB8, 0xBF]
-        - [0xC8, 0xCF]
-        - [0xD8, 0xDF]
+        Health 1 and Health 2 share the 88/89/98/99 block. Health 2 replaces
+        its lower-right 99 tile with 96. Keep both forms on the red health
+        palette.
+      tiles: [0x88, 0x89, 0x96, 0x98, 0x99]
+
+    - name: pickup_status_cure
+      palette: 3
+      description: |
+        Poison Cure (8A/8B/9A/9B) and Slow Cure (8C/8D/9C/9D).
+      tiles: [0x8A, 0x8B, 0x8C, 0x8D, 0x9A, 0x9B, 0x9C, 0x9D]
+
+    - name: pickup_shield_defense
+      palette: 4
+      description: "Shield pickup (84/85/94/95), cyan defense class."
+      tiles: [0x84, 0x85, 0x94, 0x95]
+
+    - name: pickup_attack_power
+      palette: 5
+      description: |
+        Gold/red attack and form-power class: Spiral (8E), Turbo (A8),
+        Flash (AA), Rock (C8), and Dragon (CE). Each named base expands to
+        base/base+1/base+16/base+17.
+      tiles: [
+        0x8E, 0x8F, 0x9E, 0x9F,
+        0xA8, 0xA9, 0xB8, 0xB9,
+        0xAA, 0xAB, 0xBA, 0xBB,
+        0xC8, 0xC9, 0xD8, 0xD9,
+        0xCE, 0xCF, 0xDE, 0xDF
+      ]
+
+    - name: pickup_navigation_arrow
+      palette: 4
+      description: |
+        Cyan navigation class: Fat Arrow (A0), Bidirectional Arrow (A2),
+        Half-Diagonal Arrow (A4), All-Diagonals Arrow (A6), and Teleport
+        (AC). Each named base expands to its complete 2x2 block.
+      tiles: [
+        0xA0, 0xA1, 0xB0, 0xB1,
+        0xA2, 0xA3, 0xB2, 0xB3,
+        0xA4, 0xA5, 0xB4, 0xB5,
+        0xA6, 0xA7, 0xB6, 0xB7,
+        0xAC, 0xAD, 0xBC, 0xBD
+      ]
+
+    - name: pickup_rare_score
+      palette: 2
+      description: |
+        Purple rare/score class: Extra Life (AE), Wild Card (C6), P item
+        (CA), and Orb (CC). Each named base expands to its complete 2x2 block.
+      tiles: [
+        0xAE, 0xAF, 0xBE, 0xBF,
+        0xC6, 0xC7, 0xD6, 0xD7,
+        0xCA, 0xCB, 0xDA, 0xDB,
+        0xCC, 0xCD, 0xDC, 0xDD
+      ]
 
     - name: pickup_font_no_bleed
       palette: 0
       description: |
-        Explicit neutral bands surrounding the pickup tiles. These contain
-        font, menu, and reused structural art that caused the broad red bleed.
+        Exact neutral gaps surrounding the now-inventoried pickup blocks.
+        These contain font, menu, and reused structural art that caused the
+        old blanket 80-DF mapping to bleed.
       tile_ranges:
-        - [0x80, 0x87]
-        - [0x90, 0x97]
-        - [0xA2, 0xA5]
-        - [0xB2, 0xB5]
-        - [0xC0, 0xC7]
-        - [0xD0, 0xD7]
+        - [0x80, 0x83]
+        - [0x86, 0x87]
+        - [0x90, 0x93]
+        - [0x97, 0x97]
+        - [0xC0, 0xC5]
+        - [0xD0, 0xD5]
         - [0xF0, 0xFF]
 
     - name: sentinel_reset
@@ -104,7 +148,7 @@ bg_table:
 
   notes:
     - "Iter 233 attempted: tile 0x73 → pal 1 (cursor red). REVERTED iter 236: stage 6 BG also uses 0x73 (lavender stage6_decorative_pal5 regressed). Needs per-scene WRAM 0xDA00 override."
-    - "Pal 5 (red/yellow) deliberately UNUSED in bg_table; reserved for stage-2 LAVA via separate path."
+    - "Pal 5 is attack-power gold/red in Stage 1; Stage 5/7 scene-specific tables reuse the hardware slot for lava."
     - "Pal 7 deliberately UNUSED in bg_table; bg_data BGP7 CRAM bytes are overridden to BGP0 (Dungeon) in build_v301_gdma.py:417 to hide stale CGB boot-ROM attrs."
 
 # ==============================================

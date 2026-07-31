@@ -13,8 +13,12 @@ bg_sweep retained as safety net (mini-boss probe timing dependency).
 
 Palette mapping (bg_table):
   - pal0 (floor/default):  floor, void, structure/transitions, hazards
-  - pal1 (pickup accents): confirmed pickup bands + two captured 2x2 blocks
-  - pal0 (font/reused art): interleaved 0x80-0xDF bands and 0xF0-0xFF
+  - pal1 (health):         Health 1/2 restoration pickups
+  - pal2 (rare/score):     Extra Life, Wild Card, P item, Orb
+  - pal3 (status cures):   Poison Cure, Slow Cure
+  - pal4 (defense/nav):    Shield, four arrow classes, Teleport
+  - pal5 (attack/form):    Spiral, Turbo, Flash, Rock, Dragon
+  - pal0 (font/reused art): exact gaps around the 73 pickup tile IDs
   - pal6 (walls):          0x14-0x1E, 0x25-0x26, 0x34-0x38, 0x41-0x49,
                            0x54-0x57, 0x59 (slate blue-gray)
   - pal7 overridden to pal0 colors (hides stale CGB boot-ROM attrs)

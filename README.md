@@ -16,22 +16,22 @@ with the exact title footer `DX V3.01 STRUK LABS`. The ROM is intentionally
 excluded from Git; the deterministic IPS patch, builder, probes, and
 documentation are versioned.
 
-Release candidate `v3.01-stream-rc4` builds to MD5
-`4f20b0cb7ab206c0216282a2f8fd113d` and SHA-256
-`78dc24cfc8111d359d1742e1744f824b6715fd7664ea54666a1126b2700f5f7a`.
+Release candidate `v3.01-stream-rc5` builds to MD5
+`95d98e40efa97a1882c00e5977161d5a` and SHA-256
+`5de405686c5779bc2db4df0ddc3659813e5d7d03ab39f8970f919dfec587a4eb`.
 Two independent builds reproduced it byte-for-byte, and the complete isolated
-matrix bound 37/37 passing gates to source fingerprint
-`2cbdbfdc937ebaa1e7486e390699b407a2ea821b4cf84e1b753b34a8a34250f6`.
+matrix bound 38/38 passing gates to source fingerprint
+`3c41da448ba794c37448a26d9878099bc928dabd9a6b4441487b6bc5ecceb048`.
 The checked-in ROM-free IPS reconstructs those exact bytes from the supported
 Japanese ROM; no copyrighted ROM or emulator save/state is distributed.
 
 | Release gate | Probe | Current result |
 |--------------|-------|------------|
 | Emulator process safety | `verify_mgba_singleflight_guard.py` | PASS without launching mGBA: raw commands denied, concurrent launch returns 75, parent-death cleanup works, and the suite confirms random-token ownership plus exact process-group cleanup |
-| Latest focused regression sweep | Isolated mGBA/PyBoy gates | **PASS** on MD5 `4f20b0cb7ab206c0216282a2f8fd113d`: title, spotlight, cold/post-attract GAME START, gameplay BG/OBJ, flicker, stages, bosses, death, story/ending, speed, sound, scroll, and 42-scene live deck |
-| Full deterministic suite | `run_deterministic_suite.py` | **PASS 37/37** with two byte-identical builds; source fingerprint `2cbdbfdc937e…`, zero failures, zero emulator processes left; [committable receipt](docs/release/verification/latest.json) |
-| Candidate-only IPS round trip | `verify_release_patch.py --candidate-only` | **PASS** for MD5 `4f20b0cb…`; deterministic in-memory patch reconstructs the exact candidate |
-| Checked-in distributable IPS | `verify_release_patch.py` | **PASS**: 6,749-byte IPS MD5 `f32b2293dd3cd5d63852fbb08ebb13a7` reconstructs ROM MD5 `4f20b0cb…` from the supported Japanese base |
+| Latest focused regression sweep | Isolated mGBA/PyBoy gates | **PASS** on MD5 `95d98e40efa97a1882c00e5977161d5a`: title, spotlight, cold/post-attract GAME START, gameplay BG/OBJ, semantic pickup classes, flicker, stages, bosses, death, story/ending, speed, sound, scroll, and 42-scene live deck |
+| Full deterministic suite | `run_deterministic_suite.py` | **PASS 38/38** with two byte-identical builds; source fingerprint `3c41da448ba…`, zero failures, zero emulator processes left; [committable receipt](docs/release/verification/latest.json) |
+| Candidate-only IPS round trip | `verify_release_patch.py --candidate-only` | **PASS** for MD5 `95d98e40…`; deterministic in-memory patch reconstructs the exact candidate |
+| Checked-in distributable IPS | `verify_release_patch.py` | **PASS**: 6,749-byte IPS MD5 `5a4f5d1a4a8f47802d654021ef4e2a8e` reconstructs ROM MD5 `95d98e40…` from the supported Japanese base |
 | MiSTer reservation guard | `verify_mister_reservation_guard.py` | PASS, unreserved hardware commands stop before SSH/SCP; local-only commands remain usable |
 | Audience palette → release ROM | `verify_palette_build_roundtrip.py` | PASS, edited base BG/OBJ, both jet forms, boss overrides, and all powerup bytes bake into a fresh ROM; base colors reach live mGBA CRAM |
 | Title footer and palette | `verify_title_screen_integration.py`, `verify_title_color.py` | PASS |
@@ -51,7 +51,8 @@ Japanese ROM; no copyrighted ROM or emulator save/state is distributed.
 | ROM-native final-story palettes | `verify_final_cutscene_mgba.py` | PASS, both branches; 0 position-aware layout mismatches or bad tables |
 | Complete ending phase map | `analyze_ending_page_discriminators.py`, `verify_story_attr_production.py` | PASS, credits/END/epilogue reach full BG1/BG2/BG3 layouts |
 | Stage 1 BG colorization | `verify_gameplay_palette.py` | PASS, active map uses floor BG0 + slate-wall BG6 |
-| Stage 1 pickup color containment | `verify_stage1_no_bleed.py` | **PASS**, 1,206 continuous gameplay frames, 1,143 native transition-window raster captures, six settled receipts, zero mismatched cells, and zero detached red pixels across a right/down/left/up route |
+| Stage 1 pickup class inventory | `verify_pickup_class_palettes.py` | **PASS**, all 19 labeled pickup forms / 73 unique tile IDs resolve to five byte-distinct semantic color classes |
+| Stage 1 pickup color containment | `verify_stage1_no_bleed.py` | **PASS**, 1,206 continuous gameplay frames, 1,143 native transition-window raster captures, six settled receipts, zero mismatched cells, and zero detached pickup-accent pixels across a right/down/left/up route |
 | Later-stage BG integrity | `verify_later_stage_integrity.py` | PASS, no cross-stage or unsafe attributes in Stages 2–7 |
 | Later-stage 48K-frame soak | `verify_later_stage_soak.py` | PASS, Stages 2–7; 0 unsafe attrs or lava mismatches |
 | All nine boss arenas | `verify_boss_arena_palettes.py` | PASS, 9/9 live tables exact and visibly colorized |
@@ -60,8 +61,8 @@ Japanese ROM; no copyrighted ROM or emulator save/state is distributed.
 | Scroll stability | `verify_scroll_tearing.py` | PASS, 0.00 changes/s |
 | `SELECT+START` safety | `verify_menu_hud_and_combo.py` | PASS, no scene change or freeze |
 
-Release `v3.01-stream-rc4` is bound to the current
-[37-gate receipt](docs/release/verification/latest.json). Historical promoted
+Release `v3.01-stream-rc5` is bound to the current
+[38-gate receipt](docs/release/verification/latest.json). Historical promoted
 receipts remain in
 [`docs/release/receipts/c0a29419`](docs/release/receipts/c0a29419), while the
 prior `67cf1235` folder retains the six 8,000-frame soak reports and 48-panel
@@ -85,7 +86,7 @@ stable-versus-candidate sheet.
 - `scripts/launch_mgba.sh` is the only headed-play entrypoint. It never uses
   broad `pkill` or `killall`.
 
-### Stream-safe title, transitions, and HUD (v3.01-stream-rc4)
+### Stream-safe title, transitions, and HUD (v3.01-stream-rc5)
 
 - Exact `DX V3.01 STRUK LABS` release footer with a native-style period glyph.
 - Intentional white-to-blue-gray title palette with no accidental red text.
@@ -113,20 +114,22 @@ stable-versus-candidate sheet.
   is written only with the LCD off, in VBlank, or during a fresh HBlank. This
   keeps audience-tuned palettes exact instead of producing mixed old/new rows.
 
-### Stage and pickup palette containment (v3.01-stream-rc4)
+### Stage and pickup palette containment (v3.01-stream-rc5)
 
-- Stage 1 keeps its tuned semantic floor and wall table. Six confirmed
-  eight-tile pickup bands (`$88–8F` through `$D8–DF`) plus the capture-attributed
-  blocks `$A0/$A1/$B0/$B1` and `$A6/$A7/$B6/$B7` use the cherry-red BG1
-  accent. The remaining interleaved font/structural tiles and `$F0–FF` stay
-  neutral.
+- Stage 1 keeps its tuned floor/wall table and now maps every inventoried
+  pickup by meaning: health/restoration uses red BG1; rare/life/score uses
+  purple BG2; status cures use green BG3; shields/arrows/teleport use cyan
+  BG4; and attack/form powers use gold-red BG5. The inventory covers all 19
+  labeled forms and 73 unique tile IDs, including the alternate Health 2
+  lower-right tile.
+- Exact neutral gaps around those blocks remain BG0, so adjacent font,
+  structural art, and `$F0–FF` cannot inherit a pickup palette.
   On a hidden-map cache miss, rows 4–23 commit first and rows 0–3 wrap last,
   settling the pickup-bearing rows before the map can be revealed.
 - The Stage 1 raster gate captures 12-frame windows around every scroll/source
-  transition, masks hardware OAM, and rejects red farther than two pixels from
-  a black pickup outline. This catches rendered bleed that a post-frame VRAM
-  comparison cannot see; the previous candidate is retained as a failing
-  negative control.
+  transition, masks hardware OAM, and rejects exact BG1–BG5 pickup accents
+  outside raster-aligned pickup cells. This catches rendered bleed that a
+  post-frame VRAM comparison cannot see.
 - Stages 2–4 and 6 use a neutral baseline instead of misinterpreting reused
   tile IDs through the Stage 1 table.
 - Stages 5 and 7 retain only their captured and verified lava-field mappings.
@@ -224,8 +227,8 @@ python3 scripts/diagnostics/verify_release_patch.py
 
 The patch accepts only the verified Japanese base ROM with MD5
 `df43e0adfdc74b2829c7e95e91c71a28`. The checked-in 6,749-byte IPS has MD5
-`f32b2293dd3cd5d63852fbb08ebb13a7` and reconstructs the RC4 ROM MD5
-`4f20b0cb7ab206c0216282a2f8fd113d`; copyrighted source and output ROMs are
+`5a4f5d1a4a8f47802d654021ef4e2a8e` and reconstructs the RC5 ROM MD5
+`95d98e40efa97a1882c00e5977161d5a`; copyrighted source and output ROMs are
 not distribution artifacts.
 
 ### Build the ROM-free pre-hardware bundle
@@ -276,7 +279,7 @@ the complete matrix passes:
 python3 scripts/diagnostics/run_deterministic_suite.py
 ```
 
-Passing all 36 emulator/local-tooling gates does not replace the
+Passing all 38 emulator/local-tooling gates does not replace the
 reservation-backed MiSTer FPGA sweep required before release. The historical
 `scripts/probes/full_verification_loop*.sh` scripts target the retired
 teleport build and are not release evidence.

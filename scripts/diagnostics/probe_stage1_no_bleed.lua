@@ -230,7 +230,8 @@ local function active_pickup_rects()
       local col = (first_col + screen_col) % 32
       local x = screen_col * 8 - x_offset
       local attr = emu:read8(base + row * 32 + col)
-      if (attr & 0x07) == 1 then
+      local palette = attr & 0x07
+      if palette >= 1 and palette <= 5 then
         parts[#parts + 1] = string.format(
           "%d,%d,%d,%d", x, y, x + 7, y + 7)
       end

@@ -5,6 +5,36 @@ emulator save/state files are never release artifacts in this repository.
 
 ## [Unreleased]
 
+## [v3.01-stream-rc5] - 2026-07-30
+
+### Added
+
+- Inventory all 19 labeled Stage 1 pickup forms from the real serialized mGBA
+  VRAM states, covering 73 unique tile IDs and the alternate Health 2 tile.
+- Add `verify_pickup_class_palettes.py` as release gate 16. It proves every
+  inventoried tile maps to its named semantic class, checks the exact compiled
+  LUT histogram, requires five byte-distinct palette rows, and renders a
+  contact sheet from the real pickup graphics.
+
+### Changed
+
+- Split the former single red pickup class into five audience-tunable groups:
+  health/restoration red, rare/life/score purple, status cures green,
+  shields/navigation cyan, and attack/form powers gold-red. Exact surrounding
+  font and structural gaps remain neutral.
+- Generalize the scroll-transition raster audit from red-only detection to the
+  exact accent colors of BG1–BG5. The 1,200-frame box route captured 1,143
+  transition windows with zero mismatched cells and zero detached pickup-color
+  pixels.
+- Expand the deterministic release contract to 38 serial gates. Two clean
+  builds produced ROM MD5 `95d98e40efa97a1882c00e5977161d5a` / SHA-256
+  `5de405686c5779bc2db4df0ddc3659813e5d7d03ab39f8970f919dfec587a4eb`;
+  the complete matrix passed 38/38 with source fingerprint
+  `3c41da448ba794c37448a26d9878099bc928dabd9a6b4441487b6bc5ecceb048`.
+- Regenerate the ROM-free 6,749-byte IPS (MD5
+  `5a4f5d1a4a8f47802d654021ef4e2a8e`) so it reconstructs the exact RC5
+  candidate from the supported Japanese base ROM.
+
 ## [v3.01-stream-rc4] - 2026-07-30
 
 ### Fixed

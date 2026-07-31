@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove Stage 1 has no red BG-palette bleeding during sustained play."""
+"""Prove Stage 1 pickup colors do not bleed during sustained play."""
 
 from __future__ import annotations
 
@@ -22,9 +22,15 @@ DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 FPS = 59.7275
 BANK13 = 13 * 0x4000
 DUNGEON_TABLE_OFFSET = BANK13 + (0x7000 - 0x4000)
-CAPTURED_PICKUP_TILES = {
-    0xA0, 0xA1, 0xA6, 0xA7,
-    0xB0, 0xB1, 0xB6, 0xB7,
+BG_PALETTE_OFFSET = BANK13 + (0x6800 - 0x4000)
+EXPECTED_TABLE_HISTOGRAM = {
+    0: 146,
+    1: 5,
+    2: 16,
+    3: 8,
+    4: 24,
+    5: 20,
+    6: 37,
 }
 
 
@@ -220,8 +226,31 @@ def create_contact_sheet(captures: list[dict], output: Path) -> None:
     sheet.save(output)
 
 
-def audit_rendered_red(capture: dict) -> dict:
-    """Reject Stage 1 red pixels outside raster-aligned BG1 pickup cells."""
+def bgr555_to_rgb(word: int) -> tuple[int, int, int]:
+    return (
+        (word & 0x1F) * 255 // 31,
+        ((word >> 5) & 0x1F) * 255 // 31,
+        ((word >> 10) & 0x1F) * 255 // 31,
+    )
+
+
+def pickup_accent_colors(rom: bytes) -> set[tuple[int, int, int]]:
+    """Return exact rendered RGB colors 1/2 from Stage 1 pickup BG1-BG5."""
+    colors = set()
+    for palette in range(1, 6):
+        start = BG_PALETTE_OFFSET + palette * 8
+        for color in (1, 2):
+            offset = start + color * 2
+            word = rom[offset] | (rom[offset + 1] << 8)
+            colors.add(bgr555_to_rgb(word))
+    return colors
+
+
+def audit_rendered_pickup_colors(
+    capture: dict,
+    accent_colors: set[tuple[int, int, int]],
+) -> dict:
+    """Reject pickup accent pixels outside raster-aligned pickup cells."""
 
     source = Image.open(capture["screenshot"]).convert("RGB")
     pixels = source.load()
@@ -237,23 +266,19 @@ def audit_rendered_red(capture: dict) -> dict:
             for x in range(max(0, x0), min(width, x1 + 1)):
                 pickup_cell[y][x] = True
 
-    def is_red(pixel: tuple[int, int, int]) -> bool:
-        red, green, blue = pixel
-        return red >= 120 and green <= 8 and blue <= 8
-
-    background_red = []
+    background_accents = []
     stray = []
     for y in range(height):
         for x in range(width):
-            if excluded[y][x] or not is_red(pixels[x, y]):
+            if excluded[y][x] or pixels[x, y] not in accent_colors:
                 continue
-            background_red.append((x, y))
+            background_accents.append((x, y))
             if not pickup_cell[y][x]:
                 stray.append((x, y))
 
     return {
-        "background_red_pixels": len(background_red),
-        "stray_background_red_pixels": len(stray),
+        "background_pickup_accent_pixels": len(background_accents),
+        "stray_pickup_accent_pixels": len(stray),
         "first_stray_coordinates": [list(point) for point in stray[:24]],
     }
 
@@ -265,7 +290,7 @@ def create_raster_contact_sheet(captures: list[dict], output: Path) -> None:
     failures = [
         capture
         for capture in captures
-        if capture["raster_audit"]["stray_background_red_pixels"] > 0
+        if capture["raster_audit"]["stray_pickup_accent_pixels"] > 0
     ]
     selected = failures[:4]
     evenly_spaced = (
@@ -298,7 +323,7 @@ def create_raster_contact_sheet(captures: list[dict], output: Path) -> None:
             (x + 5, y + 5),
             (
                 f"f{capture['play_frame']} sig={capture['source_signature']:02X} "
-                f"stray={capture['raster_audit']['stray_background_red_pixels']}"
+                f"stray={capture['raster_audit']['stray_pickup_accent_pixels']}"
             ),
             fill="black",
         )
@@ -415,24 +440,25 @@ def main() -> int:
     table_histogram = {
         str(palette): dungeon_table.count(palette) for palette in sorted(set(dungeon_table))
     }
-    if set(dungeon_table) - {0, 1, 6}:
+    if set(dungeon_table) - set(EXPECTED_TABLE_HISTOGRAM):
         failures.append(
-            "Stage 1 ROM table contains palettes outside floor/pickup/wall "
-            f"set {{0,1,6}}: {table_histogram}"
+            "Stage 1 ROM table contains palettes outside semantic "
+            f"floor/pickup/wall set: {table_histogram}"
         )
-    if dungeon_table.count(1) != 56:
+    numeric_histogram = {
+        palette: dungeon_table.count(palette)
+        for palette in sorted(set(dungeon_table))
+    }
+    if numeric_histogram != EXPECTED_TABLE_HISTOGRAM:
         failures.append(
-            "Stage 1 ROM table should map exactly 56 confirmed pickup tile "
-            f"IDs to red BG1, found {dungeon_table.count(1)}"
+            "Stage 1 ROM table does not contain the exact 73-tile semantic "
+            f"pickup split: {numeric_histogram}"
         )
-    missing_captured_pickups = sorted(
-        tile for tile in CAPTURED_PICKUP_TILES
-        if dungeon_table[tile] != 1
-    )
-    if missing_captured_pickups:
+    accents = pickup_accent_colors(rom_bytes)
+    if len(accents) != 9:
         failures.append(
-            "headed-capture pickup tiles are not mapped to BG1: "
-            + ", ".join(f"{tile:02X}" for tile in missing_captured_pickups)
+            "expected nine distinct non-white/non-black accent colors across "
+            f"BG1-BG5, found {len(accents)}"
         )
 
     try:
@@ -460,19 +486,21 @@ def main() -> int:
             continue
         capture["screenshot_sha256"] = digest(screenshot)
         capture["native_size"] = list(Image.open(screenshot).size)
-        capture["raster_audit"] = audit_rendered_red(capture)
+        capture["raster_audit"] = audit_rendered_pickup_colors(
+            capture, accents
+        )
 
     raster_audited = [
         capture
         for capture in raster_captures
         if "raster_audit" in capture
     ]
-    raster_background_red = sum(
-        capture["raster_audit"]["background_red_pixels"]
+    raster_background_accents = sum(
+        capture["raster_audit"]["background_pickup_accent_pixels"]
         for capture in raster_audited
     )
-    raster_stray_red = sum(
-        capture["raster_audit"]["stray_background_red_pixels"]
+    raster_stray_accents = sum(
+        capture["raster_audit"]["stray_pickup_accent_pixels"]
         for capture in raster_audited
     )
 
@@ -493,7 +521,9 @@ def main() -> int:
             args.mode in {"right", "patrol"}
             or probe.get("scy_changes", 0) > 0
         ),
-        "intentional red pickup cells observed": probe.get("pal1_cells", 0) > 0,
+        "intentional health-red pickup cells observed": (
+            probe.get("pal1_cells", 0) > 0
+        ),
         "all six visual receipts match the compiled palette LUT": (
             len(captures) == 6
             and all(
@@ -508,13 +538,13 @@ def main() -> int:
             len(raster_captures) >= probe.get("source_signature_changes", 0)
             and len(raster_captures) >= probe.get("scroll_changes", 0)
         ),
-        "intentional pickup red is present in raster audit": (
-            raster_background_red > 0
+        "intentional semantic pickup accents are present in raster audit": (
+            raster_background_accents > 0
         ),
-        "no detached red blocks or floor-pattern bleed in rendered raster": (
+        "no detached pickup colors or floor-pattern bleed in rendered raster": (
             bool(raster_audited)
             and len(raster_audited) == len(raster_captures)
-            and raster_stray_red == 0
+            and raster_stray_accents == 0
         ),
         "no tile-bank/flip/priority leakage": probe.get("unsafe_cells", -1) == 0,
         "six native screenshots": (
@@ -532,8 +562,8 @@ def main() -> int:
     print(
         "INFO: transient tile/attribute observations="
         f"{probe.get('unexpected_cells', 0)}; rendered transition captures="
-        f"{len(raster_captures)}; detached rendered red pixels="
-        f"{raster_stray_red}"
+        f"{len(raster_captures)}; detached rendered pickup-color pixels="
+        f"{raster_stray_accents}"
     )
 
     contact_sheet = output / "actual-play-stage1.png"
@@ -550,7 +580,7 @@ def main() -> int:
         capture["screenshot"] = Path(capture["screenshot"]).name
 
     report = {
-        "schema": "penta-dragon-dx-stage1-no-bleed-v3",
+        "schema": "penta-dragon-dx-stage1-no-bleed-v4",
         "status": "pass" if not failures else "fail",
         "rom": str(rom),
         "rom_md5": digest(rom, "md5"),
@@ -586,7 +616,8 @@ def main() -> int:
         return 1
     print(
         "PASS: Stage 1 completed 20+ seconds of continuous play with "
-        "no detached red pixels across horizontal and vertical transition "
+        "no detached semantic pickup colors across horizontal and vertical "
+        "transition "
         "windows."
     )
     return 0
