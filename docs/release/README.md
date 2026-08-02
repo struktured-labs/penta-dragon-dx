@@ -10,15 +10,19 @@ python3 scripts/diagnostics/run_deterministic_suite.py
 
 The command refuses to start while any mGBA process is active, builds twice
 under `/tmp`, requires byte-identical candidates, and runs the current
-38-gate matrix serially. Only a complete pass writes the ROM-free,
+47-gate matrix serially. Only a complete pass writes the ROM-free,
 source-fingerprint-bound receipt at
 `docs/release/verification/latest.json`.
 
 During the matrix, a random per-run token identifies only that run's emulator
 descendants across `xvfb` sessions and PID namespaces. A foreign emulator is
 confirmed across three 50 ms polls before the runner stops its own exact
-groups. A normally completed matrix is also rejected if any token-owned mGBA
-process remains alive.
+groups. Guarded children also publish their host-visible namespace PID and
+kernel start time before `exec`; forked children retain the same tokenized
+single-flight lock descriptor. These validated identities preserve ownership
+across environment rewriting, nested PID namespaces, and post-exec forks
+without allowing stale PID reuse. A normally completed matrix is also rejected
+if any token-owned mGBA process remains alive.
 
 Install the repository hook once per clone:
 

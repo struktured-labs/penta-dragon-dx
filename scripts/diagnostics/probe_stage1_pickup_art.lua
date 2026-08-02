@@ -61,6 +61,7 @@ local function dump()
     marker:write("ok\n")
     marker:close()
     done = true
+    os.exit(0)
 end
 
 callbacks:add("frame", function()

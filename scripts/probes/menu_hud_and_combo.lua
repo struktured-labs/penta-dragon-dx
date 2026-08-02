@@ -169,6 +169,7 @@ callbacks:add("frame", function()
             d880_after = string.format("%02X", emu:read8(0xD880)),
             ffc1 = string.format("%02X", emu:read8(0xFFC1)),
             lcdc = string.format("%02X", emu:read8(0xFF40)),
+            ffe4 = string.format("%02X", emu:read8(0xFFE4)),
             shadow_states = state_count,
         })
     end

@@ -511,7 +511,7 @@ def recapture_one(
         for actual, expected in zip(active_table, expected_table)
     ) + abs(len(active_table) - len(expected_table))
     # Arena rendering also uses live per-cell position attributes, so the
-    # mutable $CC00 working table is not required to remain byte-identical to
+    # mutable $C600 working table is not required to remain byte-identical to
     # its ROM seed. It must still be a complete, valid CGB palette-index LUT.
     if len(active_table) != 256 or any(value > 7 for value in active_table):
         failures.append("active_table is missing or contains invalid slots")

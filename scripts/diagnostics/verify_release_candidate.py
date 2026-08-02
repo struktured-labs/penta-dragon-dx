@@ -130,6 +130,30 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             300,
         ),
         Gate(
+            "menu_window_publish_order",
+            script(
+                "scripts/diagnostics/verify_menu_window_order.py",
+                r,
+                "--output",
+                str(artifacts / "menu-window-order/report.txt"),
+            ),
+            120,
+        ),
+        Gate(
+            "stale_gameplay_window",
+            script(
+                "scripts/diagnostics/verify_menu_window_order.py",
+                r,
+                "--inject-stale-frame",
+                "800",
+                "--frames",
+                "805",
+                "--output",
+                str(artifacts / "stale-gameplay-window/report.txt"),
+            ),
+            120,
+        ),
+        Gate(
             "levelselect_screen",
             script(
                 "scripts/diagnostics/verify_levelselect_screen.py",
@@ -145,12 +169,14 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "scripts/diagnostics/verify_game_start_routes.py",
                 r,
                 "--stage-confirm-offset",
-                "110",
+                "207",
+                "--max-gameplay-frame",
+                "650",
                 "--include-warm-reset",
                 "--output",
                 str(artifacts / "game-start-routes"),
             ),
-            120,
+            300,
         ),
         Gate(
             "game_start_after_attract",
@@ -164,7 +190,7 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "--timing",
                 "delayed",
                 "--stage-confirm-offset",
-                "110",
+                "207",
                 "--after-attract",
                 "--probe-max-frames",
                 "10000",
@@ -214,6 +240,41 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             30,
         ),
         Gate(
+            "pickup_live_retry_contract",
+            script("scripts/diagnostics/verify_pickup_live_retry.py"),
+            15,
+        ),
+        Gate(
+            "pickup_live_palettes",
+            script(
+                "scripts/diagnostics/verify_pickup_live_palettes.py",
+                r,
+                "--output",
+                str(artifacts / "pickup-live-palettes"),
+            ),
+            180,
+        ),
+        Gate(
+            "stage1_pickup_art",
+            script(
+                "scripts/diagnostics/verify_stage1_pickup_art.py",
+                r,
+                "--output",
+                str(artifacts / "stage1-pickup-art"),
+            ),
+            120,
+        ),
+        Gate(
+            "bonus_stage_live",
+            script(
+                "scripts/diagnostics/verify_bonus_stage_live.py",
+                r,
+                "--output",
+                str(artifacts / "bonus-stage-live"),
+            ),
+            120,
+        ),
+        Gate(
             "stage1_no_color_bleed",
             script(
                 "scripts/diagnostics/verify_stage1_no_bleed.py",
@@ -222,6 +283,51 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "1200",
                 "--output",
                 str(artifacts / "stage1-no-color-bleed"),
+            ),
+            180,
+        ),
+        Gate(
+            "stage1_tilemap_integrity",
+            script(
+                "scripts/diagnostics/verify_stage1_tilemap_copy.py",
+                r,
+                "--frames",
+                # The DE/ISR race first reproduced deterministically after
+                # frame 15,000, well beyond the former smoke-sized gate.
+                "20000",
+                "--timeout",
+                "60",
+                "--output",
+                str(artifacts / "stage1-tilemap-integrity"),
+            ),
+            180,
+        ),
+        Gate(
+            "stage1_north_route_integrity",
+            script(
+                "scripts/diagnostics/verify_stage1_north_integrity.py",
+                r,
+                "--target-camera",
+                # Reproduce the reported failure directly: cold GAME START,
+                # then walk straight north into the first-room void area.
+                # The former long expert trace crossed dozens of rooms and
+                # menus, so a tiny timing delta could make it wander away
+                # without ever producing terrain bytes to compare.
+                "0x03A4",
+                "--target-room",
+                "1",
+                "--target-settle",
+                "8",
+                "--frames",
+                "3000",
+                "--play-frames",
+                "240",
+                "--dynamic-prefix",
+                "0",
+                "--max-frame-lag",
+                "30",
+                "--output",
+                str(artifacts / "stage1-north-route-integrity"),
             ),
             180,
         ),
@@ -275,6 +381,23 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "60",
             ),
             360,
+        ),
+        Gate(
+            "stage2_stream_soak",
+            script(
+                "scripts/diagnostics/verify_later_stage_soak.py",
+                r,
+                "--stages",
+                "2",
+                "--frames",
+                "8000",
+                "--timeout",
+                "60",
+                "--require-native-bg0",
+                "--keep-dir",
+                str(artifacts / "stage2-stream-soak"),
+            ),
+            180,
         ),
         Gate(
             "boss_arenas",
@@ -401,11 +524,11 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "scripts/diagnostics/verify_live_palette_session.py",
                 r,
                 "--timeout",
-                "45",
+                "60",
                 "--keep-story-states",
                 str(story_states),
             ),
-            360,
+            600,
         ),
         Gate(
             "story_attr_production",

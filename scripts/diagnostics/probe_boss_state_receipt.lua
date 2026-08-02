@@ -52,7 +52,7 @@ local function finish(status, message)
         emu:read8(0xFFC1), emu:read8(0xFF40), emu:read8(0xFF47),
         emu:read8(0xFF41), emu:read8(0xFF44),
         tostring(state_saved), message,
-        hex_range(0xCC00, 0x100),
+        hex_range(0xC600, 0x100),
         palette_hex()
     ))
     report:close()
@@ -68,7 +68,7 @@ callbacks:add("frame", function()
     emu:write8(0xDCBB, 0xF0) -- keep the arena alive for repeatable receipts
     if frame == 1 and REARM_CURRENT_ROM then
         -- Fixture states may carry an older ROM's scene-cache identity and
-        -- $CC00 table. Force one normal current-ROM scene transition so the
+        -- mutable palette table. Force one normal current-ROM scene transition so the
         -- receipt proves the candidate's own arena table and palettes.
         emu:write8(0xDF0D, 0xFF)
     end

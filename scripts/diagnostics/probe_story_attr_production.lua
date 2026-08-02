@@ -83,7 +83,7 @@ end
 local function active_table_nonzero()
     local count = 0
     for offset = 0, 0xFF do
-        if emu:read8(0xCC00 + offset) ~= 0 then count = count + 1 end
+        if emu:read8(0xC600 + offset) ~= 0 then count = count + 1 end
     end
     return count
 end

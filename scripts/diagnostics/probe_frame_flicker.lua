@@ -14,6 +14,7 @@ local KEY_A, KEY_START, KEY_DOWN = 0x01, 0x08, 0x80
 local frame, target_frame, samples = 0, nil, 0
 local done = false
 local previous_scene = -1
+local previous_cfaa = -1
 local demo_delay_hits = 0
 
 pcall(function()
@@ -122,7 +123,7 @@ local function visible_bg_mismatches()
             local actual = emu:read8(base + index) & 0x07
             attrs[index] = actual
             active_slots[actual] = true
-            local expected = emu:read8(0xCC00 + tile) & 0x07
+            local expected = emu:read8(0xC600 + tile) & 0x07
             if actual ~= expected then
                 mismatches = mismatches + 1
                 if #examples < 12 then
@@ -189,7 +190,7 @@ trace:write(
 trace:close()
 local timeline = assert(io.open(OUT .. ".timeline.tsv", "w"))
 timeline:write(
-    "frame\td880\tffc1\tdcfd\tdd09\tsentinel\tdc00\tscx\tlcdc\tbgp\tly\n"
+    "frame\td880\tffc1\tdcfd\tdd09\tsentinel\tdf0e\tcfaa\tdc00\tscx\tlcdc\tbgp\tly\n"
 )
 timeline:close()
 
@@ -199,16 +200,19 @@ callbacks:add("frame", function()
     emu:setKeys(scheduled_keys())
 
     local scene = emu:read8(0xD880)
-    if scene ~= previous_scene then
+    local cfaa = emu:read8(0xCFAA)
+    if scene ~= previous_scene or cfaa ~= previous_cfaa then
         local handle = assert(io.open(OUT .. ".timeline.tsv", "a"))
         handle:write(string.format(
-            "%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\n",
+            "%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\n",
             frame,
             scene,
             emu:read8(0xFFC1),
             emu:read8(0xDCFD),
             emu:read8(0xDD09),
             emu:read8(0xDF51),
+            emu:read8(0xDF0E),
+            cfaa,
             emu:read8(0xDC00),
             emu:read8(0xFF43),
             emu:read8(0xFF40),
@@ -217,6 +221,7 @@ callbacks:add("frame", function()
         ))
         handle:close()
         previous_scene = scene
+        previous_cfaa = cfaa
     end
 
     if not target_frame and target_active() then target_frame = frame end

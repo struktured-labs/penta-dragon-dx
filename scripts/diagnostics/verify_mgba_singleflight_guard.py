@@ -115,6 +115,23 @@ def main() -> int:
                 "ownership token"
             )
         if (
+            "registered_owner_process" not in suite_runner
+            or "PENTA_MGBA_OWNER_REGISTRY" not in suite_runner
+            or "process_holds_owned_lock" not in suite_runner
+        ):
+            failures.append(
+                "deterministic suite lacks validated pre-exec ownership "
+                "markers"
+            )
+        try:
+            wrapper_source = GUARD.read_text()
+            if "NSpid:" not in wrapper_source or "outermost_pid" not in wrapper_source:
+                failures.append(
+                    "mGBA wrapper does not publish its host-visible namespace PID"
+                )
+        except OSError as exc:
+            failures.append(f"mGBA wrapper unavailable: {exc}")
+        if (
             "owned_mgba_processes" not in suite_runner
             or "stop_matrix_and_owned" not in suite_runner
             or 'status="owned-emulator-leak"' not in suite_runner
@@ -186,6 +203,10 @@ def main() -> int:
         lock = Path(temp) / "singleflight.lock"
         environment = os.environ.copy()
         environment["PENTA_MGBA_LOCK"] = str(lock)
+        environment["PENTA_MGBA_OWNER_REGISTRY"] = str(
+            Path(temp) / "owner-registry"
+        )
+        environment["PENTA_MATRIX_OWNER_TOKEN"] = "ab" * 32
         owner = subprocess.Popen(
             [sys.executable, str(GUARD), "self-test", "30"],
             env=environment,
@@ -195,6 +216,40 @@ def main() -> int:
         )
         try:
             wait_for_lock(lock, owner.pid)
+            try:
+                lock_metadata = lock.read_text()
+                host_pid = int(
+                    next(
+                        line.split("=", 1)[1]
+                        for line in lock_metadata.splitlines()
+                        if line.startswith("host_pid=")
+                    )
+                )
+            except (OSError, StopIteration, ValueError):
+                lock_metadata = ""
+                host_pid = owner.pid
+                failures.append(
+                    "guarded owner did not publish its host-visible PID"
+                )
+            marker = (
+                Path(environment["PENTA_MGBA_OWNER_REGISTRY"])
+                / environment["PENTA_MATRIX_OWNER_TOKEN"]
+                / f"{host_pid}.json"
+            )
+            marker_deadline = time.monotonic() + 2
+            while not marker.is_file() and time.monotonic() < marker_deadline:
+                time.sleep(0.01)
+            if not marker.is_file():
+                failures.append(
+                    "guarded owner did not publish its pre-exec marker"
+                )
+            if (
+                f"owner_token={environment['PENTA_MATRIX_OWNER_TOKEN']}\n"
+                not in lock_metadata
+            ):
+                failures.append(
+                    "guarded owner did not bind its run token to the lock"
+                )
             contender = subprocess.run(
                 [sys.executable, str(GUARD), "self-test", "0.01"],
                 env=environment,

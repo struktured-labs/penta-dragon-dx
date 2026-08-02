@@ -79,7 +79,10 @@ def main() -> int:
                 fields.get("d880") == "00" and fields.get("ffc1") == "0"
             ),
             "save-present GAME START path": fields.get("dcfd") == "01",
-            "WRAM clear stub was installed": fields.get("df0e") == "5A",
+            # Validate the executable byte itself. DF0E was a historical copy
+            # sentinel, but the title path intentionally trusts CFAA instead
+            # because attract teardown can overwrite one without the other.
+            "WRAM clear stub was installed": fields.get("cfaa") == "E5",
             "score rows are populated": int(fields.get("populated", "0")) >= 10,
             "all visible attributes are palette 0": (
                 fields.get("checked") == "360" and fields.get("nonzero") == "0"

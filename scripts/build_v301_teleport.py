@@ -136,8 +136,8 @@ def build_obj_pal_table() -> bytes:
 BANK13 = 13 * 0x4000
 COLORIZE_ADDR = 0x6E00
 OBJ_STAMPER_ADDR = 0x6A10     # old OBJ tile colorizer (CALL removed in OAM intercept)
-BG_SWEEP_ADDR = 0x6CD0     # bg_sweep safety-net (re-patched to read WRAM 0xCC00)
-WRAM_BG_TABLE = 0xCC00     # per-scene table kept current by scene_detect (bank 0)
+BG_SWEEP_ADDR = 0x6CD0     # bg_sweep safety-net (reads the mutable WRAM LUT)
+WRAM_BG_TABLE = 0xC600     # audited fixed-WRAM gap; $CCxx is dungeon-map data
 
 # Position-sweep (holy-grail path) layout in bank 13:
 POSSWEEP_ADDR = 0x7100     # position sweep code (reuses dead attr_comp space)
@@ -285,6 +285,7 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
                        splash_addr: int, title_addr: int | None = None,
                        later_dungeon_addr: int | None = None,
                        uniform_clear_addr: int | None = None,
+                       later_dungeon_service_addr: int | None = None,
                        death_service_addr: int | None = None,
                        scene_change_service_addr: int | None = None,
                        cache_addr: int = DF23_PREV_SCENE,
@@ -470,11 +471,16 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
         j_stage1 = len(c) + 1
         c.extend([0x28, 0x00])            # JR Z,dungeon (stage 1)
         if uniform_clear_addr is not None:
+            later_clear_addr = (
+                later_dungeon_service_addr
+                if later_dungeon_service_addr is not None
+                else uniform_clear_addr
+            )
             c.extend([
                 0xC3,
-                uniform_clear_addr & 0xFF,
-                (uniform_clear_addr >> 8) & 0xFF,
-            ])                            # JP uniform_clear
+                later_clear_addr & 0xFF,
+                (later_clear_addr >> 8) & 0xFF,
+            ])                            # JP later-stage clear/service
         else:
             c.extend([0x21, later_dungeon_addr & 0xFF,
                       (later_dungeon_addr >> 8) & 0xFF])
@@ -511,8 +517,10 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
     if j_copy_title is not None:
         c[j_copy_title] = (copy_pos - j_copy_title - 1) & 0xFF
 
-    # Copy 256 bytes: HL → DE = 0xCC00
-    c.extend([0x11, 0x00, 0xCC])          # LD DE, 0xCC00 (WRAM bank 0, always accessible)
+    # Copy 256 bytes: HL → the mutable palette LUT.
+    c.extend([
+        0x11, WRAM_BG_TABLE & 0xFF, WRAM_BG_TABLE >> 8,
+    ])                                    # LD DE, palette LUT (fixed WRAM)
     c.extend([0x06, 0x00])                # LD B, 0   (256 iterations)
     copy_loop = len(c)
     c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
@@ -595,7 +603,7 @@ def build_lava_override(base_addr: int,
     c.extend([0xFE, 0xFF])                # CP 0xFF
     c.extend([0xC8])                      # RET Z         (end of list)
     c.extend([0x5F])                      # LD E, A
-    c.extend([0x16, 0xCC])                # LD D, 0xCC    (DE = 0xCC00 + id, WRAM bank 0)
+    c.extend([0x16, WRAM_BG_TABLE >> 8])  # LD D, palette LUT high byte
     c.extend([0x3E, 0x05])                # LD A, 5       (pal5 = lava)
     c.extend([0x12])                      # LD [DE], A
     off = loop_pos - (len(c) + 2)

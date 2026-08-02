@@ -5,6 +5,136 @@ emulator save/state files are never release artifacts in this repository.
 
 ## [Unreleased]
 
+### Added
+
+- Add `verify_pickup_live_palettes.py` as a mandatory current-ROM runtime
+  gate. It resumes all 19 labeled pickup forms across 14 Stage 1 states,
+  verifies their semantic attributes on both physical maps, compares live
+  BG1–BG5 CRAM with the candidate bytes, captures one native frame per state,
+  and emits a contact sheet plus hash-bound JSON receipt.
+- Add `verify_bonus_stage_live.py` for the Stage 1 bonus SHMUP. It proves the
+  historical state executes current ROM code, remains live bonus gameplay,
+  uses the candidate's two Sara jet palette rows in hardware OAM, keeps visible
+  BG attributes safe, and captures three chromatic native frames.
+- Add a deterministic pickup-launch retry contract. The live verifier permits
+  only two attempts for process-level mGBA transport failures, deletes stale
+  artifacts before retrying, records every status/log, and never retries a
+  completed semantic palette failure. A no-emulator gate forces signal 11 on
+  the first synthetic attempt and proves the second artifact set is complete.
+- Add a natural Stage 1 north-route integrity gate. It cold-boots through the
+  real title and level-select inputs, holds UP without gameplay-memory writes,
+  and captures the exact native room at camera `$03A4` / room `$01`. The DX
+  candidate and untouched ROM match all 576 packed room bytes, with identical
+  `C1A0` and `$9800` hashes.
+- Add `verify_menu_window_order.py` to compare all 120 visible item-menu
+  Window tile IDs with the native `$C4E0` HUD buffer on every rendered frame.
+  The rejected build exposes 71 wrong tiles on its first Window frame; the
+  repaired build exposes 0 wrong tiles on that frame and across all 77 visible
+  frames in the route.
+- Add a 20,000-frame Stage 1 tilemap gate that compares every completed 24×24
+  VRAM room copy with the packed native source. This checks terrain tile IDs
+  directly instead of inferring correctness from palette attributes.
+- Extend the Window-order gate with a deterministic stale-Window fixture. It
+  recreates the captured scanline-96 split and requires LCDC.5 to be clear by
+  the following VBlank, with no stale Window frames after the grace frame.
+
+### Fixed
+
+- Move the mutable 256-byte BG palette lookup table from fixed WRAM `$CC00`
+  to the audited `$C600-$C6FF` gap. The original game stores its procedural
+  dungeon/world template map in `$C780-$CFFF`; the old DX table copy erased
+  the `$CC80` entries consumed at the first far-north Stage 1 boundary, so the
+  native room builder received template `$00` and faithfully rendered the
+  captured black void, false walls, and bogus pickup. The deterministic north
+  route now matches the untouched ROM at camera `$02BC` with 0/576 packed-room
+  differences while retaining floor/wall and semantic pickup attributes.
+- Update every runtime palette receipt and the Stage 1 atomic-copy signature
+  to read the relocated `$C600` LUT. This prevents the old `$CC00` assumptions
+  from falsely passing a corrupt world map or falsely rejecting the repaired
+  inline copier.
+- Repair the prerecorded-attract pickup sweep without extending its original
+  18-VBlank cadence. The `D880=$0A` pending-room path alternates semantic rows
+  6 and 7 on whichever physical map is active, so Shield and other pickup rows
+  are colored after attract/demo transitions while the title reel and Stage 1
+  timing retain the proven stock-width tile-copy path.
+- Stop validating or restoring the level-select trampoline at `$CFAA` during
+  gameplay. Stage 1 legitimately reuses that address as live workspace while
+  scrolling north; the old per-VBlank `$E5` check recopied 36 bytes of title
+  code over stock room-generation state, producing black gaps, false walls,
+  and a bogus pickup. The final guard reuses scene detection's existing Carry
+  result to distinguish title/level-select ownership from gameplay/attract,
+  keeps both routes cycle-balanced, and still repairs the menu trampoline.
+- Keep interrupts masked across the Stage 1 atomic copier's unsafe source-
+  pointer setup, admit only the Timer/audio interrupt between three-tile
+  groups, and preserve `DE` outside the interrupt stack. This retains the
+  20,000-frame zero-mismatch terrain fix without delaying the stock STAT scroll
+  service into rendered pickup scanlines. The 1,206-frame raster route has zero
+  transient LUT mismatches and zero detached pickup accent pixels across 1,124
+  transition captures.
+- Route prerecorded attract gameplay through the stock-width pure tile copier
+  before live-room signature work. Live Stage 1 retains its three-tile atomic
+  safety path, while the Gargoyle reel drops from the regressed 528 frames to
+  406 versus the untouched ROM's 395, with all spotlight/demo palettes intact.
+- Cache Stage 1 atomic refreshes by destination-map content signature instead
+  of input direction. Natural vertical traversal keeps exact tile/attribute
+  pairing without refreshing unchanged maps every frame.
+- Bind deterministic-suite emulator ownership to a pre-exec marker containing
+  the random run token, host-visible namespace PID, and kernel start time;
+  bind forked children through the tokenized inherited single-flight lock.
+  Environment rewriting, nested PID namespaces, and post-exec forks no longer
+  trigger a false foreign-process abort, while stale markers and PID reuse
+  still fail validation.
+- Prepare the item-menu HUD before enabling LCDC's hardware Window at both
+  native entry points, and retarget all interactive redraw loops to the new
+  sequence. A VBlank interrupt can no longer reveal stale room tiles as false
+  walls, black gaps, or an apparent extra lower-left pickup for one frame.
+- Initialize the Stage 1 copier's `DE=$C1A0` source pointer only after the live
+  atomic setup has disabled interrupts. This removes the rare ISR race that
+  could advance `DE` by two and shift a completed room map by two columns.
+- Hide a stale item-menu hardware Window when live dungeon gameplay has the
+  stock menu flag clear. The captured lower-48-line fake room—black gaps,
+  overlaid walls, and an apparent pickup—began exactly at `WY=$60`; the guard
+  clears LCDC.5 on that invalid state while preserving legitimate menu,
+  death/game-over, and story Window users.
+
+### Changed
+
+- Promote the stream-focused full-semantic build to
+  `rom/working/penta_dragon_dx_FIXED.gb` (SHA-256
+  `eb72a2392a7bcabfc4ac387dc9802ce90e6c48dab737243c1ce5cea9859102f3`).
+  Stage 1 terrain, semantic BG/pickup palettes, cold/warm GAME START, the
+  bonus SHMUP, automated ordinary-gameplay flicker/reel route, and the
+  2,400-frame Stage 2 multi-room soak are green. Preserve this source as
+  `v3.01-stream-rc6`, the best manually accepted stream candidate; ROM, save,
+  state, and capture files remain excluded from Git.
+- Expand the deterministic release matrix to 47 serial gates with live pickup,
+  pickup transport-retry, Stage 1 bonus-area, long room-copy, and natural
+  north-route coverage. The prior intermediate 45-gate matrix passed on two
+  byte-identical builds for MD5
+  `798a4363f99e015a9389fa0e5dd6079f` / SHA-256
+  `5c1eef4ee45eb88c1757390634b377e20402a85d7e126d5e334409f6c45c6f98`,
+  bound to source fingerprint
+  `d1ff86628eeeb35ac6aa5b633c10a91575ce5f91b2790cd6519cf335fac4a4f1`.
+  The aggregate Stage 1/5/7 speed matrix remains within 10%; a separate Stage 2
+  receipt is exactly 159/159 main-loop hits, and its 8,000-frame four-room soak
+  reports zero unexpected/unsafe attributes. The exact north checkpoint now
+  takes 1,051 DX gameplay frames versus 964 in the untouched ROM (9.0% longer),
+  down from 1,199 (24.4% longer), with identical room and VRAM hashes.
+  RC6 has focused receipts for its stream scope but intentionally awaits a new
+  full 47-gate run after the low-health flicker regression is added and fixed.
+
+### Known issues
+
+- A new headed-play reproduction shows intermittent white flicker after Sara
+  reaches low health and the warning music begins. The current automated
+  ordinary-gameplay flicker route passes because it does not enter this state.
+  A local `penta_dragon_dx_FIXED.ss2` state and capture preserve the trigger
+  for the next dedicated low-HP regression probe; neither artifact is tracked.
+- Stage 5 speed is 150/164 main loops (91.5% of stock), below the release gate.
+- The rotating spike visible in the low-health capture is not yet colorized.
+  Its BG tile/attribute and hardware-OAM presence must be inventoried before a
+  palette implementation is selected.
+
 ## [v3.01-stream-rc5] - 2026-07-30
 
 ### Added

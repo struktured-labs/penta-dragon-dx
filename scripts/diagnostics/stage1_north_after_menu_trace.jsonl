@@ -1,0 +1,8 @@
+{"f":0,"keys":16,"note":"move right off the center entrance"}
+{"f":32,"keys":0,"note":"release horizontal input"}
+{"f":36,"keys":64,"note":"walk north before opening the item menu"}
+{"f":180,"keys":4,"note":"open the item menu with SELECT"}
+{"f":186,"keys":0,"note":"release SELECT while the menu is visible"}
+{"f":300,"keys":4,"note":"close the item menu with SELECT"}
+{"f":306,"keys":0,"note":"release SELECT"}
+{"f":310,"keys":64,"note":"continue north after closing the menu"}

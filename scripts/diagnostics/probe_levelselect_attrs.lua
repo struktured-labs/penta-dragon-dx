@@ -37,10 +37,11 @@ local function finish(base, populated)
   emu:screenshot(OUT .. ".png")
   local handle = assert(io.open(OUT .. ".txt", "w"))
   handle:write(string.format(
-    "frame=%d d880=%02X ffc1=%d dcfd=%02X df0e=%02X base=%04X " ..
+    "frame=%d d880=%02X ffc1=%d dcfd=%02X cfaa=%02X df0e=%02X base=%04X " ..
     "populated=%d checked=360 nonzero=%d lcdc=%02X\n",
     f, emu:read8(0xD880), emu:read8(0xFFC1), emu:read8(0xDCFD),
-    emu:read8(0xDF0E), base, populated, nonzero, emu:read8(0xFF40)
+    emu:read8(0xCFAA), emu:read8(0xDF0E), base, populated, nonzero,
+    emu:read8(0xFF40)
   ))
   handle:close()
   done = true

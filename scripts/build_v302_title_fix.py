@@ -60,6 +60,8 @@ from build_v301_gdma import (
     create_tile_to_palette_subroutine, create_conditional_palette_cached,
     create_inline_tile_copy_tileonly, create_inline_tile_copy_pure_tileonly,
     create_inline_tile_copy_stage1_precomputed_attrs,
+    create_inline_tile_copy_stage1_buffered_attrs,
+    create_inline_tile_copy_stage1_double_buffered_attrs,
     create_inline_tile_copy_row_precomputed_attrs,
     create_inline_tile_copy_stage1_cached_atomic,
     BG_TABLE_BYTES, _bg_table,
@@ -83,20 +85,32 @@ SPOTLIGHT_MAP_YAML = Path("palettes/spotlight_palette_map.yaml")
 
 # Constants
 BANK13 = 13 * 0x4000
+BANK14 = 14 * 0x4000
+STAGE1_LOW_TILE_GFX_OFFSET = 0x1D000
+STAGE1_HIGH_TILE_GFX_OFFSET = 0x1F000
+STAGE1_PICKUP_GOLD = 0x03FF
+DEMO_COMPACT_COPY_ADDR = 0x69F8
 BG_SWEEP_ADDR = 0x6CD0
-WRAM_BG_TABLE = 0xCC00
+# Keep the palette LUT out of the stock $C780-$CFFF dungeon world map.
+# $C600-$C6FF is the fixed-WRAM gap between tile buffers and $C700 state.
+WRAM_BG_TABLE = 0xC600
 COLORIZE_ADDR = 0x6E00
 COLORIZE_PRELUDE_ADDR = 0x6E80
 TITLE_PALETTE_FIX_ADDR = 0x6A60
-TITLE_PALETTE_COPY_HELPER_ADDR = 0x6F07
+TITLE_PALETTE_COPY_HELPER_ADDR = 0x6A52
+WINDOW_ATTR_CLEAR_HELPER_ADDR = 0x6F0F
 TITLE_DELAY_ADDR = 0x7D63
 TITLE_PALETTE_SOURCE_ADDR = 0x6800
+NATIVE_BG0_ALIAS_ADDR = TITLE_PALETTE_SOURCE_ADDR + 0x38
 TUNED_BG7_SOURCE_ADDR = 0x68F8
 PALETTE_LOADER_ADDR = 0x6900
 PALETTE_LOADER_EXT_ADDR = 0x71A0
 # Stable entry in build_phased_palette_loader() that copies one eight-byte
 # palette as two LCD-mode-safe four-byte halves.
 PALETTE_COPY_CRAM8_ADDR = 0x71D3
+LATER_STAGE_BG0_REPAIR_ADDR = 0x69B8
+LATER_STAGE_BG0_FORCE_ADDR = LATER_STAGE_BG0_REPAIR_ADDR + 6
+LATER_STAGE_BG0_ENTRY_ADDR = LATER_STAGE_BG0_REPAIR_ADDR + 18
 CONDITIONAL_PALETTE_ADDR = 0x6C90
 # Keep the established $6C90 ABI as a three-byte trampoline. The expanded
 # idle-throttled implementation lives in the unused tail after the title
@@ -106,6 +120,7 @@ SPOTLIGHT_PALETTE_HELPER_ADDR = 0x6C93
 PALETTE_PHASE_ADDR = 0xDF4C
 SPOTLIGHT_PALETTE_CACHE_ADDR = 0xDF4D
 BG_SWEEP_COUNT_ADDR = 0xDF4E
+BG_SWEEP_REARM_ROWS = 18
 # Native FFBD writers set this one-shot marker. The main-loop room copier
 # consumes it exactly once to commit the matching attribute plane atomically.
 BG_SWEEP_ROOM_CACHE_ADDR = 0xDF4F
@@ -118,10 +133,14 @@ ROOM_ATTR_READY_VALUE = 0xA7
 OBJ_PAL_TABLE_ADDR = 0x6B00
 ATTRACT_OBJ_COLORIZER_ADDR = 0x6B00
 DEATH_LATE_FIX_ADDR = 0x6B60
+ATTRACT_PICKUP_SWEEP_STUB_ADDR = 0x6B56
 # The title wrapper is cycle-locked to the stock menu input phase.  Keep its
 # per-frame glyph call byte-for-byte stable and put expanded transition-only
 # work in the reclaimed position-sweep region instead.
 TITLE_TRANSITION_SERVICE_ADDR = 0x7D00
+# The retired gameplay OBJ scan is explicitly cleared through $6A6F. Keep the
+# gameplay-only hardware-Window guard in its free tail below the title helper.
+STALE_WINDOW_CLEANUP_ADDR = 0x6A40
 SPOTLIGHT_PALETTE_MAP_ADDR = 0x6BE8
 SPOTLIGHT_ROSTER_TABLE_ADDR = 0x522A
 SPOTLIGHT_ROSTER_SIZE = 0x26
@@ -155,14 +174,48 @@ NATIVE_GAMEPLAY_BGP_ROUTINE_ADDR = 0x281C
 # Its exact 33-byte cave hosts the cache/lava decision helper used by the
 # register-staged, stock-width atomic map copier.
 INLINE_ATTR_DECISION_HELPER_ADDR = 0x3482
-STAGE1_ATOMIC_WRAP_ADDR = INLINE_ATTR_DECISION_HELPER_ADDR + 11
+SEMANTIC_STAGE1_PROTOTYPE_ADDR = 0x73FC
+STAGE1_VBLANK_PROTOTYPE_ADDR = 0x6BA7
+STAGE1_VBLANK_PALETTE_TABLE_ADDR = 0x6D6B
+STAGE1_PICKUP_WRITER_ADDR = 0x6C88
+STAGE1_PICKUP_APPENDER_ADDR = 0x6CC8
+STAGE1_PICKUP_SCANNER_ADDR = 0x6F3B
+STAGE1_VBLANK_TRAMPOLINE_ADDR = INLINE_ATTR_DECISION_HELPER_ADDR + 15
+STAGE1_PICKUP_ACTIVE_ADDR = 0xDF60
+STAGE1_PICKUP_COUNT0_ADDR = 0xDF61
+STAGE1_PICKUP_ENTRIES0_ADDR = 0xDF62
+STAGE1_PICKUP_COUNT1_ADDR = 0xDF6E
+STAGE1_PICKUP_ENTRIES1_ADDR = 0xDF6F
+STAGE1_PICKUP_ID_ADDR = 0xDF7B
+STAGE1_PICKUP_BUILD_KEY_ADDR = 0xDF7C
+STAGE1_PICKUP_OLD_REMAIN_ADDR = 0xDF7D
+STAGE1_PICKUP_NEW_INDEX_ADDR = 0xDF7E
+STAGE1_PICKUP_SCAN_POS_ADDR = 0xDF7B
+STAGE1_PICKUP_QUEUE_CAPACITY = 6
+STAGE1_PICKUP_SCAN_ONE_ADDR = 0x69F8
+STAGE1_PICKUP_WRITE_TAIL_ADDR = 0x6B62
+STAGE1_PICKUP_PACKED_TABLE_ADDR = 0x6C80
+STAGE1_PICKUP_DECODER_ADDR = 0x6E6F
+STAGE1_PICKUP_SCAN_MAIN_ADDR = 0x7B49
+STAGE1_SYNC_SCANNER_ADDR = 0x6BA7
+STAGE1_SYNC_DECODER_ADDR = 0x6C30
+STAGE1_SYNC_TABLE_ADDR = 0x6C40
+STAGE1_SYNC_WRITER_ADDR = 0x6C88
+STAGE1_PICKUP_VBLANK_HELPER_ADDR = 0x69F8
+STAGE1_PICKUP_RESIDENT_WRITER_ADDR = 0x6A1A
+STAGE1_PICKUP_RESIDENT_TAIL1_ADDR = 0x7B49
+STAGE1_PICKUP_RESIDENT_TAIL2_ADDR = 0x6E6F
+STAGE1_SCROLL_EDGE_SERVICE_ADDR = 0x69F8
+STAGE1_SCROLL_TILE_Y_CACHE_ADDR = 0xDF7D
+# Three title-delay bytes plus the 19-byte readiness/demo dispatcher occupy
+# $3482-$3497. The next two bytes restore the copier's EI/RET contract.
+STAGE1_ATOMIC_WRAP_ADDR = INLINE_ATTR_DECISION_HELPER_ADDR + 22
 NATIVE_DMG_FADE_DISPATCH_ADDR = 0x10D5
 STAGE1_DEMO_DELAY_ADDR = NATIVE_DMG_FADE_DISPATCH_ADDR + 18
-# The stock attract recording is sensitive to the tile copier's scanline
-# phase. Align its Stage-1 cache misses to the first visible line. DCFD, not
-# DD09, distinguishes this route: attract keeps DCFD=0, while natural GAME
-# START publishes DCFD=1 before Stage 1 even though both briefly use DD09=1.
-STAGE1_DEMO_WAIT_LINE = 0
+# The retired attract-delay service remains in the fixed cave for historical
+# build reproduction. Current builds branch on DCFD before doing live-room
+# signature work and return DCFD=0 through the pure, stock-width copier.
+STAGE1_DEMO_WAIT_LINE = 96
 LEVELSEL_STUB_MAX = 36
 # Keep a guard gap after the RC3 wrapper while retaining ample room below the
 # 0x7000 dungeon table.
@@ -193,6 +246,7 @@ POSMAP_PTR_TABLE = 0x7FE0
 # Reclaim that dead region for main-loop semantic OAM and lava helpers.
 OAM_PALETTE_RESOLVER_ADDR = 0x7B00
 OAM_BOSS_LUT_SERVICE_ADDR = 0x7B21
+ATTRACT_PICKUP_SWEEP_HELPER_ADDR = 0x7B49
 OAM_CENTRAL_EMITTER_ADDR = 0x7B60
 OAM_FREE_EMITTER_ADDR = 0x7BE0
 LAVA_ATTR_STAGE5_SIGNATURE_ADDR = 0x7C13
@@ -225,6 +279,10 @@ LAVA_ATTR_STAGE5_9C00_META_ADDR = 0xDF56
 # its keys can never publish the A7 validity marker consumed later by Stage 5.
 STAGE1_ATTR_CACHE_9800_ADDR = LAVA_ATTR_STAGE5_9800_META_ADDR
 STAGE1_ATTR_CACHE_9C00_ADDR = LAVA_ATTR_STAGE5_9C00_META_ADDR + 1
+# Stage 1 owns the otherwise-dormant second byte of the $9800 Stage-5 record
+# while its copier runs. Preserve the caller's IE mask here so row service can
+# admit Timer/audio without allowing the re-entrant VBlank terrain path.
+STAGE1_IE_CACHE_ADDR = LAVA_ATTR_STAGE5_9800_META_ADDR + 1
 # Raw-tile XOR discriminators covered by the moving/stationary/patrol traces
 # plus the multi-room corruption routes.  These keys are injective across all
 # captured desired-palette layouts and stable across every duplicate raw-tile
@@ -246,7 +304,10 @@ LAVA_ATTR_SCENE_DISPATCH_ADDR = OAM_WRAM_BASE + 0xBC
 # DA13 instead of competing with it.
 STAGE1_ATTR_RUNTIME_ADDR = OAM_WRAM_BASE + 0xD5
 STAGE1_ATOMIC_SETUP_ADDR = OAM_WRAM_BASE + 0x13
-STAGE1_ATOMIC_GROUP_WIDTH = 4
+# Keep the stock four-tile/six-group cadence and stock row order. Rotating
+# rows 4..23 ahead of rows 0..3 let the live C1A0 room buffer change between
+# the two segments, leaving stale collision tiles in the completed map.
+STAGE1_ATOMIC_GROUP_WIDTH = 3
 LAVA_ATTR_STAGE7_9800_META_ADDR = OAM_WRAM_BASE + 0xFA
 LAVA_ATTR_STAGE7_9C00_META_ADDR = OAM_WRAM_BASE + 0xFD
 OAM_WRAM_SENTINEL_ADDR = 0xDF51
@@ -271,10 +332,10 @@ POSMAP_SCRATCH_ADDR = 0xDF47
 # retaining the exact WRAM table result through build_uniform_bg_clear().
 STORY_ATTR_ADDR = SPLASH_TABLE_ADDR
 STORY_ATTR_REGION_END = SPLASH_TABLE_ADDR + 0x100
-# The prelude ends at $6F10. Its former title-helper slot now holds the exact
-# all-pal0 WRAM clear, leaving scene detection free to use the tail through
-# $7000 for one release-only transition callback.
-UNIFORM_CLEAR_ADDR = 0x6F10
+# The 13-byte retired-sweep gap below the title glyphs holds the exact all-pal0
+# WRAM clear. This leaves the prelude enough room for its stale-Window branch
+# without adding any cycles to ordinary gameplay frames.
+UNIFORM_CLEAR_ADDR = 0x6D43
 STORY_ATTR_KEY_ADDR = 0xDF49
 STORY_ATTR_ROW_ADDR = 0xDF4A
 STORY_ATTR_MAP_DONE_ADDR = 0xDF4B
@@ -307,7 +368,8 @@ DEATH_FADE_WHITE = bytes.fromhex("FF7F FF7F FF7F FF7F")
 def build_uniform_bg_clear() -> bytes:
     """Replace the 256-byte all-pal0 ROM table with an exact WRAM zero-fill."""
     c = bytearray([
-        0x21, 0x00, 0xCC,                    # LD HL,$CC00
+        0x21, WRAM_BG_TABLE & 0xFF,
+        WRAM_BG_TABLE >> 8,                  # LD HL, palette LUT
         0xAF,                                # XOR A
         0x06, 0x00,                          # LD B,0 (256 iterations)
         0x22, 0x05, 0x20, 0xFC,              # [HL+]=A; DEC B; JR NZ
@@ -315,6 +377,933 @@ def build_uniform_bg_clear() -> bytes:
     ])
     assert len(c) == 11
     return bytes(c)
+
+
+def build_mirrored_gdma_bg_sweep() -> bytes:
+    """Mirror the resolved 32-byte attribute row with one CGB GDMA.
+
+    The original CPU loop still computes and writes exactly one active-map
+    row. DF10-DF2F already contains that complete semantic row, so a two-block
+    GDMA can copy it to the peer physical map without a second lookup/write
+    loop and without extending the 18-frame room-repair counter.
+    """
+    sweep = bytearray(
+        create_bg_sweep_viewport_gated(WRAM_BG_TABLE, BG_SWEEP_ADDR)
+    )
+    old_tail = bytes.fromhex(
+        "3E 01 E0 4F E1 11 10 DF 06 20 "
+        "1A 22 1C 05 20 FA "
+        "AF E0 4F E1 D1 C1 C9"
+    )
+    new_tail = bytes.fromhex(
+        "3E 01 E0 4F E1 E5 11 10 DF 06 20 "
+        "1A 22 1C 05 20 FA "
+        "E1 7C EE 04 67 "
+        "3E DF E0 51 3E 10 E0 52 "
+        "7C E0 53 7D E0 54 3E 01 E0 55 "
+        "AF E0 4F E1 D1 C1 C9"
+    )
+    matches = [
+        index for index in range(len(sweep) - len(old_tail) + 1)
+        if sweep[index:index + len(old_tail)] == old_tail
+    ]
+    assert matches == [len(sweep) - len(old_tail)]
+    sweep[matches[0]:] = new_tail
+    assert len(sweep) == 139
+    return bytes(sweep)
+
+
+def build_semantic_stage1_prototype(address: int) -> bytes:
+    """Diagnostic native-copy tail: clear attrs, then stamp pickup metatiles.
+
+    This intentionally lives in arena-table storage only for a Stage-1 timing
+    experiment.  It must never be enabled in a release build; a passing timing
+    result is expected to be relocated into the reclaimed Stage-1 services.
+    """
+    pickup_palettes = bytes([
+        4, 4, 4, 4, 4, 5, 5, 5,
+        1, 1, 1, 3, 3, 4, 4, 4,
+        0, 0, 2, 5, 2, 2, 5, 2,
+    ])
+
+    def assemble(table_address: int) -> bytes:
+        a = _Asm()
+        a.db(0xFA, 0x80, 0xD8, 0xFE, 0x02, 0xC0)
+        a.db(
+            0x7C, 0xD6, 0x03, 0x47,
+            0x3E, 0x02, 0xE0, 0x70,
+            0x78, 0xEA, 0xFE, 0xD3,
+        )
+        a.db(0xFA, 0xFF, 0xD3, 0xFE, 0xA5)
+        a.jr(0x28, "initialized")
+        a.db(0x21, 0x00, 0xD0, 0xAF, 0x06, 0x03)
+        a.label("zero_page")
+        a.db(0x0E, 0x00)
+        a.label("zero_byte")
+        a.db(0x22, 0x0D)
+        a.jr(0x20, "zero_byte")
+        a.db(0x05)
+        a.jr(0x20, "zero_page")
+        a.db(
+            0x21, 0xF8, 0xD3, 0xAF,
+            0x22, 0x22, 0x22, 0x77,
+            0x3E, 0xA5, 0xEA, 0xFF, 0xD3,
+        )
+
+        a.label("initialized")
+        # The native scroll path repeatedly recopies an unchanged packed map.
+        # Key each physical destination with the same content discriminator
+        # used by the receipt-covered Stage-1 runtime so only real content
+        # transitions pay for the semantic metatile scan.
+        a.db(
+            0xFA, 0xFE, 0xD3, 0xE6, 0x04, 0x0F, 0xC6, 0xF8,
+            0x5F, 0x16, 0xD3,
+            0xFA, 0x0E, 0xDC, 0x47,
+            0xFA, 0x97, 0xC2, 0xA8, 0x47,
+            0xFA, 0x9B, 0xC2, 0xA8, 0x3C, 0x47,
+            0x1A, 0xB8,
+        )
+        a.jr(0x20, "content_changed")
+        a.db(0x3E, 0x01, 0xE0, 0x70, 0xC9)
+        a.label("content_changed")
+        a.db(0x78, 0x12, 0xFA, 0xFB, 0xD3, 0xB8)
+        a.jr(0x20, "rebuild_stage")
+        # The other physical map usually follows with the same content key.
+        # Reuse the already-staged sparse plane instead of rescanning all 110
+        # metatiles or clearing WRAM a second time.
+        a.db(
+            0x3E, 0x01, 0xE0, 0x4F,
+            0x3E, 0xD0, 0xE0, 0x51,
+            0xAF, 0xE0, 0x52,
+            0xFA, 0xFE, 0xD3, 0xE0, 0x53,
+            0xAF, 0xE0, 0x54,
+            0x3E, 0x00, 0xE0, 0x55,
+            0xAF, 0xE0, 0x4F, 0x3C, 0xE0, 0x70, 0xC9,
+        )
+        a.label("rebuild_stage")
+        a.db(0x4F, 0x78, 0xEA, 0xFB, 0xD3, 0x79, 0xB7)
+        a.jr(0x28, "stage_empty")
+        a.db(0x21, 0x00, 0xD0, 0x06, 0x03, 0xAF)
+        a.label("clear_old_page")
+        a.db(0x0E, 0x00)
+        a.label("clear_old_byte")
+        a.db(0x22, 0x0D)
+        a.jr(0x20, "clear_old_byte")
+        a.db(0x05)
+        a.jr(0x20, "clear_old_page")
+        a.label("stage_empty")
+        a.db(
+            0xFA, 0x0E, 0xDC, 0x5F,
+            0xFA, 0x0F, 0xDC, 0x57,
+            0x26, 0xD0, 0x2E, 0x00,
+            0x3E, 0x0A, 0xEA, 0xFC, 0xD3,
+        )
+        a.label("row")
+        a.db(0x3E, 0x0B, 0xEA, 0xFD, 0xD3)
+        a.label("cell")
+        a.db(0x1A, 0x13, 0xD6, 0x26, 0xFE, 0x18)
+        a.jr(0x30, "neutral")
+        a.db(
+            0xC6, table_address & 0xFF,
+            0x4F, 0x06, table_address >> 8, 0x0A, 0xB7,
+        )
+        a.jr(0x28, "neutral")
+        a.db(0x4F)
+        a.db(0x79, 0x22, 0x22, 0x7D, 0xC6, 0x1E, 0x6F)
+        a.jr(0x30, "top_no_carry")
+        a.db(0x24)
+        a.label("top_no_carry")
+        a.db(0x79, 0x22, 0x22, 0x7D, 0xD6, 0x20, 0x6F)
+        a.jr(0x30, "advance")
+        a.db(0x25)
+        a.jr(0x18, "advance")
+        a.label("neutral")
+        a.db(0x7D, 0xC6, 0x02, 0x6F)
+        a.jr(0x30, "advance")
+        a.db(0x24)
+        a.label("advance")
+        a.db(0xFA, 0xFD, 0xD3, 0x3D, 0xEA, 0xFD, 0xD3)
+        a.jr(0x20, "cell")
+        a.db(0x7B, 0xC6, 0x05, 0x5F)
+        a.jr(0x30, "source_no_carry")
+        a.db(0x14)
+        a.label("source_no_carry")
+        a.db(0x7D, 0xC6, 0x2A, 0x6F)
+        a.jr(0x30, "destination_no_carry")
+        a.db(0x24)
+        a.label("destination_no_carry")
+        a.db(0xFA, 0xFC, 0xD3, 0x3D, 0xEA, 0xFC, 0xD3)
+        a.jr(0x20, "row")
+        # Publish the completed sparse plane in one fixed-duration transfer.
+        # It remains staged so the alternate physical map can reuse it.
+        a.db(
+            0x3E, 0x01, 0xE0, 0x4F,
+            0x3E, 0xD0, 0xE0, 0x51,
+            0xAF, 0xE0, 0x52,
+            0xFA, 0xFE, 0xD3, 0xE0, 0x53,
+            0xAF, 0xE0, 0x54,
+            0x3E, 0x00, 0xE0, 0x55,
+            0xAF, 0xE0, 0x4F,
+            0x3C, 0xE0, 0x70, 0xC9,
+        )
+        return a.finish()
+
+    provisional = assemble(address)
+    table_address = address + len(provisional)
+    code = assemble(table_address)
+    assert len(code) == len(provisional)
+    assert (table_address >> 8) == ((table_address + 23) >> 8)
+    return code + pickup_palettes
+
+
+def build_stage1_vblank_pickup_service(
+    address: int,
+    table_address: int,
+) -> tuple[bytes, bytes, bytes, bytes]:
+    """Build a two-cell-per-VBlank native-source pickup scanner.
+
+    Native FFBD room writers arm the service without touching the stock map
+    copier. Each VBlank clears at most one old pickup or examines two packed
+    metatile IDs; only actual pickups produce four attribute writes.
+    """
+    pickup_palettes = bytes([
+        4, 4, 4, 4, 4, 5, 5, 5,
+        1, 1, 1, 3, 3, 4, 4, 4,
+        0, 0, 2, 5, 2, 2, 5, 2,
+    ])
+    assert (table_address & 0xFF) + len(pickup_palettes) <= 0x100
+
+    worker = _Asm()
+    worker.db(0xC5, 0xD5, 0xE5)
+    worker.db(
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xFE, 0xFF,
+    )
+    worker.jr(0x20, "not_init")
+    # Normalize the active selector, clear the inactive queue, retain the old
+    # count for bounded cleanup, and delay scanning until the next VBlank.
+    worker.db(
+        0xFA, STAGE1_PICKUP_ACTIVE_ADDR & 0xFF, 0xDF,
+        0xE6, 0x01,
+        0xEA, STAGE1_PICKUP_ACTIVE_ADDR & 0xFF, 0xDF,
+        0x47, 0xEE, 0x01, 0xB7,
+    )
+    worker.jr(0x28, "clear_inactive0")
+    worker.db(0x21, STAGE1_PICKUP_COUNT1_ADDR & 0xFF, 0xDF)
+    worker.jr(0x18, "inactive_selected")
+    worker.label("clear_inactive0")
+    worker.db(0x21, STAGE1_PICKUP_COUNT0_ADDR & 0xFF, 0xDF)
+    worker.label("inactive_selected")
+    worker.db(0xAF, 0x77, 0x78, 0xB7)
+    worker.jr(0x28, "old_count0")
+    worker.db(0xFA, STAGE1_PICKUP_COUNT1_ADDR & 0xFF, 0xDF)
+    worker.jr(0x18, "old_count_ready")
+    worker.label("old_count0")
+    worker.db(0xFA, STAGE1_PICKUP_COUNT0_ADDR & 0xFF, 0xDF)
+    worker.label("old_count_ready")
+    worker.db(
+        0xEA, STAGE1_PICKUP_OLD_REMAIN_ADDR & 0xFF, 0xDF,
+        0xAF,
+        0xEA, STAGE1_PICKUP_SCAN_POS_ADDR & 0xFF, 0xDF,
+        0x3E, 0xFE,
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+    )
+    worker.jr(0x18, "done")
+
+    worker.label("not_init")
+    worker.db(0xFE, 0xFE)
+    worker.jr(0x20, "scan")
+    worker.db(
+        0xFA, STAGE1_PICKUP_OLD_REMAIN_ADDR & 0xFF,
+        STAGE1_PICKUP_OLD_REMAIN_ADDR >> 8,
+        0xB7,
+    )
+    worker.jr(0x28, "start_scan")
+    worker.db(
+        0x3D,
+        0xEA, STAGE1_PICKUP_OLD_REMAIN_ADDR & 0xFF,
+        STAGE1_PICKUP_OLD_REMAIN_ADDR >> 8,
+        0x4F,
+        0xFA, STAGE1_PICKUP_ACTIVE_ADDR & 0xFF,
+        STAGE1_PICKUP_ACTIVE_ADDR >> 8,
+        0xB7,
+    )
+    worker.jr(0x28, "old_buffer0")
+    worker.db(0x21, STAGE1_PICKUP_ENTRIES1_ADDR & 0xFF, 0xDF)
+    worker.jr(0x18, "old_address")
+    worker.label("old_buffer0")
+    worker.db(0x21, STAGE1_PICKUP_ENTRIES0_ADDR & 0xFF, 0xDF)
+    worker.label("old_address")
+    worker.db(0x79, 0x87, 0x85, 0x6F, 0x7E, 0x06, 0x00)
+    worker.db(
+        0xCD,
+        STAGE1_PICKUP_WRITER_ADDR & 0xFF,
+        STAGE1_PICKUP_WRITER_ADDR >> 8,
+    )
+    worker.jr(0x18, "done")
+
+    worker.label("start_scan")
+    worker.db(
+        0x3E, 0xFD,
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+    )
+    worker.label("scan")
+    worker.db(
+        0xCD,
+        STAGE1_PICKUP_SCANNER_ADDR & 0xFF,
+        STAGE1_PICKUP_SCANNER_ADDR >> 8,
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xB7,
+    )
+    worker.jr(0x28, "done")
+    worker.db(
+        0xCD,
+        STAGE1_PICKUP_SCANNER_ADDR & 0xFF,
+        STAGE1_PICKUP_SCANNER_ADDR >> 8,
+    )
+    worker.label("done")
+    worker.db(0xE1, 0xD1, 0xC1, 0xC9)
+    worker_code = worker.finish()
+
+    writer = _Asm()
+    writer.db(
+        0x57, 0xE6, 0x0F, 0x87, 0x5F,
+        0x7A, 0xCB, 0x37, 0xE6, 0x0F, 0x4F,
+        0xE6, 0x03, 0x0F, 0x0F, 0xB3, 0x6F,
+        0x79, 0xCB, 0x3F, 0xCB, 0x3F, 0xC6, 0x98, 0x67,
+        0x3E, 0x01, 0xE0, 0x4F,
+        0x78, 0x22, 0x77, 0x2D,
+        0x7C, 0xEE, 0x04, 0x67,
+        0x78, 0x22, 0x77, 0x2D,
+        # Stay on the alternate map for its bottom pair, then toggle back.
+        # This removes one redundant H-map toggle from the VBlank budget.
+        0x7D, 0xC6, 0x20, 0x6F,
+        0x78, 0x22, 0x77, 0x2D,
+        0x7C, 0xEE, 0x04, 0x67,
+        0x78, 0x22, 0x77, 0x2D,
+        0xAF, 0xE0, 0x4F, 0xC9,
+    )
+    writer_code = writer.finish()
+    assert STAGE1_PICKUP_WRITER_ADDR + len(writer_code) <= STAGE1_PICKUP_APPENDER_ADDR
+
+    appender = _Asm()
+    appender.db(0xF5)
+    appender.db(
+        0xFA, STAGE1_PICKUP_ACTIVE_ADDR & 0xFF, 0xDF,
+        0xEE, 0x01, 0xB7,
+    )
+    appender.jr(0x28, "append_buffer0")
+    appender.db(0x21, STAGE1_PICKUP_COUNT1_ADDR & 0xFF, 0xDF)
+    appender.jr(0x18, "append_selected")
+    appender.label("append_buffer0")
+    appender.db(0x21, STAGE1_PICKUP_COUNT0_ADDR & 0xFF, 0xDF)
+    appender.label("append_selected")
+    appender.db(0x7E, 0xFE, STAGE1_PICKUP_QUEUE_CAPACITY)
+    appender.jr(0x30, "write")
+    appender.db(0x4F, 0x34, 0x79, 0x87, 0x3C, 0x85, 0x6F)
+    appender.db(0xF1, 0x77, 0x23, 0x70)
+    appender.jr(0x18, "tail")
+    appender.label("write")
+    appender.db(0xF1)
+    appender.label("tail")
+    appender.db(
+        0xC3,
+        STAGE1_PICKUP_WRITER_ADDR & 0xFF,
+        STAGE1_PICKUP_WRITER_ADDR >> 8,
+    )
+    appender_code = appender.finish()
+    appender_blob = (
+        writer_code
+        + bytes(STAGE1_PICKUP_APPENDER_ADDR - (
+            STAGE1_PICKUP_WRITER_ADDR + len(writer_code)
+        ))
+        + appender_code
+    )
+
+    scanner = _Asm()
+    scanner.db(
+        0xFA, STAGE1_PICKUP_SCAN_POS_ADDR & 0xFF, 0xDF,
+        0xFE, 0xA0,
+    )
+    scanner.jr(0x38, "have_cell")
+    scanner.db(
+        0x21, STAGE1_PICKUP_ACTIVE_ADDR & 0xFF, 0xDF,
+        0x7E, 0xEE, 0x01, 0x77,
+        0xAF,
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xC9,
+    )
+    scanner.label("have_cell")
+    scanner.db(0x4F, 0x3C, 0x47, 0xE6, 0x0F, 0xFE, 0x0B, 0x78)
+    scanner.jr(0x20, "store_next")
+    scanner.db(0xC6, 0x05)
+    scanner.label("store_next")
+    scanner.db(
+        0xEA, STAGE1_PICKUP_SCAN_POS_ADDR & 0xFF, 0xDF,
+        0xFA, 0x0E, 0xDC, 0x6F,
+        0xFA, 0x0F, 0xDC, 0x67,
+        0x79, 0x85, 0x6F,
+    )
+    scanner.jr(0x30, "source_ready")
+    scanner.db(0x24)
+    scanner.label("source_ready")
+    scanner.db(0x7E, 0xFE, 0xD7)
+    scanner.jr(0x38, "low_band")
+    scanner.db(0xD6, 0xB1)
+    scanner.label("low_band")
+    scanner.db(0xFE, 0x26)
+    scanner.jr(0x38, "neutral")
+    scanner.db(0xFE, 0x3E)
+    scanner.jr(0x30, "neutral")
+    scanner.db(
+        0xD6, 0x26,
+        0xC6, table_address & 0xFF,
+        0x6F, 0x26, table_address >> 8,
+        0x7E, 0xB7,
+    )
+    scanner.jr(0x28, "neutral")
+    scanner.db(
+        0x47, 0x79,
+        0xC3,
+        STAGE1_PICKUP_APPENDER_ADDR & 0xFF,
+        STAGE1_PICKUP_APPENDER_ADDR >> 8,
+    )
+    scanner.label("neutral")
+    scanner.db(0xC9)
+
+    return (
+        worker_code,
+        appender_blob,
+        scanner.finish(),
+        pickup_palettes,
+    )
+
+
+def build_stage1_pickup_capture_hook() -> bytes:
+    """Classify native metatile IDs and call the sparse appender on demand."""
+    a = _Asm()
+    # B/C count down from 10/11; only the first cell sums to 21.
+    a.db(0xF5, 0x78, 0x81, 0xFE, 0x15)
+    a.jr(0x28, "capture")
+    a.label("classify")
+    a.db(0xF1, 0xF5, 0xFE, 0xD7)
+    a.jr(0x38, "low_band")
+    a.db(0xD6, 0xB1)
+    a.label("low_band")
+    a.db(0xFE, 0x26)
+    a.jr(0x38, "neutral")
+    a.db(0xFE, 0x3E)
+    a.jr(0x30, "neutral")
+    a.label("capture")
+    a.db(0xF1, 0xC3, 0x38, 0x08)
+    a.label("neutral")
+    a.db(0xF1, 0xC1, 0xD5, 0xC5, 0xC9)
+    return a.finish()
+
+
+def build_stage1_resident_pickup_service() -> tuple[
+    bytes, bytes, bytes, bytes, bytes, bytes, bytes,
+]:
+    """Build the bank-13 sparse pickup pass used after native room repair."""
+    palettes = bytes([
+        4, 4, 4, 4, 4, 5, 5, 5,
+        1, 1, 1, 3, 3, 4, 4, 4,
+        0, 0, 2, 5, 2, 2, 5, 2,
+    ])
+    packed = bytes(
+        (palettes[index] << 4) | palettes[index + 1]
+        for index in range(0, len(palettes), 2)
+    )
+
+    write_front = bytes([
+        0x57, 0xE6, 0x0F, 0x87, 0x5F,
+        0x7A, 0xCB, 0x37, 0xE6, 0x0F, 0x4F,
+        0xE6, 0x03, 0x0F, 0x0F, 0xB3, 0x6F,
+        0x79, 0xCB, 0x3F, 0xCB, 0x3F, 0xC6, 0x98, 0x67,
+        0x3E, 0x01, 0xE0, 0x4F,
+        0xC3,
+        STAGE1_PICKUP_WRITE_TAIL_ADDR & 0xFF,
+        STAGE1_PICKUP_WRITE_TAIL_ADDR >> 8,
+    ])
+    assert len(write_front) == 32
+
+    # The computed destination always begins in $9800. SET/RES bit 2 of H is
+    # two bytes cheaper than a generic XOR and updates the matching $9C00 map.
+    write_tail = bytes([
+        0x78, 0x22, 0x77, 0x2D,
+        0xCB, 0xD4,
+        0x78, 0x22, 0x77, 0x2D,
+        0x7D, 0xC6, 0x20, 0x6F,
+        0x78, 0x22, 0x77, 0x2D,
+        0xCB, 0x94,
+        0x78, 0x22, 0x77, 0x2D,
+        0xAF, 0xE0, 0x4F, 0xC9,
+    ])
+    assert len(write_tail) == 28
+
+    decoder = _Asm()
+    decoder.db(0x4F, 0xCB, 0x3F)
+    decoder.db(0xC6, STAGE1_PICKUP_PACKED_TABLE_ADDR & 0xFF, 0x6F, 0x7E)
+    decoder.db(0xCB, 0x41)
+    decoder.jr(0x20, "low_nibble")
+    decoder.db(0xCB, 0x37)
+    decoder.label("low_nibble")
+    decoder.db(0xE6, 0x0F, 0xC9)
+    decoder_code = decoder.finish()
+    assert len(decoder_code) <= 0x6E80 - STAGE1_PICKUP_DECODER_ADDR
+
+    scan_one = _Asm()
+    scan_one.db(
+        0xFA, STAGE1_PICKUP_SCAN_POS_ADDR & 0xFF, 0xDF,
+        0xFE, 0xA0,
+    )
+    scan_one.jr(0x38, "have_cell")
+    scan_one.db(
+        0xAF,
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xC9,
+    )
+    scan_one.label("have_cell")
+    scan_one.db(0x4F, 0x3C, 0x47, 0xE6, 0x0F, 0xFE, 0x0B, 0x78)
+    scan_one.jr(0x20, "store_next")
+    scan_one.db(0xC6, 0x05)
+    scan_one.label("store_next")
+    scan_one.db(
+        0xEA, STAGE1_PICKUP_SCAN_POS_ADDR & 0xFF, 0xDF,
+        0xFA, 0x0E, 0xDC, 0x6F,
+        0xFA, 0x0F, 0xDC, 0x67,
+        0x79, 0x85, 0x6F,
+    )
+    scan_one.jr(0x30, "source_ready")
+    scan_one.db(0x24)
+    scan_one.label("source_ready")
+    scan_one.db(0x7E, 0xFE, 0xD7)
+    scan_one.jr(0x38, "low_band")
+    scan_one.db(0xD6, 0xB1)
+    scan_one.label("low_band")
+    scan_one.db(0xD6, 0x26, 0xFE, 0x18)
+    scan_one.jr(0x30, "neutral")
+    scan_one.db(
+        0x26, STAGE1_PICKUP_PACKED_TABLE_ADDR >> 8,
+        0xCD,
+        STAGE1_PICKUP_DECODER_ADDR & 0xFF,
+        STAGE1_PICKUP_DECODER_ADDR >> 8,
+        0xB7,
+    )
+    scan_one.jr(0x28, "neutral")
+    scan_one.db(
+        0x47, 0x79,
+        0xC3,
+        INLINE_ATTR_DECISION_HELPER_ADDR & 0xFF,
+        INLINE_ATTR_DECISION_HELPER_ADDR >> 8,
+    )
+    scan_one.label("neutral")
+    scan_one.db(0xC9)
+    scan_one_code = scan_one.finish()
+    assert len(scan_one_code) <= 0x6A40 - STAGE1_PICKUP_SCAN_ONE_ADDR
+
+    scan_main = _Asm()
+    scan_main.db(0xC5, 0xD5, 0xE5, 0x06, 0x0A)
+    scan_main.label("cell")
+    scan_main.db(
+        0xC5,
+        0xCD,
+        STAGE1_PICKUP_SCAN_ONE_ADDR & 0xFF,
+        STAGE1_PICKUP_SCAN_ONE_ADDR >> 8,
+        0xC1,
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xB7,
+    )
+    scan_main.jr(0x28, "done")
+    scan_main.db(0x05)
+    scan_main.jr(0x20, "cell")
+    scan_main.label("done")
+    scan_main.db(0xE1, 0xD1, 0xC1, 0xC9)
+    scan_main_code = scan_main.finish()
+    assert len(scan_main_code) <= 0x7B60 - STAGE1_PICKUP_SCAN_MAIN_ADDR
+
+    room_service = _Asm()
+    room_service.db(
+        0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
+        OAM_WRAM_SENTINEL_ADDR >> 8,
+        0xFE, 0xA7,
+        0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xFE, 0x19,
+    )
+    room_service.jr(0x30, "scan")
+    room_service.db(0xB7, 0xC8, 0x3D)
+    room_service.jr(0x20, "store")
+    room_service.db(
+        0xAF,
+        0xEA, STAGE1_PICKUP_SCAN_POS_ADDR & 0xFF, 0xDF,
+        0x3E, 0xFF,
+    )
+    room_service.label("store")
+    room_service.db(
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xC3, BG_SWEEP_ADDR & 0xFF, BG_SWEEP_ADDR >> 8,
+    )
+    room_service.label("scan")
+    room_service.db(
+        0xC3,
+        STAGE1_PICKUP_SCAN_MAIN_ADDR & 0xFF,
+        STAGE1_PICKUP_SCAN_MAIN_ADDR >> 8,
+    )
+    room_service_code = room_service.finish()
+    assert len(room_service_code) <= CONDITIONAL_PALETTE_IMPL_ADDR - ROOM_BG_REPAIR_ADDR
+
+    return (
+        write_front,
+        write_tail,
+        packed,
+        decoder_code,
+        scan_one_code,
+        scan_main_code,
+        room_service_code,
+    )
+
+
+def build_stage1_sync_pickup_service() -> tuple[
+    bytes, bytes, bytes, bytes, bytes, bytes, bytes,
+]:
+    """Build a room-return queue scanner plus pickup-only VBlank publisher."""
+    palettes = bytes([
+        4, 4, 4, 4, 4, 5, 5, 5,
+        1, 1, 1, 3, 3, 4, 4, 4,
+        0, 0, 2, 5, 2, 2, 5, 2,
+    ])
+    packed = bytes(
+        (palettes[index] << 4) | palettes[index + 1]
+        for index in range(0, len(palettes), 2)
+    )
+
+    decoder = _Asm()
+    decoder.db(0x5F, 0xCB, 0x3F)
+    decoder.db(0xC6, STAGE1_SYNC_TABLE_ADDR & 0xFF, 0x6F, 0x7E)
+    decoder.db(0xCB, 0x43)
+    decoder.jr(0x20, "low_nibble")
+    decoder.db(0xCB, 0x37)
+    decoder.label("low_nibble")
+    decoder.db(0xE6, 0x0F, 0xC9)
+    decoder_code = decoder.finish()
+    assert len(decoder_code) <= STAGE1_SYNC_TABLE_ADDR - STAGE1_SYNC_DECODER_ADDR
+
+    scanner = _Asm()
+    scanner.db(
+        0xC5, 0xD5, 0xE5,
+        0xFA, 0x0E, 0xDC, 0x47,
+        0xFA, 0x97, 0xC2, 0xA8, 0x47,
+        0xFA, 0x9B, 0xC2, 0xA8, 0x3C,
+        0x21, STAGE1_PICKUP_BUILD_KEY_ADDR & 0xFF, 0xDF,
+        0xBE,
+    )
+    scanner.jr(0x28, "done")
+    scanner.db(
+        0x77,
+        0xAF,
+        0xEA, STAGE1_PICKUP_COUNT0_ADDR & 0xFF, 0xDF,
+        0xFA, 0x0E, 0xDC, 0x5F,
+        0xFA, 0x0F, 0xDC, 0x57,
+        0x06, 0x0A,
+    )
+    scanner.label("row")
+    scanner.db(0x0E, 0x0B)
+    scanner.label("cell")
+    scanner.db(0x1A, 0x13, 0xFE, 0xD7)
+    scanner.jr(0x38, "low_band")
+    scanner.db(0xD6, 0xB1)
+    scanner.label("low_band")
+    scanner.db(0xD6, 0x26, 0xFE, 0x18)
+    scanner.jr(0x30, "next_cell")
+    scanner.db(
+        0xC5, 0xD5,
+        0x26, STAGE1_SYNC_TABLE_ADDR >> 8,
+        0xCD,
+        STAGE1_SYNC_DECODER_ADDR & 0xFF,
+        STAGE1_SYNC_DECODER_ADDR >> 8,
+        0xB7,
+    )
+    scanner.jr(0x28, "restore_cell")
+    scanner.db(
+        0x67,                               # H = palette
+        0xD1, 0xC1,                        # restore source + row/column
+        0x3E, 0x0A, 0x90, 0xCB, 0x37, 0xE6, 0xF0, 0x6F,
+        0x3E, 0x0B, 0x91, 0xB5,            # A = packed row/column
+        0xC5, 0xD5,
+        0x5F, 0x44,                        # E = position; B = palette
+        0x21, STAGE1_PICKUP_COUNT0_ADDR & 0xFF, 0xDF,
+        0x7E, 0xFE, STAGE1_PICKUP_QUEUE_CAPACITY,
+    )
+    scanner.jr(0x30, "append_done")
+    scanner.db(
+        0x4F, 0x34, 0x79, 0x87, 0x3C, 0x85, 0x6F,
+        0x73, 0x23, 0x70,
+    )
+    scanner.label("append_done")
+    scanner.db(0xD1, 0xC1)
+    scanner.jr(0x18, "next_cell")
+    scanner.label("restore_cell")
+    scanner.db(0xD1, 0xC1)
+    scanner.label("next_cell")
+    scanner.db(0x0D)
+    scanner.jr(0x20, "cell")
+    scanner.db(0x7B, 0xC6, 0x05, 0x5F)
+    scanner.jr(0x30, "source_ready")
+    scanner.db(0x14)
+    scanner.label("source_ready")
+    scanner.db(0x05)
+    scanner.jr(0x20, "row")
+    scanner.label("done")
+    scanner.db(
+        0xE1, 0xD1, 0xC1,
+        0x3E, 0x01,
+        0xC3, 0x61, 0x00,
+    )
+    scanner_code = scanner.finish()
+    assert len(scanner_code) <= STAGE1_SYNC_DECODER_ADDR - STAGE1_SYNC_SCANNER_ADDR
+
+    # Replace only the final RET of the native $139A metatile expander. This
+    # runs once per packed-map build, not once per tilemap copy or metatile.
+    # The fixed secondary discards the synthetic RST return, preserves AF,
+    # and admits only ordinary gameplay scene $02.
+    # Diagnostic neutral return: isolate the one-time RST seam itself from
+    # all scan/publication work.
+    fixed_asm = _Asm()
+    fixed_asm.db(0x33, 0x33, 0xC9)
+    fixed = fixed_asm.finish()
+    assert len(fixed) <= 0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR
+
+    writer_front = bytes([
+        0x57, 0xE6, 0x0F, 0x87, 0x5F,
+        0x7A, 0xCB, 0x37, 0xE6, 0x0F, 0x4F,
+        0xE6, 0x03, 0x0F, 0x0F, 0xB3, 0x6F,
+        0x79, 0xCB, 0x3F, 0xCB, 0x3F, 0xC6, 0x98, 0x67,
+        0x3E, 0x01, 0xE0, 0x4F,
+        0xC3,
+        STAGE1_PICKUP_RESIDENT_TAIL1_ADDR & 0xFF,
+        STAGE1_PICKUP_RESIDENT_TAIL1_ADDR >> 8,
+    ])
+    assert len(writer_front) == 32
+    writer_tail1 = bytes([
+        0x78, 0x22, 0x77, 0x2D,
+        0xCB, 0xD4,
+        0x78, 0x22, 0x77, 0x2D,
+        0x7D, 0xC6, 0x20, 0x6F,
+        0x78, 0x22, 0x77, 0x2D,
+        0xC3,
+        STAGE1_PICKUP_RESIDENT_TAIL2_ADDR & 0xFF,
+        STAGE1_PICKUP_RESIDENT_TAIL2_ADDR >> 8,
+    ])
+    assert len(writer_tail1) <= 0x7B60 - STAGE1_PICKUP_RESIDENT_TAIL1_ADDR
+    writer_tail2 = bytes([
+        0xCB, 0x94,
+        0x78, 0x22, 0x77, 0x2D,
+        0xAF, 0xE0, 0x4F,
+        0xC9,
+    ])
+    assert len(writer_tail2) <= 0x6E80 - STAGE1_PICKUP_RESIDENT_TAIL2_ADDR
+
+    publish = _Asm()
+    publish.db(
+        0xC5, 0xD5, 0xE5,
+        0xFA, STAGE1_PICKUP_COUNT0_ADDR & 0xFF, 0xDF,
+        0xB7,
+    )
+    publish.jr(0x28, "done")
+    publish.db(
+        0x4F,
+        0x21, STAGE1_PICKUP_ENTRIES0_ADDR & 0xFF, 0xDF,
+    )
+    publish.label("next")
+    publish.db(
+        0x2A, 0x46, 0x23,
+        0xC5, 0xE5,
+        0xCD,
+        STAGE1_PICKUP_RESIDENT_WRITER_ADDR & 0xFF,
+        STAGE1_PICKUP_RESIDENT_WRITER_ADDR >> 8,
+        0xE1, 0xC1, 0x0D,
+    )
+    publish.jr(0x20, "next")
+    publish.label("done")
+    publish.db(0xE1, 0xD1, 0xC1, 0xC9)
+    publish_code = publish.finish()
+    assert len(publish_code) <= 0x6A40 - STAGE1_PICKUP_VBLANK_HELPER_ADDR
+
+    room = _Asm()
+    room.db(
+        0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
+        OAM_WRAM_SENTINEL_ADDR >> 8,
+        0xFE, 0xA7,
+        0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xB7, 0xC8, 0x3D,
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xC3, BG_SWEEP_ADDR & 0xFF, BG_SWEEP_ADDR >> 8,
+    )
+    room_code = room.finish()
+    assert len(room_code) <= CONDITIONAL_PALETTE_IMPL_ADDR - ROOM_BG_REPAIR_ADDR
+
+    writer = (writer_front, writer_tail1, writer_tail2)
+    return fixed, scanner_code, decoder_code, packed, writer, publish_code, room_code
+
+
+def build_stage1_scroll_edge_room_service() -> bytes:
+    """Color only the row exposed by an eight-pixel Stage-1 Y scroll.
+
+    Native room writers retain the proven 18-row repair. Once that bounded
+    pass completes, DF4E=$80 keeps this lightweight guard reachable from the
+    existing VBlank call site. Ordinary frames return after one masked SCY
+    comparison; an actual tile-row crossing reuses the exact production
+    tile-to-palette sweep for the newly exposed edge. Terrain VRAM is never
+    written here. The title demo retains its established alternating repair,
+    and all later scenes keep the ordinary bounded counter contract.
+    """
+    a = _Asm()
+    a.db(
+        0xFA, 0x80, 0xD8,
+        0xFE, 0x0A,
+    )
+    a.jr(0x28, "demo")
+    a.db(0xFE, 0x02)
+    a.jr(0x28, "stage1")
+
+    # Later stages: preserve the existing room-bounded sweep exactly.
+    a.label("ordinary")
+    a.db(
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xB7, 0xC8, 0x3D,
+    )
+    a.label("store_sweep")
+    a.db(
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xC3, BG_SWEEP_ADDR & 0xFF, BG_SWEEP_ADDR >> 8,
+    )
+
+    a.label("stage1")
+    a.db(
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xFE, 0x80,
+    )
+    a.jr(0x28, "edge")
+    a.db(0xB7, 0xC8, 0x3D)
+    a.jr(0x20, "store_sweep")
+    # Arm steady edge mode after the receipt-proven final repair row.
+    a.db(0x3E, 0x80)
+    a.jr(0x18, "store_sweep")
+
+    a.label("demo")
+    a.db(
+        0xC3,
+        ATTRACT_PICKUP_SWEEP_STUB_ADDR & 0xFF,
+        ATTRACT_PICKUP_SWEEP_STUB_ADDR >> 8,
+    )
+
+    a.label("edge")
+    a.db(
+        0xC5,
+        0xF0, 0x42, 0xE6, 0xF8,
+        0x21, STAGE1_SCROLL_TILE_Y_CACHE_ADDR & 0xFF,
+        STAGE1_SCROLL_TILE_Y_CACHE_ADDR >> 8,
+        0x46, 0xB8,
+    )
+    a.jr(0x28, "edge_done")
+    a.db(
+        0x77, 0x90, 0xFE, 0x08,
+        0x3E, 0x11,
+    )
+    a.jr(0x20, "phase_ready")
+    a.db(0x3D)
+    a.label("phase_ready")
+    a.db(
+        0xEA, 0x04, 0xDF,
+        0xC1,
+        0xC3, BG_SWEEP_ADDR & 0xFF, BG_SWEEP_ADDR >> 8,
+    )
+    a.label("edge_done")
+    a.db(0xC1, 0xC9)
+    code = a.finish()
+    assert len(code) <= 0x6A40 - STAGE1_SCROLL_EDGE_SERVICE_ADDR, len(code)
+    return code
+
+
+def build_stage1_dualpass_room_service() -> bytes:
+    """Spend 36 bounded rows on Stage 1 and preserve 18 elsewhere."""
+    a = _Asm()
+    a.db(
+        0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
+        OAM_WRAM_SENTINEL_ADDR >> 8,
+        0xFE, 0xA7,
+        0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
+        0xFA, 0x80, 0xD8,
+        0xFE, 0x02,
+    )
+    a.jr(0x28, "stage1")
+    a.db(0xFE, 0x0A)
+    a.jr(0x28, "demo")
+
+    # All later scenes retain the production 18-row upper bound even though
+    # the shared FFBD hook arms 36 for live Stage 1.
+    a.label("ordinary")
+    a.db(
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xFE, 0x13,
+    )
+    a.jr(0x38, "ordinary_ready")
+    a.db(0x3E, 0x12)
+    a.label("ordinary_ready")
+    a.db(0xB7, 0xC8, 0x3D)
+    a.label("store_sweep")
+    a.db(
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xC3, BG_SWEEP_ADDR & 0xFF, BG_SWEEP_ADDR >> 8,
+    )
+
+    a.label("stage1")
+    a.db(
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xB7, 0xC8, 0x3D,
+    )
+    a.jr(0x18, "store_sweep")
+
+    a.label("demo")
+    a.db(
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xFE, 0x13,
+    )
+    a.jr(0x38, "demo_ready")
+    a.db(
+        0x3E, 0x12,
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+    )
+    a.label("demo_ready")
+    a.db(
+        0xC3,
+        ATTRACT_PICKUP_SWEEP_STUB_ADDR & 0xFF,
+        ATTRACT_PICKUP_SWEEP_STUB_ADDR >> 8,
+    )
+    code = a.finish()
+    assert len(code) <= 0x6A40 - STAGE1_SCROLL_EDGE_SERVICE_ADDR, len(code)
+    return code
 
 
 def build_story_attr_sweep() -> tuple[bytes, int, int, int]:
@@ -1015,7 +2004,9 @@ def build_next_dma_shadow_colorizer() -> bytes:
     return bytes(code)
 
 
-def build_attract_obj_colorizer() -> bytes:
+def build_attract_obj_colorizer(
+    stage1_semantic_vblank: bool = False,
+) -> bytes:
     """Dispatch BG/OAM work and color the real title spotlight actors.
 
     The title spotlight is D880=$1B, not the later D880=$0A gameplay demo.
@@ -1096,20 +2087,37 @@ def build_attract_obj_colorizer() -> bytes:
     # The active flag is part of the proven transition contract: it prevents
     # a stale publish after the stock demo has started returning to title.
     a.db(0xF0, 0xC1, 0xB7, 0xC8)
-    a.db(
-        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
-        0xB7,
-        0xC4, ROOM_BG_REPAIR_ADDR & 0xFF, ROOM_BG_REPAIR_ADDR >> 8,
-    )
+    if stage1_semantic_vblank:
+        a.db(
+            0xFA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
+            0xB7,
+        )
+        a.jr(0x28, "gameplay_publish")
+        # CALL $0061 switches to bank 14 and returns at the following address.
+        # The builder overlays these eight padding bytes in bank 14 with a
+        # call to the semantic row service and a bank-13 restore. Execution
+        # then resumes at the shared FF80 publish tail in this bank.
+        a.db(0x3E, 0x0E, 0xCD, 0x61, 0x00)
+        a.db(*bytes(8))
+    else:
+        a.db(
+            0xFA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
+            0xB7,
+            0xC4, ROOM_BG_REPAIR_ADDR & 0xFF, ROOM_BG_REPAIR_ADDR >> 8,
+        )
     # Sprite attributes are now assigned by the three stock emitters. No
     # all-40-slot scan remains in this VBlank path.
+    a.label("gameplay_publish")
     a.db(0xC3, 0x80, 0xFF)                  # tail-call stock OAM DMA
     code = a.finish()
     assert ATTRACT_OBJ_COLORIZER_ADDR + len(code) <= SPOTLIGHT_PALETTE_MAP_ADDR
     return code
 
 
-def build_room_bg_repair() -> bytes:
+def build_room_bg_repair(
+    stage1_atomic_attrs: bool = True,
+    stage1_semantic_vblank: bool = False,
+) -> bytes:
     """Run one pending BG row.
 
     The stock tilemap copier is restored to its single-wait, tile-only path.
@@ -1120,6 +2128,65 @@ def build_room_bg_repair() -> bytes:
     a legacy gameplay save state.  Cold-boot gameplay already has the A7
     sentinel. Both callees preserve BC/DE/HL.
     """
+    if not stage1_atomic_attrs:
+        if stage1_semantic_vblank:
+            # A three-byte source-pointer key captures every transition in the
+            # live north-route trace while keeping the no-work VBlank path in
+            # the already-mapped bank. Bank 14 is entered only for ten bounded
+            # semantic rows after a real packed-map transition.
+            code = bytearray([
+                0xFA, 0x80, 0xD8, 0xFE, 0x02, 0xC0,
+                0xFA, 0x0E, 0xDC,
+                0x21,
+                STAGE1_ATTR_CACHE_9800_ADDR & 0xFF,
+                STAGE1_ATTR_CACHE_9800_ADDR >> 8,
+                0xBE,
+                0x28, 0x06,
+                0x77,
+                0x3E, 0x0A,
+                0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+                BG_SWEEP_COUNT_ADDR >> 8,
+                0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+                BG_SWEEP_COUNT_ADDR >> 8,
+                0xB7, 0xC8,
+                0xCD,
+                STAGE1_VBLANK_TRAMPOLINE_ADDR & 0xFF,
+                STAGE1_VBLANK_TRAMPOLINE_ADDR >> 8,
+                0xC9,
+            ])
+            capacity = CONDITIONAL_PALETTE_IMPL_ADDR - ROOM_BG_REPAIR_ADDR
+            assert len(code) <= capacity
+            return bytes(code) + bytes(capacity - len(code))
+
+        # The production-safe native Stage-1 copier keeps terrain at stock
+        # cadence. Spend the existing room-bounded DF4E budget on one
+        # attribute row per VBlank, including legacy states whose saved DF4E
+        # counter is already armed. Scene $0A retains its alternating pickup
+        # row repair; all other scenes use the ordinary sequential sweep.
+        code = bytearray([
+            0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
+            OAM_WRAM_SENTINEL_ADDR >> 8,
+            0xFE, 0xA7,
+            0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
+        ])
+        code.extend([0xFA, 0x80, 0xD8, 0xD6, 0x0A])
+        branch_next = ROOM_BG_REPAIR_ADDR + len(code) + 2
+        branch_delta = ATTRACT_PICKUP_SWEEP_STUB_ADDR - branch_next
+        assert -128 <= branch_delta <= 127
+        code.extend([0x28, branch_delta & 0xFF])
+        code.extend([
+            0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+            BG_SWEEP_COUNT_ADDR >> 8,
+            0xB7, 0xC8,
+            0x3D,
+            0xEA, BG_SWEEP_COUNT_ADDR & 0xFF,
+            BG_SWEEP_COUNT_ADDR >> 8,
+            0xC3, BG_SWEEP_ADDR & 0xFF, BG_SWEEP_ADDR >> 8,
+        ])
+        capacity = CONDITIONAL_PALETTE_IMPL_ADDR - ROOM_BG_REPAIR_ADDR
+        assert len(code) <= capacity
+        return bytes(code) + bytes(capacity - len(code))
+
     a = _Asm()
     a.db(
         0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
@@ -1127,24 +2194,29 @@ def build_room_bg_repair() -> bytes:
         0xFE, 0xA7,
         0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
     )
-    # Scrolling dungeon scenes use one stable BG palette. A tile copy followed
-    # by this older row-at-a-time attribute sweep visibly repaints the screen
-    # over several frames (white/gray blocks in both D880=$0A demo play and
-    # ordinary gameplay). Keep their attribute plane untouched and let the
-    # stock-speed tile copier run without a second asynchronous writer.
-    # Arena/story states begin at $0C and retain their dedicated position
-    # passes below.
-    # Preserve the original instruction cadence exactly. This path is sampled
-    # in a cycle-sensitive attract demo; shortening SUB/CP to a single CP made
-    # its Gargoyle segment run 660 frames instead of the stock 395.
-    a.db(0xFA, 0x80, 0xD8, 0xD6, 0x02, 0xFE, 0x0A)
+    # Live Stage 1 owns attributes in the atomic copier, so discard its native
+    # room-rearm marker. The prerecorded D880=$0A/$0B demo uses the stock-width
+    # pure copier for cadence; let its already-room-bounded marker drive one BG
+    # row per VBlank so pickups do not remain neutral. Arenas/story retain the
+    # same pending path. Two NOPs keep the ordinary live clear path at its
+    # receipt-proven 76-cycle cadence; the steady demo RET-Z path is also 76T.
+    a.db(0xFA, 0x80, 0xD8, 0xD6, 0x0A)
     a.jr(0x30, "pending")
     a.db(
+        0x00, 0x00,
         0xAF,
         0xEA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
         0xC9,
     )
     a.label("pending")
+    # SUB $0A left Z set only for the attract miniboss scene. Its 2x2 Shield
+    # crosses the two rows that a shared sequential cursor assigned to
+    # different physical maps, so tail through a nearby stub to the bounded
+    # alternating-row scheduler. The exact 36-byte cave has room for this JR.
+    branch_from = ROOM_BG_REPAIR_ADDR + 24
+    branch_delta = ATTRACT_PICKUP_SWEEP_STUB_ADDR - branch_from
+    assert -128 <= branch_delta <= 127
+    a.db(0x28, branch_delta & 0xFF)
     a.db(
         0xFA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
         0xB7, 0xC8,                        # no pending rows -> RET Z
@@ -1152,10 +2224,32 @@ def build_room_bg_repair() -> bytes:
         0xEA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
         0xC3, BG_SWEEP_ADDR & 0xFF, BG_SWEEP_ADDR >> 8,
     )                                      # tail-call one row
-    return a.finish()
+    code = a.finish()
+    assert len(code) == CONDITIONAL_PALETTE_IMPL_ADDR - ROOM_BG_REPAIR_ADDR
+    return code
 
 
-def build_room_bg_rearm_bank0() -> bytes:
+def build_attract_pickup_sweep_helper() -> bytes:
+    """Spend the bounded attract repair alternating Shield rows 6 and 7.
+
+    D880=$0A flips physical tilemaps while its pure copier runs. A global
+    sequential sweep therefore assigned the Shield's two rows to only one
+    map. Reusing the existing 18 repair VBlanks for rows 6/7 keeps the proven
+    workload and revisits both rows on every active-map run without adding any
+    main-loop tile-copy work.
+    """
+    return bytes([
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
+        0xB7, 0xC8,                         # no pending rows -> RET Z
+        0x3D,
+        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
+        0xE6, 0x01, 0xC6, 0x04,             # DF04 input 4/5 -> row 6/7
+        0xEA, 0x04, 0xDF,
+        0xC3, BG_SWEEP_ADDR & 0xFF, BG_SWEEP_ADDR >> 8,
+    ])
+
+
+def build_room_bg_rearm_bank0(rows: int = BG_SWEEP_REARM_ROWS) -> bytes:
     """Preserve stock ``LDH [FFBD],A`` and arm an 18-row BG repair.
 
     Each native FFBD store is replaced by the two-byte ``RST $00; NOP``.
@@ -1165,7 +2259,7 @@ def build_room_bg_rearm_bank0() -> bytes:
     return bytes([
         0xE0, 0xBD,                         # stock LDH [FFBD],A
         0xF5,                               # PUSH AF
-        0x3E, 0x12,
+        0x3E, rows,
         0xEA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
         0x3E, ROOM_ATTR_PENDING_VALUE,
         0xEA,
@@ -1176,7 +2270,10 @@ def build_room_bg_rearm_bank0() -> bytes:
     ])
 
 
-def install_room_bg_rearm_hooks(rom: bytearray) -> None:
+def install_room_bg_rearm_hooks(
+    rom: bytearray,
+    target_addr: int = ROOM_BG_REARM_BANK0_ADDR,
+) -> None:
     """Rearm BG attributes at all four executable native FFBD writers."""
     vanilla = Path("rom/Penta Dragon (J).gb").read_bytes()
     # The fifth E0 BD byte pair at file $30CAF is compressed/data, not code.
@@ -1191,8 +2288,8 @@ def install_room_bg_rearm_hooks(rom: bytearray) -> None:
     assert rom[0x0000:0x0003] == vanilla[0x0000:0x0003]
     rom[0x0000:0x0003] = bytes([
         0xC3,
-        ROOM_BG_REARM_BANK0_ADDR & 0xFF,
-        ROOM_BG_REARM_BANK0_ADDR >> 8,
+        target_addr & 0xFF,
+        target_addr >> 8,
     ])
 
 
@@ -1361,11 +2458,13 @@ def build_lava_attr_scene_dispatcher() -> bytes:
 def build_stage1_attr_runtime() -> bytes:
     """Return NZ while Stage 1 needs an atomic attribute-plane refresh.
 
-    DC00 is sufficient for the horizontally scrolling path, but it settles
-    before C1A0 finishes rebuilding during vertical movement. Force an atomic
-    refresh whenever Up/Down is held and clear that destination's cache. The
-    first post-release call consequently performs one final settling refresh;
-    horizontal-only play retains the receipt-proven fast DC00 cache.
+    The native room builder's DC0E source pointer distinguishes all but three
+    desired-palette transitions in the combined historical/current box-route
+    corpus. Raw cells 247 and 251 cover those residual vertical transitions.
+    Their XOR is a compact per-destination content key, unlike joypad state it
+    does not refresh unchanged maps continuously. INC supplies the established
+    nonzero valid marker; the deterministic probes assert that the captured
+    key corpus never wraps to zero.
     """
     a = _Asm()
     a.db(0xFA, 0x80, 0xD8, 0xFE, 0x02)     # load D880 without borrowing B
@@ -1376,18 +2475,10 @@ def build_stage1_attr_runtime() -> bytes:
         0x5F,                               # E = $53/$57; D is preset $DF
     )
     a.db(
-        0xF0, 0x93,                         # active-high joypad state
-        0xE6, 0xC0,                         # Up/Down
-    )
-    a.jr(0x28, "cached_horizontal")
-    a.db(
-        0xAF, 0x12,                         # invalidate this map's cache
-        0x3C, 0xC9,                         # A=1/NZ: refresh atomically
-    )
-    a.label("cached_horizontal")
-    a.db(
-        0xFA, 0x00, 0xDC, 0x3C,            # camera phase + valid bit
-        0x47,                               # B = current key
+        0xFA, 0x0E, 0xDC, 0x47,            # B = room-builder source low
+        0xFA, 0x97, 0xC2, 0xA8, 0x47,      # XOR raw cell 247
+        0xFA, 0x9B, 0xC2, 0xA8, 0x3C,      # XOR raw cell 251; valid +1
+        0x47,                               # B = current content key
         0x1A,                               # A = cached key
         0xB8,                               # cached CP current
         0xC8,                               # cache hit -> Z
@@ -1406,37 +2497,70 @@ def build_stage1_attr_runtime() -> bytes:
 
 
 def build_stage1_atomic_setup() -> bytes:
-    """Select pickup-first rows and preserve the attract recording's cadence.
-
-    DD09 is not a demo discriminator: natural GAME START also holds it at one
-    during the first Stage 1 frames. DCFD is zero throughout the attract route
-    and one before natural GAME START enters Stage 1. Live play returns the
-    exact A=0/Z/C=0 contract; attract play enters the receipt-proven scanline
-    phase wait that keeps its prerecorded input synchronized.
-    """
+    """Admit only Timer/audio while the packed map source is live."""
     code = bytes([
-        0x11, 0x00, 0xC2,                   # packed source row 4
-        0x06, 0x14,                         # rows 4..23
-        0xFA, 0xFD, 0xDC,                   # GAME START/save marker
-        0xEE, 0x01,                         # live 1 -> exact A=0/Z/C=0
-        0xC8,                               # live GAME START
-        0xC3,
-        STAGE1_DEMO_DELAY_ADDR & 0xFF,
-        STAGE1_DEMO_DELAY_ADDR >> 8,
+        0xF3,                               # DI before changing IE
+        0xF0, 0xFF,                         # A = caller's IE
+        0xEA, STAGE1_IE_CACHE_ADDR & 0xFF,
+        STAGE1_IE_CACHE_ADDR >> 8,
+        0xE6, 0x04,                         # retain Timer only
+        0xE0, 0xFF,                         # publish bounded in-copy IE
+        0xC9,
     ])
-    assert len(code) == 14
+    assert len(code) == 11
     return code
 
 
-def build_stage1_demo_delay() -> bytes:
-    """Phase-align only title-demo Stage-1 cache misses to scanline zero."""
+def build_stage1_atomic_wrap() -> bytes:
+    """Restore the stock interrupt-enabled return contract."""
+    code = bytes([
+        0xF3,
+        0xFA, STAGE1_IE_CACHE_ADDR & 0xFF,
+        STAGE1_IE_CACHE_ADDR >> 8,
+        0xE0, 0xFF,                         # restore caller's IE
+        0xFB, 0xC9,                         # EI; RET
+    ])
+    assert len(code) == 8
+    return code
+
+
+def build_stage1_demo_delay(wait_line: int = STAGE1_DEMO_WAIT_LINE) -> bytes:
+    """Phase-align only title-demo Stage-1 cache misses to a proven scanline."""
+    assert 0 <= wait_line <= 153
     code = bytes([
         0xF0, 0x44,                         # LDH A,[LY]
-        0xFE, STAGE1_DEMO_WAIT_LINE,
+        0xFE, wait_line,
         0x20, 0xFA,                         # JR NZ,-6
         0xC9,
     ])
     assert len(code) == 7
+    return code
+
+
+def build_demo_compact_dispatcher() -> bytes:
+    """Use the compact pure copier only for prerecorded attract gameplay.
+
+    Entry $3482 supplies the normal $9800 map base; entry $3484 preserves a
+    caller-supplied $9800/$9C00 base. Real play has DCFD=$01 and title drawing
+    has FFC1=$00, so both tail directly to the byte-exact native copier. Only
+    DCFD=$00 + FFC1=$01 maps bank 13 for the position-independent compact
+    copier, then restores bank 1 before returning to the original caller.
+    """
+    common = INLINE_ATTR_DECISION_HELPER_ADDR + 2
+    code = bytes([
+        0x26, 0x98,                         # $3482: H = $98
+        0xFA, 0xFD, 0xDC, 0xB7,             # $3484: DCFD == attract?
+        0xC2, 0xA7, 0x42,                   # real play -> native copier
+        0xF0, 0xC1, 0xB7,                   # title drawing stays native
+        0xCA, 0xA7, 0x42,
+        0x3E, 0x0D, 0xCD, 0x61, 0x00,       # map bank 13
+        0xCD, DEMO_COMPACT_COPY_ADDR & 0xFF,
+        DEMO_COMPACT_COPY_ADDR >> 8,
+        0x3E, 0x01,                         # restore bank 1
+        0xC3, 0x61, 0x00,                   # helper RET returns to caller
+    ])
+    assert common == INLINE_ATTR_DECISION_HELPER_ADDR + 2
+    assert len(code) <= 0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR
     return code
 
 
@@ -1530,10 +2654,9 @@ def build_lava_attr_decider_bank0() -> bytes:
 def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     """Title-timed prefix plus gameplay attribute decision helper.
 
-    The first three bytes provide the title entry's 28T Z-preserving return.
-    Its inline caller supplies the matching shorter setup, exactly preserving
-    retired $9800 decision path. Gameplay calls the following readiness
-    trampoline and enters the expanded WRAM helper.
+    Gameplay calls this readiness trampoline and enters the expanded WRAM
+    helper. The title path uses the RET byte at the end of the adjacent GDMA
+    helper as an exact fixed-delay target and bypasses this decision entirely.
     Old combat states can resume before the room-change slow path initializes
     WRAM, so legacy states return Z without entering an uncopied routine.
 
@@ -1542,40 +2665,27 @@ def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     reloads D880 itself. C and E remain scratch on Stage 1 cache decisions.
     """
     a = _Asm()
-    a.db(0x18, 0x00, 0xC9)                  # title: 28T, preserve A=0/Z
+    # The title entry calls three bytes before the gameplay decision. This
+    # exact 28T delay preserves A=0/Z and the established title copier phase.
+    a.db(0x18, 0x00, 0xC9)
     a.db(
         0xFA,
         OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xB7,                               # sentinel is controlled 00/A7
-        0xC2,
+        0xB7, 0xC8,                         # zero legacy state: return Z
+        0xFA, 0xFD, 0xDC, 0xB7, 0xC8,       # attract: stock-width pure copy
+        0xCD,
         STAGE1_ATTR_RUNTIME_ADDR & 0xFF,
         STAGE1_ATTR_RUNTIME_ADDR >> 8,
-        0xC9,                               # zero legacy state: return Z
+        0x00, 0xC9,                         # live: restore atomic return phase
     )
-    assert (
-        INLINE_ATTR_DECISION_HELPER_ADDR + len(a.finish())
-        == STAGE1_ATOMIC_WRAP_ADDR
-    )
-    a.db(
-        0xB7,                               # row loop leaves A=final L
-    )
-    a.jr(0x28, "wrap")
-    a.db(
-        0x24, 0x24, 0x24,                   # stock final H = base+$03
-        0xD1,                               # restore stock final DE=$C3E0
-        0xAF, 0x6F, 0xC9,                   # stock final L=0, A=0/Z
-    )
-    a.label("wrap")
-    a.db(
-        0x25, 0x25, 0x25,                   # restore destination map H
-        0xD5,                               # retain stock final source DE
-        0x11, 0xA0, 0xC1,                   # packed source row 0
-        0x06, 0x04,                         # rows 0..3
-        0xC3, atomic_row_addr & 0xFF, atomic_row_addr >> 8,
-    )
+    # The prerecorded attract stream was authored against the stock four-tile
+    # cadence. Its early return avoids both the live three-tile 8/6 cadence
+    # penalty and a room-signature calculation whose answer it cannot use.
+    a.db(0x00, 0x00, 0x00, 0x00)           # fixed-address padding
+    del atomic_row_addr                     # stock-order path needs no wrap
     code = a.finish()
-    assert len(code) == 33
+    assert len(code) == 22
     return code
 
 
@@ -1956,11 +3066,7 @@ def build_title_transition_service() -> bytes:
     a.jr(0x20, "check_gameplay")
     a.db(
         0xAF,
-        0xEA, 0x08, 0xDF,                   # re-arm both-map cleaner
-        # The prior cache clear was redundant: the completed reel leaves
-        # identity 2 cached and the next reel always starts at identity 0.
-        # Reuse those exact three bytes for the missing title OAM publish so
-        # this cycle-sensitive helper does not grow into the lava decider.
+        0xEA, 0x08, 0xDF,                  # rearm both-map title cleaner
         0xCD, 0x80, 0xFF,                  # one transition-only OAM clear
     )
     a.jr(0x18, "done")
@@ -2002,12 +3108,35 @@ def build_title_transition_service() -> bytes:
     return a.finish()
 
 
+def build_stale_window_cleanup() -> bytes:
+    """Hide a stale item-menu Window before it can cover dungeon gameplay.
+
+    Stock marks both item-menu entry paths with FFE4=1 and clears it on their
+    normal exits.  Only the live Stage 1 scene ($02) is receipt-covered here;
+    later dungeon-family scenes use the Window for legitimate transitions and
+    remain outside this guard.
+    """
+    return bytes.fromhex(
+        "F0 E4 B7 C0 "    # FFE4!=0: legitimate item menu
+        "FA 80 D8 FE 02 C0 " # only live Stage 1 scene $02
+        "F0 40 CB AF "    # clear the already-confirmed Window bit
+        "E0 40 AF C9"     # publish; return A=0/Z for window-off path
+    )
+
+
+def build_title_palette_copy_helper() -> bytes:
+    """Copy one eight-byte palette from HL to the selected CRAM data port."""
+    return bytes.fromhex("0E 08 2A E0 69 0D 20 FA C9")
+
+
 def build_title_glyph_blob() -> bytes:
     """Period tile plus the CGB boot-font 9 tile restored after the title."""
     return PERIOD_TILE + NATIVE_DIGIT_9_TILE
 
 
-def build_vram_glyph_copy() -> bytes:
+def build_vram_glyph_copy(
+    death_late_fix_addr: int = DEATH_LATE_FIX_ADDR,
+) -> bytes:
     """Build the gated VBlank helper for the exact v3.01 footer glyphs.
 
     LCDC uses signed BG tile addressing on the title, so IDs 0x76-0x7F are at
@@ -2054,8 +3183,8 @@ def build_vram_glyph_copy() -> bytes:
     c.extend([
         0xF1,                              # POP AF (saved VBK)
         0xC3,
-        DEATH_LATE_FIX_ADDR & 0xFF,
-        DEATH_LATE_FIX_ADDR >> 8,
+        death_late_fix_addr & 0xFF,
+        death_late_fix_addr >> 8,
     ])                                    # tail-call VBK restore/death fix
 
     # Title code lives after the shared tail and branches backward to it. This
@@ -2117,6 +3246,14 @@ def build_colorize_prelude() -> bytes:
     c.extend([0xF0, 0xBA, 0xB7])              # LDH A,[FFBA]; OR A
     j_not_later_stage1 = len(c) + 1
     c.extend([0x28, 0x00])                    # JR Z,not_later
+    # Stage 1 takes the branch above with exactly its receipt-proven cadence.
+    # Later stages repair BG0 only on the phased-loader frame that just copied
+    # slot 0, avoiding both a permanent CRAM tax and yellow snowfields.
+    c.extend([
+        0xCD,
+        LATER_STAGE_BG0_REPAIR_ADDR & 0xFF,
+        LATER_STAGE_BG0_REPAIR_ADDR >> 8,
+    ])
     preserve_table = len(c)
     c.extend([0x3E, 0x5A, 0xEA, 0x02, 0xDF])  # preserve neutral table
     not_later = len(c)
@@ -2126,13 +3263,16 @@ def build_colorize_prelude() -> bytes:
     for jump_pos in (j_not_later_lo, j_not_later_stage1):
         c[jump_pos] = (not_later - jump_pos - 1) & 0xFF
 
-    c.extend([0xCD, LAVA_OVERRIDE_ADDR & 0xFF, LAVA_OVERRIDE_ADDR >> 8])
-
-    # Level-select WRAM stub copy. Stock attract-mode teardown overwrites CFAA
-    # without touching the historical DF0E sentinel, which made first-process
-    # GAME START jump into data after one demo cycle. Validate the executable
-    # entry byte itself before trusting it; the deterministic attract overwrite
-    # changes it from the stub's PUSH HL ($E5) to $12.
+    # The path into not_later preserves Carry only for D880<2 (title and
+    # save-present level select); every gameplay/attract route arrives NC.
+    # Use that existing flag instead of reading another live WRAM byte. Menu
+    # frames retain the historical CFAA validation/copy verbatim. Gameplay
+    # skips terrain-owned CFAA and pays an equal 32T padding path. A final 16T
+    # padding pair plus a tail JP to lava replaces CALL+RET and the prelude RET,
+    # balancing both fast routes and the rare menu repair cycle-for-cycle with
+    # the prior release while keeping CFAA untouched during active play.
+    j_live_cfaa = len(c) + 1
+    c.extend([0x30, 0x00])                # JR NC,live_cfaa
     levelsel_stub = build_levelsel_attr_clear_stub()
     assert len(levelsel_stub) == LEVELSEL_STUB_MAX
     c.extend([
@@ -2140,18 +3280,18 @@ def build_colorize_prelude() -> bytes:
         0xFE, levelsel_stub[0],
     ])
     j_stub_ready = len(c) + 1
-    c.extend([0x28, 0x00])                # JR Z, stub_ready
+    c.extend([0x28, 0x00])                # JR Z,window_maintenance
     c.extend([
         0x21, LEVELSEL_STUB_ROM_ADDR & 0xFF, LEVELSEL_STUB_ROM_ADDR >> 8,
         0x11, LEVELSEL_STUB_WRAM & 0xFF, LEVELSEL_STUB_WRAM >> 8,
-        0x06, LEVELSEL_STUB_MAX,
     ])
+    c.extend([0x06, LEVELSEL_STUB_MAX])
     copy_loop = len(c)
-    c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
+    c.extend([0x2A, 0x12, 0x13, 0x05])    # ROM -> title-owned CFAA
     c.extend([0x20, (copy_loop - (len(c) + 2)) & 0xFF])
     c.extend([0x3E, 0x5A, 0xEA, 0x0E, 0xDF])
-    stub_ready = len(c)
-    c[j_stub_ready] = (stub_ready - j_stub_ready - 1) & 0xFF
+    window_maintenance = len(c)
+    c[j_stub_ready] = (window_maintenance - j_stub_ready - 1) & 0xFF
 
     # The item menu is a hardware window at WY=96. The game rewrites its tile
     # IDs but leaves VBK=1 untouched, so the window inherits dungeon item/wall
@@ -2163,12 +3303,20 @@ def build_colorize_prelude() -> bytes:
     c.extend([0xF0, 0x40, 0xE6, 0x20])    # LDH A,[LCDC]; AND window-enable
     j_window_on = len(c) + 1
     c.extend([0x20, 0x00])                # JR NZ, window_on
+    window_off = len(c)
     c.extend([0xEA, 0x0F, 0xDF])          # DF0F = 0 (A is already zero)
     j_colorize_off = len(c) + 1
     c.extend([0x18, 0x00])                # JR colorize
 
     window_on = len(c)
     c[j_window_on] = (window_on - j_window_on - 1) & 0xFF
+    c.extend([
+        0xCD,
+        STALE_WINDOW_CLEANUP_ADDR & 0xFF,
+        STALE_WINDOW_CLEANUP_ADDR >> 8,
+    ])
+    j_stale_window_hidden = len(c) + 1
+    c.extend([0x28, 0x00])                # JR Z,window_off
     c.extend([0xF0, 0x4F, 0xF5, 0x3E, 0x01, 0xE0, 0x4F])
     c.extend([0xF0, 0x40, 0xE6, 0x40])    # LCDC window-map select
     c.extend([0x26, 0x98, 0x28, 0x02, 0x26, 0x9C])
@@ -2201,13 +3349,33 @@ def build_colorize_prelude() -> bytes:
     c[j_rows_done] = (rows_done - j_rows_done - 1) & 0xFF
     c.extend([0xF1, 0xE0, 0x4F])          # restore VBK
 
+    c[j_stale_window_hidden] = (
+        window_off - j_stale_window_hidden - 1
+    ) & 0xFF
+
     finish = len(c)
     c[j_colorize_off] = (finish - j_colorize_off - 1) & 0xFF
-    c.extend([0xC9])
+    c.extend([
+        0x23, 0x2B,                         # common 16T balance, preserve HL
+        0xC3, LAVA_OVERRIDE_ADDR & 0xFF, LAVA_OVERRIDE_ADDR >> 8,
+    ])
+
+    # The live branch is out of line so the rare menu repair can fall straight
+    # into window maintenance. Branch (12T) + padding (20T) + JR (12T) equals
+    # the menu branch-not-taken plus ready-stub check (44T).
+    live_cfaa = len(c)
+    c[j_live_cfaa] = (live_cfaa - j_live_cfaa - 1) & 0xFF
+    c.extend([0x00, 0x23, 0x2B])            # 20T, preserve HL and flags
+    c.extend([
+        0x18,
+        (window_maintenance - (len(c) + 2)) & 0xFF,
+    ])
 
     # Shared bounded row primitive. It is placed after the public RET so the
     # prelude's normal return cannot fall through into it.
-    clear_20_addr = COLORIZE_PRELUDE_ADDR + len(c)
+    clear_20_addr = WINDOW_ATTR_CLEAR_HELPER_ADDR
+    assert COLORIZE_PRELUDE_ADDR + len(c) <= clear_20_addr
+    c.extend(bytes(clear_20_addr - (COLORIZE_PRELUDE_ADDR + len(c))))
     for call_operand in clear_calls:
         c[call_operand] = clear_20_addr & 0xFF
         c[call_operand + 1] = (clear_20_addr >> 8) & 0xFF
@@ -2216,19 +3384,10 @@ def build_colorize_prelude() -> bytes:
     c.extend([0x22, 0x0D])                  # LD [HL+],A; DEC C
     c.extend([0x20, (clear_cell - (len(c) + 2)) & 0xFF])
     c.extend([0xC9])
-
-    # Nine-byte shared CRAM copier in the final gap before $6F10. Callers set
-    # HL to an eight-byte source; the helper owns C. Keeping it here lets the title helper
-    # repair both BG0 and the title-safe BG7 alias inside its 32-byte slot.
     assert (
         COLORIZE_PRELUDE_ADDR + len(c)
-        == TITLE_PALETTE_COPY_HELPER_ADDR
+        == WINDOW_ATTR_CLEAR_HELPER_ADDR + 8
     )
-    c.extend([0x0E, 0x08])
-    palette_copy_loop = len(c)
-    c.extend([0x2A, 0xE0, 0x69, 0x0D])
-    c.extend([0x20, (palette_copy_loop - (len(c) + 2)) & 0xFF])
-    c.extend([0xC9])
     return bytes(c)
 
 
@@ -2266,9 +3425,11 @@ def build_title_palette_fix() -> bytes:
     # the CGB boot-white BG0/BG7 immediately instead of waiting for BGP=$E4;
     # that old wait exposed two receipt-confirmed white title frames.
     c.extend([0x3E, 0x80, 0xE0, 0x68])    # BCPS index 0, auto-increment
+    # Stage 1 reserves BG0[1] for pickup gold. The title must retain its
+    # untouched blue-gray ramp, already stored in the boot-safe BG7 alias.
     c.extend([
-        0x21, TITLE_PALETTE_SOURCE_ADDR & 0xFF,
-        TITLE_PALETTE_SOURCE_ADDR >> 8,
+        0x21, NATIVE_BG0_ALIAS_ADDR & 0xFF,
+        NATIVE_BG0_ALIAS_ADDR >> 8,
     ])
     c.extend([
         0xCD,
@@ -2281,7 +3442,15 @@ def build_title_palette_fix() -> bytes:
         0xCD,
         TITLE_PALETTE_COPY_HELPER_ADDR & 0xFF,
         TITLE_PALETTE_COPY_HELPER_ADDR >> 8,
-        0xCD, TITLE_DELAY_ADDR & 0xFF, TITLE_DELAY_ADDR >> 8,
+        # Returned title keeps FFC1 set. Cancel any stale gameplay phase here,
+        # before the wrapper reaches its palette scheduler, so it cannot
+        # advance far enough to repaint BG0. This title-only path leaves the
+        # receipt-proven demo/gameplay CRAM service timing untouched.
+        0xAF,
+        0xEA, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+        # 20T clear + 32T balance exactly replaces the old 52T delay call.
+        # PUSH/POP preserves C; B is deliberately normalized just below.
+        0xC5, 0xC1, 0x00,
         0x06, 0x00,                         # match old B=0 postcondition
         0xC9,
     ])
@@ -2347,6 +3516,9 @@ def build_conditional_palette_phased() -> bytes:
         0xF0, 0xC0, 0xA8, 0x47,            # B ^= FFC0
         0xF0, 0xD0, 0xA8, 0x47,            # B ^= FFD0
         0xF0, 0xC1, 0xA8, 0x47,            # B ^= FFC1
+        # Keep the receipt-proven room-transition cadence. Stage transitions
+        # also change this key (and other hashed gameplay flags), which starts
+        # the bounded BG reload that selects the stage-specific BG0 source.
         0xF0, 0xBD, 0xA8, 0x3C, 0x47,      # B = (B ^ FFBD) + 1
         0xFA, 0x00, 0xDF, 0xB8,            # compare cached DF00
     ])
@@ -2593,6 +3765,39 @@ def build_phased_palette_loader() -> tuple[bytes, bytes]:
     return main_code, ext_code
 
 
+def build_later_stage_bg0_repair() -> bytes:
+    """Restore native BG0 after the Stage-1 pickup palette is reloaded.
+
+    The phased loader enters BG slot 0 with phase $0B and stores its next
+    phase ($0C) before the VBlank wrapper reaches the colorize prelude. Only
+    later-stage dungeon paths call this helper, so Stage 1 executes no added
+    instructions. The title-safe BG7 source at $6838 remains a byte-exact copy
+    of the native BG0 ramp.
+    """
+    code = bytes([
+        0xFA, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+        0xFE, 0x0C,
+        0xC0,                               # RET NZ
+        # Force entry starts here for a newly entered later-stage dungeon.
+        0x3E, 0x80, 0xE0, 0x68,             # BG0, auto-increment
+        0x21, NATIVE_BG0_ALIAS_ADDR & 0xFF,
+        NATIVE_BG0_ALIAS_ADDR >> 8,         # native BG0 alias
+        0x0E, 0x69,                         # BCPD
+        0xC3, PALETTE_COPY_CRAM8_ADDR & 0xFF,
+        PALETTE_COPY_CRAM8_ADDR >> 8,
+        # Scene-detect entry: repair, then preserve its original all-pal0
+        # later-dungeon table initialization via the existing helper.
+        0xCD, LATER_STAGE_BG0_FORCE_ADDR & 0xFF,
+        LATER_STAGE_BG0_FORCE_ADDR >> 8,
+        0xC3, UNIFORM_CLEAR_ADDR & 0xFF, UNIFORM_CLEAR_ADDR >> 8,
+    ])
+    assert LATER_STAGE_BG0_FORCE_ADDR == LATER_STAGE_BG0_REPAIR_ADDR + 6
+    assert LATER_STAGE_BG0_ENTRY_ADDR == LATER_STAGE_BG0_REPAIR_ADDR + 18
+    assert len(code) == 24
+    assert LATER_STAGE_BG0_REPAIR_ADDR + len(code) <= DEATH_FADE_HELPER_ADDR
+    return code
+
+
 def compile_spotlight_palette_map(
     path: Path = SPOTLIGHT_MAP_YAML,
 ) -> tuple[bytes, list[int], list[int]]:
@@ -2752,11 +3957,107 @@ def write_output_with_backup(
     return backup_path
 
 
+def _remap_2bpp_indices(tile: bytes, mapping: tuple[int, int, int, int]) -> bytes:
+    """Remap a Game Boy tile's four pixel indices without changing its shape."""
+    assert len(tile) == 16
+    assert len(mapping) == 4 and all(0 <= value <= 3 for value in mapping)
+    result = bytearray()
+    for row in range(0, 16, 2):
+        low, high = tile[row:row + 2]
+        remapped_low = 0
+        remapped_high = 0
+        for bit in range(8):
+            mask = 1 << bit
+            old = (1 if low & mask else 0) | (2 if high & mask else 0)
+            new = mapping[old]
+            if new & 1:
+                remapped_low |= mask
+            if new & 2:
+                remapped_high |= mask
+        result.extend((remapped_low, remapped_high))
+    return bytes(result)
+
+
+def _tile_indices(tile: bytes) -> set[int]:
+    values: set[int] = set()
+    for row in range(0, len(tile), 2):
+        low, high = tile[row:row + 2]
+        for bit in range(8):
+            mask = 1 << bit
+            values.add(
+                (1 if low & mask else 0) | (2 if high & mask else 0)
+            )
+    return values
+
+
+def apply_stage1_reserved_pickup_gold(
+    rom: bytearray,
+    vanilla_rom: bytes,
+) -> None:
+    """Reserve BG0 index 1 for pickups with no runtime hooks or attr scans.
+
+    Stage 1's signed-index tileset is stored as two raw 0x800-byte halves:
+    IDs 00-7F at 0x1D000 and IDs 80-FF at 0x1F000.  Pickup art collapses
+    its two middle DMG shades onto index 1; every other Stage-1 tile collapses
+    index 1 onto index 2.  Changing only BG0[1] can therefore make pickups
+    gold without painting a single ordinary terrain pixel gold.
+    """
+    pickup_tiles = {
+        tile for tile, palette in enumerate(BG_TABLE_BYTES)
+        if 1 <= palette <= 5
+    }
+    assert len(pickup_tiles) == 73
+    pickup_mapping = (0, 1, 1, 3)
+    terrain_mapping = (0, 2, 2, 3)
+    for tile in range(0x100):
+        source = (
+            STAGE1_LOW_TILE_GFX_OFFSET + tile * 16
+            if tile < 0x80
+            else STAGE1_HIGH_TILE_GFX_OFFSET + tile * 16
+        )
+        original = vanilla_rom[source:source + 16]
+        assert len(original) == 16
+        assert rom[source:source + 16] == original, (
+            f"Stage-1 tile source {tile:02X} changed before art remap"
+        )
+        mapping = pickup_mapping if tile in pickup_tiles else terrain_mapping
+        remapped = _remap_2bpp_indices(original, mapping)
+        indices = _tile_indices(remapped)
+        if tile in pickup_tiles:
+            assert 1 in indices and 2 not in indices, f"pickup {tile:02X}"
+        else:
+            assert 1 not in indices, f"terrain {tile:02X}"
+        rom[source:source + 16] = remapped
+
+    bg0_color1 = BANK13 + (TITLE_PALETTE_SOURCE_ADDR - 0x4000) + 2
+    rom[bg0_color1:bg0_color1 + 2] = STAGE1_PICKUP_GOLD.to_bytes(2, "little")
+    print(
+        "  Stage-1 pickup art: BG0[1]=gold; 73 pickup tiles reserve index 1; "
+        "183 non-pickup tiles exclude it; later stages retain native BG0 "
+        "(zero gameplay runtime cycles)"
+    )
+
+
 def main(
     palette_yaml: Path = PALETTE_YAML,
     output_path: Path = OUTPUT_PATH,
     base_output: Path | None = None,
+    stage1_demo_wait_line: int = STAGE1_DEMO_WAIT_LINE,
+    stock_tile_copy: bool = False,
+    native_room_writers: bool = False,
+    stock_vblank: bool = False,
+    disabled_vblank_service: str | None = None,
+    stock_oam_emitters: bool = False,
+    minimal_prelude: bool = False,
+    disable_lava_override: bool = False,
+    buffered_stage1_attrs: bool = False,
+    compact_tile_copy: bool = False,
+    demo_compact_tile_copy: bool = False,
+    semantic_stage1_prototype: bool = False,
+    semantic_stage1_vblank_prototype: bool = False,
+    reserved_pickup_gold: bool = False,
 ):
+    death_late_fix_addr = DEATH_LATE_FIX_ADDR
     palette_yaml = Path(palette_yaml)
     output_path = Path(output_path)
     if base_output is None:
@@ -2813,6 +4114,75 @@ def main(
         BANK13 + (PALETTE_LOADER_EXT_ADDR - 0x4000)
     )
     vanilla_rom = Path("rom/Penta Dragon (J).gb").read_bytes()
+    later_stage_bg0_repair = build_later_stage_bg0_repair()
+    # The new palette loader retires the base build's old $69B8-$69CF tail.
+    # Reuse that now-unreachable gap up to the fixed death-fade helper.
+    assert (
+        PALETTE_LOADER_ADDR + len(palette_loader)
+        == LATER_STAGE_BG0_REPAIR_ADDR
+    )
+    later_stage_bg0_repair_off = (
+        BANK13 + (LATER_STAGE_BG0_REPAIR_ADDR - 0x4000)
+    )
+    assert (
+        LATER_STAGE_BG0_REPAIR_ADDR + len(later_stage_bg0_repair)
+        <= DEATH_FADE_HELPER_ADDR
+    )
+    rom[
+        later_stage_bg0_repair_off:
+        later_stage_bg0_repair_off + len(later_stage_bg0_repair)
+    ] = later_stage_bg0_repair
+
+    # The stock item-menu entries enable the hardware Window and execute EI
+    # before copying the prepared C4E0 HUD into its six visible rows.  Stock's
+    # short VBlank normally hides that tiny ordering window; DX's additional
+    # palette work can let an IRQ land there and expose the stale dungeon map
+    # as lower-screen walls/gaps for a rendered frame.  Keep the same native
+    # HUD builder/copier and byte budget, but publish the Window only after its
+    # complete 6x20 tile map is ready.  The first entry has an extra stock
+    # service call between enable and copy; retain it after publication.
+    menu_setup = bytes.fromhex("F3 3E 07 E0 4B 3E 60 E0 4A")
+    window_publish = bytes.fromhex("F0 40 CB EF E0 40 FB")
+    hud_copy = bytes.fromhex("CD 0E 20")
+    menu_entries = (
+        (0x1B48, bytes.fromhex("CD E4 41")),
+        (0x1D78, b""),
+    )
+    for address, middle_service in menu_entries:
+        original = menu_setup + window_publish + middle_service + hud_copy
+        reordered = menu_setup + middle_service + hud_copy + window_publish
+        assert len(original) == len(reordered)
+        assert rom[address:address + len(original)] == original, (
+            f"native menu Window sequence moved at 0x{address:04X}"
+        )
+        rom[address:address + len(reordered)] = reordered
+
+    # The interactive item menu loops back to the old $1D88 HUD-copy call
+    # after input and item updates.  That call now begins at $1D81, followed
+    # by the delayed Window publication. Retarget every native loop edge so
+    # later redraws retain both operations instead of entering halfway through
+    # the reordered sequence with a stale accumulator.
+    menu_loop_entry = 0x1D81
+    relative_menu_edges = (
+        (0x1DC0, bytes.fromhex("28 C6")),
+        (0x1DD9, bytes.fromhex("28 AD")),
+    )
+    for address, original in relative_menu_edges:
+        assert rom[address:address + 2] == original
+        displacement = menu_loop_entry - (address + 2)
+        assert -128 <= displacement <= 127
+        rom[address + 1] = displacement & 0xFF
+    absolute_menu_edges = (
+        (0x1DF3, 0xCA),
+        (0x1E05, 0xC3),
+        (0x1EBD, 0xC3),
+        (0x1F5D, 0xC3),
+    )
+    for address, opcode in absolute_menu_edges:
+        assert rom[address:address + 3] == bytes([opcode, 0x88, 0x1D])
+        rom[address + 1:address + 3] = menu_loop_entry.to_bytes(2, "little")
+    print("  item-menu publish order: native HUD copy precedes Window enable")
+
     assert rom[
         palette_loader_ext_off:
         palette_loader_ext_off + len(palette_loader_ext)
@@ -2872,6 +4242,11 @@ def main(
         f"+ independent gameplay BG7 ({len(palette_loader)}+"
         f"{len(palette_loader_ext)} bytes)"
     )
+    print(
+        "  later-stage BG0: native ramp restored only after the slot-0 "
+        f"palette phase ({len(later_stage_bg0_repair)} bytes at "
+        f"bank13:0x{LATER_STAGE_BG0_REPAIR_ADDR:04X})"
+    )
 
     # 2. Encode the exact release identity. This intentionally does not depend
     # on the current git tag: detached/debug tags must not rename the ROM.
@@ -2917,7 +4292,7 @@ def main(
 
     # 4. Store the glyph loader immediately after the RLE expander's reserved
     # range. A later boundary assertion verifies the generated expander fits.
-    vram_copy_code = build_vram_glyph_copy()
+    vram_copy_code = build_vram_glyph_copy(death_late_fix_addr)
     assert VRAM_GLYPH_COPY_ADDR + len(vram_copy_code) <= COLORIZE_ADDR
     off = BANK13 + (VRAM_GLYPH_COPY_ADDR - 0x4000)
     assert rom[off:off + len(vram_copy_code)] == bytes(len(vram_copy_code)), \
@@ -2962,6 +4337,7 @@ def main(
         title_addr=SPLASH_TABLE_ADDR,
         later_dungeon_addr=SPLASH_TABLE_ADDR,
         uniform_clear_addr=UNIFORM_CLEAR_ADDR,
+        later_dungeon_service_addr=LATER_STAGE_BG0_ENTRY_ADDR,
         scene_change_service_addr=TITLE_TRANSITION_SERVICE_ADDR,
         cache_addr=SCENE_CACHE_ADDR,
         stage1_attr_cache_addrs=(
@@ -3105,13 +4481,11 @@ def main(
         inactive_off:inactive_off + len(story_inactive)
     ] = story_inactive
     clear_off = BANK13 + (UNIFORM_CLEAR_ADDR - 0x4000)
-    expected_base_wrapper_prefix = bytes.fromhex(
-        "C5 D5 E5 3E 20 E0 00 F0 00 F0 00"
-    )
+    expected_base_wrapper_prefix = bytes(len(uniform_clear))
     assert rom[
         clear_off:clear_off + len(uniform_clear)
     ] == expected_base_wrapper_prefix, \
-        "base VBlank wrapper prefix changed at uniform clear helper slot"
+        "retired sweep gap changed at uniform clear helper slot"
     rom[clear_off:clear_off + len(uniform_clear)] = uniform_clear
     print(
         f"  story/ending attr sweep: {len(story_attr)} bytes at "
@@ -3174,19 +4548,27 @@ def main(
     ] = bytes(0x6A70 - BASE_SHADOW_MAIN_ADDR)
     print("  gameplay OBJ VBlank scan: retired")
 
-    attract_obj = build_attract_obj_colorizer()
+    attract_obj = build_attract_obj_colorizer(
+        stage1_semantic_vblank=False,
+    )
     death_late_fix = build_death_late_fix()
     title_transition = build_title_transition_service()
+    stale_window_cleanup = build_stale_window_cleanup()
+    title_palette_copy = build_title_palette_copy_helper()
     assert (
         ATTRACT_OBJ_COLORIZER_ADDR + len(attract_obj)
-        <= DEATH_LATE_FIX_ADDR
+        <= death_late_fix_addr
     )
     assert (
-        DEATH_LATE_FIX_ADDR + len(death_late_fix)
+        death_late_fix_addr + len(death_late_fix)
         <= CONDITIONAL_PALETTE_IMPL_ADDR
     )
     assert (
-        ROOM_BG_REPAIR_ADDR + len(build_room_bg_repair())
+        ROOM_BG_REPAIR_ADDR + len(
+            build_room_bg_repair(
+                stage1_atomic_attrs=(not stock_tile_copy or native_room_writers)
+            )
+        )
         <= CONDITIONAL_PALETTE_IMPL_ADDR
     )
     assert (
@@ -3195,7 +4577,7 @@ def main(
     )
     off = BANK13 + (ATTRACT_OBJ_COLORIZER_ADDR - 0x4000)
     rom[off:off + len(attract_obj)] = attract_obj
-    death_late_off = BANK13 + (DEATH_LATE_FIX_ADDR - 0x4000)
+    death_late_off = BANK13 + (death_late_fix_addr - 0x4000)
     rom[
         death_late_off:death_late_off + len(death_late_fix)
     ] = death_late_fix
@@ -3205,6 +4587,42 @@ def main(
     rom[
         transition_off:transition_off + len(title_transition)
     ] = title_transition
+    stale_window_off = (
+        BANK13 + (STALE_WINDOW_CLEANUP_ADDR - 0x4000)
+    )
+    assert (
+        STALE_WINDOW_CLEANUP_ADDR + len(stale_window_cleanup)
+        <= TITLE_PALETTE_FIX_ADDR
+    )
+    assert rom[
+        stale_window_off:stale_window_off + len(stale_window_cleanup)
+    ] == bytes(len(stale_window_cleanup)), (
+        "stale-Window cleanup slot is no longer free"
+    )
+    rom[
+        stale_window_off:stale_window_off + len(stale_window_cleanup)
+    ] = stale_window_cleanup
+    title_palette_copy_off = (
+        BANK13 + (TITLE_PALETTE_COPY_HELPER_ADDR - 0x4000)
+    )
+    assert (
+        STALE_WINDOW_CLEANUP_ADDR + len(stale_window_cleanup)
+        == TITLE_PALETTE_COPY_HELPER_ADDR
+    )
+    assert (
+        TITLE_PALETTE_COPY_HELPER_ADDR + len(title_palette_copy)
+        <= TITLE_PALETTE_FIX_ADDR
+    )
+    assert rom[
+        title_palette_copy_off:
+        title_palette_copy_off + len(title_palette_copy)
+    ] == bytes(len(title_palette_copy)), (
+        "title palette copier slot is no longer free"
+    )
+    rom[
+        title_palette_copy_off:
+        title_palette_copy_off + len(title_palette_copy)
+    ] = title_palette_copy
     conditional_impl_off = (
         BANK13 + (CONDITIONAL_PALETTE_IMPL_ADDR - 0x4000)
     )
@@ -3220,11 +4638,15 @@ def main(
     )
     print(
         f"  death wrapper-tail containment: {len(death_late_fix)} bytes at "
-        f"bank13:0x{DEATH_LATE_FIX_ADDR:04X}"
+        f"bank13:0x{death_late_fix_addr:04X}"
     )
     print(
         f"  title transition service: {len(title_transition)} bytes at "
         f"bank13:0x{TITLE_TRANSITION_SERVICE_ADDR:04X}"
+    )
+    print(
+        f"  stale gameplay Window cleanup: {len(stale_window_cleanup)} bytes "
+        f"at bank13:0x{STALE_WINDOW_CLEANUP_ADDR:04X}"
     )
     print(
         "  idle-throttled palette service: "
@@ -3266,14 +4688,18 @@ def main(
         f"  colorize BG/OAM pipeline -> ${ATTRACT_OBJ_COLORIZER_ADDR:04X}"
     )
 
-    # 11. Re-patch bg_sweep to read WRAM 0xCC00 (per-scene), including on the
+    # 11. Re-patch bg_sweep to read the per-scene WRAM palette LUT, including
     # title. The title-safe inline hook avoids the input corruption; this
     # sweep is still required to replace all-white boot attributes.
-    sweep = bytearray(create_bg_sweep_viewport_gated(WRAM_BG_TABLE, BG_SWEEP_ADDR))
+    sweep = bytearray(
+        build_mirrored_gdma_bg_sweep()
+        if semantic_stage1_vblank_prototype
+        else create_bg_sweep_viewport_gated(WRAM_BG_TABLE, BG_SWEEP_ADDR)
+    )
     assert sweep[:4] == bytearray([0xF0, 0xC1, 0xB7, 0xC8])
     sweep[0:4] = bytearray([0x00, 0x00, 0x00, 0x00])
-    assert BG_SWEEP_ADDR + len(sweep) <= TITLE_GLYPH_DATA_ADDR, \
-        "bg_sweep collides with title glyph data"
+    assert BG_SWEEP_ADDR + len(sweep) <= UNIFORM_CLEAR_ADDR, \
+        "bg_sweep collides with uniform clear"
     off = BANK13 + (BG_SWEEP_ADDR - 0x4000)
     rom[off:off + len(sweep)] = sweep
     print(f"  bg_sweep: WRAM 0x{WRAM_BG_TABLE:04X}, title-enabled ({len(sweep)} bytes)")
@@ -3286,7 +4712,9 @@ def main(
     )
     ptr_off = BANK13 + (POSMAP_PTR_TABLE - 0x4000)
     rom[ptr_off:ptr_off + 18] = bytes(18)
-    room_bg_repair = build_room_bg_repair()
+    room_bg_repair = build_room_bg_repair(
+        stage1_atomic_attrs=(not stock_tile_copy or native_room_writers)
+    )
     death_fade_helper = build_death_fade_helper()
     lava_attr_stage5_signature = build_lava_attr_sample_signature(
         LAVA_ATTR_STAGE5_SAMPLES,
@@ -3358,6 +4786,27 @@ def main(
         )
         assert addr + len(code) <= next_addr
         off = BANK13 + (addr - 0x4000)
+        rom[off:off + len(code)] = code
+
+    attract_pickup_helpers = (
+        (
+            ATTRACT_PICKUP_SWEEP_STUB_ADDR,
+            bytes([
+                0xC3,
+                ATTRACT_PICKUP_SWEEP_HELPER_ADDR & 0xFF,
+                ATTRACT_PICKUP_SWEEP_HELPER_ADDR >> 8,
+            ]),
+        ),
+        (
+            ATTRACT_PICKUP_SWEEP_HELPER_ADDR,
+            build_attract_pickup_sweep_helper(),
+        ),
+    )
+    for addr, code in attract_pickup_helpers:
+        off = BANK13 + (addr - 0x4000)
+        assert rom[off:off + len(code)] == bytes(len(code)), (
+            f"attract pickup helper slot at ${addr:04X} is no longer free"
+        )
         rom[off:off + len(code)] = code
     lava_stage5_signature_off = (
         BANK13 + (LAVA_ATTR_STAGE5_SIGNATURE_ADDR - 0x4000)
@@ -3478,31 +4927,53 @@ def main(
 
     # 13. INLINE HOOK: unchanged Stage 1 maps keep the native four-tiles-per-
     # HBlank cadence. A per-map future-phase change takes a precomputed atomic
-    # four-tile path exactly once. Cache-miss copies rotate rows 4..23 before
-    # rows 0..3, committing every pickup-bearing row before the hidden map is
-    # revealed without taxing redundant stock-width copies.
+    # four-tile path exactly once. Cache-miss copies retain stock row order so
+    # the live C1A0 buffer cannot change between rotated copy segments.
     # The fixed decision helper caches Stage 1 and dispatches exact Stage 5/7
     # lava signatures. Changed maps take the register-staged four-tile atomic
     # path; unchanged/neutral maps retain the stock-width pure path.
-    inline_blob = create_inline_tile_copy_stage1_precomputed_attrs(
-        INLINE_ATTR_DECISION_HELPER_ADDR + 3,
-        STAGE1_ATOMIC_SETUP_ADDR,
-        STAGE1_ATOMIC_WRAP_ADDR,
-        STAGE1_ATOMIC_GROUP_WIDTH,
-    )
-    atomic_row_marker = bytes([
-        0x0E,
-        24 // STAGE1_ATOMIC_GROUP_WIDTH,
-        0xC5, 0xE5, 0x21, 0x30, 0xDF,
-    ])
-    atomic_row_offsets = [
-        index
-        for index in range(len(inline_blob) - len(atomic_row_marker) + 1)
-        if inline_blob[index:index + len(atomic_row_marker)] == atomic_row_marker
-    ]
-    assert len(atomic_row_offsets) == 1
-    atomic_row_addr = 0x42A7 + atomic_row_offsets[0]
+    if buffered_stage1_attrs:
+        assert (
+            not stock_tile_copy
+            and not compact_tile_copy
+            and not semantic_stage1_prototype
+            and not semantic_stage1_vblank_prototype
+        ), (
+            "buffered Stage-1 attrs and the tile-copy isolation flags are "
+            "mutually exclusive"
+        )
+        inline_blob = create_inline_tile_copy_stage1_buffered_attrs(
+            INLINE_ATTR_DECISION_HELPER_ADDR + 3,
+            STAGE1_ATOMIC_WRAP_ADDR,
+            0,
+        )
+        atomic_row_addr = 0
+        print(
+            "  diagnostic isolation: buffered Stage-1 attrs with one GDMA "
+            "commit"
+        )
+    else:
+        inline_blob = create_inline_tile_copy_stage1_precomputed_attrs(
+            INLINE_ATTR_DECISION_HELPER_ADDR + 3,
+            STAGE1_ATOMIC_SETUP_ADDR,
+            STAGE1_ATOMIC_WRAP_ADDR,
+            atomic_group_width=STAGE1_ATOMIC_GROUP_WIDTH,
+        )
+        atomic_row_marker = bytes([
+            0x06, WRAM_BG_TABLE >> 8,
+            0x3E,
+            24 // STAGE1_ATOMIC_GROUP_WIDTH,
+            0xE0, 0xE0,
+        ])
+        atomic_row_offsets = [
+            index
+            for index in range(len(inline_blob) - len(atomic_row_marker) + 1)
+            if inline_blob[index:index + len(atomic_row_marker)] == atomic_row_marker
+        ]
+        assert len(atomic_row_offsets) == 1
+        atomic_row_addr = 0x42A7 + atomic_row_offsets[0]
     inline_attr_decision = build_inline_attr_decision_helper(atomic_row_addr)
+    stage1_atomic_wrap = build_stage1_atomic_wrap()
     available = 0x436D - 0x42A7 + 1
     assert len(inline_blob) <= available
     title_pure_entry = 0x42A7 + len(inline_blob) - 10
@@ -3516,20 +4987,151 @@ def main(
     rom[0x0030:0x0033] = bytes([
         0xC3, title_pure_entry & 0xFF, title_pure_entry >> 8,
     ])
-    assert INLINE_ATTR_DECISION_HELPER_ADDR + len(inline_attr_decision) <= 0x34A3
+    assert STAGE1_ATOMIC_WRAP_ADDR + len(stage1_atomic_wrap) <= 0x34A3
     assert rom[
         INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3
     ] == bytes(0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR)
-    rom[INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3] = (
+    fixed_inline_helpers = (
         inline_attr_decision
-        + bytes(0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR - len(inline_attr_decision))
+        + stage1_atomic_wrap
     )
+    assert len(fixed_inline_helpers) <= 0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR
+    rom[INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3] = (
+        fixed_inline_helpers
+        + bytes(0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR - len(fixed_inline_helpers))
+    )
+    if (
+        stock_tile_copy
+        or compact_tile_copy
+        or semantic_stage1_prototype
+        or semantic_stage1_vblank_prototype
+    ):
+        # Diagnostic escape hatch: preserve every other DX subsystem while
+        # restoring the stock 24x24 tile copier and its RST $30 entry. This is
+        # intentionally selectable so terrain regressions can be attributed
+        # independently of palette/OAM/title work.
+        if compact_tile_copy:
+            compact_blob = create_inline_tile_copy_pure_tileonly()
+            rom[0x42A7:0x436E] = compact_blob + bytes(
+                available - len(compact_blob)
+            )
+            print(
+                "  diagnostic isolation: compact four-tile/single-wait "
+                "copier"
+            )
+        else:
+            rom[0x42A7:0x436E] = vanilla_rom[0x42A7:0x436E]
+        rom[0x0030:0x0033] = vanilla_rom[0x0030:0x0033]
+
+    if demo_compact_tile_copy:
+        assert stock_tile_copy and native_room_writers, (
+            "demo-only compact copy requires native live terrain/call sites"
+        )
+        assert not compact_tile_copy, (
+            "demo-only and all-scene compact copy are mutually exclusive"
+        )
+        demo_compact = create_inline_tile_copy_pure_tileonly()
+        demo_compact_off = BANK13 + (DEMO_COMPACT_COPY_ADDR - 0x4000)
+        assert (
+            DEMO_COMPACT_COPY_ADDR + len(demo_compact)
+            <= STALE_WINDOW_CLEANUP_ADDR
+        )
+        assert rom[
+            demo_compact_off:demo_compact_off + len(demo_compact)
+        ] == bytes(len(demo_compact)), (
+            "demo compact-copy cave is no longer free"
+        )
+        rom[
+            demo_compact_off:demo_compact_off + len(demo_compact)
+        ] = demo_compact
+        demo_dispatch = build_demo_compact_dispatcher()
+        rom[
+            INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3
+        ] = demo_dispatch + bytes(
+            0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR - len(demo_dispatch)
+        )
+        assert rom[0x42A0:0x42A7] == vanilla_rom[0x42A0:0x42A7]
+        # $9C00 entry preserves its selected H through the common dispatcher.
+        # $9800 entry uses RST $30 so direct CALL $42A5 sites remain valid.
+        demo_common = INLINE_ATTR_DECISION_HELPER_ADDR + 2
+        rom[0x42A0:0x42A7] = bytes([
+            0x26, 0x9C,
+            0xC3, demo_common & 0xFF, demo_common >> 8,
+            0xF7, 0xC9,
+        ])
+        assert rom[0x0030:0x0033] == vanilla_rom[0x0030:0x0033]
+        rom[0x0030:0x0033] = bytes([
+            0xC3,
+            INLINE_ATTR_DECISION_HELPER_ADDR & 0xFF,
+            INLINE_ATTR_DECISION_HELPER_ADDR >> 8,
+        ])
+        print(
+            "  attract-only compact pure copier: "
+            f"{len(demo_compact)} bytes at bank13:0x"
+            f"{DEMO_COMPACT_COPY_ADDR:04X}; live/title remain native"
+        )
+
+    if semantic_stage1_prototype:
+        assert (
+            not stock_tile_copy
+            and not compact_tile_copy
+            and not semantic_stage1_vblank_prototype
+        )
+        semantic = build_semantic_stage1_prototype(
+            SEMANTIC_STAGE1_PROTOTYPE_ADDR
+        )
+        semantic_off = BANK13 + (
+            SEMANTIC_STAGE1_PROTOTYPE_ADDR - 0x4000
+        )
+        rom[semantic_off:semantic_off + len(semantic)] = semantic
+        assert len(semantic) <= 0x180
+
+        # Redirect the native map-toggle entry through an always-mapped
+        # wrapper. It reproduces the stock toggle, calls the byte-exact native
+        # copier, then invokes the otherwise-unused RST $18 semantic tail.
+        wrapper = bytes.fromhex(
+            "FA 0B DC 3C E6 01 EA 0B DC 28 04 26 9C 18 02 26 98 "
+            "CD A7 42 F3 F5 C5 D5 E5 DF E1 D1 C1 F1 FB C9"
+        )
+        assert len(wrapper) <= 0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR
+        rom[
+            INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3
+        ] = wrapper + bytes(
+            0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR - len(wrapper)
+        )
+        assert rom[0x4295:0x4298] == vanilla_rom[0x4295:0x4298]
+        rom[0x4295:0x4298] = bytes([
+            0xC3,
+            INLINE_ATTR_DECISION_HELPER_ADDR & 0xFF,
+            INLINE_ATTR_DECISION_HELPER_ADDR >> 8,
+        ])
+        assert rom[0x0018:0x001B] == vanilla_rom[0x0018:0x001B]
+        rom[0x0018:0x001B] = bytes([0xC3, 0x38, 0x08])
+        print(
+            "  diagnostic isolation: native copier + Stage-1 semantic "
+            f"pickup tail ({len(semantic)} bytes; arena tables intentionally "
+            "sacrificed in this non-release ROM)"
+        )
+
+    if semantic_stage1_vblank_prototype:
+        assert not compact_tile_copy and not semantic_stage1_prototype
+        # The peer-map GDMA happens wholly inside the bounded room sweep.
+        # Every native terrain path and RST vector remains byte-exact.
+        assert rom[0x13AA] == vanilla_rom[0x13AA] == 0xD5
+        assert rom[0x13E4] == vanilla_rom[0x13E4] == 0xC9
+        assert rom[0x4295:0x4298] == vanilla_rom[0x4295:0x4298]
+        assert rom[0x0018:0x0020] == vanilla_rom[0x0018:0x0020]
+        assert rom[0x436D] == vanilla_rom[0x436D] == 0xC9
+        print(
+            "  diagnostic isolation: byte-exact native terrain copier + "
+            "18 bounded CPU+GDMA mirrored attribute rows"
+        )
 
     # The original RST $08 vector jumps to $0000 and has no viable caller.
     # Reuse it for the stock BGP write plus a fixed-bank dispatcher. Keep the
     # original unconditional dispatch cadence: the attract reel is sensitive
     # even to equivalent-looking changes on the common E4 path.
-    # RST $18 remains untouched.
+    # RST $18 remains untouched except in the older synchronous diagnostic.
     assert rom[0x0008:0x0010] == bytes.fromhex(
         "C3 00 00 FE FF 9F FF FF"
     )
@@ -3548,7 +5150,7 @@ def main(
         0x00, 0x00, 0x00,
     ])
     native_fade_service = build_native_dmg_fade_fixed_service()
-    stage1_demo_delay = build_stage1_demo_delay()
+    stage1_demo_delay = build_stage1_demo_delay(stage1_demo_wait_line)
     assert (
         NATIVE_DMG_FADE_DISPATCH_ADDR + len(native_fade_service)
         == STAGE1_DEMO_DELAY_ADDR
@@ -3589,6 +5191,29 @@ def main(
     # 14. Safe scene/colorize prelude at bank13:0x6E80. It deliberately has no
     # SELECT+START handling and no IRQ stack redirection.
     prelude = build_colorize_prelude()
+    if disable_lava_override:
+        lava_tail = bytes([
+            0xC3, LAVA_OVERRIDE_ADDR & 0xFF, LAVA_OVERRIDE_ADDR >> 8,
+        ])
+        assert prelude.count(lava_tail) == 1
+        lava_tail_offset = prelude.index(lava_tail)
+        prelude = (
+            prelude[:lava_tail_offset]
+            + bytes([0xC9, 0x00, 0x00])
+            + prelude[lava_tail_offset + len(lava_tail):]
+        )
+        print(
+            "  diagnostic isolation: lava override disabled at constant "
+            "instruction width"
+        )
+    if minimal_prelude:
+        prelude = bytes([
+            0xCD, SCENE_DETECT_ADDR & 0xFF, SCENE_DETECT_ADDR >> 8, 0xC9,
+        ]) + bytes(len(prelude) - 4)
+        print(
+            "  diagnostic isolation: prelude reduced to scene detection "
+            "while the shared title-palette copier remains out of line"
+        )
     assert COLORIZE_PRELUDE_ADDR + len(prelude) <= WRAPPER_ADDR
     off = BANK13 + (COLORIZE_PRELUDE_ADDR - 0x4000)
     rom[off:off + len(prelude)] = prelude
@@ -3683,6 +5308,51 @@ def main(
         0xC1,                                 # POP BC
         0xC9,                                 # RET
     ])
+
+    if disabled_vblank_service is not None:
+        service_calls = {
+            "death": [bytes([
+                0xCD, DEATH_ATTR_DISPATCH_ADDR & 0xFF,
+                DEATH_ATTR_DISPATCH_ADDR >> 8,
+            ])],
+            "title-palette": [bytes([
+                0xCD, TITLE_PALETTE_FIX_ADDR & 0xFF,
+                TITLE_PALETTE_FIX_ADDR >> 8,
+            ])],
+            "palette-scheduler": [
+                bytes([
+                    0xCD, CONDITIONAL_PALETTE_ADDR & 0xFF,
+                    CONDITIONAL_PALETTE_ADDR >> 8,
+                ]),
+                bytes([
+                    0xCC, CONDITIONAL_PALETTE_ADDR & 0xFF,
+                    CONDITIONAL_PALETTE_ADDR >> 8,
+                ]),
+            ],
+            "prelude": [bytes([
+                0xCD, COLORIZE_PRELUDE_ADDR & 0xFF,
+                COLORIZE_PRELUDE_ADDR >> 8,
+            ])],
+            "colorizer": [bytes([
+                0xD4, COLORIZE_ADDR & 0xFF, COLORIZE_ADDR >> 8,
+            ])],
+            "glyph-copy": [bytes([
+                0xCD, VRAM_GLYPH_COPY_ADDR & 0xFF,
+                VRAM_GLYPH_COPY_ADDR >> 8,
+            ])],
+        }
+        for call in service_calls[disabled_vblank_service]:
+            assert wrapper.count(call) == 1, (
+                disabled_vblank_service,
+                call.hex(),
+                wrapper.count(call),
+            )
+            offset = wrapper.index(call)
+            wrapper[offset:offset + len(call)] = bytes(len(call))
+        print(
+            "  diagnostic isolation: disabled VBlank service "
+            f"{disabled_vblank_service} at constant instruction width"
+        )
     assert WRAPPER_ADDR + len(wrapper) <= SCENE_DETECT_ADDR
     wrapper_off = BANK13 + (WRAPPER_ADDR - 0x4000)
     rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
@@ -3703,11 +5373,34 @@ def main(
     ])
     assert WRAPPER_ADDR == 0x6F20
     assert 0x0824 + len(new_hook) == ROOM_BG_REARM_BANK0_ADDR
-    new_hook.extend(build_room_bg_rearm_bank0())
+    # The production-safe native Stage-1 copier uses the room-change hooks to
+    # arm its bounded attribute sweep. ``--native-room-writers`` remains the
+    # explicit diagnostic escape hatch that removes this instrumentation.
+    use_room_rearm_hooks = not (
+        native_room_writers
+        or semantic_stage1_prototype
+    )
+    if use_room_rearm_hooks:
+        new_hook.extend(build_room_bg_rearm_bank0())
+    elif semantic_stage1_prototype:
+        # RST $18 trampoline: preserve the caller's mapped bank, map bank 13,
+        # call the diagnostic semantic tail, then tail-restore the bank.
+        new_hook.extend(bytes([
+            0xF0, 0x99, 0xF5,
+            0x3E, 0x0D, 0xCD, 0x61, 0x00,
+            0xCD,
+            SEMANTIC_STAGE1_PROTOTYPE_ADDR & 0xFF,
+            SEMANTIC_STAGE1_PROTOTYPE_ADDR >> 8,
+            0xF1, 0xC3, 0x61, 0x00,
+        ]))
     assert len(new_hook) <= 47
     new_hook_padded = (new_hook + bytearray(47 - len(new_hook)))[:47]
     rom[0x0824:0x0824 + 47] = new_hook_padded
-    install_room_bg_rearm_hooks(rom)
+    if use_room_rearm_hooks:
+        install_room_bg_rearm_hooks(
+            rom,
+            target_addr=ROOM_BG_REARM_BANK0_ADDR,
+        )
     lava_decider_bank0 = build_lava_attr_decider_bank0()
     bank0_decider_end = (
         LAVA_ATTR_DECIDER_BANK0_ADDR + len(lava_decider_bank0)
@@ -3719,19 +5412,58 @@ def main(
     rom[
         LAVA_ATTR_DECIDER_BANK0_ADDR:bank0_decider_end
     ] = lava_decider_bank0
+    if not use_room_rearm_hooks:
+        room_hook_status = "native FFBD writers/RST $00 retained"
+    else:
+        room_hook_status = "RST $00 hooks at four native room writers"
     print(
-        f"  VBlank hook + FFBD rearm target: {len(new_hook)} bytes at 0x0824; "
-        "RST $00 hooks at four native room writers; "
+        f"  VBlank hook + optional FFBD rearm target: {len(new_hook)} bytes "
+        f"at 0x0824; {room_hook_status}; "
         f"lava-decider trampoline={len(lava_decider_bank0)} bytes"
     )
+
+    if stock_vblank:
+        # Diagnostic isolation: retain all ROM data/palettes/title work but
+        # restore the stock VBlank DMA + joypad service and remove every room
+        # writer trampoline installed above. This proves whether terrain
+        # corruption is caused by the runtime VBlank family rather than ROM
+        # room data or the inline 24x24 copier.
+        rom[0x06D5:0x06D8] = vanilla_rom[0x06D5:0x06D8]
+        rom[0x0824:0x0853] = vanilla_rom[0x0824:0x0853]
+        for offset in (0x0B7E, 0x11D2, 0x11FC, 0x4106):
+            rom[offset:offset + 2] = vanilla_rom[offset:offset + 2]
+        rom[0x0000:0x0003] = vanilla_rom[0x0000:0x0003]
+        print("  diagnostic isolation: stock VBlank + room writers restored")
+
+    if stock_oam_emitters:
+        assert stock_tile_copy, (
+            "native OAM emitters overlap the DX inline decision cave; "
+            "use --stock-tile-copy for this diagnostic"
+        )
+        rom[0x0008:0x0010] = vanilla_rom[0x0008:0x0010]
+        rom[NATIVE_DMG_FADE_SITE:NATIVE_DMG_FADE_SITE + 2] = vanilla_rom[
+            NATIVE_DMG_FADE_SITE:NATIVE_DMG_FADE_SITE + 2
+        ]
+        rom[0x10D1:0x10EE] = vanilla_rom[0x10D1:0x10EE]
+        rom[0x346F:0x34A3] = vanilla_rom[0x346F:0x34A3]
+        print(
+            "  diagnostic isolation: native gameplay OAM emitters and "
+            "their overlapping DMG-fade sites restored"
+        )
+
+    if reserved_pickup_gold:
+        apply_stage1_reserved_pickup_gold(rom, vanilla_rom)
 
     # 17. Levelsel JP NZ patch
     expected = bytes([0xC2, 0x93, 0x73])
     actual = bytes(rom[LEVELSEL_PATCH_ADDR:LEVELSEL_PATCH_ADDR + 3])
     assert actual == expected, f"levelsel patch site corrupted: {actual.hex()}"
-    rom[LEVELSEL_PATCH_ADDR + 1] = LEVELSEL_STUB_WRAM & 0xFF
-    rom[LEVELSEL_PATCH_ADDR + 2] = (LEVELSEL_STUB_WRAM >> 8) & 0xFF
-    print(f"  Levelsel JP NZ patched: 0x{LEVELSEL_PATCH_ADDR:04X} → 0x{LEVELSEL_STUB_WRAM:04X}")
+    if minimal_prelude:
+        print("  diagnostic isolation: native level-select branch retained")
+    else:
+        rom[LEVELSEL_PATCH_ADDR + 1] = LEVELSEL_STUB_WRAM & 0xFF
+        rom[LEVELSEL_PATCH_ADDR + 2] = (LEVELSEL_STUB_WRAM >> 8) & 0xFF
+        print(f"  Levelsel JP NZ patched: 0x{LEVELSEL_PATCH_ADDR:04X} → 0x{LEVELSEL_STUB_WRAM:04X}")
 
     # Header checksum
     chk = 0
@@ -3782,9 +5514,119 @@ if __name__ == "__main__":
         type=Path,
         help="Intermediate v3.01 path (defaults beside a custom output)",
     )
+    parser.add_argument(
+        "--stage1-demo-wait-line",
+        type=int,
+        default=STAGE1_DEMO_WAIT_LINE,
+        help="diagnostic LY phase for attract Stage 1 cache misses",
+    )
+    parser.add_argument(
+        "--stock-tile-copy",
+        action="store_true",
+        help="restore the native 24x24 tile copier for isolation testing",
+    )
+    parser.add_argument(
+        "--stock-vblank",
+        action="store_true",
+        help="restore native VBlank/input/DMA and room writers for isolation",
+    )
+    parser.add_argument(
+        "--native-room-writers",
+        action="store_true",
+        help="retain native FFBD writers/RST $00 while testing the DX copier",
+    )
+    parser.add_argument(
+        "--disable-vblank-service",
+        choices=(
+            "death",
+            "title-palette",
+            "palette-scheduler",
+            "prelude",
+            "colorizer",
+            "glyph-copy",
+        ),
+        help="diagnostically NOP one fixed-width per-VBlank service",
+    )
+    parser.add_argument(
+        "--stock-oam-emitters",
+        action="store_true",
+        help="retain the two native gameplay OAM emitters for isolation",
+    )
+    parser.add_argument(
+        "--minimal-prelude",
+        action="store_true",
+        help="run only scene detection in the per-VBlank prelude",
+    )
+    parser.add_argument(
+        "--disable-lava-override",
+        action="store_true",
+        help="NOP the per-VBlank lava override while retaining the prelude",
+    )
+    parser.add_argument(
+        "--buffered-stage1-attrs",
+        action="store_true",
+        help=(
+            "diagnostically stage Stage-1 attrs in WRAM and publish them "
+            "with one GDMA instead of per-group VRAM attr writes"
+        ),
+    )
+    parser.add_argument(
+        "--compact-tile-copy",
+        action="store_true",
+        help="diagnostically use the compact four-tile single-wait copier",
+    )
+    parser.add_argument(
+        "--semantic-stage1-prototype",
+        action="store_true",
+        help=(
+            "diagnostically keep the native copier and stamp only Stage-1 "
+            "pickup metatiles; overwrites later-arena tables and is never a "
+            "release build"
+        ),
+    )
+    parser.add_argument(
+        "--semantic-stage1-vblank-prototype",
+        action="store_true",
+        help=(
+            "diagnostically keep the native copier and color one semantic "
+            "Stage-1 pickup metatile row per VBlank from a bank-14 cave"
+        ),
+    )
+    parser.add_argument(
+        "--reserved-pickup-gold",
+        action="store_true",
+        help=(
+            "reserve Stage-1 BG0 color index 1 for gold pickup art without "
+            "runtime attribute writes"
+        ),
+    )
+    parser.add_argument(
+        "--demo-compact-tile-copy",
+        action="store_true",
+        help=(
+            "use the compact pure tile copier only for DCFD=0 prerecorded "
+            "gameplay while retaining byte-exact native live terrain"
+        ),
+    )
     arguments = parser.parse_args()
     main(
         palette_yaml=arguments.palette_yaml,
         output_path=arguments.output,
         base_output=arguments.base_output,
+        stage1_demo_wait_line=arguments.stage1_demo_wait_line,
+        stock_tile_copy=arguments.stock_tile_copy,
+        native_room_writers=arguments.native_room_writers,
+        stock_vblank=arguments.stock_vblank,
+        disabled_vblank_service=arguments.disable_vblank_service,
+        stock_oam_emitters=arguments.stock_oam_emitters,
+        minimal_prelude=arguments.minimal_prelude,
+        disable_lava_override=arguments.disable_lava_override,
+        buffered_stage1_attrs=arguments.buffered_stage1_attrs,
+        compact_tile_copy=arguments.compact_tile_copy,
+        demo_compact_tile_copy=arguments.demo_compact_tile_copy,
+        semantic_stage1_prototype=arguments.semantic_stage1_prototype,
+        semantic_stage1_vblank_prototype=(
+            arguments.semantic_stage1_vblank_prototype
+        ),
+        reserved_pickup_gold=arguments.reserved_pickup_gold,
     )

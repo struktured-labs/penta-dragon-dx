@@ -97,6 +97,13 @@ def main() -> None:
         failures.append("SELECT+START changed the boss index")
     if combo.get("d880_before") != combo.get("d880_after"):
         failures.append("SELECT+START changed the scene state")
+    if (
+        int(combo.get("lcdc", "00"), 16) & 0x20
+        and combo.get("ffe4") != "01"
+    ):
+        failures.append(
+            "SELECT+START exposed a Window after the stock menu flag cleared"
+        )
     if int(combo.get("shadow_states", "0")) < 2:
         failures.append("gameplay shadow OAM did not continue changing")
 

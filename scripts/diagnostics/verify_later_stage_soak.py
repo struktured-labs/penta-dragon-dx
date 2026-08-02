@@ -15,6 +15,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 PROBE = ROOT / "scripts/diagnostics/probe_later_stage_soak.lua"
+BANK13 = 13 * 0x4000
+NATIVE_BG0_ALIAS_ADDR = 0x6838
 
 
 def read_fields(report: Path) -> tuple[dict[str, int], list[int], list[int]]:
@@ -112,6 +114,13 @@ def main() -> int:
         "--wram-audit", action="store_true",
         help="prove candidate fixed-WRAM ranges remain unchanged during play",
     )
+    parser.add_argument(
+        "--require-native-bg0", action="store_true",
+        help=(
+            "require every captured later-stage room to retain the candidate "
+            "ROM's title-safe native BG0 alias"
+        ),
+    )
     args = parser.parse_args()
     if args.capture_stable < 0:
         parser.error("--capture-stable must be non-negative")
@@ -133,6 +142,12 @@ def main() -> int:
         output = Path(temporary.name)
 
     failures: list[str] = []
+    native_bg0_offset = BANK13 + NATIVE_BG0_ALIAS_ADDR - 0x4000
+    native_bg0 = args.rom.resolve().read_bytes()[
+        native_bg0_offset:native_bg0_offset + 8
+    ]
+    if args.require_native_bg0 and len(native_bg0) != 8:
+        parser.error("candidate ROM does not contain a complete native BG0 alias")
     try:
         for stage in stages:
             target = stage - 1
@@ -169,6 +184,28 @@ def main() -> int:
                 failures.append(f"Stage {target + 1}: expected scene was never sampled")
             if len(rooms) < 2:
                 failures.append(f"Stage {target + 1}: exercised only {len(rooms)} room")
+            if args.require_native_bg0:
+                bg0_mismatches: list[str] = []
+                for room in rooms:
+                    bgp = output / f"stage{target + 1}.room{room:02X}.bgp.bin"
+                    if not bgp.is_file() or len(bgp.read_bytes()) != 64:
+                        bg0_mismatches.append(f"{room:02X}:missing")
+                        continue
+                    observed_bg0 = bgp.read_bytes()[:8]
+                    if observed_bg0 != native_bg0:
+                        bg0_mismatches.append(
+                            f"{room:02X}:{observed_bg0.hex().upper()}"
+                        )
+                print(
+                    f"Stage {target + 1}: native_bg0="
+                    f"{'PASS' if not bg0_mismatches else 'FAIL'} "
+                    f"expected={native_bg0.hex().upper()}"
+                )
+                if bg0_mismatches:
+                    failures.append(
+                        f"Stage {target + 1}: non-native BG0 in "
+                        + ",".join(bg0_mismatches)
+                    )
     finally:
         if temporary is not None:
             temporary.cleanup()

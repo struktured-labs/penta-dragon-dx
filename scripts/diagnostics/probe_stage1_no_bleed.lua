@@ -51,6 +51,7 @@ local debug_copy_hits, debug_atomic_hits, debug_pure_hits = 0, 0, 0
 local debug_main_hits, debug_last_address = 0, -1
 local debug_atomic = tonumber(os.getenv("STAGE1_DEBUG_ATOMIC") or "0")
 local debug_pure = tonumber(os.getenv("STAGE1_DEBUG_PURE") or "0")
+local debug_decision = tonumber(os.getenv("STAGE1_DEBUG_DECISION") or "13445")
 local trace_layouts = tonumber(os.getenv("STAGE1_TRACE_LAYOUTS") or "0") ~= 0
 local layout_records, layout_seen = {}, {}
 local debug_destination = 0
@@ -111,6 +112,16 @@ pcall(function()
         scx = emu:read8(0xFF43),
         scy = emu:read8(0xFF42),
         dc00 = emu:read8(0xDC00),
+        dc01 = emu:read8(0xDC01),
+        dc02 = emu:read8(0xDC02),
+        dc03 = emu:read8(0xDC03),
+        dc0b = emu:read8(0xDC0B),
+        dc0c = emu:read8(0xDC0C),
+        dc0d = emu:read8(0xDC0D),
+        dc0e = emu:read8(0xDC0E),
+        dc0f = emu:read8(0xDC0F),
+        dc81 = emu:read8(0xDC81),
+        ffcf = emu:read8(0xFFCF),
         cache9800 = emu:read8(0xDF53),
         cache9c00 = emu:read8(0xDF57),
         raw_hash = raw_hash,
@@ -119,7 +130,7 @@ pcall(function()
         room = emu:read8(0xFFBD),
       }
     end
-  end, 0x3485)
+  end, debug_decision)
 end)
 
 local function seed_sram()
@@ -343,7 +354,7 @@ local function finish()
   end
   for _, event in ipairs(helper_events) do
     handle:write(string.format(
-      "helper_event=%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d\n",
+      "helper_event=%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d\n",
       event.frame,
       event.h,
       event.a,
@@ -352,6 +363,16 @@ local function finish()
       event.scx,
       event.scy,
       event.dc00,
+      event.dc01,
+      event.dc02,
+      event.dc03,
+      event.dc0b,
+      event.dc0c,
+      event.dc0d,
+      event.dc0e,
+      event.dc0f,
+      event.dc81,
+      event.ffcf,
       event.cache9800,
       event.cache9c00,
       event.raw_hash,

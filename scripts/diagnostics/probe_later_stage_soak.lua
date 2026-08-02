@@ -104,13 +104,16 @@ if TRACE_ADDRS ~= "" then
         log(string.format(
           "breakpoint=%04X segment=%s pc=%04X scene=%02X room=%02X " ..
           "dcfd=%02X dd09=%02X a=%02X f=%02X scx=%02X scy=%02X " ..
-          "decision=%02X bank=%02X svbk=%02X mapped4C54=%02X",
+          "decision=%02X bank=%02X svbk=%02X mapped4C54=%02X " ..
+          "e=%02X h=%02X l=%02X phase=%02X bcps=%02X",
           address, tostring(segment), address, emu:read8(0xD880),
           emu:read8(0xFFBD), emu:read8(0xDCFD), emu:read8(0xDD09),
           emu:readRegister("A"), emu:readRegister("F"),
           emu:read8(0xFF43), emu:read8(0xFF42),
           emu:read8(0xFFE0), emu:read8(0xFF99), emu:read8(0xFF70),
-          emu:read8(0x4C54)))
+          emu:read8(0x4C54), emu:readRegister("E"),
+          emu:readRegister("H"), emu:readRegister("L"),
+          emu:read8(0xDF4C), emu:read8(0xFF68)))
       end
       if segment then
         emu:setBreakpoint(callback, address, segment)

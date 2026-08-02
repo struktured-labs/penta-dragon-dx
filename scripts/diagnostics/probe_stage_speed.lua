@@ -26,6 +26,8 @@ local atomic_call_indices = {}
 local previous_scx, scroll_changes = -1, 0
 local active_frames, first_inactive_frame = 0, -1
 local expected_scene_frames, first_scene_mismatch = 0, -1
+local first_scene_mismatch_value = -1
+local mismatch_cpu_pc, mismatch_dma_source, mismatch_svbk = -1, -1, -1
 local lava_copy_hits, attr_map_changes, attr_map_unchanged = 0, 0, 0
 local attr_changed_cells, attr_changed_groups = 0, 0
 local max_attr_changed_cells, max_attr_changed_groups = 0, 0
@@ -48,6 +50,14 @@ local function entry_return()
   local ok, sp = pcall(function() return emu:getRegister("SP") end)
   if not ok or type(sp) ~= "number" then return -1 end
   return emu:read8(sp) + 256 * emu:read8((sp + 1) & 0xFFFF)
+end
+
+local function read_register(name)
+  local ok, value = pcall(function() return emu:readRegister(name) end)
+  if ok and type(value) == "number" then return value end
+  ok, value = pcall(function() return emu:getRegister(name) end)
+  if ok and type(value) == "number" then return value end
+  return -1
 end
 
 local function profile_lava_attr_map()
@@ -199,6 +209,12 @@ local function finish()
     '  "expected_scene_frames": %d,\n', expected_scene_frames))
   handle:write(string.format(
     '  "first_scene_mismatch": %d,\n', first_scene_mismatch))
+  handle:write(string.format(
+    '  "first_scene_mismatch_value": %d,\n', first_scene_mismatch_value))
+  handle:write(string.format('  "mismatch_cpu_pc": %d,\n', mismatch_cpu_pc))
+  handle:write(string.format(
+    '  "mismatch_dma_source": %d,\n', mismatch_dma_source))
+  handle:write(string.format('  "mismatch_svbk": %d,\n', mismatch_svbk))
   handle:write(string.format('  "room": %d,\n', emu:read8(0xFFBD)))
   handle:write(string.format('  "ffc1": %d\n', emu:read8(0xFFC1)))
   handle:write("}\n")
@@ -263,6 +279,10 @@ callbacks:add("frame", function()
     expected_scene_frames = expected_scene_frames + 1
   elseif first_scene_mismatch < 0 then
     first_scene_mismatch = play_frames
+    first_scene_mismatch_value = emu:read8(0xD880)
+    mismatch_cpu_pc = read_register("PC")
+    mismatch_dma_source = emu:read8(0xFF46)
+    mismatch_svbk = emu:read8(0xFF70)
   end
   if emu:read8(0xFFC1) == 1 then
     active_frames = active_frames + 1

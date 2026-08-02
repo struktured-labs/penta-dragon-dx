@@ -76,7 +76,7 @@ local function finish(status, message)
         emu:read8(0xFFC1), emu:read8(0xFFBA), emu:read8(0xFFBF),
         stable, message, register("PC"), register("SP"),
         emu:read8(0xFFFF), emu:read8(0xFF40),
-        hex_range(0xCC00, 0x100),
+        hex_range(0xC600, 0x100),
         palette_hex("cgbBgPalette", 0xFF68, 0xFF69)
     ))
     report:close()

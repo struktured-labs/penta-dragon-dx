@@ -68,7 +68,12 @@ def _bg_table() -> bytes:
 
 
 BG_TABLE_BYTES = _bg_table()
-WRAM_BG_TABLE = 0xCC00
+# The stock dungeon world/template map occupies $C780-$CFFF; in particular,
+# Stage 1's first far-north room reads its template IDs from $CC80.  Keeping
+# the mutable 256-byte palette LUT at $CC00 overwrote that map and produced
+# void tiles/false walls.  $C600-$C6FF is the audited gap between the native
+# secondary tile buffers and the $C700 state block.
+WRAM_BG_TABLE = 0xC600
 WRAM_BG_TABLE_HI = (WRAM_BG_TABLE >> 8) & 0xFF
 ATTR_BUFFER = 0xCC80  # WRAM bank 0 (dead-code attr buffer, kept consistent)
 
@@ -615,6 +620,7 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     external_decision_helper_addr: int | None = None,
     external_atomic_setup_addr: int | None = None,
     external_atomic_wrap_addr: int | None = None,
+    external_attr_commit_addr: int | None = None,
     atomic_group_width: int = 4,
 ) -> bytes:
     """Atomic Stage 1 attrs with precomputed HBlank-sized tile groups.
@@ -688,6 +694,8 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     else:
         assert external_atomic_setup_addr is not None
         assert external_atomic_wrap_addr is not None
+        if external_attr_commit_addr is not None:
+            assert atomic_group_width == 4
         # The fixed helper reloads the scene after its readiness check and
         # borrows E for Stage 1's destination-specific cache lookup. D=$DF
         # selects the proven metadata page and is replaced by the packed source
@@ -703,62 +711,73 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
             external_decision_helper_addr >> 8,
         ])
         mark("common_setup")
-        emit([0x11, 0xA0, 0xC1])
-        j_tileonly = emit_jr_fwd(0x28)      # Z -> stock tile-only path
+        if external_attr_commit_addr is not None:
+            # The buffered path plus its local GDMA helper exceeds JR range.
+            j_tileonly = emit_jp_fwd(0xCA)  # Z -> stock tile-only path
+        else:
+            j_tileonly = emit_jr_fwd(0x28)  # Z -> stock tile-only path
         emit([
-            0x2E, 0x80,                     # dirty path begins at row 4
             0xCD,
             external_atomic_setup_addr & 0xFF,
             external_atomic_setup_addr >> 8,
+            # The live Stage-1 setup above disables interrupts. Initialize
+            # DE only after that DI has taken effect: the stock ISR borrows
+            # and can advance DE by two, which previously produced a rare
+            # whole-map two-column shift between this setup and row 0.
+            0x11, 0xA0, 0xC1,
         ])
+        if external_attr_commit_addr is not None:
+            emit([0x06, 0x18])              # buffered path: 24 rows in B
     if external_decision_helper_addr is None:
         emit([0x06, 0x18])                  # B = 24 rows
 
     mark("atomic_row")
-    emit([0x0E, 24 // atomic_group_width])
+    if external_attr_commit_addr is None and external_decision_helper_addr is not None:
+        emit([
+            0x06, WRAM_BG_TABLE_HI,
+            0x3E, 24 // atomic_group_width, 0xE0, 0xE0,
+        ])                                  # LUT page; group count in FFE0
+    else:
+        emit([0x0E, 24 // atomic_group_width])
 
     mark("atomic_group")
-    # Save the group counter, then stage the tile IDs in the statically idle
-    # DF30..DF33 gap. Do not borrow ostensibly-unused HRAM here: the stock game
-    # accesses several such bytes indirectly, which a rejected prototype
-    # proved by suppressing Sara and scrolling despite a clean opcode census.
-    tile_scratch = (0xDF30, 0xDF31, 0xDF32, 0xDF33)[:atomic_group_width]
-    emit([
-        0xC5,                               # PUSH BC
-        0xE5,                               # preserve destination HL
-        0x21, tile_scratch[0] & 0xFF, tile_scratch[0] >> 8,
-    ])
-    for _ in tile_scratch:
-        emit([0x1A, 0x13, 0x22])            # source -> scratch; advance both
-    emit([
-        0xE1,                               # restore destination HL
-        0xD5,                               # save advanced source DE
-        0x11, tile_scratch[0] & 0xFF, tile_scratch[0] >> 8,
-        0x06, WRAM_BG_TABLE_HI,              # DE=scratch; B=$CC
-    ])
-    for index, _ in enumerate(tile_scratch):
-        emit([0x1A])                        # tile=[DE]
-        if index + 1 < len(tile_scratch):
-            emit([0x13])                    # final scratch pointer is dead
+    if external_attr_commit_addr is not None:
+        # Build the off-screen map's attribute plane in CGB WRAM bank 2 while
+        # retaining the stock four-tile HBlank writer for bank-0 tile IDs.
+        # Mapping either $98xx or $9Cxx through H&3 gives the same $D0xx-
+        # $D2xx staging offset. The completed 24x32 plane is committed once,
+        # immediately before the stock map flip, by the fixed WRAM helper.
         emit([
-            0x4F, 0x0A, 0xF5,               # C=tile; PUSH table[tile]
+            0xE5, 0xC5,                     # save VRAM HL and row/group BC
+            0x7C, 0xE6, 0x03, 0xF6, 0xD0, 0x67,
+            0x3E, 0x02, 0xE0, 0x70,         # SVBK=2 attr staging
+            0x06, WRAM_BG_TABLE_HI,          # B=$CC palette LUT page
         ])
-    if atomic_group_width == 3:
-        # Put the trailing attrs in registers and leave attr 1 on the stack.
+        for _ in range(atomic_group_width):
+            emit([
+                0x1A, 0x13,                 # tile=[DE]; DE++
+                0x4F, 0x0A, 0x22,           # attr=LUT[tile]; stage it
+            ])
         emit([
-            0xF1, 0x5F,                     # E = attr 3
-            0xF1, 0x4F,                     # C = attr 2
+            0x3E, 0x01, 0xE0, 0x70,         # restore SVBK=1
+            0xC1, 0xE1,                     # row/group BC; VRAM HL
         ])
-        # BC's outer values are already on the stack and D is not an attr
-        # register in the three-wide path. Hoist tiles 2/3 into B/D so only
-        # tile 1 needs a 16T absolute read after mode 0 begins.
-        emit([
-            0xFA, tile_scratch[1] & 0xFF, tile_scratch[1] >> 8, 0x47,
-            0xFA, tile_scratch[2] & 0xFF, tile_scratch[2] >> 8, 0x57,
-        ])
+        emit([0x1B] * atomic_group_width)    # rewind for stock tile writer
+    else:
+        # Precompute the four palette bytes in reverse source order. They then
+        # pop forward after the stock tile writer without a destination rewind.
+        # B keeps the LUT page for the full row; FFE0 owns its six-group count.
+        emit([0x13] * atomic_group_width)    # advance to source-group end
+        for _ in range(atomic_group_width):
+            emit([
+                0x1B, 0x1A,                 # DE--; tile=[DE]
+                0x4F, 0x0A, 0xF5,           # C=tile; PUSH table[tile]
+            ])
 
-    # One wait per four tiles, matching the pure/stock cadence.
-    emit([0xF3])                            # DI
+    # One wait per four tiles, matching the pure/stock cadence.  The external
+    # atomic setup enters with IME clear, and every later group returns from
+    # the explicit register-safe interrupt slot below with IME clear.  Keeping
+    # a second DI here only spent one byte in the already-full inline cave.
     mark("atomic_stat3")
     emit([0xF0, 0x41, 0xE6, 0x03, 0xFE, 0x03])
     emit_jr_back(0x20, "atomic_stat3")
@@ -766,64 +785,104 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     emit([0xF0, 0x41, 0xE6, 0x03])
     emit_jr_back(0x20, "atomic_stat0")
 
-    # Tile IDs first in VBK0 even though DE currently holds attrs 3/4.
-    if atomic_group_width == 3:
-        emit([
-            0xFA, tile_scratch[0] & 0xFF, tile_scratch[0] >> 8, 0x22,
-            0x78, 0x22,                     # tile 2 from B
-            0x7A, 0x22,                     # tile 3 from D
-        ])
-    else:
-        for address in tile_scratch[:-1]:
-            emit([0xFA, address & 0xFF, address >> 8, 0x22])
-        # DE still points at tile 4 because the attrs remain stacked.
-        emit([0x1A, 0x22])
+    # Tile IDs first in VBK0, using the stock source/advance sequence.
+    for _ in range(atomic_group_width):
+        emit([0x1A, 0x13, 0x22])
 
-    # Then matching attrs in VBK1.
-    emit([0x3E, 0x01, 0xE0, 0x4F])
-    if atomic_group_width == 4:
-        # Store attr 4 first so a departing pickup is neutralized before its
-        # replacement floor reaches the PPU, then walk backward to attr 1.
-        emit([0x2D])                         # DEC L -> tile 4 destination
-        for _ in range(3):
-            emit([0xF1, 0x32])              # attrs 4/3/2
-        emit([0xF1, 0x77])                   # attr 1 at group start
-        emit([0x7D, 0xC6, 0x04, 0x6F])      # restore group-end HL
+    if external_attr_commit_addr is None:
+        # Then matching attrs in VBK1. Reverse-order precompute leaves attr 0
+        # on top, so write forward and naturally finish at the group end.
+        emit([0x3E, 0x01, 0xE0, 0x4F])
+        emit([
+            0x7D, 0xD6, atomic_group_width, 0x6F,
+        ])                                  # rewind to group start
+        for _ in range(atomic_group_width):
+            emit([0xF1, 0x22])              # attr 0..3; advance destination
+        emit([0xAF, 0xE0, 0x4F])            # restore VBK0
+        emit([
+            0xF0, 0xE0, 0x3D, 0xE0, 0xE0,
+        ])                                  # DEC FFE0 group count; retain flags
     else:
-        emit([0x7D, 0xD6, atomic_group_width, 0x6F])
-        emit([0xF1, 0x22])                  # attr 1
-        for register in (0x79, 0x7B):
-            emit([register, 0x22])           # attrs 2/3
-    emit([0xAF, 0xE0, 0x4F])                # restore VBK0
-    emit([
-        0xD1,                               # restore advanced DE
-        0xFB, 0xC1, 0x0D,                   # EI; POP BC; DEC C
-    ])
+        emit([0x0D])                        # DEC group count
     emit_jr_back(0x20, "atomic_group")
+
+    if external_decision_helper_addr is not None:
+        # Give Timer one register-safe service point per row. Per-group
+        # service made the palette precompute miss the next HBlank, adding a
+        # scanline to nearly every group. The stock ISR can mutate the stacked
+        # DE save itself; publish DE in the census-proven DF30/DF31 scratch
+        # bytes instead. HL remains stack-safe and the fixed setup masks out
+        # re-entrant VBlank service until the completed map is published.
+        emit([
+            0x7A, 0xEA, 0x30, 0xDF,         # save D
+            0x7B, 0xEA, 0x31, 0xDF,         # save E
+            0xE5,
+            0xFB, 0x00, 0xF3,
+            0xE1,
+            0xFA, 0x30, 0xDF, 0x57,         # restore D
+            0xFA, 0x31, 0xDF, 0x5F,         # restore E
+        ])
 
     # Destination rows are 32 bytes while packed source rows are 24.
     emit([
         0x7D, 0xC6, 0x08, 0x6F,             # L += 8
         0x30, 0x01, 0x24,                   # carry -> INC H
-        0x05,                               # DEC B
     ])
+    if external_attr_commit_addr is None and external_decision_helper_addr is not None:
+        # B remains the $CC LUT page for the full row. E reaches $E0 only at
+        # the exact 24-row packed-source end ($C3E0).
+        emit([0x7B, 0xFE, 0xE0])            # LD A,E; CP $E0
+    else:
+        emit([0x05])                        # DEC B
     if external_atomic_wrap_addr is None:
         emit([0xC8])                         # final atomic row -> RET Z
         emit_jr_back(0x18, "atomic_row")
     else:
         emit_jr_back(0x20, "atomic_row")
+        if external_attr_commit_addr is not None:
+            attr_commit_call = len(code) + 1
+            emit([0xCD, 0x00, 0x00])
         emit([
             0xC3,
             external_atomic_wrap_addr & 0xFF,
             external_atomic_wrap_addr >> 8,
         ])
 
+    if external_attr_commit_addr is not None:
+        # This routine lives in the same bank-1 cave as its caller, so it does
+        # not depend on a separately initialized WRAM payload. HL is one row
+        # beyond the completed map ($9B00/$9F00); three DEC H operations
+        # recover the $9800/$9C00 GDMA destination. Padding columns are never
+        # visible in the stock 24-tile-wide Stage-1 camera range.
+        attr_commit_addr = 0x42A7 + len(code)
+        code[attr_commit_call] = attr_commit_addr & 0xFF
+        code[attr_commit_call + 1] = attr_commit_addr >> 8
+        emit([
+            0x25, 0x25, 0x25,               # H = destination $98/$9C
+            0x3E, 0x02, 0xE0, 0x70,         # SVBK=2 source bank
+            0x3E, 0x01, 0xE0, 0x4F,         # VBK=1 destination bank
+            0x3E, 0xD0, 0xE0, 0x51,
+            0xAF, 0xE0, 0x52, 0xE0, 0x54,
+            0x7C, 0xE0, 0x53,
+            0x3E, 0x2F, 0xE0, 0x55,         # 48 * 16 = $300 bytes
+            0xAF, 0xE0, 0x4F,               # restore VBK=0
+            0x3C, 0xE0, 0x70,               # restore SVBK=1
+            0xC9,
+        ])
+
     # Pure tile-only path for every non-Stage-1 caller.
     if external_decision_helper_addr is None:
         patch_jp_fwd(j_tileonly)
     else:
-        patch_jr_fwd(j_tileonly)
+        if external_attr_commit_addr is not None:
+            patch_jp_fwd(j_tileonly)
+        else:
+            patch_jr_fwd(j_tileonly)
     mark("pure_setup")
+    if external_decision_helper_addr is not None:
+        # Cache hits and neutral scenes do not call the atomic setup, so give
+        # their stock-width path its own packed-source initialization.
+        emit([0x11, 0xA0, 0xC1])
     emit([0x3E, 0x18, 0xF5])               # stock-timed 24-row counter
 
     mark("pure_row")
@@ -870,6 +929,332 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
             0xC3, common_setup_addr & 0xFF, common_setup_addr >> 8,
         ])
 
+    return bytes(code)
+
+
+def create_inline_tile_copy_stage1_buffered_attrs(
+    external_decision_helper_addr: int,
+    external_atomic_wrap_addr: int,
+    external_gdma_register_helper_addr: int,
+) -> bytes:
+    """Stock-cadence tile copy with a buffered Stage-1 attribute commit.
+
+    Dirty Stage-1 maps stage four palette bytes in CGB WRAM bank 2 before the
+    same four-tile HBlank writer used by cache hits and neutral scenes. Once
+    all 24 rows are complete, one general DMA publishes the off-screen map's
+    attribute plane before the native map flip. Tile IDs therefore retain one
+    shared source pointer and stock-width cadence; palette work can neither
+    expose a half-updated pickup nor race the live C1A0 room buffer.
+    """
+    code = bytearray()
+    targets: dict[str, int] = {}
+
+    def emit(values):
+        code.extend(values)
+
+    def mark(name):
+        targets[name] = len(code)
+
+    def jr_back(opcode, name):
+        offset = targets[name] - (len(code) + 2)
+        assert -128 <= offset <= 127
+        emit([opcode, offset & 0xFF])
+
+    def jr_fwd(opcode):
+        position = len(code) + 1
+        emit([opcode, 0x00])
+        return position
+
+    def patch_jr(position):
+        offset = len(code) - (position + 1)
+        assert -128 <= offset <= 127
+        code[position] = offset & 0xFF
+
+    def jp_fwd(opcode):
+        position = len(code) + 1
+        emit([opcode, 0x00, 0x00])
+        return position
+
+    def patch_jp(position):
+        address = 0x42A7 + len(code)
+        code[position] = address & 0xFF
+        code[position + 1] = address >> 8
+
+    # H is the caller-selected $98/$9C map base. The fixed helper reloads the
+    # scene after its readiness check and borrows E during the Stage-1 cache
+    # decision, so initialize the packed source after flags are final.
+    emit([
+        0x2E, 0x00,                         # L=0
+        0x03, 0x0B,                         # established 16T setup cadence
+        0x16, 0xDF,
+        0xCD,
+        external_decision_helper_addr & 0xFF,
+        external_decision_helper_addr >> 8,
+    ])
+    mark("common_decision")
+    emit([0xF3])                            # close source/ISR race for both paths
+    j_pure_setup = jp_fwd(0xCA)             # Z -> cache/neutral tile-only
+
+    emit([
+        0x3E, 0x01, 0xE0, 0xE0,             # FFE0=1: stage/commit attrs
+        0x11, 0xA0, 0xC1,
+        0x06, 0x18,                         # B=24 rows
+    ])
+    j_row_from_dirty = jr_fwd(0x18)
+
+    patch_jp(j_pure_setup)
+    mark("pure_setup")
+    emit([
+        0xAF, 0xE0, 0xE0,                   # FFE0=0: exact tile-only map
+        0x11, 0xA0, 0xC1,
+        0x06, 0x18,
+    ])
+
+    mark("row")
+    patch_jr(j_row_from_dirty)
+    emit([0x0E, 0x06])                      # C=6 four-tile groups
+
+    mark("group")
+    emit([0xF0, 0xE0, 0xB7])               # dirty attribute plane?
+    j_skip_stage = jr_fwd(0x28)
+
+    # Preserve the single live tile source and VRAM destination while HL is
+    # remapped to the matching $D000-$D2FF offset in CGB WRAM bank 2.
+    emit([
+        0xE5, 0xC5, 0xD5,
+        0x7C, 0xE6, 0x03, 0xF6, 0xD0, 0x67,
+        0x3E, 0x02, 0xE0, 0x70,
+        0x06, WRAM_BG_TABLE_HI,
+    ])
+    for _ in range(4):
+        emit([
+            0x1A, 0x13,                     # tile=[DE]; DE++
+            0x4F, 0x0A, 0x22,               # attr=LUT[tile]; staged write
+        ])
+    emit([
+        0x3E, 0x01, 0xE0, 0x70,
+        0xD1, 0xC1, 0xE1,
+    ])
+    patch_jr(j_skip_stage)
+
+    mark("stat3")
+    emit([0xF0, 0x41, 0xE6, 0x03, 0xFE, 0x03])
+    jr_back(0x20, "stat3")
+    mark("stat0")
+    emit([0xF0, 0x41, 0xE6, 0x03])
+    jr_back(0x20, "stat0")
+    for _ in range(4):
+        emit([0x1A, 0x13, 0x22])
+
+    # The DX VBlank path may borrow DE. Give it one deterministic service slot
+    # per stock-width group while the exact post-write source is protected.
+    emit([0xD5, 0xFB, 0x00, 0xF3, 0xD1, 0x0D])
+    jr_back(0x20, "group")
+
+    emit([
+        0x7D, 0xC6, 0x08, 0x6F,
+        0x30, 0x01, 0x24,
+        0x05,
+    ])
+    jr_back(0x20, "row")
+
+    emit([0xF0, 0xE0, 0xB7])
+    j_pure_done = jr_fwd(0x28)
+    attr_commit_call = len(code) + 1
+    emit([0xCD, 0x00, 0x00])
+    emit([
+        0xC3,
+        external_atomic_wrap_addr & 0xFF,
+        external_atomic_wrap_addr >> 8,
+    ])
+    patch_jr(j_pure_done)
+    emit([0xFB, 0xC9])                      # pure path: native EI/RET contract
+
+    # HL is $9B00/$9F00 after the final row. Recover the destination map base,
+    # then commit the complete staged plane. The stock 24-tile camera never
+    # exposes the eight padding columns copied between visible rows.
+    attr_commit_addr = 0x42A7 + len(code)
+    code[attr_commit_call] = attr_commit_addr & 0xFF
+    code[attr_commit_call + 1] = attr_commit_addr >> 8
+    emit([
+        0x25, 0x25, 0x25,
+        0x3E, 0x02, 0xE0, 0x70,
+        0x3E, 0x01, 0xE0, 0x4F,
+        0x3E, 0xD0, 0xE0, 0x51,
+        0xAF, 0xE0, 0x52, 0xE0, 0x54,
+        0x7C, 0xE0, 0x53,
+        0x3E, 0x2F, 0xE0, 0x55,
+        0xAF, 0xE0, 0x4F,
+        0x3C, 0xE0, 0x70,
+        0xC9,
+    ])
+
+    # RST $30/title callers bypass the scene decision but retain its exact
+    # fixed prefix and conditional-jump cadence before entering pure setup.
+    mark("title_pure_entry")
+    emit([
+        0x26, 0x98, 0xAF, 0x6F,
+        0xCD,
+        (external_decision_helper_addr - 3) & 0xFF,
+        (external_decision_helper_addr - 3) >> 8,
+        0xC3,
+        (0x42A7 + targets["common_decision"]) & 0xFF,
+        (0x42A7 + targets["common_decision"]) >> 8,
+    ])
+    return bytes(code)
+
+
+def create_inline_tile_copy_stage1_double_buffered_attrs(
+    external_decision_helper_addr: int,
+    external_gdma_register_helper_addr: int,
+) -> bytes:
+    """Build both Stage-1 VRAM planes off-screen and publish them by GDMA.
+
+    Dirty maps are compiled in one source pass into matching $D000-$D2FF
+    buffers in CGB WRAM banks 3 (tile IDs) and 2 (palette attributes). Two
+    bounded general DMAs then replace the off-screen map before the native map
+    flip. Cache hits and every neutral scene retain the stock HBlank copier,
+    so Stage 2 and later neutral stages do not pay the Stage-1 color cost.
+    """
+    code = bytearray()
+    targets: dict[str, int] = {}
+
+    def emit(values):
+        code.extend(values)
+
+    def mark(name):
+        targets[name] = len(code)
+
+    def jr_back(opcode, name):
+        offset = targets[name] - (len(code) + 2)
+        assert -128 <= offset <= 127
+        emit([opcode, offset & 0xFF])
+
+    def jp_fwd(opcode):
+        position = len(code) + 1
+        emit([opcode, 0x00, 0x00])
+        return position
+
+    def patch_jp(position):
+        address = 0x42A7 + len(code)
+        code[position] = address & 0xFF
+        code[position + 1] = address >> 8
+
+    emit([
+        0x2E, 0x00,
+        0x03, 0x0B,                         # established 16T setup cadence
+        0x16, 0xDF,
+        0xCD,
+        external_decision_helper_addr & 0xFF,
+        external_decision_helper_addr >> 8,
+    ])
+    mark("common_decision")
+    emit([0xF3])                            # freeze source + bank contracts
+    j_pure = jp_fwd(0xCA)
+
+    # One packed source pass writes attrs to bank 2 and the same tile IDs to
+    # bank 3. No stack value survives an SVBK change: the CPU stack itself is
+    # in the switchable WRAM window on this game, so cross-bank PUSH/POP would
+    # restore unrelated bytes and corrupt the scene state.
+    emit([
+        0x3E, 0x02, 0xE0, 0x70,
+        0x21, 0x00, 0xD0,
+        0x11, 0xA0, 0xC1,
+        0x06, WRAM_BG_TABLE_HI,
+    ])
+    mark("compile_row")
+    emit([0x3E, 0x06, 0xE0, 0xE0])         # six groups in FFE0
+    mark("compile_group")
+    for _ in range(4):
+        emit([
+            0x1A, 0x13,                     # tile ID; advance source
+            0x4F, 0x0A, 0x22,               # bank-2 attr at [HL+]
+        ])
+    emit([
+        0x1B, 0x1B, 0x1B, 0x1B,             # reread the same source group
+        0x7D, 0xD6, 0x04, 0x6F,             # rewind buffer destination
+        0x3E, 0x03, 0xE0, 0x70,             # bank 3 tile buffer
+        0x1A, 0x13, 0x22,
+        0x1A, 0x13, 0x22,
+        0x1A, 0x13, 0x22,
+        0x1A, 0x13, 0x22,
+        0x3E, 0x02, 0xE0, 0x70,             # back to bank 2 attrs
+        0xF0, 0xE0, 0x3D, 0xE0, 0xE0,
+    ])
+    jr_back(0x20, "compile_group")
+    emit([
+        0x7D, 0xC6, 0x08, 0x6F,
+        0x30, 0x01, 0x24,
+        0x7B, 0xFE, 0xE0,                   # E=$E0 only after row 24
+    ])
+    jr_back(0x20, "compile_row")
+
+    # LCDC.3 selects the map currently on screen, so the off-screen target is
+    # its opposite: bit clear -> $9C00, bit set -> $9800.
+    emit([
+        0xF0, 0x40, 0x0F, 0xE6, 0x04,
+        0xEE, 0x9C, 0x67,                   # L is already zero at $D300
+        0xAF, 0xE0, 0x54,                   # shared destination low = 0
+    ])
+
+    # Tile plane: WRAM bank 3 $D000 -> VRAM bank 0.
+    emit([
+        0x3E, 0x03, 0xE0, 0x70,
+        0x3E, 0xD0,
+        0xCD,
+        external_gdma_register_helper_addr & 0xFF,
+        external_gdma_register_helper_addr >> 8,
+    ])
+    # Attribute plane: WRAM bank 2 $D000 -> VRAM bank 1.
+    emit([
+        0x3E, 0x02, 0xE0, 0x70,
+        0x3E, 0x01, 0xE0, 0x4F,
+        0x3E, 0xD0,
+        0xCD,
+        external_gdma_register_helper_addr & 0xFF,
+        external_gdma_register_helper_addr >> 8,
+        0xAF, 0xE0, 0x4F,
+        0x3C, 0xE0, 0x70,
+        0xAF, 0xFB, 0xC9,                   # A=0/Z; IE untouched; EI/RET
+    ])
+
+    # Cache hits and all neutral callers use one stock-width tile-only loop.
+    patch_jp(j_pure)
+    mark("pure_setup")
+    emit([0x11, 0xA0, 0xC1, 0x06, 0x18])
+    mark("pure_row")
+    emit([0x0E, 0x06])
+    mark("pure_group")
+    emit([0xF3])
+    mark("pure_stat3")
+    emit([0xF0, 0x41, 0xE6, 0x03, 0xFE, 0x03])
+    jr_back(0x20, "pure_stat3")
+    mark("pure_stat0")
+    emit([0xF0, 0x41, 0xE6, 0x03])
+    jr_back(0x20, "pure_stat0")
+    for _ in range(4):
+        emit([0x1A, 0x13, 0x22])
+    emit([0xFB, 0x0D])
+    jr_back(0x20, "pure_group")
+    emit([
+        0x7D, 0xC6, 0x08, 0x6F,
+        0x30, 0x01, 0x24,
+        0x05,
+    ])
+    jr_back(0x20, "pure_row")
+    emit([0xC9])
+
+    mark("title_pure_entry")
+    emit([
+        0x26, 0x98, 0xAF, 0x6F,
+        0xCD,
+        (external_gdma_register_helper_addr + 12) & 0xFF,
+        (external_gdma_register_helper_addr + 12) >> 8,
+        0x03,                               # CALL RET + INC BC = exact 48T
+        0xC3,
+        (0x42A7 + targets["common_decision"]) & 0xFF,
+        (0x42A7 + targets["common_decision"]) >> 8,
+    ])
     return bytes(code)
 
 
@@ -1329,6 +1714,7 @@ def create_attr_computation(bg_table_addr: int) -> bytes:
 def build_v301(
     palette_yaml: Path | str = Path("palettes/penta_palettes_v097.yaml"),
     output_path: Path | str = Path("rom/working/penta_dragon_dx_v301.gb"),
+    stock_tile_copy: bool = False,
 ):
     input_rom = Path("rom/Penta Dragon (J).gb")
     palette_yaml = Path(palette_yaml)
@@ -1683,6 +2069,12 @@ def build_v301(
         rom[0x42A7 + len(inline_code):0x436E] = bytearray(available - len(inline_code))
 
     assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98])
+
+    if stock_tile_copy:
+        vanilla = input_rom.read_bytes()
+        rom[0x42A7:0x436E] = vanilla[0x42A7:0x436E]
+        rom[0x0030:0x0033] = vanilla[0x0030:0x0033]
+        print("  diagnostic isolation: native 24x24 copier restored")
 
     print(f"  inline tile copy: {len(inline_code)} bytes (tile-only, {available - len(inline_code)} free)")
 

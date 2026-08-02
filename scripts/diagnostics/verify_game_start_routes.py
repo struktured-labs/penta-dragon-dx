@@ -13,6 +13,7 @@ Unlike the legacy PyBoy smoke test, this gate:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import os
 import shutil
@@ -29,6 +30,12 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 DEFAULT_MGBA = ROOT / "scripts/mgba-qt-singleflight"
 LUA = Path(__file__).with_name("probe_game_start_route.lua")
+MGBA_LOCK = Path(
+    os.environ.get(
+        "PENTA_MGBA_LOCK",
+        "/tmp/penta-dragon-dx.mgba-singleflight.lock",
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -91,6 +98,27 @@ def parse_result(path: Path) -> dict[str, list[str]]:
     return result
 
 
+def wait_for_mgba_slot(timeout: float = 3.0) -> None:
+    """Wait for the prior serial Qt process to release the project lock."""
+    deadline = time.monotonic() + timeout
+    MGBA_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(MGBA_LOCK, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                return
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "guarded mGBA slot remained occupied after prior route"
+                    )
+                time.sleep(0.05)
+    finally:
+        os.close(descriptor)
+
+
 def run_route(
     rom: Path,
     mgba: Path,
@@ -136,6 +164,8 @@ def run_route(
         "-C",
         f"savegamePath={runtime}",
     ]
+    result_path = prefix.with_suffix(".txt")
+    wait_for_mgba_slot()
     started = time.monotonic()
     process = subprocess.Popen(
         command,
@@ -144,19 +174,25 @@ def run_route(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    try:
-        stdout, _ = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+    deadline = started + timeout
+    while (
+        time.monotonic() < deadline
+        and process.poll() is None
+        and not (result_path.is_file() and result_path.stat().st_size > 0)
+    ):
+        time.sleep(0.05)
+    if process.poll() is None:
         process.terminate()
         try:
             stdout, _ = process.communicate(timeout=3)
         except subprocess.TimeoutExpired:
             process.kill()
             stdout, _ = process.communicate()
+    else:
+        stdout, _ = process.communicate()
     duration = time.monotonic() - started
     (runtime / "emulator.log").write_text(stdout)
 
-    result_path = prefix.with_suffix(".txt")
     if not result_path.is_file():
         return False, {
             "route": route.name,

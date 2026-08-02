@@ -155,6 +155,16 @@ def parse_probe(path: Path) -> dict:
                 scx,
                 scy,
                 dc00,
+                dc01,
+                dc02,
+                dc03,
+                dc0b,
+                dc0c,
+                dc0d,
+                dc0e,
+                dc0f,
+                dc81,
+                ffcf,
                 cache9800,
                 cache9c00,
                 raw_hash,
@@ -172,6 +182,16 @@ def parse_probe(path: Path) -> dict:
                     "scx": int(scx),
                     "scy": int(scy),
                     "dc00": int(dc00),
+                    "dc01": int(dc01),
+                    "dc02": int(dc02),
+                    "dc03": int(dc03),
+                    "dc0b": int(dc0b),
+                    "dc0c": int(dc0c),
+                    "dc0d": int(dc0d),
+                    "dc0e": int(dc0e),
+                    "dc0f": int(dc0f),
+                    "dc81": int(dc81),
+                    "ffcf": int(ffcf),
                     "cache_9800": int(cache9800),
                     "cache_9c00": int(cache9c00),
                     "raw_hash": int(raw_hash),
@@ -368,6 +388,14 @@ def run_probe(
             "STAGE1_BLEED_LUT": str(lut_path),
         }
     )
+    for debug_variable in (
+        "STAGE1_DEBUG_ATOMIC",
+        "STAGE1_DEBUG_PURE",
+        "STAGE1_DEBUG_DECISION",
+        "STAGE1_TRACE_LAYOUTS",
+    ):
+        if debug_variable in os.environ:
+            environment[debug_variable] = os.environ[debug_variable]
     environment.pop("DISPLAY", None)
     environment.pop("WAYLAND_DISPLAY", None)
     log = output / "mgba.log"

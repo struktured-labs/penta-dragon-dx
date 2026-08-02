@@ -75,7 +75,7 @@ end
 
 local function active_table_is_neutral()
     for offset = 0, 0xFF do
-        if emu:read8(0xCC00 + offset) ~= 0 then return false end
+        if emu:read8(0xC600 + offset) ~= 0 then return false end
     end
     return true
 end

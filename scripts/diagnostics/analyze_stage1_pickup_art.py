@@ -8,20 +8,22 @@ from collections import Counter
 import json
 from pathlib import Path
 
+from verify_pickup_class_palettes import PICKUPS
 
-TARGET_RANGES = (
-    range(0x88, 0x90),
-    range(0x98, 0xA0),
-    range(0xA8, 0xB0),
-    range(0xB8, 0xC0),
-    range(0xC8, 0xD0),
-    range(0xD8, 0xE0),
-)
-TARGETS = frozenset(tile for group in TARGET_RANGES for tile in group)
+TARGETS = frozenset(tile for pickup in PICKUPS for tile in pickup.tiles)
 
 
-def decode_tile(vram: bytes, tile: int, bank: int) -> list[int]:
-    base = bank * 0x2000 + tile * 16
+def decode_tile(
+    vram: bytes,
+    tile: int,
+    bank: int,
+    *,
+    signed_indices: bool,
+) -> list[int]:
+    tile_offset = tile * 16
+    if signed_indices and tile < 0x80:
+        tile_offset += 0x1000
+    base = bank * 0x2000 + tile_offset
     pixels = []
     for row in range(8):
         low, high = vram[base + row * 2:base + row * 2 + 2]
@@ -55,6 +57,7 @@ def main() -> int:
         line.split("=", 1)
         for line in Path(str(prefix) + ".state.txt").read_text().splitlines()
     )["LCDC"], 16)
+    signed_indices = not bool(lcdc & 0x10)
     map_base = 0x1C00 if lcdc & 0x08 else 0x1800
     tilemap = vram0[map_base:map_base + 0x400]
     attrs = vram1[map_base:map_base + 0x400]
@@ -62,17 +65,23 @@ def main() -> int:
     visible_non_targets = Counter()
     for tile, attr in zip(tilemap, attrs):
         bank = (attr >> 3) & 1
-        pixels = decode_tile(vram, tile, bank)
+        pixels = decode_tile(
+            vram, tile, bank, signed_indices=signed_indices
+        )
         counter = visible_targets if tile in TARGETS else visible_non_targets
         counter.update(pixels)
 
     pickup_tiles = {
         f"{tile:02X}": {
             "bank0_index_histogram": dict(
-                sorted(Counter(decode_tile(vram, tile, 0)).items())
+                sorted(Counter(decode_tile(
+                    vram, tile, 0, signed_indices=signed_indices
+                )).items())
             ),
             "bank1_index_histogram": dict(
-                sorted(Counter(decode_tile(vram, tile, 1)).items())
+                sorted(Counter(decode_tile(
+                    vram, tile, 1, signed_indices=signed_indices
+                )).items())
             ),
         }
         for tile in sorted(TARGETS)

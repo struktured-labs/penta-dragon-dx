@@ -32,6 +32,7 @@ GUARDED_ENTRYPOINTS = (
     "scripts/diagnostics/generate_stream_story_states.py",
     "scripts/diagnostics/inventory_attract_reel.py",
     "scripts/diagnostics/inventory_savestate_scenes.py",
+    "scripts/diagnostics/verify_bonus_stage_live.py",
     "scripts/diagnostics/verify_death_gameover.py",
     "scripts/diagnostics/verify_final_cutscene_mgba.py",
     "scripts/diagnostics/verify_frame_flicker.py",
@@ -42,9 +43,12 @@ GUARDED_ENTRYPOINTS = (
     "scripts/diagnostics/verify_levelselect_screen.py",
     "scripts/diagnostics/verify_live_palette_session.py",
     "scripts/diagnostics/verify_palette_build_roundtrip.py",
+    "scripts/diagnostics/verify_pickup_live_palettes.py",
     "scripts/diagnostics/verify_stage1_no_bleed.py",
+    "scripts/diagnostics/verify_stage1_pickup_art.py",
     "scripts/diagnostics/verify_stage_speed_matrix.py",
     "scripts/diagnostics/verify_story_attr_production.py",
+    "scripts/diagnostics/verify_stale_window_state.py",
     "scripts/diagnostics/verify_title_showcase_mgba.py",
 )
 

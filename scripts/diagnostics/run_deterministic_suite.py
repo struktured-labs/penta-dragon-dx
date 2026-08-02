@@ -27,6 +27,18 @@ from suite_contract import (
 BUILDER = ROOT / "scripts/build_v302_title_fix.py"
 MATRIX = ROOT / "scripts/diagnostics/verify_release_candidate.py"
 PROCESS_CHECK = ROOT / "scripts/check_emulator_processes.sh"
+OWNER_REGISTRY = Path(
+    os.environ.get(
+        "PENTA_MGBA_OWNER_REGISTRY",
+        f"/tmp/penta-dragon-dx.mgba-owners-{os.getuid()}",
+    )
+)
+MGBA_LOCK = Path(
+    os.environ.get(
+        "PENTA_MGBA_LOCK",
+        "/tmp/penta-dragon-dx.mgba-singleflight.lock",
+    )
+)
 
 
 def utc_now() -> str:
@@ -90,6 +102,96 @@ def process_is_descendant(pid: int, root_pid: int) -> bool:
     return current == root_pid
 
 
+def process_start_time(pid: int) -> int | None:
+    """Return Linux start ticks for a PID, tolerating spaces in comm."""
+
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        fields_after_comm = stat[stat.rfind(")") + 2:].split()
+        return int(fields_after_comm[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def registered_owner_process(
+    owner_token: str,
+    pid: int,
+    process_group: int,
+) -> bool:
+    """Validate the wrapper's pre-exec ownership marker for this process."""
+
+    marker = OWNER_REGISTRY / owner_token / f"{pid}.json"
+    try:
+        value = json.loads(marker.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    start_time = process_start_time(pid)
+    return (
+        value.get("pid") == pid
+        and value.get("start_time") == start_time
+        and start_time is not None
+        # Qt/headless may create a new session after exec. The immutable
+        # PID/start-tick pair proves this is the registered process; its exact
+        # current group is then obtained from os.getpgid() by the caller.
+        and isinstance(value.get("process_group"), int)
+        and value["process_group"] > 1
+        and process_group > 1
+    )
+
+
+def process_holds_owned_lock(pid: int, owner_token: str) -> bool:
+    """Prove a forked emulator inherited this run's locked file descriptor."""
+
+    try:
+        metadata = MGBA_LOCK.read_text()
+        lock_stat = MGBA_LOCK.stat()
+        descriptors = list(Path(f"/proc/{pid}/fd").iterdir())
+    except OSError:
+        return False
+    if f"owner_token={owner_token}\n" not in metadata:
+        return False
+    for descriptor in descriptors:
+        try:
+            descriptor_stat = descriptor.stat()
+        except OSError:
+            continue
+        if (
+            descriptor_stat.st_dev == lock_stat.st_dev
+            and descriptor_stat.st_ino == lock_stat.st_ino
+        ):
+            return True
+    return False
+
+
+def process_command(pid: int) -> str:
+    """Return a bounded command line while the observed process still lives."""
+
+    try:
+        command = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return "(unavailable)"
+    return command.replace(b"\0", b" ").decode(errors="replace")[:2048].strip()
+
+
+def cleanup_owner_registry(owner_token: str) -> None:
+    """Remove only marker files underneath this run's random token."""
+
+    owner_dir = OWNER_REGISTRY / owner_token
+    try:
+        markers = list(owner_dir.iterdir())
+    except OSError:
+        return
+    for marker in markers:
+        if marker.is_file() and (
+            marker.name.endswith(".json") or marker.name.endswith(".tmp")
+        ):
+            marker.unlink(missing_ok=True)
+    try:
+        owner_dir.rmdir()
+    except OSError:
+        pass
+
+
 def token_process_groups(owner_token: str) -> set[int]:
     """Return host process groups carrying this matrix's random token."""
 
@@ -103,7 +205,12 @@ def token_process_groups(owner_token: str) -> set[int]:
             process_group = os.getpgid(int(process_dir.name))
         except OSError:
             continue
-        if owner_entry in environment:
+        pid = int(process_dir.name)
+        if (
+            owner_entry in environment
+            or registered_owner_process(owner_token, pid, process_group)
+            or process_holds_owned_lock(pid, owner_token)
+        ):
             groups.add(process_group)
     return groups
 
@@ -136,19 +243,30 @@ def foreign_mgba_processes(
             environment = (process_dir / "environ").read_bytes().split(b"\0")
         except OSError:
             environment = []
-        if owner_entry in environment:
+        pid = int(process_dir.name)
+        if (
+            owner_entry in environment
+            or registered_owner_process(owner_token, pid, process_group)
+            or process_holds_owned_lock(pid, owner_token)
+        ):
             allowed_process_groups.add(process_group)
             continue
         if (
             process_group == allowed_root_pid
-            or process_is_descendant(int(process_dir.name), allowed_root_pid)
+            or process_is_descendant(pid, allowed_root_pid)
         ):
             continue
         found.append(
             {
-                "pid": int(process_dir.name),
+                "pid": pid,
                 "name": name,
                 "process_group": process_group,
+                "command": process_command(pid),
+                "owner_environment": owner_entry in environment,
+                "owner_marker": registered_owner_process(
+                    owner_token, pid, process_group
+                ),
+                "owner_lock": process_holds_owned_lock(pid, owner_token),
             }
         )
     return sorted(found, key=lambda item: int(item["pid"]))
@@ -167,20 +285,24 @@ def owned_mgba_processes(
         try:
             name = (process_dir / "comm").read_text().strip()
             environment = (process_dir / "environ").read_bytes().split(b"\0")
-        except OSError:
-            continue
-        if (
-            name not in {"mgba", "mgba-qt", "mgba-headless"}
-            or owner_entry not in environment
-        ):
-            continue
-        try:
             process_group = os.getpgid(int(process_dir.name))
         except OSError:
             continue
+        pid = int(process_dir.name)
+        if (
+            name not in {"mgba", "mgba-qt", "mgba-headless"}
+            or (
+                owner_entry not in environment
+                and not registered_owner_process(
+                    owner_token, pid, process_group
+                )
+                and not process_holds_owned_lock(pid, owner_token)
+            )
+        ):
+            continue
         found.append(
             {
-                "pid": int(process_dir.name),
+                "pid": pid,
                 "name": name,
                 "process_group": process_group,
             }
@@ -258,6 +380,7 @@ def run_matrix_guarded(
     """Run the matrix while continuously enforcing the empty foreign slot."""
 
     owner_token = secrets.token_hex(32)
+    cleanup_owner_registry(owner_token)
     environment = os.environ.copy()
     environment["PENTA_MATRIX_OWNER_TOKEN"] = owner_token
     with log.open("w") as handle:
@@ -302,6 +425,7 @@ def run_matrix_guarded(
                 # Stop only the matrix group and per-run-token descendants.
                 # Never signal the foreign owner or use a name-pattern kill.
                 stop_matrix_and_owned(process, owner_token)
+                cleanup_owner_registry(owner_token)
                 return process.returncode, foreign, []
             time.sleep(0.05)
         # Close the small race between the final poll and matrix exit.
@@ -312,10 +436,12 @@ def run_matrix_guarded(
         )
         if foreign:
             stop_owned_mgba(owner_token)
+            cleanup_owner_registry(owner_token)
             return process.returncode, foreign, []
         leaked = owned_mgba_processes(owner_token)
         if leaked:
             stop_owned_mgba(owner_token)
+        cleanup_owner_registry(owner_token)
         return process.returncode, [], leaked
 
 
