@@ -16,13 +16,20 @@ static disassembly with mGBA/PyBoy scene and CGB-attribute captures.
 
 ## TL;DR
 
+Current production behavior is state-independent: entering a supported story
+or ending family starts a bounded loader for all eight BG rows from the YAML
+palette deck before the position-aware attribute dispatcher runs. The
+production gate checks the exact 64 CRAM bytes, the exact 360 visible
+attributes, live tile/glyph content, and native rendered pixels. Correct
+attribute indices over stale or all-white CRAM no longer count as colorized.
+
 | Sequence | D880 / FFC1 | Render identity | Current DX behavior |
 |----------|-------------|-----------------|---------------------|
-| **OPENING START story prologue** (default title option) | `0x15` / `0` | Japanese text, open book, Sara portrait, dragon eye | ROM-native BG1/BG2/BG3 artwork: 160 art cells above 200 BG0 dialogue cells |
+| **OPENING START story prologue** (default title option) | `0x15` / `0` | Japanese text, open book, Sara portrait, dragon eye | ROM-native multi-region YAML masks: 160 art cells above 200 BG0 dialogue cells |
 | GAME START | DOWN, then confirm | Skips the prologue and enters stage load | Separate path; do not use it to test the story |
 | Title attract/logo/menu | `0x00/01/1B/1C` / `0` | Logo, menu, animated banner | Title-specific paths described below |
-| **Penta Dragon pre-battle bridge** | `0x19`, then splash `0x18`, then arena `0x14` | Sets `FFBA=8`, shows Penta transition/speech, enters final boss | ROM-native BG4/BG7 art above BG0 dialogue; 50 mGBA samples with zero layout mismatches |
-| **Post-final ending** | after bank-2 loop returns: `0x1A→0x16→0x00` / `0` | Lisa/Sara ending, credits, END, epilogue | BG5/BG6/BG7 dialogue art, then full-screen BG1/BG2/BG3; two 139-panel inventories pass |
+| **Penta Dragon pre-battle bridge** | `0x19`, then splash `0x18`, then arena `0x14` | Sets `FFBA=8`, shows Penta transition/speech, enters final boss | ROM-native multi-region Penta/Sara art above BG0 dialogue; 57 mGBA samples with zero layout mismatches |
+| **Post-final ending** | after bank-2 loop returns: `0x1A→0x16→0x00` / `0` | Lisa/Sara ending, credits, END, epilogue | Exact arts 5/6/7 region masks, then full-screen BG1/BG2/BG3; two 154-panel inventories pass |
 | Death/game-over cinematic | `0x17` / `1` | bank14 illustration, then hardware window | ROM-native neutral BG0 containment on both physical maps; six natural boss routes pass |
 
 ## 1. OPENING START story prologue (confirmed live)
@@ -41,9 +48,10 @@ panels red. This was palette-metadata collision, not corrupt graphics.
 The production builder now uses panel and screen-position semantics rather
 than a global tile-ID table. The uncommitted text preamble remains
 `attrs={0:360}`. Once each stock panel identity commits, the visible top eight
-rows use BG1 for the book, BG2 for Sara, or BG3 for the dragon eye; the
-separator, border, and dialogue remain exactly 200 BG0 cells. All 33 sampled
-panels pass with no unsafe attribute bits. One frame at an art-page boundary
+rows use its exact multi-region YAML mask: BG5/BG6 for the book,
+BG2/BG4/BG5/BG7 for Sara, and BG3/BG6/BG7 for the dragon eye. The separator,
+border, and dialogue remain exactly 200 BG0 cells. All 33 sampled panels pass
+with no unsafe attribute bits. One frame at an art-page boundary
 may still show the complete previous art layout while `DCF0` announces the
 next page; the next sample must commit it via `DD07+1==DCF0`.
 
@@ -136,7 +144,7 @@ the title descriptor at bank1 **0x4E63** (tile IDs 0xE0–0xFF, 0xCE/0xCF,
 0xDE/0xDF — the decorative title tiles). `CALL 0x42A5` then runs the **DX inline
 tile+attr copy** (`0x42A5: LD H,0x98 → 0x42A7`). Verified in DX ROM the patched
 body at 0x42AC contains `06 CC` (`LD B,0xCC`) and `0A` (`LD A,[BC]`) — i.e. it
-performs the `bg_table[tile_id]` lookup at WRAM 0xCC00 and writes the attr to
+performs the `bg_table[tile_id]` lookup at WRAM 0xC600 and writes the attr to
 VRAM bank 1. **So this path IS colorized** by whatever per-scene table is
 active. The release title/banner table is uniformly palette 0.
 
@@ -264,10 +272,10 @@ renderer or story timing:
 
 1. `scene_detect` at bank 13:`0x6F90` selects a neutral active tile-ID table
    for story scenes, preventing the Stage 1 semantic table from touching
-   dialogue. The active 256-byte table remains WRAM `0xCC00`.
-2. The ROM-native story sweep at bank 13:`0x7E40` applies committed page
-   identity by screen position: BG4/BG7 for pre-final art and BG5/BG6/BG7 for
-   post-final art, always above 200 BG0 separator/dialogue cells.
+   dialogue. The active 256-byte table remains WRAM `0xC600`.
+2. The ROM-native story sweep at bank 13:`0x7E40` applies each committed
+   art ID's exact 20×8 YAML region mask by screen position, always above 200
+   BG0 separator/dialogue cells.
 3. The finite sweep writes five cells per VBlank quarter, completing three
    32-column artwork passes plus four separator quarters. Its page key includes
    `DCF0`, the active tilemap, and the eight-pixel `SCX/SCY` viewport shift, so
@@ -281,6 +289,19 @@ Every written attribute is an exact palette index with bank/flip/priority bits
 zero. There is no unbounded per-frame ending sweep; the original control flow
 and audio timing remain intact.
 
+During some direct-written credit pages, the stock ending reuses `$C600` as
+ordinary script workspace. The original ROM reproduces the same values at the
+same phases. Since `FFC1=0` disables the gameplay LUT consumer and the ending
+service owns the complete attribute map directly, the neutral-LUT invariant is
+required only for story scenes `$19/$1A`; credits, END, and epilogue are proved
+by their exact 360 visible attribute bytes.
+
+Earlier generated ending fixtures exposed a second failure mode: credits or
+END could satisfy their BG1/BG2 attribute masks while the captured mGBA frame
+was effectively all white. The fixture and production gates now require the
+exact eight-row YAML CRAM deck as well as nonempty tile/glyph buffers and a
+nonblank chromatic screenshot. These are fatal checks, not advisory metrics.
+
 ---
 
 ## 4. Does cutscene BG flow through the inline hook / bg_sweep?
@@ -290,9 +311,9 @@ and audio timing remain intact.
 | Title banner (D880=0x1B) | `0x1238`→C1A0→`CALL 0x42A5`→`0x42A7` | YES (inline hook attr phase) | YES |
 | Title logo/text (D880=0x1C) | `0x0D27`/`0x0D33` direct | NO | NO |
 | Title menu glyphs | `0x3C72`/`0x3BE2` direct | NO | NO |
-| OPENING story (`D880=0x15`) | mixed inline/direct writers + DX position sweep | YES | BG1/BG2/BG3 art over BG0 dialogue |
-| Pre-final story (`D880=0x19`) | mixed inline/direct writers + DX position sweep | YES | BG4/BG7 art over BG0 dialogue |
-| Post-final dialogue (`D880=0x1A`) | mixed inline/direct writers + DX position sweep | YES | BG5/BG6/BG7 art over BG0 dialogue |
+| OPENING story (`D880=0x15`) | mixed inline/direct writers + DX position sweep | YES | Exact arts 1–3 region masks over BG0 dialogue |
+| Pre-final story (`D880=0x19`) | mixed inline/direct writers + DX position sweep | YES | Exact arts 4/7 region masks over BG0 dialogue |
+| Post-final dialogue (`D880=0x1A`) | mixed inline/direct writers + DX position sweep | YES | Exact arts 5/6/7 region masks over BG0 dialogue |
 | Credits/END/epilogue (`D880=0x16→0x00`, `FFE4=1`) | stock direct tile writer + DX ending sweep | Stock: **NO**; DX: **YES** | Full BG1/BG2/BG3 phase layouts |
 | Death/GAME OVER (`D880=0x17`) | stock bank14/direct window render + DX two-map neutralizer | Stock: **NO**; DX: **YES** | Exact BG0 on both physical maps |
 | bg_sweep | bank13:0x6CD0 | YES, but outer handler is **gated by FFC1==1** | Gameplay only |
@@ -336,8 +357,8 @@ trusts the stale dialogue portrait bytes:
 | Epilogue text | `D880=00`, `D889=0C`, `DCE2=01`, `FFF9=01` |
 
 Two independent full inventories completed the stock ending naturally and
-captured 139 panels each: 68 post-final dialogue, 23 credits, 2 END, 3
-epilogue-preamble, and 43 epilogue-text samples. The discriminator gate
+captured 154 panels each: 68 post-final dialogue, 39 credits, 2 END, 3
+epilogue-preamble, and 42 epilogue-text samples. The discriminator gate
 requires full BG1 credits, full BG2 END, a neutral BG0 epilogue preamble, and
 full BG3 epilogue text, while allowing only bounded two-phase transitions.
 
@@ -348,8 +369,9 @@ and `FFF9=1`, because title/boot reuse `D880=0x00`.
 Every artistic revision must rerun the mGBA pixel-pipeline gate in
 `verify_final_cutscene_mgba.py`, the story-production and ending-discriminator
 gates, plus the title, stage-timing, menu/HUD, later-stage, and boss-arena
-gates. The current exact ROM passes all 30 isolated emulator/local gates.
-PyBoy remains useful for deterministic inventory and control-flow coverage,
+gates. The current exact ROM passes both the dedicated 21-gate live profile
+and the broader source-bound 51-gate release matrix. PyBoy
+remains useful for deterministic inventory and control-flow coverage,
 but it is not the final timing/flicker authority.
 
 The title-idle actor spotlight is a separate OBJ problem and is already mapped
@@ -377,8 +399,8 @@ background story panels.
 - DX inline hook (colorizes): bank1 0x42A7, body 0x42AC (contains `06 CC`/`0A`
   bg_table lookup). Entries: 0x42A0 (H=0x9C), 0x42A5 (H=0x98).
 - DX bg_sweep: bank13 0x6CD0 (outer FFC1 gate; reads active table at WRAM
-  0xCC00).
-- DX colorize handler: bank13 0x6E00; per-scene ROM table → WRAM 0xCC00.
+  0xC600).
+- DX colorize handler: bank13 0x6E00; per-scene ROM table → WRAM 0xC600.
 - Release `scene_detect`: bank13 0x6F90; uniform clear 0x6FF1; arena tables
   0x7200-0x7AFF.
 - ROM-native story service: bank13 0x7E40; row dispatcher 0x6D6E; five-cell
@@ -399,7 +421,7 @@ They do not fabricate story frames or patch the ROM file.
   the state that surrounds the chosen branch, and starts the original
   `0x54C0` pre-final or `0x5514` post-final routine. The pre-final path reached
   `0x19→0x18→0x14`. Two full post-final runs covered `0x1A→0x16→0x00`
-  and captured 139 panels apiece across the ROM-native dialogue, credits, END,
+  and captured 154 panels apiece across the ROM-native dialogue, credits, END,
   epilogue-preamble, and epilogue-text layouts.
 - **mGBA pixel pipeline:** `probe_final_cutscene_mgba.lua` modifies emulated
   memory only: after the first title pass has begun, it replaces the
@@ -408,8 +430,8 @@ They do not fabricate story frames or patch the ROM file.
   that branch when it returns around frame 2,046. The stub maps bank 1 and
   jumps to `0x54C0` or the stack-balanced post-final entry at `0x5513`; the ROM
   on disk is unchanged.
-- **Gate result:** `verify_final_cutscene_mgba.py` sampled 50 pre-final panels
-  and 15 post-final panels. Both branches had zero position-aware layout
+- **Gate result:** `verify_final_cutscene_mgba.py` sampled 57 pre-final panels
+  and 21 post-final panels. Both branches had zero position-aware layout
   mismatches, zero bad active-table samples, and valid 160×144 screenshots.
 
 This is deterministic original-control-flow coverage, not a claim that a human
@@ -425,14 +447,14 @@ containment fix.
 | State | Stock identity | Live preview |
 |-------|----------------|--------------|
 | `opening.ss0` | Default first title option, initial text | neutral |
-| `opening_book.ss0` | `15/02/01/01/00` | BG1 |
-| `opening_sara.ss0` | `15/02/01/02/01` | BG2 |
-| `opening_dragon_eye.ss0` | `15/02/01/03/02` | BG3 |
-| `pre_final.ss0` | `19/04/01/04/03` | BG4 |
-| `pre_final_sara.ss0` | `19/04/01/07/06` | BG7 |
-| `post_final.ss0` | `1A/05/01/05/04` | BG5 |
-| `post_final_lisa.ss0` | `1A/05/01/06/05` | BG6 |
-| `post_final_sara.ss0` | `1A/05/01/07/06` | BG7 |
+| `opening_book.ss0` | `15/02/01/01/00` | OpeningBook region mask |
+| `opening_sara.ss0` | `15/02/01/02/01` | SaraPortrait region mask |
+| `opening_dragon_eye.ss0` | `15/02/01/03/02` | DragonEye region mask |
+| `pre_final.ss0` | `19/04/01/04/03` | PreFinalPenta region mask |
+| `pre_final_sara.ss0` | `19/04/01/07/06` | SaraPortrait region mask |
+| `post_final.ss0` | `1A/05/01/05/04` | PostFinalDragon region mask |
+| `post_final_lisa.ss0` | `1A/05/01/06/05` | LisaDragonPortrait region mask |
+| `post_final_sara.ss0` | `1A/05/01/07/06` | SaraPortrait region mask |
 | `ending_credits.ss0` | `16/01/00/00` | full-screen BG1 |
 | `ending_end.ss0` | `16/01/00/01` | full-screen BG2 |
 | `ending_epilogue.ss0` | `00/0C/01/01` | full-screen BG3 |
@@ -449,7 +471,7 @@ the untouched `FIXED.gb` and must retain that complete identity and its exact
 160-art/200-dialogue production layout for 60 frames. They are safe one-click
 panels in the 42-button livestream scene deck.
 
-The ROM assigns the matching BG1–BG7 palette to screen tile rows 0–7
+The ROM assigns the matching 20×8 YAML region mask to screen tile rows 0–7
 (160 cells). Rows 8–17 (200 cells)—including the separator, dialogue border,
 and text—are explicitly held on BG0. Lua reasserts this identical mapping after
 research-state loads. A rendered audit caught and corrected the earlier row-8

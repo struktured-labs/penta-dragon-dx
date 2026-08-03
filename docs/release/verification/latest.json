@@ -1,9 +1,9 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-07-31T03:19:05.595970+00:00",
-  "git_head_at_run": "653b260d8289bea2f10bfb6799f3dd4d48e7363a",
-  "source_fingerprint": "3c41da448ba794c37448a26d9878099bc928dabd9a6b4441487b6bc5ecceb048",
+  "generated_at": "2026-08-03T21:56:33.163503+00:00",
+  "git_head_at_run": "43f244ed63859cea6124d335bab686f53e4ae8e7",
+  "source_fingerprint": "ed7a035690b1bd46940b20802b4e8339210dbe87ee02e623c647f1fd2ef99698",
   "source_inputs": [
     {
       "path": ".claude/settings.json",
@@ -17,8 +17,8 @@
     },
     {
       "path": ".githooks/pre-commit",
-      "sha256": "5fc657f0fe6c83f544afa2cdf6b2bcc7f729bceeb75bbca596d0c3d23da194a0",
-      "size": 142
+      "sha256": "7acdb4dd0ba5c21c68e5830e5563d80dc9acd9e4ad653cd9c2390ab0124d419f",
+      "size": 213
     },
     {
       "path": ".gitignore",
@@ -42,8 +42,8 @@
     },
     {
       "path": "palettes/bg_tile_categories.yaml",
-      "sha256": "ad2fd6b6e160802f8d268ad4fd9b7d5761acdc564b69b3e607542641619a1feb",
-      "size": 16010
+      "sha256": "5474c2e1fbfef9c21ac8190329a45543e3bfd0418e0ef9a579db70b2fd6ec4b5",
+      "size": 20605
     },
     {
       "path": "palettes/monster_palette_map.yaml",
@@ -57,8 +57,8 @@
     },
     {
       "path": "palettes/penta_palettes_v097.yaml",
-      "sha256": "77bcc71bd8fcd88c541b735c3fe2bc85d026fdc43ea9057aca514b6b6ad7d8c2",
-      "size": 8799
+      "sha256": "53e7a512511d4ac2c7de320ee9723e5fab069376c379f50251863f62f3dcf14b",
+      "size": 11184
     },
     {
       "path": "palettes/spotlight_palette_map.yaml",
@@ -92,8 +92,8 @@
     },
     {
       "path": "scripts/build_release_bundle.py",
-      "sha256": "154bc17598a2a58622519a0ce483d3b94080c0ceb14143af91c85380d6f4adc5",
-      "size": 21230
+      "sha256": "2a1672ec37a82005964cfe77117cb8201c50265e6137a72d2630adc59ba40105",
+      "size": 21552
     },
     {
       "path": "scripts/build_v296_phantomsafe.py",
@@ -102,18 +102,18 @@
     },
     {
       "path": "scripts/build_v301_gdma.py",
-      "sha256": "240278c97b5b43952c9c0db23b8cd246e7f56e6af37616c91a534e8a771897c0",
-      "size": 71590
+      "sha256": "4643538e82d13e1bc341676435f4adc8e7c1cbdad2f05a2d4cadfddeee24a985",
+      "size": 86711
     },
     {
       "path": "scripts/build_v301_teleport.py",
-      "sha256": "93c1958974ec7bd3e8ff996f26779f91c15369b98c29f4fb8233fd69d5fd7441",
-      "size": 65932
+      "sha256": "5724ae69c31e1ce922ce4f2116099d8fb3ee52fe9221b4386bdb3cb7da4fbbba",
+      "size": 66241
     },
     {
       "path": "scripts/build_v302_title_fix.py",
-      "sha256": "c6f4312f1282bd8fe7c74846f36783177a2fd9c364b9176e45fcca51f7f9c9ee",
-      "size": 155798
+      "sha256": "b433cbacf6ec85d652affc89f55a366c1ad88fc27a485752232dad31acb62918",
+      "size": 264924
     },
     {
       "path": "scripts/check_emulator_processes.sh",
@@ -126,14 +126,24 @@
       "size": 38079
     },
     {
+      "path": "scripts/cutscene_region_palettes.py",
+      "sha256": "e506f6c548c46e486a78d768e13fe126c357c9b1e605144c4ea7eb69f0849d9a",
+      "size": 5695
+    },
+    {
       "path": "scripts/diagnostics/analyze_ending_page_discriminators.py",
-      "sha256": "0f1802f991ab570fb03fce2167e211ada5ee1af95c6f04c94280e8f356593ab8",
-      "size": 8263
+      "sha256": "f34a510714634c7a422cd770dc4ada76c56665014e04a1c4e1f8586cb412d76f",
+      "size": 10610
+    },
+    {
+      "path": "scripts/diagnostics/analyze_stage1_hazard_layers.py",
+      "sha256": "a8db1661ee3f3adb6880d9be612ffea0c61554feb504041067cb616b0111cea2",
+      "size": 27555
     },
     {
       "path": "scripts/diagnostics/analyze_stage1_pickup_art.py",
-      "sha256": "5b0dde2c26cf0505e533d49d33e9b2ff8f33791c1a438bcf33be4dd921cb40e9",
-      "size": 3691
+      "sha256": "3e428b79bb929a7ae1a7c99960ba188534d483b2764ecb210abc34848780fc8b",
+      "size": 3965
     },
     {
       "path": "scripts/diagnostics/analyze_story_panel_discriminators.py",
@@ -152,8 +162,8 @@
     },
     {
       "path": "scripts/diagnostics/generate_stream_boss_states.py",
-      "sha256": "12e789880b745a8f6284ad37e2daec71ac89256a0390445e432a0e0cb84451cc",
-      "size": 25190
+      "sha256": "a19336223c92732584c20412244d641f4c121809eeabc2827585aaa300d69329",
+      "size": 25320
     },
     {
       "path": "scripts/diagnostics/generate_stream_stage_states.py",
@@ -162,8 +172,8 @@
     },
     {
       "path": "scripts/diagnostics/generate_stream_story_states.py",
-      "sha256": "9d98ff8e1d6586cf7cf10d1f7a8f216da82498552ee341374e1b9ec63d425ca1",
-      "size": 20647
+      "sha256": "c6d292d3d2fb8c53a55af10be3f03c2048987cb9f2f06af1b683cc89bd8c08f1",
+      "size": 26523
     },
     {
       "path": "scripts/diagnostics/inventory_attract_reel.py",
@@ -172,13 +182,13 @@
     },
     {
       "path": "scripts/diagnostics/inventory_final_cutscene.py",
-      "sha256": "f7cc0e5bd434ad9c3a0e8870b5e9fa621e5a201f2a4acf8adb0825bb58628420",
-      "size": 18677
+      "sha256": "69dd16daeadcc4dd6333066c6524c49e545e72f518143b5021fda2a78a8a0b98",
+      "size": 22228
     },
     {
       "path": "scripts/diagnostics/inventory_opening_cutscene.py",
-      "sha256": "137db83862368f518611dd3dd0437aa3c20bea308b37fbd4d19b4b4e8c3cf6f5",
-      "size": 12074
+      "sha256": "39844f777d02c48f509417e0d9cca50d3fc5a5d842a4eec4b1191d96dccfebce",
+      "size": 14319
     },
     {
       "path": "scripts/diagnostics/inventory_savestate_scenes.py",
@@ -191,9 +201,19 @@
       "size": 7410
     },
     {
+      "path": "scripts/diagnostics/make_cgb_test_rom.py",
+      "sha256": "950a8e15d8de0bdc6d7ed1259f8ed9061d1be275bdc6071e7ed5144bf38ed193",
+      "size": 766
+    },
+    {
       "path": "scripts/diagnostics/montage.py",
       "sha256": "aa64762e6f980b306a0513f019981ba0cb1203cb197941cd62fb1ea11eee2ed2",
       "size": 1615
+    },
+    {
+      "path": "scripts/diagnostics/normalize_mgba_state_pc.py",
+      "sha256": "a03fbe7c4dafb516a50ca2b9477322e27eb4bdb40e9dcb1377f1ab256e125b79",
+      "size": 4642
     },
     {
       "path": "scripts/diagnostics/probe_arena_alt_fullscan.lua",
@@ -246,6 +266,11 @@
       "size": 2328
     },
     {
+      "path": "scripts/diagnostics/probe_attract_pickup_palettes.lua",
+      "sha256": "d9f8069da4eeeb7a72f2facd5766c162bde257486cf781d54c0c5cf0f5ed074f",
+      "size": 6519
+    },
+    {
       "path": "scripts/diagnostics/probe_attract_reel_inventory.lua",
       "sha256": "49cd5663fd8a9d10a81f1c8d4ab9b11b92fe46bc2d91ef76a693a933f460916e",
       "size": 2797
@@ -266,14 +291,19 @@
       "size": 2108
     },
     {
+      "path": "scripts/diagnostics/probe_bonus_stage_live.lua",
+      "sha256": "52251c4df4740493f8ff4d49519a3f8d1884454f6329d59fc9e4c767e8609a9e",
+      "size": 5223
+    },
+    {
       "path": "scripts/diagnostics/probe_boss_coord.lua",
       "sha256": "c346071d4c1f6d34ff68ac1a0a9396a74172334e6a058bc0e1232da2a0b88219",
       "size": 2087
     },
     {
       "path": "scripts/diagnostics/probe_boss_state_receipt.lua",
-      "sha256": "40395cee2df052c3ec9e1561f4f307ecf10a6e8c37a24b9c1490a9c62a0ce128",
-      "size": 3310
+      "sha256": "55eb881e5a0fada36ff8055ea4bb149c21641840298cf25a1beb23c80edc658d",
+      "size": 4382
     },
     {
       "path": "scripts/diagnostics/probe_cram_accessor.lua",
@@ -327,8 +357,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_ending_tail_state_integrity.lua",
-      "sha256": "085fe6d7d068993ab902664de7c2ac22c0bd258c954e4bd1d95423f72ffd6fb9",
-      "size": 3530
+      "sha256": "28d6c60c3718e272e8fb9a14025508168c668a6b7836f6fe434896bc65afe7e6",
+      "size": 5933
     },
     {
       "path": "scripts/diagnostics/probe_ending_trigger.lua",
@@ -337,18 +367,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_final_cutscene_mgba.lua",
-      "sha256": "bea74f6349b6b4daadb11000ef77d0143a1321b067fedd90605106c2e4025e16",
-      "size": 14013
+      "sha256": "509d8667175b8b9c7a80b749ad2f9e212884f4f296837954ef3f0cfa41596c11",
+      "size": 15048
     },
     {
       "path": "scripts/diagnostics/probe_final_story_state_integrity.lua",
-      "sha256": "a5a00acc4245289b298f8f1b71eba34cabd77a94fade0e80a259fc79c5a89a24",
-      "size": 3960
+      "sha256": "59de426f63f77d66a7362d1eb9cd5348c6b0273b95633da2ebcd0544426c2165",
+      "size": 4284
     },
     {
       "path": "scripts/diagnostics/probe_frame_flicker.lua",
-      "sha256": "e65382141e74a887679d30934b277d49f9849428b8a835d2f69d9059ae025624",
-      "size": 8940
+      "sha256": "b0f6a62ed4d905777e92d54a15037392e842c4aedd21b6f29764f09e08cd4c25",
+      "size": 9127
     },
     {
       "path": "scripts/diagnostics/probe_game_start_route.lua",
@@ -377,18 +407,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_generate_boss_state.lua",
-      "sha256": "70e3d55258230769fc7650bcd20d0632d52eb79d233de508504388d42dbe7fab",
-      "size": 4340
+      "sha256": "ad2fe0d378fbe77f44ded8e36761f02d56a363154e8307563810b8811a0900cc",
+      "size": 5172
     },
     {
       "path": "scripts/diagnostics/probe_generate_ending_tail_state.lua",
-      "sha256": "ee20bd69b5ff9249a5933ff0a93ea83c6ac37b2a84cf39b6b85288bb623da428",
-      "size": 8459
+      "sha256": "cc9a7f82100ead35b96f9b99091128fcfe10b7f2b7db639a6c68817cc0ccadc0",
+      "size": 12145
     },
     {
       "path": "scripts/diagnostics/probe_generate_opening_state.lua",
-      "sha256": "a377e65a4d40b47010fe539461e5786a8ae4dee56653a07bc0141530622db00c",
-      "size": 5403
+      "sha256": "6932f77216747d729aea028aa20a163b4a18dc8ff74a575482b2f47c1fd46679",
+      "size": 7082
     },
     {
       "path": "scripts/diagnostics/probe_item_menu.lua",
@@ -397,8 +427,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_later_stage_soak.lua",
-      "sha256": "792932361736bd6336e4602b1548e6ba9cec25ebf301f7e54d1ec256a4c8122b",
-      "size": 14043
+      "sha256": "de32eddf419f9978da320bfd6fa9e441f7261a73fdb745bbf47d78bf65441147",
+      "size": 14228
     },
     {
       "path": "scripts/diagnostics/probe_lava_ffba.lua",
@@ -417,13 +447,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_levelselect_attrs.lua",
-      "sha256": "bcc1768a17c486e05b5c2a477ed6dd9d4a85613fb31952df05f836e03ed68c1c",
-      "size": 2093
+      "sha256": "48d296c891e3271add6db33697bf3e087f810698d9edbf5d3cf3f4eddfd53ea0",
+      "size": 2126
     },
     {
       "path": "scripts/diagnostics/probe_loadstate_shot.lua",
       "sha256": "a7379cdf304f256d5d8ef21485722b0502badd0b012a3b91ab25fd382a2d6954",
       "size": 1258
+    },
+    {
+      "path": "scripts/diagnostics/probe_low_health_flicker.lua",
+      "sha256": "3784a0a658c7989f65e5f39a7c32625be25c27f19c9dc61083cbdd5e0abba9e8",
+      "size": 5854
     },
     {
       "path": "scripts/diagnostics/probe_manual_game_start.lua",
@@ -434,6 +469,11 @@
       "path": "scripts/diagnostics/probe_menu_flicker.lua",
       "sha256": "e13cb6f68897533da51440a1935a71aa2c0ee7179991603081be824a69b09673",
       "size": 2980
+    },
+    {
+      "path": "scripts/diagnostics/probe_menu_window_order.lua",
+      "sha256": "13b87c20513c6b3545a75548c8bbccf253c1eda3e5171041544671ed682dba3c",
+      "size": 9057
     },
     {
       "path": "scripts/diagnostics/probe_monster_capture.lua",
@@ -457,8 +497,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_palette_build_roundtrip.lua",
-      "sha256": "68792ebe5876b4f5d96e5f1c8cdccf693a8294ed7c154a6a5d426b9deafa56c5",
-      "size": 5880
+      "sha256": "7bfcffc22d5df01054dbb1ff3f0bf23568c4b97d291c79df484b2ffd85802f1f",
+      "size": 5896
+    },
+    {
+      "path": "scripts/diagnostics/probe_pickup_live_palettes.lua",
+      "sha256": "38a63aa7a74a2b333280eb2370ab766e71cde272d537e32e461d821a5af5f992",
+      "size": 7100
+    },
+    {
+      "path": "scripts/diagnostics/probe_resume_stage1_visual.lua",
+      "sha256": "3e415c40b5d77d99b61dfc1eeecc99e0607f1f667558ad05646d6115821f7da2",
+      "size": 2687
     },
     {
       "path": "scripts/diagnostics/probe_savestate_cram.lua",
@@ -502,13 +552,33 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage1_no_bleed.lua",
-      "sha256": "f6b254d7fee027aec8063c9fc17b8bf558a7640c8288408a9cf7c92344c0e5ac",
-      "size": 18819
+      "sha256": "558c417506f6254687a1835b4be7b31a05d4f4b76f270a81a28d9e0451648add",
+      "size": 21290
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_north_integrity.lua",
+      "sha256": "0f672489830e5d91db646e18284ba1260c93aed06fbd53d931d5227f17a28dfe",
+      "size": 14062
     },
     {
       "path": "scripts/diagnostics/probe_stage1_pickup_art.lua",
-      "sha256": "b54959a1f58f5367091f01d6db68b5ffe316acb2c9ef88061bbcafcf4316a96e",
-      "size": 2199
+      "sha256": "eb6c45a45522018d7b58316dc19faa92cfd7dc5d5682622937058d75033f54d3",
+      "size": 2214
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_pickup_writers.lua",
+      "sha256": "cef68e899a7a7f2d0181e822942279176cec2d7e74b479404c669f8db66b9134",
+      "size": 9130
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_spike_palettes.lua",
+      "sha256": "3c3369584d3607fe153a85cb02a8828beebd38754f9ec1815be7a431365a2c3f",
+      "size": 14303
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_tilemap_copy.lua",
+      "sha256": "3e0a09fc1769791fa6c5444955954c567798247ab02b29358615968c4f39d9b9",
+      "size": 18014
     },
     {
       "path": "scripts/diagnostics/probe_stage1_vram_dump.lua",
@@ -527,13 +597,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage_speed.lua",
-      "sha256": "f8481b648ae7a609777daac7f97d98a5d74b79ca52bde647a9ef0cbf1fda5d6f",
-      "size": 10751
+      "sha256": "8f5601fd9079fba34a1c224d89bf7d8d5161e67b420a10398a4535e8e8994d38",
+      "size": 12484
+    },
+    {
+      "path": "scripts/diagnostics/probe_stale_window_state.lua",
+      "sha256": "1e0c3f6ff7c2d4f0c5ea4d7495a1db7a972aaf4656287063954f630a5569918d",
+      "size": 2501
     },
     {
       "path": "scripts/diagnostics/probe_story_attr_production.lua",
-      "sha256": "ca9704fe5eeefccfbaff062c2e154365577189cdf2604de57e70ee2599f162ab",
-      "size": 6384
+      "sha256": "87fe138cc0899db4f0779792978d25fe6868ee3db7b35ddfa30f53824d8c5c76",
+      "size": 8570
     },
     {
       "path": "scripts/diagnostics/probe_table_trace.lua",
@@ -552,8 +627,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_title_showcase_mgba.lua",
-      "sha256": "871e2dd93516a8580b8917dd20f0e131cdc627b706c5ee48d583d9233e657099",
-      "size": 6434
+      "sha256": "e508b4ec204d12542368ca20c468d4d76fdc0a7f82cb18b1d79e9ecba7d7c34c",
+      "size": 8144
     },
     {
       "path": "scripts/diagnostics/probe_vram_obj_inventory.lua",
@@ -571,19 +646,24 @@
       "size": 2887
     },
     {
+      "path": "scripts/diagnostics/prototype_cutscene_region_palettes.py",
+      "sha256": "ec020e63a133c78e49e598094683f732f63c4244c75a24303629dd37122af79c",
+      "size": 10126
+    },
+    {
       "path": "scripts/diagnostics/render_stage_integrity.py",
       "sha256": "7bddf27545b1269b38e5d28bd3fd03439fb9f41822a3c9133dbde7d7540d3b45",
       "size": 3069
     },
     {
       "path": "scripts/diagnostics/run_deterministic_suite.py",
-      "sha256": "407b950c0e3fa24923394d7df28038f12abbb2a2e94131db2015ea6a71f812b1",
-      "size": 18843
+      "sha256": "7945c9554008580ec078f0598ed1c5401f80273e8a04fc00a0f9e15caa7618f5",
+      "size": 22962
     },
     {
       "path": "scripts/diagnostics/suite_contract.py",
-      "sha256": "60b1393541a1598675b8b90af118b8c79c7ab6433e4c93a7d558d449bb6df26a",
-      "size": 4696
+      "sha256": "25602fe5da93531f63be285da0a65fbd46790bd711f718621da62140a4d13462",
+      "size": 5157
     },
     {
       "path": "scripts/diagnostics/trace_native_bgp_writes.lua",
@@ -594,6 +674,16 @@
       "path": "scripts/diagnostics/trace_shadow_oam_writes.lua",
       "sha256": "dbb8ff20de770a28f4c3bb503250793506197d34f5d6c7d734f7e03407f74696",
       "size": 1872
+    },
+    {
+      "path": "scripts/diagnostics/verify_attract_pickup_palettes.py",
+      "sha256": "293b96b489bb2e2af2fd49c788cf9c2aba9552688a28cfd20efac8fe3e5e92ba",
+      "size": 9185
+    },
+    {
+      "path": "scripts/diagnostics/verify_bonus_stage_live.py",
+      "sha256": "ba4bece311b1cd4c6a5beefc62cf509153afe61b58ec593dc3922cbb456cfb57",
+      "size": 7140
     },
     {
       "path": "scripts/diagnostics/verify_cram_loading.py",
@@ -607,18 +697,18 @@
     },
     {
       "path": "scripts/diagnostics/verify_final_cutscene_mgba.py",
-      "sha256": "b1d1d6dea32d4fa78679cd213c10448cb388c157e6184ef381ca282e750835c4",
-      "size": 5494
+      "sha256": "778e8b10aaca098465e5902a141685208978bc08213e7f3ec501a7a9bedadcdf",
+      "size": 8262
     },
     {
       "path": "scripts/diagnostics/verify_frame_flicker.py",
-      "sha256": "fae17794a09b32bd4b475fb7d517039e6db8cbaa0cc762d22b8fff89df4decd3",
-      "size": 19516
+      "sha256": "e0c17761b1c88ff52f002f686b367b2668b403ccd5c293803abc3a9d559b7b59",
+      "size": 21279
     },
     {
       "path": "scripts/diagnostics/verify_game_start_routes.py",
-      "sha256": "7ca3afe6eb8cd7dd82110e1b42fd0d35b3c37814ba893a011b4a1515c4eb12a1",
-      "size": 16993
+      "sha256": "faebbcb3228cddfa313d0ea417bd6762d3eef24f54899248bb26db403851f75d",
+      "size": 18155
     },
     {
       "path": "scripts/diagnostics/verify_gameplay_obj_palettes.py",
@@ -637,23 +727,38 @@
     },
     {
       "path": "scripts/diagnostics/verify_later_stage_soak.py",
-      "sha256": "9d57828081cdf74409fcbe944f0ac3b6f7e02fc453fd74befbddcd720abb5b03",
-      "size": 6853
+      "sha256": "b24d4fe947fc4b18e42742c3f093d976bb8f6ad275182513931e7528003453cc",
+      "size": 8510
     },
     {
       "path": "scripts/diagnostics/verify_levelselect_screen.py",
-      "sha256": "85180717c0d35fdcc5739b06c7626abe95c4795d1675516071b0a366f0b6afcf",
-      "size": 3411
+      "sha256": "e176de02ed6711f4bbe00577567f3fda5b7bc0218a418c6b5297948473b691d7",
+      "size": 3642
     },
     {
       "path": "scripts/diagnostics/verify_live_palette_session.py",
-      "sha256": "a6fcb4596d9783cd33b4933b8b23fe053c2f19d307c9e9846725d0862bd76753",
-      "size": 34365
+      "sha256": "9cdfff8fc2c42ce8f134a598ce423b4f0b435ead7295e01a9bcf574e08b697aa",
+      "size": 34720
+    },
+    {
+      "path": "scripts/diagnostics/verify_live_regression.py",
+      "sha256": "4ca8e5f90b3c17ea0866b6cdedc93567837933429ad45dfa85e3cbb9e7045c95",
+      "size": 5815
+    },
+    {
+      "path": "scripts/diagnostics/verify_low_health_flicker.py",
+      "sha256": "f1d9fee02035faea03c1dc7bce37cd46549f498666c7f8ea43fcad94fad96ec7",
+      "size": 8117
+    },
+    {
+      "path": "scripts/diagnostics/verify_menu_window_order.py",
+      "sha256": "effd1df472574189fc4a0034c09987396faacd729e52bafdb0a9c863ca926d41",
+      "size": 5572
     },
     {
       "path": "scripts/diagnostics/verify_mgba_singleflight_guard.py",
-      "sha256": "454e36d3c2cffab41b8f4cb1b0487bc57e406660ccfeb3d819eb216e0f60a79b",
-      "size": 10458
+      "sha256": "ba3b5189d27222d681db86a9c94b247feafd41d250646b8e44c91e4514d0f08f",
+      "size": 12724
     },
     {
       "path": "scripts/diagnostics/verify_mister_release_workflow.py",
@@ -667,18 +772,28 @@
     },
     {
       "path": "scripts/diagnostics/verify_palette_build_roundtrip.py",
-      "sha256": "4f59d3aa29de0ba6f3acbf4fbaf0895c86fb13245c8075ca04bbdcb744f91233",
-      "size": 12727
+      "sha256": "c71c5e0144d3587d178ed198f142a67b81b43e1db8fb3cfbfa9f4fcc0a7b9e6a",
+      "size": 13213
     },
     {
       "path": "scripts/diagnostics/verify_pickup_class_palettes.py",
-      "sha256": "ec17352d1caedf0f96ca1550605788058409c973bf2f72a408a270bbf8423697",
-      "size": 12443
+      "sha256": "78904001704e196631f2c5b5d82be3d91e7e3d912e4670e71a3e16d38a39eb73",
+      "size": 12664
+    },
+    {
+      "path": "scripts/diagnostics/verify_pickup_live_palettes.py",
+      "sha256": "5a7caa48dccfcaffd01fb44a80d76d7cc9a9fab7ef46f78a0de2609b2a8c9d8e",
+      "size": 14172
+    },
+    {
+      "path": "scripts/diagnostics/verify_pickup_live_retry.py",
+      "sha256": "b143a98c598c16709f677b61da84781b1d6cc3627e73d769709fc1af7c51296f",
+      "size": 2520
     },
     {
       "path": "scripts/diagnostics/verify_release_candidate.py",
-      "sha256": "3a0fcd6eec46d34402063d3707e31205157e1b87b9d9bcd2fdcedf8623c5e1f3",
-      "size": 23466
+      "sha256": "cf57518c8127ac66d36446222af46197bc8bed4d50705d878dee8a259ee1e52b",
+      "size": 29809
     },
     {
       "path": "scripts/diagnostics/verify_release_patch.py",
@@ -697,18 +812,43 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_no_bleed.py",
-      "sha256": "f1cf46815e60180a426691b1ed63cce6519d3e794077a06d820dad6aefecdad7",
-      "size": 21448
+      "sha256": "b82dbb5c9c60f3c8b63da0b3bd1024f747d97eb3f37787f113ca9b05fd5dfe01",
+      "size": 24535
+    },
+    {
+      "path": "scripts/diagnostics/verify_stage1_north_integrity.py",
+      "sha256": "d246d3cf28acf20ba194bb8da7c6c26fdf5ff23440e7d378915b43d0517a7d1d",
+      "size": 10941
+    },
+    {
+      "path": "scripts/diagnostics/verify_stage1_pickup_art.py",
+      "sha256": "c2b621d6262b5c86ec8200a15556faa8968cd644c78938de7df4d6ab446f8247",
+      "size": 11156
+    },
+    {
+      "path": "scripts/diagnostics/verify_stage1_spike_palettes.py",
+      "sha256": "25455ef1899aea6bdddea68c0f01092c5800a08a6b19538846b965bf4185b58f",
+      "size": 20525
+    },
+    {
+      "path": "scripts/diagnostics/verify_stage1_tilemap_copy.py",
+      "sha256": "7901795d76518accdb2405c80e2293d5ea8580b03f066e06dbc92f7d35fe653e",
+      "size": 11952
     },
     {
       "path": "scripts/diagnostics/verify_stage_speed_matrix.py",
-      "sha256": "695407dc5f7ae5b0f8662cc30f66913ef76192414d314a7cd5ef286f3a953e18",
-      "size": 7513
+      "sha256": "dd4c23b98aa15fc914993a0fc71c1287a336a71dc47600d0d5cd63a89a112705",
+      "size": 8860
+    },
+    {
+      "path": "scripts/diagnostics/verify_stale_window_state.py",
+      "sha256": "7ac9f488eeb07d9a4e78ed7d6832959402144958e199307463abfddce749e9df",
+      "size": 4516
     },
     {
       "path": "scripts/diagnostics/verify_story_attr_production.py",
-      "sha256": "4ba3013bdf44f49807627468e812efe3cfc8ec05ad81b3ccb8f4960b90f76e34",
-      "size": 6239
+      "sha256": "2e1ffc6a670a2bcbbc2e0ac0e8a17e4c031e6f3ccc028b6137ffbf2e91357662",
+      "size": 12879
     },
     {
       "path": "scripts/diagnostics/verify_suite_receipt.py",
@@ -722,13 +862,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_title_showcase_mgba.py",
-      "sha256": "42c1c6efe5e7d3e3b8d3b164e9657d4c75ddbcf9f47f81a5b332c19e0ceab49f",
-      "size": 8243
+      "sha256": "de87d5c495fa40210c4fe9433e8a15aedcc39505952997f0ff720b1d80e72b07",
+      "size": 10097
     },
     {
       "path": "scripts/diagnostics/verify_title_visual_receipts.py",
-      "sha256": "2f62639258831f98a6bae5c767f9f8228333cad7b3d0575ef9d6ecac5443c835",
-      "size": 9800
+      "sha256": "f1b2a016561e95486e9d58da06412bb612200209b28fa0894c547c50225eb0d5",
+      "size": 10073
     },
     {
       "path": "scripts/hooks/guard_mgba_launch.py",
@@ -777,8 +917,8 @@
     },
     {
       "path": "scripts/mgba_singleflight.py",
-      "sha256": "d01dbb412fca6e0ed1123cee02ff1ffe1137726c4ba7db0b4be4b724a6d2c35b",
-      "size": 3334
+      "sha256": "782fe0f2c21b174ca54a0acab15a145b38c9743c951533ca8ef9030df87e80f8",
+      "size": 5976
     },
     {
       "path": "scripts/mister.py",
@@ -847,8 +987,8 @@
     },
     {
       "path": "scripts/probes/menu_hud_and_combo.lua",
-      "sha256": "9556ed2c910e6f1f309f99d94b47623d05c6882c444c3426d587006f2c7c87ec",
-      "size": 6189
+      "sha256": "33cad05244130654c700e229de56a16ecf15061736d8d16136004520f864598c",
+      "size": 6250
     },
     {
       "path": "scripts/probes/phantom_d887.lua",
@@ -907,8 +1047,8 @@
     },
     {
       "path": "scripts/probes/verify_menu_hud_and_combo.py",
-      "sha256": "f181c3f0f94b369fb12a56902924ad23a67b18b562c19a4f0028519bb872e0c5",
-      "size": 4171
+      "sha256": "07b0fa77109872b53ebc69a2657c6905206912b8e06ed27dccbeabae279a27f8",
+      "size": 4386
     },
     {
       "path": "scripts/probes/verify_miniboss_color.py",
@@ -944,6 +1084,16 @@
       "path": "scripts/probes/verify_title_screen_integration.py",
       "sha256": "e50f83140d532e799ac9ab2a0f60d50e24dd6fb69f090da0a8c7f6386fe3885e",
       "size": 8710
+    },
+    {
+      "path": "scripts/record_palette_approval.py",
+      "sha256": "014e5d83fcda0f1947d9a070735e28b45a7487aae4c3548f5fde8a32f273caae",
+      "size": 3929
+    },
+    {
+      "path": "scripts/stage1_hazard_art.py",
+      "sha256": "e1cbb5ba177c8644d2e8ab224ff6a83ea1f6c56ab30271d8ee8174132c6e2d66",
+      "size": 11849
     },
     {
       "path": "src/penta_dragon_dx/__init__.py",
@@ -1003,237 +1153,315 @@
   ],
   "candidate": {
     "size": 262144,
-    "md5": "95d98e40efa97a1882c00e5977161d5a",
-    "sha256": "5de405686c5779bc2db4df0ddc3659813e5d7d03ab39f8970f919dfec587a4eb"
+    "md5": "6add942f4e2abd94dc44cab7c3245ab6",
+    "sha256": "ba095d92a71bd5d9c85a6943bc98a47d61532fa492af765603f62a8e0a808148"
   },
   "deterministic_build": {
     "passes": 2,
     "byte_identical": true,
-    "build_a_sha256": "5de405686c5779bc2db4df0ddc3659813e5d7d03ab39f8970f919dfec587a4eb",
-    "build_b_sha256": "5de405686c5779bc2db4df0ddc3659813e5d7d03ab39f8970f919dfec587a4eb"
+    "build_a_sha256": "ba095d92a71bd5d9c85a6943bc98a47d61532fa492af765603f62a8e0a808148",
+    "build_b_sha256": "ba095d92a71bd5d9c85a6943bc98a47d61532fa492af765603f62a8e0a808148"
   },
   "matrix": {
     "status": "emulator-pass",
     "scope": "full",
-    "gate_count": 38,
+    "gate_count": 51,
     "failures": 0,
-    "manifest_sha256": "ae4be8cbb56ac21f733bb50ce900d7a24cce43d143e59996cce20f31386989f3",
+    "manifest_sha256": "e15945ffef1f5d7530ce52795ad7f22b33e813a7e4f241ffcbaa994fd2d73598",
     "results": [
       {
         "name": "emulator_singleflight_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.265
+        "duration_seconds": 0.315
       },
       {
         "name": "title_footer_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.568
+        "duration_seconds": 0.468
       },
       {
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.016
+        "duration_seconds": 1.066
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.566
+        "duration_seconds": 0.617
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.043
+        "duration_seconds": 19.658
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.617
+        "duration_seconds": 6.825
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.619
+        "duration_seconds": 1.667
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.566
+        "duration_seconds": 0.515
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.817
+        "duration_seconds": 12.237
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.52
+        "duration_seconds": 19.15
+      },
+      {
+        "name": "menu_window_publish_order",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 7.076
+      },
+      {
+        "name": "stale_gameplay_window",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 6.125
       },
       {
         "name": "levelselect_screen",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.88
+        "duration_seconds": 12.695
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 104.93
+        "duration_seconds": 170.638
       },
       {
         "name": "game_start_after_attract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.87
+        "duration_seconds": 9.982
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.73
+        "duration_seconds": 40.334
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 17.496
+        "duration_seconds": 24.418
       },
       {
         "name": "pickup_class_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.114
+        "duration_seconds": 0.166
+      },
+      {
+        "name": "attract_pickup_palettes",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 8.078
+      },
+      {
+        "name": "stage1_spike_palettes",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 12.737
+      },
+      {
+        "name": "pickup_live_retry_contract",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.117
+      },
+      {
+        "name": "pickup_live_palettes",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 77.716
+      },
+      {
+        "name": "stage1_pickup_art",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 2.968
+      },
+      {
+        "name": "bonus_stage_live",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 6.073
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.776
+        "duration_seconds": 8.328
+      },
+      {
+        "name": "stage1_tilemap_integrity",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 20.849
+      },
+      {
+        "name": "stage1_north_route_integrity",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 13.336
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.033
+        "duration_seconds": 46.249
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.941
+        "duration_seconds": 23.454
+      },
+      {
+        "name": "low_health_flicker",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 7.578
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.075
+        "duration_seconds": 13.043
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.678
+        "duration_seconds": 1.574
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.286
+        "duration_seconds": 7.987
+      },
+      {
+        "name": "stage2_stream_soak",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 1.316
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.239
+        "duration_seconds": 110.867
       },
       {
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.786
+        "duration_seconds": 97.344
       },
       {
         "name": "title_idle_reel",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.623
+        "duration_seconds": 4.622
       },
       {
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.553
+        "duration_seconds": 22.404
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.519
+        "duration_seconds": 2.47
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.528
+        "duration_seconds": 19.199
+      },
+      {
+        "name": "pre_final_inventory",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 1.166
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.672
+        "duration_seconds": 4.725
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.671
+        "duration_seconds": 4.723
       },
       {
         "name": "ending_discriminators",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.032
+        "duration_seconds": 0.064
       },
       {
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 29.792
+        "duration_seconds": 42.354
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.064
+        "duration_seconds": 28.38
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 81.939
+        "duration_seconds": 262.386
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.656
+        "duration_seconds": 88.632
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.62
+        "duration_seconds": 6.627
       },
       {
         "name": "candidate_ips_roundtrip",
@@ -1245,7 +1473,7 @@
         "name": "mister_reservation_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.164
+        "duration_seconds": 0.215
       }
     ]
   },

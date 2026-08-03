@@ -14,6 +14,11 @@ local CAPTURE_STABLE = tonumber(
     os.getenv("FINAL_SCENE_CAPTURE_STABLE") or "240"
 )
 local ART_TARGET = tonumber(os.getenv("FINAL_SCENE_ART_ID") or "")
+local ATTR_MASKS = assert(
+    os.getenv("FINAL_SCENE_ATTR_MASKS"),
+    "FINAL_SCENE_ATTR_MASKS is required"
+)
+assert(#ATTR_MASKS == 7 * 160, "FINAL_SCENE_ATTR_MASKS must be 1120 digits")
 local TRACE_LAYOUT = os.getenv("FINAL_SCENE_TRACE_LAYOUT") == "1"
 local TRACE = io.open(OUT .. ".trace", "w")
 local function trace(message)
@@ -82,6 +87,7 @@ local reached = false
 local screenshot_taken = false
 local stable_scene_frames = 0
 local state_saved = false
+local done = false
 local previous_layout_key = -1
 local layout_stable_frames = 0
 local previous_mismatch_signature = nil
@@ -120,7 +126,15 @@ local function visible_attr_layout()
             local map_y = ((scy + row * 8) >> 3) & 0x1F
             local map_x = ((scx + column * 8) >> 3) & 0x1F
             local attr = emu:read8(base + map_y * 32 + map_x)
-            local expected = (row <= 7) and committed_art or 0
+            local expected = 0
+            if row <= 7 then
+                local mask_index = (
+                    (committed_art - 1) * 160 + row * 20 + column + 1
+                )
+                expected = assert(tonumber(ATTR_MASKS:sub(
+                    mask_index, mask_index
+                )))
+            end
             if attr ~= 0 then contaminated = contaminated + 1 end
             if attr ~= expected then
                 mismatch = mismatch + 1
@@ -145,6 +159,8 @@ local function active_table_is_neutral()
 end
 
 local function finish(status)
+    if done then return end
+    done = true
     local out = io.open(OUT, "w")
     out:write(string.format("status=%s\n", status))
     out:write(string.format("entry=%s\n", ENTRY))
@@ -152,6 +168,9 @@ local function finish(status)
     out:write(string.format("expected_scene=%02X\n", expected_scene))
     out:write(string.format("reached=%s\n", tostring(reached)))
     out:write(string.format("samples=%d\n", samples))
+    out:write(string.format("nonzero_attr_total=%d\n", contaminated_total))
+    out:write(string.format("max_nonzero_attrs=%d\n", max_contaminated))
+    -- Backward-compatible aliases retained for historical receipts.
     out:write(string.format("contaminated_total=%d\n", contaminated_total))
     out:write(string.format("max_contaminated=%d\n", max_contaminated))
     out:write(string.format(
@@ -174,11 +193,19 @@ local function finish(status)
         local marker = assert(io.open(OUT .. ".done", "w"))
         marker:write(status .. "\n")
         marker:close()
+        -- Screenshot/state serialization is queued by mGBA's Qt frontend.
+        -- Leave the process alive so the parent can observe stable artifacts
+        -- before terminating it; os.exit here could drop a valid capture.
+        return
     end
     os.exit(status == "ok" and 0 or 1)
 end
 
 callbacks:add("frame", function()
+    if done then
+        emu:setKeys(0)
+        return
+    end
     frame = frame + 1
     local scene = emu:read8(0xD880)
 

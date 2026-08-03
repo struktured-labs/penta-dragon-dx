@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import os
@@ -11,27 +12,32 @@ from pathlib import Path
 import signal
 import shutil
 import subprocess
+import sys
 import time
 
 from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from build_v301_gdma import _bg_table  # noqa: E402
+
+
 PROBE = ROOT / "scripts/diagnostics/probe_stage1_no_bleed.lua"
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 FPS = 59.7275
 BANK13 = 13 * 0x4000
 DUNGEON_TABLE_OFFSET = BANK13 + (0x7000 - 0x4000)
 BG_PALETTE_OFFSET = BANK13 + (0x6800 - 0x4000)
-EXPECTED_TABLE_HISTOGRAM = {
-    0: 146,
-    1: 5,
-    2: 16,
-    3: 8,
-    4: 24,
-    5: 20,
-    6: 37,
-}
+EXPECTED_TABLE = bytes(_bg_table())
+EXPECTED_TABLE_HISTOGRAM = dict(sorted(Counter(EXPECTED_TABLE).items()))
+# emu:screenshot() queues the image from Lua's frame callback; guarded Qt can
+# commit it a handful of callbacks later. Align raster pixels with nearby past
+# and future metadata instead of pretending the queued filename is synchronous.
+# Twelve frames is the probe's existing transition-window bound. The separate
+# every-frame tile/LUT assertion remains the authoritative color-bleed gate.
+RASTER_ALIGNMENT_RADIUS = 12
 
 
 def stop_owned_process_group(process: subprocess.Popen) -> None:
@@ -209,7 +215,11 @@ def parse_probe(path: Path) -> dict:
             }
         elif key == "pal1_capture":
             result.setdefault("pal1_captures", []).append(value)
-        elif key in {"first_unexpected_screenshot", "first_unexpected_details"}:
+        elif key in {
+            "first_unexpected_screenshot",
+            "first_unexpected_details",
+            "first_runtime_lut_mismatch_details",
+        }:
             result[key] = value
         else:
             result[key] = int(value)
@@ -301,6 +311,27 @@ def audit_rendered_pickup_colors(
         "stray_pickup_accent_pixels": len(stray),
         "first_stray_coordinates": [list(point) for point in stray[:24]],
     }
+
+
+def raster_aligned_rectangles(
+    captures: list[dict], index: int, key: str
+) -> tuple[list[list[int]], list[int]]:
+    """Return rectangles from the bounded metadata window around one image."""
+
+    frame = captures[index]["play_frame"]
+    nearby = [
+        capture for capture in captures
+        if abs(capture["play_frame"] - frame) <= RASTER_ALIGNMENT_RADIUS
+    ]
+    rectangles = {
+        tuple(rectangle)
+        for capture in nearby
+        for rectangle in capture[key]
+    }
+    frames = [capture["play_frame"] for capture in nearby]
+    return [list(rectangle) for rectangle in sorted(rectangles)], [
+        min(frames), max(frames)
+    ]
 
 
 def create_raster_contact_sheet(captures: list[dict], output: Path) -> None:
@@ -471,16 +502,20 @@ def main() -> int:
     if set(dungeon_table) - set(EXPECTED_TABLE_HISTOGRAM):
         failures.append(
             "Stage 1 ROM table contains palettes outside semantic "
-            f"floor/pickup/wall set: {table_histogram}"
+            f"floor/pickup/hazard set: {table_histogram}"
         )
     numeric_histogram = {
         palette: dungeon_table.count(palette)
         for palette in sorted(set(dungeon_table))
     }
+    if dungeon_table != EXPECTED_TABLE:
+        failures.append(
+            "Stage 1 ROM table differs from the YAML-compiled semantic map"
+        )
     if numeric_histogram != EXPECTED_TABLE_HISTOGRAM:
         failures.append(
-            "Stage 1 ROM table does not contain the exact 73-tile semantic "
-            f"pickup split: {numeric_histogram}"
+            "Stage 1 ROM table does not contain the exact YAML-compiled "
+            f"semantic split: {numeric_histogram}"
         )
     accents = pickup_accent_colors(rom_bytes)
     if len(accents) != 9:
@@ -507,15 +542,25 @@ def main() -> int:
         capture["native_size"] = list(Image.open(screenshot).size)
 
     raster_captures: list[dict] = probe["raster_captures"]
-    for capture in raster_captures:
+    for index, capture in enumerate(raster_captures):
         screenshot = Path(capture["screenshot"])
         if not screenshot.is_file() or screenshot.stat().st_size <= 100:
             failures.append(f"missing rendered raster screenshot {screenshot}")
             continue
         capture["screenshot_sha256"] = digest(screenshot)
         capture["native_size"] = list(Image.open(screenshot).size)
+        aligned = dict(capture)
+        aligned["pickup_rectangles"], aligned_frames = (
+            raster_aligned_rectangles(
+                raster_captures, index, "pickup_rectangles"
+            )
+        )
+        aligned["oam_rectangles"], _ = raster_aligned_rectangles(
+            raster_captures, index, "oam_rectangles"
+        )
+        capture["raster_alignment_frames"] = aligned_frames
         capture["raster_audit"] = audit_rendered_pickup_colors(
-            capture, accents
+            aligned, accents
         )
 
     raster_audited = [
@@ -561,6 +606,11 @@ def main() -> int:
         ),
         "every sampled visible cell matches the compiled palette LUT": (
             probe.get("unexpected_cells", -1) == 0
+        ),
+        "runtime Stage 1 palette LUT remains byte-exact": (
+            probe.get("runtime_lut_mismatch_frames", -1) == 0
+            and probe.get("runtime_lut_mismatch_cells", -1) == 0
+            and probe.get("runtime_lut_mismatch_max", -1) == 0
         ),
         "scroll/source transition raster windows captured": (
             len(raster_captures) >= probe.get("source_signature_changes", 0)
@@ -619,6 +669,7 @@ def main() -> int:
             "play_frames_requested": args.frames,
             "emulated_seconds": round(args.frames / FPS, 3),
         },
+        "raster_alignment_radius_frames": RASTER_ALIGNMENT_RADIUS,
         "stage1_table_histogram": table_histogram,
         "probe": probe,
         "checks": checks,

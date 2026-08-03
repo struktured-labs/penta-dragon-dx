@@ -17,15 +17,28 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from PIL import Image
+
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from bg_experiment import load_palettes_from_yaml  # noqa: E402
+from cutscene_region_palettes import (  # noqa: E402
+    load_cutscene_region_palettes,
+    panel_mask,
+)
+
+
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 DEFAULT_OUTPUT = ROOT / "tmp/palette_session/story_states"
+DEFAULT_PALETTES = ROOT / "palettes/penta_palettes_v097.yaml"
 OPENING_PROBE = Path(__file__).with_name("probe_generate_opening_state.lua")
 FINAL_PROBE = Path(__file__).with_name("probe_final_cutscene_mgba.lua")
 FINAL_INTEGRITY_PROBE = Path(__file__).with_name(
@@ -75,6 +88,53 @@ def md5(path: Path) -> str:
     return digest.hexdigest()
 
 
+def artifact_status(*paths: Path) -> str:
+    """Describe capture files before their temporary directory is removed."""
+    parts = []
+    for path in paths:
+        try:
+            size: int | str = path.stat().st_size
+        except OSError:
+            size = "missing"
+        parts.append(f"{path.name}={size}")
+    return ", ".join(parts)
+
+
+def screenshot_color_metrics(path: Path) -> dict[str, int | float]:
+    """Return deterministic visible-render evidence for one mGBA capture."""
+    with Image.open(path) as image:
+        rgb = image.convert("RGB")
+        if rgb.size != (160, 144):
+            raise RuntimeError(
+                f"{path.name} is {rgb.size[0]}x{rgb.size[1]}, expected 160x144"
+            )
+        colors = rgb.getcolors(maxcolors=160 * 144)
+    if not colors:
+        raise RuntimeError(f"{path.name} has an invalid color histogram")
+    dominant = max(count for count, _color in colors)
+    pixels = 160 * 144
+    return {
+        "distinct_colors": len(colors),
+        "dominant_pixels": dominant,
+        "non_dominant_pixels": pixels - dominant,
+        "dominant_fraction": dominant / pixels,
+    }
+
+
+def require_visible_render(path: Path) -> dict[str, int | float]:
+    """Reject blank/near-blank screenshots that attribute checks can miss."""
+    metrics = screenshot_color_metrics(path)
+    if (
+        metrics["distinct_colors"] < 2
+        or metrics["non_dominant_pixels"] < 100
+        or metrics["dominant_fraction"] >= 0.995
+    ):
+        raise RuntimeError(
+            f"{path.name} is blank or near-blank: {metrics}"
+        )
+    return metrics
+
+
 def cached(output: Path, rom_md5: str) -> bool:
     manifest = output / "manifest.json"
     if not manifest.is_file() or not all(
@@ -110,33 +170,70 @@ def run_until_marker(
     cwd: Path,
     marker: Path,
     timeout: float,
+    required_artifacts: tuple[tuple[Path, int], ...] = (),
 ) -> None:
+    process_log = Path(f"{marker}.process.log")
+    log_handle = process_log.open("wb")
     process = subprocess.Popen(
         command,
         cwd=cwd,
         env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
     )
     try:
         deadline = time.monotonic() + timeout
+        previous_sizes: tuple[int, ...] | None = None
+        stable_polls = 0
         while time.monotonic() < deadline:
             if marker.is_file():
                 # Lua opens the marker before writing its status. Waiting for
                 # non-empty content avoids terminating mGBA in that tiny race.
+                # Screenshots and state containers may still be flushing after
+                # the marker is closed, so successful captures also require
+                # their artifacts to reach minimum size and remain stable for
+                # three polls before mGBA is terminated.
                 try:
-                    if marker.read_text().strip():
-                        return
+                    status = marker.read_text().strip()
                 except OSError:
-                    pass
+                    status = ""
+                if status and status != "ok":
+                    return
+                if status == "ok":
+                    try:
+                        sizes = tuple(
+                            path.stat().st_size
+                            for path, minimum in required_artifacts
+                            if path.stat().st_size >= minimum
+                        )
+                    except OSError:
+                        sizes = ()
+                    if len(sizes) == len(required_artifacts):
+                        if sizes == previous_sizes:
+                            stable_polls += 1
+                        else:
+                            previous_sizes = sizes
+                            stable_polls = 1
+                        if stable_polls >= 3:
+                            return
+                    else:
+                        previous_sizes = None
+                        stable_polls = 0
             if process.poll() is not None:
+                log_handle.flush()
+                try:
+                    detail = process_log.read_text(errors="replace")[-4000:].strip()
+                except OSError:
+                    detail = ""
                 raise RuntimeError(
-                    f"mGBA exited {process.returncode} before {marker.name}"
+                    f"mGBA exited {process.returncode} before {marker.name}; "
+                    f"output={detail or '<empty>'}"
                 )
             time.sleep(0.05)
         raise TimeoutError(f"timed out waiting for {marker.name}")
     finally:
         terminate(process)
+        log_handle.close()
 
 
 def generate_opening(
@@ -146,6 +243,7 @@ def generate_opening(
     tmpdir: Path,
     stem: str,
     art_target: int | None,
+    attribute_mask: str | None,
     timeout: float,
 ) -> str:
     prefix = tmpdir / stem
@@ -164,6 +262,7 @@ def generate_opening(
     )
     if art_target is not None:
         env["OPENING_ART_ID"] = str(art_target)
+        env["OPENING_ATTR_MASK"] = attribute_mask or ""
     run_until_marker(
         [
             mgba,
@@ -180,6 +279,7 @@ def generate_opening(
         tmpdir,
         done,
         timeout,
+        ((state, 1024), (report, 1), (screenshot, 100)),
     )
     detail = report.read_text().strip() if report.is_file() else "no report"
     if done.read_text().strip() != "ok":
@@ -234,6 +334,8 @@ def generate_final_story(
     entry: str,
     stem: str,
     art_target: int,
+    attribute_masks: str,
+    attribute_mask: str,
     timeout: float,
 ) -> str:
     capture_runtime = tmpdir / f"{stem}.capture.runtime"
@@ -252,6 +354,7 @@ def generate_final_story(
         ),
         FINAL_SCENE_STATE_OUT=str(state),
         FINAL_SCENE_CAPTURE_STABLE="240",
+        FINAL_SCENE_ATTR_MASKS=attribute_masks,
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
     )
@@ -272,6 +375,7 @@ def generate_final_story(
         tmpdir,
         capture_done,
         timeout,
+        ((state, 1024), (capture_report, 1), (capture_screenshot, 100)),
     )
     capture_detail = (
         capture_report.read_text().strip()
@@ -317,6 +421,7 @@ def generate_final_story(
         FINAL_STORY_ENTRY=entry,
         FINAL_STORY_OUT=str(clean_prefix),
         FINAL_STORY_ART_ID=str(art_target),
+        FINAL_STORY_ATTR_MASK=attribute_mask,
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
     )
@@ -338,6 +443,7 @@ def generate_final_story(
         tmpdir,
         clean_done,
         timeout,
+        ((clean_report, 1), (clean_screenshot, 100)),
     )
     clean_detail = (
         clean_report.read_text().strip()
@@ -387,8 +493,9 @@ def generate_ending_tail(
     tmpdir: Path,
     stem: str,
     target: str,
+    expected_cram: str,
     timeout: float,
-) -> str:
+) -> tuple[str, dict[str, int | float]]:
     capture_runtime = tmpdir / f"{stem}.capture.runtime"
     capture_runtime.mkdir()
     state = tmpdir / f"{stem}.ss0"
@@ -396,6 +503,7 @@ def generate_ending_tail(
     capture_report = Path(str(capture_prefix) + ".report")
     capture_done = Path(str(capture_prefix) + ".done")
     capture_screenshot = Path(str(capture_prefix) + ".png")
+    capture_trace = Path(str(capture_prefix) + ".trace")
     expected, d889, dce2, fff9, capture_stable = ENDING_TAIL_GUARDS[
         target
     ]
@@ -404,6 +512,7 @@ def generate_ending_tail(
         ENDING_TAIL_STATE_OUT=str(state),
         ENDING_TAIL_OUT=str(capture_prefix),
         ENDING_TAIL_TARGET=target,
+        ENDING_TAIL_EXPECTED_CRAM=expected_cram,
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
     )
@@ -423,6 +532,7 @@ def generate_ending_tail(
         tmpdir,
         capture_done,
         timeout,
+        ((state, 1024), (capture_report, 1), (capture_screenshot, 100)),
     )
     capture_detail = (
         capture_report.read_text().strip()
@@ -442,7 +552,7 @@ def generate_ending_tail(
         f"stable={capture_stable}",
         "visible_attr_target=360",
         "visible_attr_wrong=0",
-        "table_neutral=true",
+        f"cram={expected_cram}",
         "state_saved=true",
         "message=saved-colored-release-rom-tail",
     )
@@ -457,9 +567,13 @@ def generate_ending_tail(
         or not capture_screenshot.is_file()
         or capture_screenshot.stat().st_size < 100
     ):
+        if capture_trace.is_file():
+            shutil.copy2(capture_trace, output / f"{stem}.capture.trace")
         raise RuntimeError(
             f"{target} capture failed: "
-            f"{', '.join(missing) or capture_detail}"
+            f"missing={', '.join(missing) or 'none'}; "
+            f"report={capture_detail}; artifacts: "
+            f"{artifact_status(state, capture_report, capture_screenshot)}"
         )
 
     # Prove that the saved direct-written tail resumes in a fresh mGBA
@@ -474,6 +588,7 @@ def generate_ending_tail(
     clean_env.update(
         ENDING_TAIL_INTEGRITY_OUT=str(clean_prefix),
         ENDING_TAIL_TARGET=target,
+        ENDING_TAIL_EXPECTED_CRAM=expected_cram,
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
     )
@@ -495,6 +610,7 @@ def generate_ending_tail(
         tmpdir,
         clean_done,
         timeout,
+        ((clean_report, 1), (clean_screenshot, 100)),
     )
     clean_detail = (
         clean_report.read_text().strip()
@@ -514,7 +630,7 @@ def generate_ending_tail(
         "stable=60",
         "visible_attr_target=360",
         "visible_attr_wrong=0",
-        "table_neutral=true",
+        f"cram={expected_cram}",
         "message=colored-release-rom-resume",
     )
     missing = [token for token in required_clean if token not in clean_detail]
@@ -529,17 +645,22 @@ def generate_ending_tail(
             f"{', '.join(missing) or clean_detail}"
         )
 
+    render_metrics = require_visible_render(clean_screenshot)
+
     shutil.move(state, output / f"{stem}.ss0")
     shutil.move(clean_report, output / f"{stem}.report")
     shutil.move(clean_screenshot, output / f"{stem}.png")
     shutil.move(capture_report, output / f"{stem}.capture.report")
-    return clean_detail
+    return clean_detail, render_metrics
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--palette-yaml", type=Path, default=DEFAULT_PALETTES
+    )
     parser.add_argument(
         "--mgba", default=str(ROOT / "scripts/mgba-qt-singleflight")
     )
@@ -560,6 +681,21 @@ def main() -> int:
 
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    panels = load_cutscene_region_palettes(args.palette_yaml)
+    bg_data = load_palettes_from_yaml(args.palette_yaml)["bg_data"]
+    if len(bg_data) != 64:
+        raise RuntimeError(
+            f"expected eight 8-byte YAML BG rows, found {len(bg_data)} bytes"
+        )
+    masks = {
+        art_id: "".join(
+            str(value)
+            for row in panel_mask(panels[art_id])
+            for value in row
+        )
+        for art_id in range(1, 8)
+    }
+    attribute_masks = "".join(masks[art_id] for art_id in range(1, 8))
     rom_md5 = md5(args.rom)
     if not args.target and not args.force and cached(output, rom_md5):
         print(f"Stream story states are current for {rom_md5}.")
@@ -576,6 +712,7 @@ def main() -> int:
                 tmpdir,
                 stem,
                 art_target,
+                masks.get(art_target),
                 args.timeout,
             )
             for stem, art_target in OPENING_STATES
@@ -590,12 +727,14 @@ def main() -> int:
                 entry,
                 stem,
                 art_target,
+                attribute_masks,
+                masks[art_target],
                 args.timeout,
             )
             for entry, stem, art_target in FINAL_STATES
             if stem in selected
         }
-        tail_details = {
+        tail_results = {
             stem: generate_ending_tail(
                 args.mgba,
                 args.rom,
@@ -603,9 +742,10 @@ def main() -> int:
                 tmpdir,
                 stem,
                 target,
+                bg_data[palette * 8:(palette + 1) * 8].hex().upper(),
                 args.timeout,
             )
-            for stem, target, _palette in ENDING_TAIL_STATES
+            for stem, target, palette in ENDING_TAIL_STATES
             if stem in selected
         }
 
@@ -613,8 +753,9 @@ def main() -> int:
         print(f"{stem}: PASS | {detail}")
     for stem, detail in final_details.items():
         print(f"{stem}: PASS | {detail}")
-    for stem, detail in tail_details.items():
+    for stem, (detail, metrics) in tail_results.items():
         print(f"{stem}: PASS | {detail}")
+        print(f"{stem}: rendered pixels | {metrics}")
 
     missing_states = [
         stem for stem in STORY_STATES
@@ -649,6 +790,13 @@ def main() -> int:
         "ending_tail_palettes": {
             stem: palette
             for stem, _target, palette in ENDING_TAIL_STATES
+        },
+        "ending_tail_expected_cram": {
+            stem: bg_data[palette * 8:(palette + 1) * 8].hex().upper()
+            for stem, _target, palette in ENDING_TAIL_STATES
+        },
+        "ending_tail_render_metrics": {
+            stem: metrics for stem, (_detail, metrics) in tail_results.items()
         },
         "ending_tail_guards": {
             stem: {

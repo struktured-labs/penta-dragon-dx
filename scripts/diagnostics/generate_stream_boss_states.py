@@ -406,6 +406,7 @@ def generate_one(
         state = prefix.with_suffix(".ss0")
         report = prefix.with_suffix(".report")
         screenshot = prefix.with_suffix(".png")
+        trace = prefix.with_suffix(".trace")
         if not screenshot.is_file() or screenshot.stat().st_size < 1000:
             raise RuntimeError(
                 f"{name}: final screenshot is missing or structurally trivial"
@@ -428,6 +429,8 @@ def generate_one(
         shutil.move(state, output / f"{stem}.ss0")
         shutil.move(report, output / f"{stem}.report")
         shutil.move(screenshot, output / f"{stem}.png")
+        if trace.is_file():
+            shutil.move(trace, output / f"{stem}.trace")
         return target, detail
 
 

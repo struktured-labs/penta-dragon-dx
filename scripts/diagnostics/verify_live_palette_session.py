@@ -803,6 +803,14 @@ def main() -> int:
                 ),
             }
 
+            if not scene_checks["scene deck has expected game-state domains"]:
+                print("Scene-domain audit (exact Lua receipt fields):")
+                for scene in sorted(audited):
+                    print(
+                        f"  {scene}: "
+                        + json.dumps(audited[scene], sort_keys=True)
+                    )
+
             print(report)
             all_checks = {
                 **ui_checks,

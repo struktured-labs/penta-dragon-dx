@@ -61,18 +61,28 @@ def lit_pixels(path: Path, box: tuple[int, int, int, int]) -> int:
         )
 
 
+def is_exact_white_frame(path: Path) -> bool:
+    """Prove that a BGP=$00 CRAM exception was fully hidden by stock fade."""
+    with Image.open(path) as image:
+        if image.size != (160, 144):
+            raise RuntimeError(f"{path.name}: expected 160x144, got {image.size}")
+        return set(image.convert("RGB").getdata()) == {(255, 255, 255)}
+
+
 def run_probe(
     mgba: str,
     rom: Path,
     output: Path,
     timeout: float,
-) -> tuple[dict[str, str], list[Path]]:
+) -> tuple[dict[str, str], list[Path], list[Path], list[Path]]:
     output.parent.mkdir(parents=True, exist_ok=True)
     report = Path(str(output) + ".report")
     done = Path(str(output) + ".done")
     for path in (report, done):
         path.unlink(missing_ok=True)
     for path in output.parent.glob(output.name + ".*.scene*.png"):
+        path.unlink()
+    for path in output.parent.glob(output.name + ".cram-*.png"):
         path.unlink()
 
     environment = os.environ.copy()
@@ -118,8 +128,18 @@ def run_probe(
 
     if not report.is_file():
         raise RuntimeError("mGBA produced no title showcase report")
-    screenshots = sorted(output.parent.glob(output.name + ".*.scene*.png"))
-    return parse_report(report), screenshots
+    screenshots = sorted(
+        path
+        for path in output.parent.glob(output.name + ".*.scene*.png")
+        if ".cram-" not in path.name
+    )
+    blank_receipts = sorted(
+        output.parent.glob(output.name + ".cram-blank.*.png")
+    )
+    bad_receipts = sorted(
+        output.parent.glob(output.name + ".cram-bad.*.png")
+    )
+    return parse_report(report), screenshots, blank_receipts, bad_receipts
 
 
 def main() -> int:
@@ -142,7 +162,7 @@ def main() -> int:
         parser.error("mgba-qt was not found")
 
     try:
-        report, screenshots = run_probe(
+        report, screenshots, blank_receipts, bad_receipts = run_probe(
             args.mgba,
             args.rom.resolve(),
             args.output.resolve(),
@@ -178,6 +198,32 @@ def main() -> int:
         )
     if len(screenshots) != 9:
         failures.append(f"rendered {len(screenshots)} screenshots, expected 9")
+
+    blank_samples = int(report.get("cram_blank_transition_samples", "-1"))
+    if blank_samples != len(blank_receipts):
+        failures.append(
+            "BGP=$00 CRAM transition receipt count mismatch: "
+            f"report={blank_samples}, screenshots={len(blank_receipts)}"
+        )
+    if len(blank_receipts) > 2:
+        failures.append(
+            f"BGP=$00 CRAM transition lasted {len(blank_receipts)} samples; "
+            "expected no more than 2"
+        )
+    for screenshot in blank_receipts:
+        try:
+            if not is_exact_white_frame(screenshot):
+                failures.append(
+                    f"{screenshot.name}: BGP=$00 exception was not an exact "
+                    "all-white rendered frame"
+                )
+        except Exception as error:
+            failures.append(str(error))
+    if bad_receipts:
+        failures.append(
+            f"unexpected visible-BGP CRAM mismatch receipts: "
+            f"{[path.name for path in bad_receipts]}"
+        )
 
     red_counts: dict[str, int] = {}
     for screenshot in screenshots:
@@ -234,7 +280,8 @@ def main() -> int:
         f"banner_table_bad={report.get('banner_table_bad_samples')} "
         f"inactive_table_non_neutral="
         f"{report.get('table_non_neutral_samples')} "
-        f"cram_bad={report.get('cram_bad_samples')}"
+        f"cram_bad={report.get('cram_bad_samples')} "
+        f"blank_transition_receipts={len(blank_receipts)}"
     )
     print(
         "Spotlight pixels: "

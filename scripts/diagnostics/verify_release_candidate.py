@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from suite_contract import source_snapshot
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
@@ -240,6 +242,26 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             30,
         ),
         Gate(
+            "attract_pickup_palettes",
+            script(
+                "scripts/diagnostics/verify_attract_pickup_palettes.py",
+                r,
+                "--output",
+                str(artifacts / "attract-pickup-palettes"),
+            ),
+            120,
+        ),
+        Gate(
+            "stage1_spike_palettes",
+            script(
+                "scripts/diagnostics/verify_stage1_spike_palettes.py",
+                r,
+                "--output",
+                str(artifacts / "stage1-spike-palettes.json"),
+            ),
+            15,
+        ),
+        Gate(
             "pickup_live_retry_contract",
             script("scripts/diagnostics/verify_pickup_live_retry.py"),
             15,
@@ -324,8 +346,11 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "240",
                 "--dynamic-prefix",
                 "0",
-                "--max-frame-lag",
-                "30",
+                # Use the same explicit OG-speed policy as the three-stage
+                # matrix. The route still independently requires every one
+                # of the 576 packed terrain bytes to match stock.
+                "--max-frame-lag-ratio",
+                "0.10",
                 "--output",
                 str(artifacts / "stage1-north-route-integrity"),
             ),
@@ -354,6 +379,18 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 str(artifacts / "frame-flicker"),
             ),
             180,
+        ),
+        Gate(
+            "low_health_flicker",
+            script(
+                "scripts/diagnostics/verify_low_health_flicker.py",
+                r,
+                "--samples",
+                "360",
+                "--output",
+                str(artifacts / "low-health-flicker"),
+            ),
+            90,
         ),
         Gate(
             "miniboss_color",
@@ -463,6 +500,21 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 r,
                 "--output",
                 str(artifacts / "final-cutscene-mgba"),
+            ),
+            180,
+        ),
+        Gate(
+            "pre_final_inventory",
+            script(
+                "scripts/diagnostics/inventory_final_cutscene.py",
+                r,
+                "--entry",
+                "pre-final",
+                "--frames",
+                "32000",
+                "--expect-production",
+                "--output",
+                str(artifacts / "pre-final-inventory"),
             ),
             180,
         ),
@@ -655,6 +707,7 @@ def main() -> int:
 
     source_hash = md5(source_rom)
     source_size = source_rom.stat().st_size
+    suite_source_fingerprint, suite_source_inputs = source_snapshot()
     if args.resume:
         if not tested_rom.is_file():
             parser.error(f"resume tested ROM not found: {tested_rom}")
@@ -692,6 +745,11 @@ def main() -> int:
             parser.error(
                 "resume manifest ROM hash does not match the source candidate"
             )
+        if manifest.get("source_fingerprint") != suite_source_fingerprint:
+            parser.error(
+                "resume manifest suite-source fingerprint does not match; "
+                "rerun the selected gates instead of retaining stale results"
+            )
         prior_results = {
             result.get("name"): result
             for result in manifest.get("results", [])
@@ -725,6 +783,8 @@ def main() -> int:
             "tested_rom": str(tested_rom),
             "rom_md5": source_hash,
             "rom_size": source_size,
+            "source_fingerprint": suite_source_fingerprint,
+            "source_input_count": len(suite_source_inputs),
             "python": sys.version,
             "platform": platform.platform(),
             "mgba_qt": str(ROOT / "scripts/mgba-qt-singleflight"),
@@ -848,6 +908,13 @@ def main() -> int:
     hashes_intact = source_final == source_hash and tested_final == tested_hash
     if not hashes_intact:
         failures += 1
+    suite_source_fingerprint_after, suite_source_inputs_after = source_snapshot()
+    source_inputs_intact = (
+        suite_source_fingerprint_after == suite_source_fingerprint
+        and suite_source_inputs_after == suite_source_inputs
+    )
+    if not source_inputs_intact:
+        failures += 1
 
     # Resume can complete a dependency after later independent gates already
     # passed. Serialize the finished manifest in canonical gate order so
@@ -867,6 +934,8 @@ def main() -> int:
         source_rom_md5_after=source_final,
         tested_rom_md5_after=tested_final,
         rom_hashes_intact=hashes_intact,
+        source_fingerprint_after=suite_source_fingerprint_after,
+        source_inputs_intact=source_inputs_intact,
         failures=failures,
     )
     write_manifest(manifest_path, manifest)

@@ -6,12 +6,23 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import shutil
+import sys
 import zlib
 
 from pyboy import PyBoy
+
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from cutscene_region_palettes import (  # noqa: E402
+    load_cutscene_region_palettes,
+    panel_mask,
+)
 
 
 STORY_STATE_BYTES = {
@@ -33,6 +44,12 @@ STORY_STATE_BYTES = {
 }
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 @dataclass
 class Panel:
     frame: int
@@ -40,6 +57,7 @@ class Panel:
     unsafe_attrs: int
     tiles: Counter[tuple[int, int]]
     tilemap: bytes
+    attributes: bytes
     tilemap_crc32: int
     image_crc32: int
     story_state: dict[str, int]
@@ -48,7 +66,7 @@ class Panel:
 
 def visible_bg(
     pyboy: PyBoy,
-) -> tuple[Counter[int], int, Counter[tuple[int, int]], bytes]:
+) -> tuple[Counter[int], int, Counter[tuple[int, int]], bytes, bytes]:
     memory = pyboy.memory
     lcdc = memory[0xFF40]
     scy = memory[0xFF42]
@@ -58,6 +76,7 @@ def visible_bg(
     unsafe_attrs = 0
     tiles: Counter[tuple[int, int]] = Counter()
     tilemap = bytearray()
+    attributes = bytearray()
     for row in range(18):
         for column in range(20):
             map_y = ((scy + row * 8) >> 3) & 0x1F
@@ -69,9 +88,10 @@ def visible_bg(
             if attribute & 0xF8:
                 unsafe_attrs += 1
             tilemap.append(tile)
+            attributes.append(attribute)
             palettes[palette] += 1
             tiles[(tile, palette)] += 1
-    return palettes, unsafe_attrs, tiles, bytes(tilemap)
+    return palettes, unsafe_attrs, tiles, bytes(tilemap), bytes(attributes)
 
 
 def story_state(pyboy: PyBoy) -> dict[str, int]:
@@ -93,6 +113,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("rom", type=Path)
     parser.add_argument("--output", type=Path, default=Path("/tmp/penta-opening"))
+    parser.add_argument(
+        "--palette-yaml",
+        type=Path,
+        default=ROOT / "palettes/penta_palettes_v097.yaml",
+    )
     parser.add_argument("--frames", type=int, default=12000)
     parser.add_argument(
         "--expect-neutral",
@@ -115,6 +140,15 @@ def main() -> int:
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
+    cutscene_panels = load_cutscene_region_palettes(args.palette_yaml)
+    expected_story_attrs = {
+        art_id: bytes(
+            value
+            for row in panel_mask(panel)
+            for value in row
+        ) + bytes(200)
+        for art_id, panel in cutscene_panels.items()
+    }
 
     pyboy = PyBoy(str(args.rom.resolve()), window="null", cgb=True, sound=False)
     pyboy.set_emulation_speed(0)
@@ -148,7 +182,13 @@ def main() -> int:
                 # text wait without skipping all of the intervening animation.
                 if frame - last_panel >= 360:
                     panel_number += 1
-                    palettes, unsafe_attrs, tiles, tilemap = visible_bg(pyboy)
+                    (
+                        palettes,
+                        unsafe_attrs,
+                        tiles,
+                        tilemap,
+                        attributes,
+                    ) = visible_bg(pyboy)
                     path = output / f"panel{panel_number:02d}_f{frame}.png"
                     image = pyboy.screen.image
                     image.save(path)
@@ -159,6 +199,7 @@ def main() -> int:
                             unsafe_attrs,
                             tiles,
                             tilemap,
+                            attributes,
                             zlib.crc32(tilemap),
                             zlib.crc32(image.tobytes()),
                             story_state(pyboy),
@@ -217,9 +258,9 @@ def main() -> int:
         return 1
     if args.expect_neutral:
         print("PASS: every sampled OPENING panel is 360/360 palette 0.")
+    full_story_arts: set[int] = set()
     if args.expect_production:
         failures = []
-        full_story_arts: set[int] = set()
         previous_full_story_art: int | None = None
         transition_art: int | None = None
         transition_samples = 0
@@ -232,17 +273,18 @@ def main() -> int:
                 and 1 <= art <= 7
                 and ((state["dd07"] + 1) & 0xFF) == art
             )
-            expected = (
-                Counter({art: 160, 0: 200})
+            expected_attributes = (
+                expected_story_attrs[art]
                 if art_committed
-                else Counter({0: 360})
+                else bytes(360)
             )
+            expected = Counter(expected_attributes)
             if panel.unsafe_attrs:
                 failures.append(
                     f"panel {index} f{panel.frame}: "
                     f"{panel.unsafe_attrs} unsafe high-bit attributes"
                 )
-            if panel.palettes == expected:
+            if panel.attributes == expected_attributes:
                 if art_committed:
                     full_story_arts.add(art)
                     previous_full_story_art = art
@@ -250,19 +292,24 @@ def main() -> int:
                 transition_samples = 0
                 continue
 
-            nonneutral = sum(
-                count
-                for palette, count in panel.palettes.items()
-                if palette != 0
+            previous_attributes = (
+                expected_story_attrs[previous_full_story_art]
+                if previous_full_story_art is not None
+                else None
             )
             bounded_transition = (
                 art_committed
-                and previous_full_story_art is not None
+                and previous_attributes is not None
                 and previous_full_story_art != art
-                and panel.palettes.get(0, 0) == 200
-                and nonneutral == 160
-                and set(panel.palettes)
-                <= {0, previous_full_story_art, art}
+                and panel.attributes[160:] == bytes(200)
+                and all(
+                    actual in {old, new}
+                    for actual, old, new in zip(
+                        panel.attributes[:160],
+                        previous_attributes[:160],
+                        expected_story_attrs[art][:160],
+                    )
+                )
             )
             # The stock engine updates DCF0 one render step before DD07 and the
             # tilemap commit. At that exact handoff, the complete previous art
@@ -288,8 +335,7 @@ def main() -> int:
                 and 1 <= art <= 7
                 and previous_full_story_art is not None
                 and previous_full_story_art != art
-                and panel.palettes
-                == Counter({previous_full_story_art: 160, 0: 200})
+                and panel.attributes == previous_attributes
                 and next_commits_art
             )
             if bounded_transition or previous_page_handoff:
@@ -303,7 +349,7 @@ def main() -> int:
                 transition_art = None
                 transition_samples = 0
 
-            if panel.palettes != expected:
+            if panel.attributes != expected_attributes:
                 failures.append(
                     f"panel {index} f{panel.frame}: "
                     f"{dict(sorted(panel.palettes.items()))} != "
@@ -320,12 +366,33 @@ def main() -> int:
                 print(f"  - {failure}")
             return 1
         print(
-            "PASS: committed OPENING artwork uses its BG1..BG7 page "
-            "palette (160 cells) above neutral BG0 dialogue (200 cells)."
+            "PASS: committed OPENING artwork exactly matches its YAML "
+            "160-cell region mask above neutral BG0 dialogue (200 cells)."
         )
     manifest = {
+        "schema": "penta-dragon-dx-opening-cutscene-v3",
+        "status": "pass",
+        "verification_mode": (
+            "production"
+            if args.expect_production
+            else "neutral" if args.expect_neutral else "inventory"
+        ),
         "route": "opening",
         "rom": str(args.rom.resolve()),
+        "rom_sha256": sha256(args.rom.resolve()),
+        "palette_yaml": str(args.palette_yaml.resolve()),
+        "palette_yaml_sha256": sha256(args.palette_yaml.resolve()),
+        "checks": {
+            "opening_reached": opening_started,
+            "panels_captured": bool(panels),
+            "unsafe_attributes_zero": unsafe == 0,
+            "required_region_masks_observed": (
+                full_story_arts >= {1, 2, 3}
+                if args.expect_production
+                else None
+            ),
+        },
+        "full_story_arts": sorted(full_story_arts),
         "story_state_bytes": STORY_STATE_BYTES,
         "panels": [
             {
@@ -336,6 +403,7 @@ def main() -> int:
                 "tilemap_crc32": f"{panel.tilemap_crc32:08X}",
                 "image_crc32": f"{panel.image_crc32:08X}",
                 "tilemap_hex": panel.tilemap.hex().upper(),
+                "attribute_hex": panel.attributes.hex().upper(),
                 "story_state": panel.story_state,
                 "image": panel.path.name,
             }

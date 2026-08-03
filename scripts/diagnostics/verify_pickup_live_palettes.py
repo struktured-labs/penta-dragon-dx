@@ -247,15 +247,24 @@ def main() -> int:
         for state_name, expected_pickups in grouped.items():
             state = states / state_name
             runtime_state = state
-            if state_name == "level1_sara_w_rock_item.ss0":
+            # These two fixtures serialize a PC inside code replaced by the
+            # current build.  Preserve their game/video memory, retarget the
+            # ROM CRC, and resume at the shared fixed-bank main loop.  Other
+            # fixtures intentionally keep their native resume points: several
+            # capture one-frame/transient pickup forms that disappear if they
+            # are advanced through the generic main-loop entry first.
+            if state_name in {
+                "level1_sara_w_rock_item.ss0",
+                "level1_sara_w_teleport.ss0",
+            }:
                 normalized = output / "normalized" / state.name
                 normalized.parent.mkdir(parents=True, exist_ok=True)
-                normalize(
-                    state,
-                    normalized,
-                    0x016C,
-                    [(0xDF02, 0x00), (0xDF0D, 0xFF)],
+                writes = (
+                    [(0xDF02, 0x00), (0xDF0D, 0xFF)]
+                    if state_name == "level1_sara_w_rock_item.ss0"
+                    else []
                 )
+                normalize(state, normalized, 0x016C, writes, rom)
                 runtime_state = normalized
             try:
                 result = run_state(

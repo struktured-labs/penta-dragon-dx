@@ -10,6 +10,11 @@ local OUT = os.getenv("FINAL_STORY_OUT") or "/tmp/penta-final-story-integrity"
 local EXPECTED = (ENTRY == "pre-final") and 0x19 or 0x1A
 local EXPECTED_SEQUENCE = (ENTRY == "pre-final") and 0x04 or 0x05
 local ART_TARGET = tonumber(os.getenv("FINAL_STORY_ART_ID") or "")
+local ATTR_MASK = assert(
+    os.getenv("FINAL_STORY_ATTR_MASK"),
+    "FINAL_STORY_ATTR_MASK is required"
+)
+assert(#ATTR_MASK == 160, "FINAL_STORY_ATTR_MASK must contain 160 digits")
 local f, stable, done = 0, 0, false
 
 local function requested_art_is_committed()
@@ -37,7 +42,11 @@ local function visible_attr_layout()
             local map_y = ((scy + row * 8) >> 3) & 0x1F
             local map_x = ((scx + column * 8) >> 3) & 0x1F
             local attr = emu:read8(base + map_y * 32 + map_x)
-            local expected = (row <= 7) and ART_TARGET or 0
+            local expected = 0
+            if row <= 7 then
+                local index = row * 20 + column + 1
+                expected = assert(tonumber(ATTR_MASK:sub(index, index)))
+            end
             if attr == expected then
                 if row <= 7 then
                     target = target + 1

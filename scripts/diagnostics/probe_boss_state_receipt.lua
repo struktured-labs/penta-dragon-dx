@@ -7,7 +7,23 @@ local TARGET = tonumber(os.getenv("BOSS_TARGET") or "0")
 local EXPECTED_SCENE = 0x0C + TARGET
 local RECEIPT_FRAME = tonumber(os.getenv("BOSS_RECEIPT_FRAMES") or "120")
 local REARM_CURRENT_ROM = os.getenv("BOSS_RECEIPT_REARM") ~= "0"
+local KEEP_ALIVE = os.getenv("BOSS_RECEIPT_KEEPALIVE") ~= "0"
 local frame, done, state_saved = 0, false, false
+local trace = assert(io.open(OUT .. ".audit.trace", "w"))
+
+local function register(name)
+    local accessors = {
+        function() return emu:getRegister(name) end,
+        function() return emu:getRegister(string.lower(name)) end,
+        function() return emu:readRegister(name) end,
+        function() return emu:readRegister(string.lower(name)) end,
+    }
+    for _, accessor in ipairs(accessors) do
+        local ok, value = pcall(accessor)
+        if ok and value ~= nil then return value & 0xFFFF end
+    end
+    return 0xFFFF
+end
 
 local function hex_range(address, length)
     local result = {}
@@ -42,6 +58,7 @@ end
 local function finish(status, message)
     if done then return end
     done = true
+    trace:close()
     local report = assert(io.open(OUT .. ".audit.report", "w"))
     report:write(string.format(
         "status=%s target=%d expected_scene=%02X frame=%d d880=%02X " ..
@@ -65,15 +82,29 @@ callbacks:add("frame", function()
     if done then return end
     frame = frame + 1
     emu:setKeys(0)
-    emu:write8(0xDCBB, 0xF0) -- keep the arena alive for repeatable receipts
+    if KEEP_ALIVE then
+        emu:write8(0xDCBB, 0xF0)
+    end
     if frame == 1 and REARM_CURRENT_ROM then
         -- Fixture states may carry an older ROM's scene-cache identity and
         -- mutable palette table. Force one normal current-ROM scene transition so the
         -- receipt proves the candidate's own arena table and palettes.
         emu:write8(0xDF0D, 0xFF)
     end
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    if KEEP_ALIVE then
+        emu:write8(0xDCDC, 0xFF)
+        emu:write8(0xDCDD, 0xFF)
+    end
+    if frame <= 4 then
+        trace:write(string.format(
+            "frame=%d pc=%04X sp=%04X d880=%02X ffb7=%02X ffba=%02X " ..
+            "ffbf=%02X dcbb=%02X dc80_dfff=%s\n",
+            frame, register("PC"), register("SP"), emu:read8(0xD880),
+            emu:read8(0xFFB7), emu:read8(0xFFBA), emu:read8(0xFFBF),
+            emu:read8(0xDCBB), hex_range(0xDC80, 0x380)
+        ))
+        trace:flush()
+    end
     if frame > 3 and emu:read8(0xD880) ~= EXPECTED_SCENE then
         finish("error", "arena-left-after-reload")
         return

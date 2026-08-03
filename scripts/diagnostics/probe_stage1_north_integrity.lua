@@ -46,6 +46,21 @@ local room_write_events = {}
 local room_build_events = {}
 local source_build_events = {}
 local source_write_events = {}
+local atomic_wrap_hits = 0
+local hazard_helper_hits = 0
+local stage1_cache_trace = {}
+local last_stage1_cache = ""
+
+pcall(function()
+  emu:setBreakpoint(function()
+    if first_gameplay >= 0 then atomic_wrap_hits = atomic_wrap_hits + 1 end
+  end, 0x3498)
+  emu:setBreakpoint(function()
+    if first_gameplay >= 0 and emu:read8(0xFF99) == 0x0E then
+      hazard_helper_hits = hazard_helper_hits + 1
+    end
+  end, 0x6BA7)
+end)
 
 local function register(name)
   local ok, value = pcall(function() return emu:readRegister(name) end)
@@ -208,6 +223,9 @@ local function finish(status)
   report:write("room_builds=" .. table.concat(room_build_events, ";") .. "\n")
   report:write("source_builds=" .. table.concat(source_build_events, ";") .. "\n")
   report:write("source_writes=" .. table.concat(source_write_events, ";") .. "\n")
+  report:write(string.format("atomic_wrap_hits=%d\n", atomic_wrap_hits))
+  report:write(string.format("hazard_helper_hits=%d\n", hazard_helper_hits))
+  report:write("stage1_cache_trace=" .. table.concat(stage1_cache_trace, ";") .. "\n")
   report:close()
   emu:quit()
 end
@@ -221,6 +239,17 @@ callbacks:add("frame", function()
   local room = emu:read8(0xFFBD)
   local lcdc = emu:read8(0xFF40)
   local cfaa = emu:read8(0xCFAA)
+  if first_gameplay >= 0 and #stage1_cache_trace < 128 then
+    local cache = string.format(
+      "%02X/%02X/%02X/%02X:s%04X", emu:read8(0xDF53),
+      emu:read8(0xDF57), emu:read8(0xDF55), emu:read8(0xDF58),
+      emu:read8(0xDC0E) | (emu:read8(0xDC0F) << 8))
+    if cache ~= last_stage1_cache then
+      stage1_cache_trace[#stage1_cache_trace + 1] = string.format(
+        "f%d:g%d:%s", frame, gameplay_frame, cache)
+      last_stage1_cache = cache
+    end
+  end
   local state = string.format("%02X/%02X/%02X/%02X", scene, active, room, lcdc)
   if state ~= last_state and #transitions < 128 then
     transitions[#transitions + 1] = string.format("f%d:%s", frame, state)

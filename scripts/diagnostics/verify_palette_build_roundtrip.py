@@ -26,6 +26,9 @@ BANK13 = 13 * 0x4000
 TUNED = {
     ("bg_palettes", "Dungeon"): ["7FFF", "6A10", "3508", "0000"],
     ("bg_palettes", "BG7"): ["7FFF", "4210", "2108", "0000"],
+    ("stage1_hazard_palettes", "RotatingSpikeTeeth"): [
+        "7FFF", "5294", "02DF", "0000"
+    ],
     ("obj_palettes", "SaraWitch"): ["0000", "1234", "2345", "0001"],
     ("obj_palettes", "SaraWitchJet"): ["0000", "1123", "2456", "3001"],
     ("obj_palettes", "SaraDragonJet"): ["0000", "0765", "1ABC", "2DEF"],
@@ -245,6 +248,9 @@ def main() -> int:
         palette_data = BANK13 + (0x6800 - 0x4000)
         bg0 = palette_bytes(TUNED[("bg_palettes", "Dungeon")])
         bg7 = palette_bytes(TUNED[("bg_palettes", "BG7")])
+        stage1_hazard_bg7 = palette_bytes(
+            TUNED[("stage1_hazard_palettes", "RotatingSpikeTeeth")]
+        )
         obj2 = palette_bytes(TUNED[("obj_palettes", "SaraWitch")])
         witch_jet = palette_bytes(TUNED[("obj_palettes", "SaraWitchJet")])
         dragon_jet = palette_bytes(TUNED[("obj_palettes", "SaraDragonJet")])
@@ -265,6 +271,10 @@ def main() -> int:
                 BANK13 + (0x68F8 - 0x4000):
                 BANK13 + (0x68F8 - 0x4000) + 8
             ] == bg7,
+            "tuned Stage-1 hazard BG7 source": rom[
+                BANK13 + (0x68C8 - 0x4000):
+                BANK13 + (0x68C8 - 0x4000) + 8
+            ] == stage1_hazard_bg7,
             "OBJ2 source": rom[
                 palette_data + 64 + 16:palette_data + 64 + 24
             ] == obj2,
@@ -307,7 +317,7 @@ def main() -> int:
             output_rom,
             work / "runtime",
             bg0,
-            bg7,
+            stage1_hazard_bg7,
             obj2,
             args.timeout,
         )
@@ -343,10 +353,13 @@ def main() -> int:
             return 1
 
         print(
-            "PASS: edited BG0/BG7/OBJ2, both Jet, Gargoyle/Boss3, and all "
-            "powerup YAML bytes reached the ROM"
+            "PASS: edited BG0/BG7/Stage-1 hazard BG7/OBJ2, both Jet, "
+            "Gargoyle/Boss3, and all powerup YAML bytes reached the ROM"
         )
-        print("PASS: title kept the BG7 boot mask; gameplay restored tuned BG7")
+        print(
+            "PASS: title kept the BG7 boot mask; Stage 1 selected the tuned "
+            "hazard BG7 row"
+        )
         print("PASS: tuned BG0 and OBJ2 reached live mGBA CRAM")
         print("PASS: production rebuild preserves a hash-named rollback ROM")
         print(f"PASS: workspace candidate stayed {candidate_hash}")

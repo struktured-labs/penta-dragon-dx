@@ -10,8 +10,13 @@ local STATE_OUT = assert(
 )
 local OUT = os.getenv("OPENING_OUT") or "/tmp/penta-opening-state"
 local ART_TARGET = tonumber(os.getenv("OPENING_ART_ID") or "")
+local ATTR_MASK = os.getenv("OPENING_ATTR_MASK") or ""
+if ART_TARGET then
+    assert(#ATTR_MASK == 160, "OPENING_ATTR_MASK must contain 160 digits")
+end
 local TRACE = os.getenv("OPENING_TRACE")
 local f, reached, stable, done = 0, false, 0, false
+local map_dumped = false
 
 local function visible_attr_layout()
     local lcdc = emu:read8(0xFF40)
@@ -26,7 +31,11 @@ local function visible_attr_layout()
             local map_y = ((scy + row * 8) >> 3) & 0x1F
             local map_x = ((scx + column * 8) >> 3) & 0x1F
             local attr = emu:read8(base + map_y * 32 + map_x)
-            local expected = (ART_TARGET and row <= 7) and ART_TARGET or 0
+            local expected = 0
+            if ART_TARGET and row <= 7 then
+                local index = row * 20 + column + 1
+                expected = assert(tonumber(ATTR_MASK:sub(index, index)))
+            end
             if attr == expected then
                 if expected ~= 0 then
                     target = target + 1
@@ -41,6 +50,31 @@ local function visible_attr_layout()
     end
     emu:write8(0xFF4F, old_vbk)
     return target, neutral, wrong, unsafe
+end
+
+local function map_nonzero(base)
+    local old_vbk = emu:read8(0xFF4F)
+    local count = 0
+    emu:write8(0xFF4F, 1)
+    for offset = 0, 0x3FF do
+        if emu:read8(base + offset) ~= 0 then count = count + 1 end
+    end
+    emu:write8(0xFF4F, old_vbk)
+    return count
+end
+
+local function map_nonzero_cells(base)
+    local old_vbk = emu:read8(0xFF4F)
+    local cells = {}
+    emu:write8(0xFF4F, 1)
+    for offset = 0, 0x3FF do
+        local value = emu:read8(base + offset)
+        if value ~= 0 then
+            cells[#cells + 1] = string.format("%03X:%02X", offset, value)
+        end
+    end
+    emu:write8(0xFF4F, old_vbk)
+    return table.concat(cells, ",")
 end
 
 local function finish(status, message)
@@ -70,15 +104,29 @@ callbacks:add("frame", function()
     f = f + 1
     local scene = emu:read8(0xD880)
     if TRACE and scene == 0x15 and (f % 10) == 0 then
+        local trace_target, trace_neutral, trace_wrong, trace_unsafe =
+            visible_attr_layout()
         local trace = assert(io.open(TRACE, "a"))
         trace:write(string.format(
             "f=%d stable=%d dce8=%02X dcea=%02X dcf0=%02X dd07=%02X " ..
-            "scy=%02X scx=%02X key=%02X row=%02X\n",
+            "scy=%02X scx=%02X key=%02X row=%02X target=%d " ..
+            "neutral=%d wrong=%d unsafe=%d lcdc=%02X nz9800=%d nz9c00=%d\n",
             f, stable, emu:read8(0xDCE8), emu:read8(0xDCEA),
             emu:read8(0xDCF0), emu:read8(0xDD07),
             emu:read8(0xFF42), emu:read8(0xFF43),
-            emu:read8(0xDF49), emu:read8(0xDF4A)
+            emu:read8(0xDF49), emu:read8(0xDF4A),
+            trace_target, trace_neutral, trace_wrong, trace_unsafe,
+            emu:read8(0xFF40), map_nonzero(0x9800), map_nonzero(0x9C00)
         ))
+        if not map_dumped
+            and ART_TARGET
+            and emu:read8(0xDCF0) == ART_TARGET
+            and emu:read8(0xDF4A) >= 0x88
+        then
+            trace:write("map9800_cells=" .. map_nonzero_cells(0x9800) .. "\n")
+            trace:write("map9c00_cells=" .. map_nonzero_cells(0x9C00) .. "\n")
+            map_dumped = true
+        end
         trace:close()
     end
 

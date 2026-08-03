@@ -31,9 +31,9 @@ bg_table:
     2: "rare, life, score, and wildcard pickups (purple)"
     3: "status-cure pickups (green)"
     4: "shield, arrow, and teleport pickups (cyan)"
-    5: "attack and form-power pickups (gold/red); later scenes reuse the slot for lava"
-    6: "walls + spike cylinders (slate/gunmetal metallic ramp)"
-    7: "RESERVED — was deep-blue secret-stage intent; build override sets pal 7 CRAM to pal 0 colors to hide stale CGB boot-ROM attrs"
+    5: "attack/form-power pickups + spike rings/body/wall connector (gold/red); later scenes reuse the slot for lava"
+    6: "walls + unpainted spike shadows (slate/gunmetal metallic ramp)"
+    7: "Stage-1 rotating teeth; scene-local colors come from penta_palettes_v097.yaml and normal BG7 is restored elsewhere"
 
   categories:
     - name: wall_edge
@@ -56,13 +56,51 @@ bg_table:
       tiles: [0x41, 0x42, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
               0x54, 0x55, 0x56, 0x57, 0x59]
 
-    - name: hazard_spike_cylinder
+    - name: hazard_spike_legacy_accent
+      palette: 5
+      description: |
+        Legacy 2A-3D spike accents. They do not share the large rotating
+        cylinder's floor-bearing art. Excludes 0x47/0x57, which remain wall
+        corners after the 2026-05-23 headed regression.
+      tiles: [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]
+
+    - name: hazard_spike_teeth
+      palette: 7
+      description: |
+        The 12 protruding tooth/drill animation frames. Semantic source-art
+        masks preserve their embedded blue checkerboard while filling the
+        complete outlined tooth with the Stage-1-only BG7 material row.
+      tile_ranges:
+        - [0x64, 0x69]
+        - [0x74, 0x79]
+
+    - name: hazard_spike_fire_body
+      palette: 5
+      description: |
+        Four rotating rings plus the four continuous cylinder/end-cap cells.
+        Their reviewed semantic art uses BG5 yellow/red without painting the
+        embedded floor or the 63/73 cast-shadow column.
+      tiles: [0x61, 0x62, 0x6C, 0x6D, 0x6E, 0x71, 0x72, 0x7C, 0x7D, 0x7E]
+
+    - name: hazard_spike_wall_connector
+      palette: 5
+      description: |
+        The upper/lower mixed cells where the rotating cylinder enters its
+        left wall. Reviewed masks extend the gold/red material to the black
+        cylinder outline while collapsing only the tiny wall-side remainder
+        to neutral white/black, avoiding the old five-pixel gray collar.
+      tiles: [0x60, 0x70]
+
+    - name: hazard_spike_support
       palette: 6
       description: |
-        Rotating spike cylinders. Metallic slate/gunmetal (7FFF/6F7B/2D4A),
-        formerly pal 5 (washed-out lava look). Pal 5 reserved for stage-2
-        LAVA. Excludes 0x47/0x57 — handled as wall corners.
-      tiles: [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]
+        Remaining 60-7F rail, support, and shadow cells. These retain stock
+        art and the stable wall-compatible metallic ramp until a future
+        animation capture proves a more specific material role.
+      tiles: [
+        0x63, 0x6A, 0x6B, 0x6F,
+        0x73, 0x7A, 0x7B, 0x7F
+      ]
 
     - name: pickup_health_restore
       palette: 1
@@ -147,9 +185,73 @@ bg_table:
       tiles: [0xFF]
 
   notes:
-    - "Iter 233 attempted: tile 0x73 → pal 1 (cursor red). REVERTED iter 236: stage 6 BG also uses 0x73 (lavender stage6_decorative_pal5 regressed). Needs per-scene WRAM 0xDA00 override."
+    - "Stage 1 maps teeth 0x64-0x69/0x74-0x79 to scene-local BG7, rings/body 61/62/6C/6D/6E/71/72/7C/7D/7E to BG5, and unclassified supports to BG6. Title/menu, the secret jet stage, and later-stage reuse retain their normal palette paths."
     - "Pal 5 is attack-power gold/red in Stage 1; Stage 5/7 scene-specific tables reuse the hardware slot for lava."
-    - "Pal 7 deliberately UNUSED in bg_table; bg_data BGP7 CRAM bytes are overridden to BGP0 (Dungeon) in build_v301_gdma.py:417 to hide stale CGB boot-ROM attrs."
+    - "The base build still aliases BG7 to BG0 for boot/title safety. The release loader selects the Stage-1-only tooth row when the active FFD0 stage flag is 00, and restores normal YAML BG7 in the bonus and later stages."
+
+# YAML-owned source-art masks for the Stage 1 rotating cylinder. The builder,
+# offline preview, and release verifier all consume this same declaration.
+stage1_hazard_art:
+  rotating_spike:
+    source_offset: 0x1D000
+    palette_categories:
+      tooth: hazard_spike_teeth
+      fire_body: hazard_spike_fire_body
+      wall_connector: hazard_spike_wall_connector
+      support: hazard_spike_support
+    ring_tiles: [0x6C, 0x6D, 0x7C, 0x7D]
+    body_tiles: [0x61, 0x62, 0x6E, 0x71, 0x72, 0x7E]
+    connector_row_spans:
+      0x60: {0: [5, 8], 1: [4, 8], 2: [3, 8], 3: [3, 8], 4: [2, 8], 5: [2, 8], 6: [2, 8], 7: [2, 8]}
+      0x70: {0: [2, 8], 1: [2, 8], 2: [2, 8], 3: [2, 8], 4: [3, 8], 5: [3, 8], 6: [4, 8], 7: [4, 8]}
+    semantic_base_tiles:
+      0x64: 0x01
+      0x65: 0x02
+      0x66: 0x01
+      0x67: 0x02
+      0x68: 0x04
+      0x69: 0x03
+      0x6C: 0x6E
+      0x6D: 0x6E
+      0x74: 0x01
+      0x75: 0x02
+      0x76: 0x04
+      0x77: 0x03
+      0x78: 0x04
+      0x79: 0x03
+      0x7C: 0x7E
+      0x7D: 0x7E
+    environment_remap: [0, 1, 1, 3]
+    hazard_remap: [2, 2, 2, 3]
+    ring_regions:
+      0x6C: [0, 4, 8, 8]
+      0x7C: [0, 0, 8, 4]
+      0x6D: [0, 0, 8, 5]
+      0x7D: [0, 3, 8, 8]
+    tooth_row_spans:
+      0x64: {5: [3, 5], 6: [2, 6], 7: [1, 7]}
+      0x65: {5: [3, 5], 6: [2, 6], 7: [1, 7]}
+      0x66: {1: [3, 5], 2: [2, 6], 3: [2, 6], 4: [1, 7], 5: [1, 7], 6: [0, 8], 7: [0, 8]}
+      0x67: {1: [3, 5], 2: [2, 6], 3: [2, 6], 4: [1, 7], 5: [1, 7], 6: [0, 8], 7: [0, 8]}
+      0x68: {0: [1, 7], 1: [2, 6], 2: [3, 5]}
+      0x69: {0: [1, 7], 1: [2, 6], 2: [3, 5]}
+      0x74: {3: [3, 5], 4: [2, 6], 5: [2, 6], 6: [1, 7], 7: [1, 7]}
+      0x75: {3: [3, 5], 4: [2, 6], 5: [2, 6], 6: [1, 7], 7: [1, 7]}
+      0x76: {0: [0, 8], 1: [0, 8], 2: [1, 7], 3: [1, 7], 4: [2, 6], 5: [2, 6], 6: [3, 5]}
+      0x77: {0: [0, 8], 1: [0, 8], 2: [1, 7], 3: [1, 7], 4: [2, 6], 5: [2, 6], 6: [3, 5]}
+      0x78: {0: [1, 7], 1: [1, 7], 2: [2, 6], 3: [2, 6], 4: [3, 5]}
+      0x79: {0: [1, 7], 1: [1, 7], 2: [2, 6], 3: [2, 6], 4: [3, 5]}
+    body_row_spans:
+      0x61: {1: [0, 8], 2: [0, 8], 3: [0, 8], 4: [0, 8], 5: [0, 8], 6: [0, 8], 7: [0, 8]}
+      0x62: {0: [0, 1], 1: [0, 2], 2: [0, 3], 3: [0, 4], 4: [0, 5], 5: [0, 6], 6: [0, 7], 7: [0, 8]}
+      0x6C: {1: [0, 8], 2: [0, 8], 3: [0, 8], 4: [0, 8], 5: [0, 8], 6: [0, 8], 7: [0, 8]}
+      0x6D: {0: [0, 8], 1: [0, 8], 2: [0, 8], 3: [0, 8], 4: [0, 8], 5: [0, 8], 6: [0, 8], 7: [0, 8]}
+      0x6E: {1: [0, 8], 2: [0, 8], 3: [0, 8], 4: [0, 8], 5: [0, 8], 6: [0, 8], 7: [0, 8]}
+      0x71: {0: [0, 8], 1: [0, 8], 2: [0, 8], 3: [0, 8], 4: [0, 8], 5: [0, 8]}
+      0x72: {0: [0, 8], 1: [0, 7], 2: [0, 6], 3: [0, 5], 4: [0, 4], 5: [0, 3], 6: [0, 2], 7: [0, 1]}
+      0x7C: {0: [0, 8], 1: [0, 8], 2: [0, 8], 3: [0, 8], 4: [0, 8], 5: [0, 8]}
+      0x7D: {0: [0, 8], 1: [0, 8], 2: [0, 8], 3: [0, 8], 4: [0, 8], 5: [0, 8], 6: [0, 8], 7: [0, 8]}
+      0x7E: {0: [0, 8], 1: [0, 8], 2: [0, 8], 3: [0, 8], 4: [0, 8], 5: [0, 8]}
 
 # ==============================================
 # CANONICAL obj_colorizer — bank13:0x6A10 (production base)

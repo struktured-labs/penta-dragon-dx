@@ -26,6 +26,7 @@ local atomic_call_indices = {}
 local previous_scx, scroll_changes = -1, 0
 local active_frames, first_inactive_frame = 0, -1
 local expected_scene_frames, first_scene_mismatch = 0, -1
+local dma_unreadable_scene_samples, non_dma_scene_mismatch_frames = 0, 0
 local first_scene_mismatch_value = -1
 local mismatch_cpu_pc, mismatch_dma_source, mismatch_svbk = -1, -1, -1
 local lava_copy_hits, attr_map_changes, attr_map_unchanged = 0, 0, 0
@@ -208,6 +209,12 @@ local function finish()
   handle:write(string.format(
     '  "expected_scene_frames": %d,\n', expected_scene_frames))
   handle:write(string.format(
+    '  "dma_unreadable_scene_samples": %d,\n',
+    dma_unreadable_scene_samples))
+  handle:write(string.format(
+    '  "non_dma_scene_mismatch_frames": %d,\n',
+    non_dma_scene_mismatch_frames))
+  handle:write(string.format(
     '  "first_scene_mismatch": %d,\n', first_scene_mismatch))
   handle:write(string.format(
     '  "first_scene_mismatch_value": %d,\n', first_scene_mismatch_value))
@@ -275,14 +282,27 @@ callbacks:add("frame", function()
   end
 
   play_frames = play_frames + 1
-  if emu:read8(0xD880) == EXPECTED_SCENE then
+  local sampled_scene = emu:read8(0xD880)
+  if sampled_scene == EXPECTED_SCENE then
     expected_scene_frames = expected_scene_frames + 1
-  elseif first_scene_mismatch < 0 then
-    first_scene_mismatch = play_frames
-    first_scene_mismatch_value = emu:read8(0xD880)
-    mismatch_cpu_pc = read_register("PC")
-    mismatch_dma_source = emu:read8(0xFF46)
-    mismatch_svbk = emu:read8(0xFF70)
+  else
+    local sampled_pc = read_register("PC")
+    local sampled_dma_source = emu:read8(0xFF46)
+    local dma_unreadable = sampled_scene == 0xFF
+      and sampled_pc >= 0xFF80 and sampled_pc <= 0xFF9F
+      and (sampled_dma_source == 0xC0 or sampled_dma_source == 0xC1)
+    if dma_unreadable then
+      dma_unreadable_scene_samples = dma_unreadable_scene_samples + 1
+    else
+      non_dma_scene_mismatch_frames = non_dma_scene_mismatch_frames + 1
+    end
+    if first_scene_mismatch < 0 then
+      first_scene_mismatch = play_frames
+      first_scene_mismatch_value = sampled_scene
+      mismatch_cpu_pc = sampled_pc
+      mismatch_dma_source = sampled_dma_source
+      mismatch_svbk = emu:read8(0xFF70)
+    end
   end
   if emu:read8(0xFFC1) == 1 then
     active_frames = active_frames + 1

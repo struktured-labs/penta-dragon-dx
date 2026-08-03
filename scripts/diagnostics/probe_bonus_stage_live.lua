@@ -22,12 +22,21 @@ pcall(function()
     emu:setBreakpoint(function() tile_copy_hits = tile_copy_hits + 1 end, 0x42A7)
 end)
 
-local function cram_word(palette, color)
+local function obj_cram_word(palette, color)
     local index = palette * 8 + color * 2
     emu:write8(0xFF6A, index)
     local low = emu:read8(0xFF6B)
     emu:write8(0xFF6A, index + 1)
     local high = emu:read8(0xFF6B)
+    return (high << 8) | low
+end
+
+local function bg_cram_word(palette, color)
+    local index = palette * 8 + color * 2
+    emu:write8(0xFF68, index)
+    local low = emu:read8(0xFF69)
+    emu:write8(0xFF68, index + 1)
+    local high = emu:read8(0xFF69)
     return (high << 8) | low
 end
 
@@ -100,9 +109,13 @@ local function finish()
         handle:write(string.format(
             "objcram=%d,%04X,%04X,%04X,%04X\n",
             palette,
-            cram_word(palette, 0), cram_word(palette, 1),
-            cram_word(palette, 2), cram_word(palette, 3)))
+            obj_cram_word(palette, 0), obj_cram_word(palette, 1),
+            obj_cram_word(palette, 2), obj_cram_word(palette, 3)))
     end
+    handle:write(string.format(
+        "bg7=%04X,%04X,%04X,%04X\n",
+        bg_cram_word(7, 0), bg_cram_word(7, 1),
+        bg_cram_word(7, 2), bg_cram_word(7, 3)))
     handle:close()
     os.exit(0)
 end

@@ -17,9 +17,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from cutscene_region_palettes import (  # noqa: E402
+    load_cutscene_region_palettes,
+    panel_mask,
+)
+
+
+DEFAULT_PALETTES = ROOT / "palettes/penta_palettes_v097.yaml"
 
 EXPECTED_SIGNATURE = [
     (0x1A, 0x01, 0x00, 0x00),
@@ -56,7 +68,10 @@ def compress(values: list[tuple[int, int, int, int]]) -> list[
     return result
 
 
-def analyze_manifest(path: Path) -> dict:
+def analyze_manifest(
+    path: Path,
+    expected_story_attrs: dict[int, bytes],
+) -> dict:
     data = json.loads(path.read_text())
     if data.get("route") != "post-final":
         raise ValueError(f"{path}: expected a post-final manifest")
@@ -71,6 +86,7 @@ def analyze_manifest(path: Path) -> dict:
     full_targets: dict[str, set[int]] = {
         phase: set() for phase in PHASE_TARGETS
     }
+    previous_full_story_art: int | None = None
     for panel in panels:
         state = panel.get("story_state", {})
         missing = {"d889", "dce2", "fff9"} - state.keys()
@@ -113,23 +129,61 @@ def analyze_manifest(path: Path) -> dict:
 
         valid = False
         if phase == "post_final_dialogue":
-            # A neutral setup panel is followed by a 160-cell art field over a
-            # fixed 200-cell dialogue frame. A single inventory sample can
-            # straddle an old->new art-page transition, so two art palettes may
-            # share those 160 cells.
-            art_keys = set(palettes) - {0}
-            valid = (
-                palettes == {0: 360}
-                or (
-                    palettes.get(0) == 200
-                    and art_keys
-                    and art_keys <= {5, 6, 7}
-                    and sum(palettes[key] for key in art_keys) == 160
+            attribute_hex = panel.get("attribute_hex")
+            if not isinstance(attribute_hex, str):
+                failures.append(
+                    f"frame {panel['frame']}: manifest lacks attribute_hex; "
+                    "regenerate it with inventory_final_cutscene.py"
                 )
+                continue
+            try:
+                attributes = bytes.fromhex(attribute_hex)
+            except ValueError:
+                attributes = b""
+            if len(attributes) != 360:
+                failures.append(
+                    f"frame {panel['frame']}: attribute_hex is not 360 bytes"
+                )
+                continue
+            art = state.get("dcf0", 0)
+            art_committed = (
+                state.get("dce8") == 0x05
+                and state.get("dcea") == 0x01
+                and art in {5, 6, 7}
+                and ((state.get("dd07", 0) + 1) & 0xFF) == art
             )
-            for target in (5, 6, 7):
-                if palettes == {0: 200, target: 160}:
-                    full_targets[phase].add(target)
+            expected = (
+                expected_story_attrs[art] if art_committed else bytes(360)
+            )
+            valid = attributes == expected
+            if valid and art_committed:
+                full_targets[phase].add(art)
+                previous_full_story_art = art
+            elif art_committed and previous_full_story_art is not None:
+                previous = expected_story_attrs[previous_full_story_art]
+                valid = (
+                    previous_full_story_art != art
+                    and attributes[160:] == bytes(200)
+                    and all(
+                        actual in {old, new}
+                        for actual, old, new in zip(
+                            attributes[:160],
+                            previous[:160],
+                            expected_story_attrs[art][:160],
+                        )
+                    )
+                )
+            elif (
+                not art_committed
+                and art in {5, 6, 7}
+                and previous_full_story_art is not None
+                and attributes
+                == expected_story_attrs[previous_full_story_art]
+            ):
+                # DCF0 announces the next stock page one render step before
+                # DD07 commits it. The exact previous position mask is still
+                # the correct visible layout during that bounded handoff.
+                valid = True
         else:
             transition_pairs = {
                 "credits": {0, 1},
@@ -198,9 +252,22 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("manifests", nargs="+", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--palette-yaml", type=Path, default=DEFAULT_PALETTES
+    )
     args = parser.parse_args()
 
-    reports = [analyze_manifest(path) for path in args.manifests]
+    panels = load_cutscene_region_palettes(args.palette_yaml)
+    expected_story_attrs = {
+        art_id: bytes(
+            value for row in panel_mask(panel) for value in row
+        ) + bytes(200)
+        for art_id, panel in panels.items()
+    }
+    reports = [
+        analyze_manifest(path, expected_story_attrs)
+        for path in args.manifests
+    ]
     failures = [
         f"{report['path']}: {failure}"
         for report in reports

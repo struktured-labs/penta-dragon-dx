@@ -54,7 +54,11 @@ def main() -> int:
         type=Path,
         default=Path("/tmp/penta-title-visual-receipts"),
     )
-    parser.add_argument("--max-frames", type=int, default=14000)
+    # The second attract cycle reaches the miniboss after frame 14,000 on the
+    # current production timing. Keep enough horizon to prove both the
+    # returned title and the later miniboss instead of mistaking a valid,
+    # slower attract route for a missing receipt.
+    parser.add_argument("--max-frames", type=int, default=26000)
     args = parser.parse_args()
 
     output = args.output.resolve()

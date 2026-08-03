@@ -3,9 +3,10 @@
 -- A normal cold boot establishes the release ROM's video/interrupt state,
 -- then one emulator-only register redirect enters the balanced stock ending
 -- routine at 5513. Released A pulses advance its pages. The requested phase
--- must commit with its ROM-native production attributes and a neutral lookup
--- table before the untouched-ROM state is saved. The ROM file is never
--- modified.
+-- must commit with its ROM-native production attributes before the
+-- untouched-ROM state is saved. The ROM file is never modified. $C600 is
+-- reported but not constrained here because stock reuses it as ending-script
+-- workspace on the direct-written credits/END tail.
 
 local STATE_OUT = assert(
     os.getenv("ENDING_TAIL_STATE_OUT"),
@@ -30,7 +31,15 @@ local TARGETS = {
     },
 }
 local TARGET = assert(TARGETS[TARGET_NAME], "unknown ENDING_TAIL_TARGET")
+local EXPECTED_CRAM = assert(
+    os.getenv("ENDING_TAIL_EXPECTED_CRAM"),
+    "ENDING_TAIL_EXPECTED_CRAM required"
+)
+assert(#EXPECTED_CRAM == 16, "ENDING_TAIL_EXPECTED_CRAM must be 8 bytes")
 local f, stable, done = 0, 0, false
+local capture_pending, capture_age, state_saved = false, 0, false
+local capture_target, capture_wrong = 0, 0
+local capture_wrong_rows, capture_table_neutral = "", false
 local injected = false
 local TRACE = os.getenv("ENDING_TAIL_TRACE") == "1"
     and io.open(OUT .. ".trace", "w") or nil
@@ -80,6 +89,52 @@ local function active_table_is_neutral()
     return true
 end
 
+local function visible_render_metrics()
+    local lcdc = emu:read8(0xFF40)
+    local scy = emu:read8(0xFF42)
+    local scx = emu:read8(0xFF43)
+    local base = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
+    local old_vbk = emu:read8(0xFF4F)
+    local nonzero_cells, glyph_bytes = 0, 0
+    local distinct = {}
+    emu:write8(0xFF4F, 0)
+    for row = 0, 17 do
+        for column = 0, 19 do
+            local map_y = ((scy + row * 8) >> 3) & 0x1F
+            local map_x = ((scx + column * 8) >> 3) & 0x1F
+            local tile = emu:read8(base + map_y * 32 + map_x)
+            distinct[tile] = true
+            if tile ~= 0 then nonzero_cells = nonzero_cells + 1 end
+            local tile_address
+            if (lcdc & 0x10) ~= 0 then
+                tile_address = 0x8000 + tile * 16
+            else
+                local signed_tile = tile < 0x80 and tile or tile - 0x100
+                tile_address = 0x9000 + signed_tile * 16
+            end
+            for byte = 0, 15 do
+                if emu:read8(tile_address + byte) ~= 0 then
+                    glyph_bytes = glyph_bytes + 1
+                end
+            end
+        end
+    end
+    emu:write8(0xFF4F, old_vbk)
+    local distinct_count = 0
+    for _tile, _present in pairs(distinct) do
+        distinct_count = distinct_count + 1
+    end
+
+    local old_index = emu:read8(0xFF68)
+    local cram = {}
+    for index = 0, 7 do
+        emu:write8(0xFF68, TARGET.palette * 8 + index)
+        cram[#cram + 1] = string.format("%02X", emu:read8(0xFF69))
+    end
+    emu:write8(0xFF68, old_index)
+    return nonzero_cells, distinct_count, glyph_bytes, table.concat(cram)
+end
+
 local function target_committed()
     return (
         emu:read8(0xD880) == TARGET.d880
@@ -107,23 +162,35 @@ local function finish(status, message)
     emu:setKeys(0)
     local target, wrong, wrong_rows = visible_attr_layout()
     local table_neutral = active_table_is_neutral()
-    local state_saved = false
-    if status == "ok" and (
-        target ~= 360 or wrong ~= 0 or not table_neutral
-    ) then
+    local tile_nonzero, tile_distinct, glyph_bytes, cram =
+        visible_render_metrics()
+    if capture_pending then
+        -- These are the invariants serialized into STATE_OUT. The live game
+        -- may resume its table workspace while Qt flushes the already-saved
+        -- file during the following frames.
+        target = capture_target
+        wrong = capture_wrong
+        wrong_rows = capture_wrong_rows
+        table_neutral = capture_table_neutral
+    end
+    if status == "ok" and (target ~= 360 or wrong ~= 0) then
         status = "error"
         message = "production-layout-mismatch"
     end
-    if status == "ok" then
-        emu:screenshot(OUT .. ".png")
-        local ok, result = pcall(function()
-            return emu:saveStateFile(STATE_OUT)
-        end)
-        state_saved = ok and result ~= false
-        if not state_saved then
-            status = "error"
-            message = "saveStateFile-failed"
-        end
+    if (
+        status == "ok"
+        and (tile_nonzero == 0 or tile_distinct < 2 or glyph_bytes == 0)
+    ) then
+        status = "error"
+        message = "blank-visible-render"
+    end
+    if status == "ok" and cram ~= EXPECTED_CRAM then
+        status = "error"
+        message = "yaml-cram-mismatch"
+    end
+    if status == "ok" and not state_saved then
+        status = "error"
+        message = "saveStateFile-failed"
     end
     local report = assert(io.open(OUT .. ".report", "w"))
     report:write(string.format(
@@ -133,6 +200,7 @@ local function finish(status, message)
         "dcf0=%02X dd07=%02X ff93=%02X " ..
         "df08=%02X df07=%02X df49=%02X df4a=%02X pc=%04X sp=%04X " ..
         "visible_attr_target=%d visible_attr_wrong=%d " ..
+        "tile_nonzero=%d tile_distinct=%d glyph_bytes=%d cram=%s " ..
         "table_neutral=%s state_saved=%s wrong_rows=%s " ..
         "message=%s\n",
         status, TARGET_NAME, f, emu:read8(0xD880),
@@ -144,7 +212,8 @@ local function finish(status, message)
         emu:read8(0xDF08), emu:read8(0xDF07),
         emu:read8(0xDF49), emu:read8(0xDF4A),
         emu:readRegister("pc"), emu:readRegister("sp"),
-        target, wrong, tostring(table_neutral),
+        target, wrong, tile_nonzero, tile_distinct, glyph_bytes, cram,
+        tostring(table_neutral),
         tostring(state_saved), wrong_rows, message
     ))
     report:close()
@@ -185,6 +254,19 @@ callbacks:add("frame", function()
             return
         end
         injected = true
+    end
+
+    if capture_pending then
+        -- mGBA queues PNG/state serialization from a frame callback. Give the
+        -- Qt event loop several complete frames to flush both files before
+        -- publishing the done marker; otherwise a parent can observe "ok"
+        -- and terminate the process while one artifact is still absent.
+        emu:setKeys(0)
+        capture_age = capture_age + 1
+        if capture_age >= 3 then
+            finish("ok", "saved-colored-release-rom-tail")
+        end
+        return
     end
 
     local raw_committed = target_committed()
@@ -231,7 +313,19 @@ callbacks:add("frame", function()
         stable = 0
     end
     if stable == TARGET.stable then
-        finish("ok", "saved-colored-release-rom-tail")
+        capture_target, capture_wrong, capture_wrong_rows =
+            visible_attr_layout()
+        capture_table_neutral = active_table_is_neutral()
+        emu:screenshot(OUT .. ".png")
+        local ok, result = pcall(function()
+            return emu:saveStateFile(STATE_OUT)
+        end)
+        state_saved = ok and result ~= false
+        if not state_saved then
+            finish("error", "saveStateFile-failed")
+            return
+        end
+        capture_pending = true
     elseif f >= MAX_FRAMES then
         finish("error", "ending-tail-target-timeout")
     end

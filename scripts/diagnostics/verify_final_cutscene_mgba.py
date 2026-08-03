@@ -4,17 +4,35 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
+import sys
 
 from PIL import Image
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+
+from cutscene_region_palettes import (  # noqa: E402
+    load_cutscene_region_palettes,
+    panel_mask,
+)
+
+
 DEFAULT_ROM = PROJECT_ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
+DEFAULT_PALETTES = PROJECT_ROOT / "palettes/penta_palettes_v097.yaml"
 PROBE = PROJECT_ROOT / "scripts/diagnostics/probe_final_cutscene_mgba.lua"
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def parse_result(path: Path) -> dict[str, str]:
@@ -34,7 +52,12 @@ def red_dominant_pixels(path: Path) -> int:
 
 
 def run_entry(
-    mgba: str, rom: Path, output: Path, entry: str, max_frames: int
+    mgba: str,
+    rom: Path,
+    output: Path,
+    entry: str,
+    max_frames: int,
+    attribute_masks: str,
 ) -> tuple[dict[str, str], int]:
     result_path = output / f"{entry}.txt"
     screenshot_path = output / f"{entry}.png"
@@ -47,6 +70,7 @@ def run_entry(
             "FINAL_SCENE_SCREENSHOT": str(screenshot_path),
             "FINAL_SCENE_MAX_FRAMES": str(max_frames),
             "FINAL_SCENE_ART_ID": "4" if entry == "pre-final" else "5",
+            "FINAL_SCENE_ATTR_MASKS": attribute_masks,
             "QT_QPA_PLATFORM": "offscreen",
             "SDL_AUDIODRIVER": "dummy",
         }
@@ -89,6 +113,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
     parser.add_argument(
+        "--palette-yaml", type=Path, default=DEFAULT_PALETTES
+    )
+    parser.add_argument(
         "--mgba",
         default=str(PROJECT_ROOT / "scripts/mgba-qt-singleflight"),
     )
@@ -111,29 +138,46 @@ def main() -> int:
     rom = args.rom.resolve()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    panels = load_cutscene_region_palettes(args.palette_yaml)
+    attribute_masks = "".join(
+        str(value)
+        for art_id in range(1, 8)
+        for row in panel_mask(panels[art_id])
+        for value in row
+    )
+    assert len(attribute_masks) == 7 * 160
 
     failures: list[str] = []
+    entry_receipts: list[dict] = []
     entries = (("post-final", 12000), ("pre-final", 16000))
     if args.entry:
         entries = tuple(item for item in entries if item[0] in args.entry)
     for entry, max_frames in entries:
         try:
             result, red_pixels = run_entry(
-                args.mgba, rom, output, entry, max_frames
+                args.mgba, rom, output, entry, max_frames, attribute_masks
             )
         except Exception as exc:
             failures.append(str(exc))
+            entry_receipts.append(
+                {"entry": entry, "status": "fail", "error": str(exc)}
+            )
             continue
         status = result.get("status")
         samples = int(result.get("samples", "0"))
-        contaminated = int(result.get("contaminated_total", "-1"))
+        nonzero = int(
+            result.get(
+                "nonzero_attr_total",
+                result.get("contaminated_total", "-1"),
+            )
+        )
         mismatch = int(result.get("layout_mismatch_total", "-1"))
         table_bad = int(result.get("table_bad_samples", "-1"))
         transitions = result.get("transitions", "")
         expected = "19" if entry == "pre-final" else "1A"
         print(
             f"{entry:10s}: status={status} samples={samples} "
-            f"attrs_nonzero={contaminated} layout_mismatch={mismatch} "
+            f"attrs_nonzero={nonzero} layout_mismatch={mismatch} "
             f"table_bad={table_bad} "
             f"red_pixels={red_pixels} frames={result.get('frames')}"
         )
@@ -153,16 +197,55 @@ def main() -> int:
             failures.append(
                 f"{entry}: transitions never reached D880={expected}"
             )
+        screenshot = output / f"{entry}.png"
+        checks = {
+            "probe_status_ok": status == "ok",
+            "samples_present": samples > 0,
+            "position_masks_exact": mismatch == 0,
+            "active_story_table_neutral": table_bad == 0,
+            "expected_scene_reached": f">{expected}" in transitions,
+            "native_screenshot_present": screenshot.is_file(),
+        }
+        entry_receipts.append(
+            {
+                "entry": entry,
+                "status": "pass" if all(checks.values()) else "fail",
+                "samples": samples,
+                "nonzero_attr_total": nonzero,
+                "layout_mismatch_total": mismatch,
+                "table_bad_samples": table_bad,
+                "red_dominant_pixels": red_pixels,
+                "frames": int(result.get("frames", "0")),
+                "transitions": transitions,
+                "screenshot": str(screenshot),
+                "screenshot_sha256": sha256(screenshot),
+                "checks": checks,
+            }
+        )
+    receipt = {
+        "schema": "penta-dragon-dx-final-cutscene-mgba-v3",
+        "status": "pass" if not failures else "fail",
+        "rom": str(rom),
+        "rom_sha256": sha256(rom),
+        "palette_yaml": str(args.palette_yaml.resolve()),
+        "palette_yaml_sha256": sha256(args.palette_yaml.resolve()),
+        "entries": entry_receipts,
+        "failures": failures,
+    }
+    receipt_path = output / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
     if failures:
         print("FAIL:")
         for failure in failures:
             print(f"  - {failure}")
+        print(f"Receipt: {receipt_path}")
         return 1
     scope = "both final-story branches" if len(entries) == 2 else entries[0][0]
     print(
-        f"PASS: {scope} keeps BG1..BG7 on committed artwork "
-        f"and BG0 on dialogue in mGBA ({output})."
+        f"PASS: {scope} exactly matches the YAML region masks on committed "
+        f"artwork and BG0 on dialogue in mGBA ({output})."
     )
+    print(f"Receipt: {receipt_path}")
     return 0
 
 

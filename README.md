@@ -9,29 +9,35 @@ DMA, avoiding stale palette attributes without touching sprite positions.
 
 ---
 
-## Status: ⚠️ v3.01 stream RC6 recovery candidate — low-health flicker open
+## Status: ⚠️ v3.01 stream RC8 candidate — audience palette vote pending
 
 The current release workflow builds `rom/working/penta_dragon_dx_FIXED.gb`
 with the exact title footer `DX V3.01 STRUK LABS`. The ROM is intentionally
 excluded from Git; the deterministic IPS patch, builder, probes, and
 documentation are versioned.
 
-Tag `v3.01-stream-rc6` records the best manually accepted stream candidate. It
-builds to MD5 `62cfa7a61615371f33ae0478c9828345` and SHA-256
-`eb72a2392a7bcabfc4ac387dc9802ce90e6c48dab737243c1ce5cea9859102f3`.
-Two clean builds reproduced those bytes. Focused receipts cover the repaired
-Stage 1 north route, Stage 1 room copies and semantic pickups, all cold/warm
-GAME START routes, the bonus area, and a 2,400-frame four-room Stage 2 soak.
-The ROM is not tracked. The checked-in ROM-free IPS remains the historical RC5
-artifact pending a new complete release pass, the palette vote, and reserved
-MiSTer hardware validation.
+Tag `v3.01-stream-rc6` remains the last tagged recovery point. The current
+untagged candidate builds to MD5 `6add942f4e2abd94dc44cab7c3245ab6`
+and SHA-256
+`ba095d92a71bd5d9c85a6943bc98a47d61532fa492af765603f62a8e0a808148`.
+The dedicated live-regression profile owns 21 mandatory gates. **21/21 pass**:
+cold/warm and post-attract GAME START, the general OG speed matrix, exact
+20,000-frame terrain copying, visible pickup containment, all prerecorded/live
+pickup forms, the rotating spikes, the bonus room, ordinary/low-health
+flicker, all 38 spotlight actors, and the opening/final cutscenes. The natural
+north route reaches the byte-exact room-$01 checkpoint 89 gameplay frames
+later than stock, within the same explicit 10% OG-speed policy used by the
+three-stage matrix (96-frame computed budget). The ROM is not tracked.
+The checked-in ROM-free IPS remains the historical RC5 artifact pending the
+full release pass, audience palette vote, and reserved MiSTer validation.
 
 | Release gate | Probe | Current result |
 |--------------|-------|------------|
 | Emulator process safety | `verify_mgba_singleflight_guard.py` | PASS without launching mGBA: raw commands denied, concurrent launch returns 75, parent-death cleanup works, and the suite confirms random-token ownership plus exact process-group cleanup |
-| Latest focused regression sweep | Isolated mGBA gates | **PASS** on RC6 MD5 `62cfa7a61615371f33ae0478c9828345`: GAME START routes, Stage 1 terrain/tilemap/semantic pickups, bonus area, focused Stage 2 soak, title reel, and the existing automated flicker route |
-| Manual low-health flicker | Headed mGBA + saved state/capture | **OPEN**: intermittent white flicker appears after HP becomes low and the warning music starts; the existing ordinary-gameplay flicker probe does not reproduce this trigger |
-| Historical full deterministic suite | `run_deterministic_suite.py` | **PASS, 45/45** on the prior MD5 `798a4363f99e015a9389fa0e5dd6079f` candidate with source fingerprint `d1ff86628eeeb35a…`; see its hash-bound [receipt](docs/release/verification/latest.json) |
+| Dedicated live regression | `verify_live_regression.py` | **PASS, 21/21** on MD5 `6add942f4e2abd94dc44cab7c3245ab6`: terrain, bleed, pickup-local chroma, spikes, bonus room, flicker, spotlight, starts, every story illustration, and the complete ending pass. The north route is +89 gameplay frames versus its computed 96-frame/10% budget, with all 576 packed terrain bytes matching stock |
+| Manual low-health flicker | Headed mGBA + saved state/capture | Historical report is now covered by the deterministic low-health fixture; one final headed audience pass remains part of stream preparation |
+| Deterministic low-health flicker | `verify_low_health_flicker.py` | **PASS on RC8**, 360 consecutive low-HP frames: BGP stayed `$E4`, zero non-`E4` writes, byte-stable BG CRAM, one stable attribute layout per physical map, and no white-flash brightness outlier |
+| Full deterministic suite | `run_deterministic_suite.py` | **PASS, 51/51** on RC8 MD5 `6add942f4e2abd94dc44cab7c3245ab6`; two builds were byte-identical and the ROM plus source fingerprint `ed7a0356…9698` are bound by the [receipt](docs/release/verification/latest.json) |
 | Candidate-only IPS round trip | `verify_release_patch.py --candidate-only` | Historical **PASS** for MD5 `798a4363…`; the checked-in distributable IPS remains the historical RC5 artifact pending hardware/audience approval |
 | Checked-in distributable IPS (RC5) | `verify_release_patch.py` | **PASS**: historical 6,749-byte IPS MD5 `5a4f5d1a4a8f47802d654021ef4e2a8e` reconstructs RC5 ROM MD5 `95d98e40…` from the supported Japanese base |
 | MiSTer reservation guard | `verify_mister_reservation_guard.py` | PASS, unreserved hardware commands stop before SSH/SCP; local-only commands remain usable |
@@ -46,22 +52,25 @@ MiSTer hardware validation.
 | Stale gameplay Window recovery | `verify_menu_window_order.py --inject-stale-frame 800` | **PASS**, the captured `WY=$60` lower-screen overlay is removed by the next VBlank with 0 stale frames after the grace frame |
 | Save-present GAME START score screen | `verify_levelselect_screen.py` | PASS, 360/360 visible attributes on palette 0 |
 | Cold-process GAME START | `verify_game_start_routes.py` | PASS, eight blank/saved × delayed/prompt × cold/reset routes plus a first-process post-attract route all reach 120 stable Stage 1 frames; live play records 0 attract-wait hits |
-| Vanilla gameplay-speed parity | `verify_stage_speed_matrix.py` | Stage 1 **PASS** at 138/141 (97.9%); Stage 2 focused receipt 159/159 (100.0%); Stage 7 **PASS** at 156/167 (93.4%); Stage 5 is still **FAIL** at 150/164 (91.5%) |
+| Vanilla gameplay-speed parity | `verify_stage_speed_matrix.py` | **PASS on the current candidate**: Stage 1 96.45%, Stage 5 96.34%, and Stage 7 94.01% of the untouched ROM under the fixed 600-frame right-input matrix. The stricter natural north-route checkpoint remains red separately |
 | Adversarial speed routes | `verify_stage_speed_matrix.py` | Historical promoted baseline: stationary Stage 5/7 97.1%/100%; right 95.1%/91.6%; patrol 80.1%/91.4% (Stage 5 patrol remains the worst measured case) |
 | Headed live speed comparison | Manual user playtest | **PASS**, user reports speed is good on the promoted no-bleed build |
 | Ordinary gameplay enemy OBJ palettes | `verify_gameplay_obj_palettes.py` | PASS, 6,290 hardware-OAM samples / 0 mismatches across 7 active combat anchors; the eighth naturally entered its miniboss scene before sampling |
-| Idle actor spotlight reel | `inventory_spotlight_roster.py`, `inventory_attract_reel.py` | PASS, all 38 roster identities use their gameplay-YAML family; Sara W/Sara D/Dragonfly travel and Gargoyle sprites have 0 palette mismatches; the exact flicker audit returns at sample 407 and the inventory measures 406 Gargoyle frames versus OG 395 |
-| ROM-native OPENING story palettes | `inventory_opening_cutscene.py --expect-production` | PASS, committed art is 160 page-palette cells above 200 neutral dialogue cells |
-| ROM-native final-story palettes | `verify_final_cutscene_mgba.py` | PASS, both branches; 0 position-aware layout mismatches or bad tables |
-| Complete ending phase map | `analyze_ending_page_discriminators.py`, `verify_story_attr_production.py` | PASS, credits/END/epilogue reach full BG1/BG2/BG3 layouts |
+| Idle actor spotlight reel | `inventory_spotlight_roster.py`, `inventory_attract_reel.py` | PASS, all 38 roster identities use their gameplay-YAML family; Sara W/Sara D/Dragonfly travel and Gargoyle sprites have 0 palette mismatches; the exact flicker audit returns at sample 388 and the inventory measures 387 Gargoyle frames versus OG 395 |
+| ROM-native OPENING story palettes | `inventory_opening_cutscene.py --expect-production` | PASS, each 20×8 illustration exactly matches its position-aware YAML mask above 200 neutral dialogue cells |
+| ROM-native final-story palettes | `verify_final_cutscene_mgba.py` | PASS, 57 pre-final + 21 post-final mGBA samples; 0 position-aware layout mismatches or bad story tables |
+| Complete ending phase map | `inventory_final_cutscene.py`, `analyze_ending_page_discriminators.py` | PASS, two independent 154-panel runs exactly cover arts 5/6/7 and full BG1 credits, BG2 END, BG0 preamble, and BG3 epilogue |
+| ROM-native cutscene pixels and CRAM | `verify_story_attr_production.py` | **PASS on RC8**, every story/ending state matches the exact 64-byte YAML BG palette deck and expected 360-cell attribute mask; native captures must also contain visible tiles/glyphs and nonblank, chromatic pixels |
 | Stage 1 BG colorization | `verify_gameplay_palette.py` | PASS, active map uses floor BG0 + slate-wall BG6 |
+| Stage 1 rotating/thrusting spikes | `verify_stage1_spike_palettes.py` | **PASS on RC8**, tracked packed-BG fixtures cover every live animation tile `$60–$7F`; 24 YAML-compiled source-art variants use scene-local BG7 teeth, BG5 rings/cylinder, and BG6 supports. The production delta is exactly 258/384 bytes, and the live receipt matches all 32 visible cells (10 teeth, 20 body/ring, 2 supports), exact CRAM, and the complete animation cycle |
 | Stage 1 pickup class inventory | `verify_pickup_class_palettes.py` | **PASS**, all 19 labeled pickup forms / 73 unique tile IDs resolve to five byte-distinct semantic color classes |
 | Stage 1 live pickup palettes | `verify_pickup_live_palettes.py` | **PASS**, all 19 forms resume across 14 current-ROM states; both physical maps use their semantic BG attributes, BG1–BG5 exactly match candidate CRAM, and every launch/artifact is recorded with a bounded transport retry |
+| Stage 1 attract-demo pickup palettes | `verify_attract_pickup_palettes.py` | **PASS on RC8**, natural cold boot with no input; 5,708/5,708 visible pickup cells use their compiled YAML palette, zero remain on BG0, all six native frames contain chroma inside the exact visible pickup rectangles, and the segment remains within 10% of OG timing |
 | Stage 1 bonus area | `verify_bonus_stage_live.py` | **PASS**, historical state resumes in current code, both Sara jet palettes exactly match the ROM, visible OAM uses the jet slot, BG attributes remain safe, and three native frames are chromatic |
 | Stage 1 pickup color containment | `verify_stage1_no_bleed.py` | **PASS**, 1,206 continuous gameplay frames, 1,124 native transition-window raster captures, six settled receipts, zero mismatched cells, and zero detached pickup-accent pixels across a right/down/left/up route |
 | Stage 1 room-map integrity | `verify_stage1_tilemap_copy.py` | **PASS**, 20,000 frames and 4,275 completed 24×24 room copies across both physical maps match the packed native source byte-for-byte with zero mismatches; the prior interrupt race that could shift a complete map by two columns is covered |
-| Stage 1 natural north route | `verify_stage1_north_integrity.py` | **PASS**, cold GAME START + recorded main-corridor route reaches camera `$02BC` / room `$01`; all 576 packed room bytes exactly match the untouched ROM, with no gameplay-memory writes |
-| Natural north traversal timing | same route receipt | Terrain **PASS**; identical camera `$02BC` / room `$01` takes 1,309 DX gameplay frames versus 1,212 stock on this route (+97 frames), while the independent 600-frame Stage 1 throughput gate remains 97.9% of stock |
+| Stage 1 natural north route | `verify_stage1_north_integrity.py` | **PASS**, cold GAME START + straight-north input reaches camera `$03A4` / room `$01`; all 576 packed room bytes, C1A0, and visible VRAM hashes exactly match the untouched ROM, with no gameplay-memory writes |
+| Natural north traversal timing | same route receipt | Terrain **PASS**; identical camera `$03A4` / room `$01` takes 1,053 DX gameplay frames versus 964 stock (+89), within the computed 96-frame/10% OG-speed budget |
 | Later-stage BG integrity | `verify_later_stage_integrity.py` | PASS, no cross-stage or unsafe attributes in Stages 2–7 |
 | Later-stage 48K-frame soak | `verify_later_stage_soak.py` | PASS, Stages 2–7; 0 unsafe attrs or lava mismatches |
 | All nine boss arenas | `verify_boss_arena_palettes.py` | PASS, 9/9 live tables exact and visibly colorized |
@@ -70,18 +79,15 @@ MiSTer hardware validation.
 | Scroll stability | `verify_scroll_tearing.py` | PASS, 0.00 changes/s |
 | `SELECT+START` safety | `verify_menu_hud_and_combo.py` | PASS, no scene change or freeze |
 
-The current stream-focused working ROM is SHA-256
-`eb72a2392a7bcabfc4ac387dc9802ce90e6c48dab737243c1ce5cea9859102f3`.
-Its Stage 1/2/bonus scope is green, including the repaired natural north route;
-it is not marked release-ready because the manually reproduced low-health
-warning-music flicker remains open and Stage 5 speed remains below the gate.
-The local `penta_dragon_dx_FIXED.ss2` state and accompanying capture reproduce
-the flicker but remain intentionally excluded from Git with all emulator state
-and copyrighted game imagery. They are the fixture for a dedicated low-HP
-regression probe. The rotating spike visible in that capture is also queued for
-a tilemap/attribute-versus-OAM identity audit before it receives a palette.
-The prior post-RC5 candidate remains bound to the historical 45-gate
-[receipt](docs/release/verification/latest.json); reservation-backed MiSTer
+The current stream-focused candidate ROM is SHA-256
+`ba095d92a71bd5d9c85a6943bc98a47d61532fa492af765603f62a8e0a808148`.
+Its Stage 1/bonus scope is green, including the rotating-spike material pass,
+the repaired natural north route, and the dedicated low-health fixture. The
+local emulator state and captures remain intentionally excluded from Git with
+all copyrighted game imagery.
+The current candidate passes the dedicated 21-gate live profile and is bound
+to the complete 51-gate source fingerprint and ROM hash by the checked-in
+[receipt](docs/release/verification/latest.json). Reservation-backed MiSTer
 hardware and the audience palette vote remain pending. Historical promoted RC5
 receipts remain in
 [`docs/release/receipts/c0a29419`](docs/release/receipts/c0a29419), while the
@@ -170,6 +176,19 @@ stable-versus-candidate sheet.
   transition, masks hardware OAM, and rejects exact BG1–BG5 pickup accents
   outside raster-aligned pickup cells. This catches rendered bleed that a
   post-frame VRAM comparison cannot see.
+- The rotating cylinder is a BG-tile assembly, not an OBJ sprite. Its 32 live
+  `$60–$7F` animation IDs are partitioned into 12 teeth on scene-local BG7,
+  10 ring/body IDs on BG5, and 10 metallic support/shadow IDs on BG6. The
+  builder compiles 24 exact source-art variants from the semantic masks in
+  `palettes/bg_tile_categories.yaml`; no runtime art rewrite or OBJ hook is
+  involved.
+- Audience tuning requires no code edit. Change
+  `stage1_hazard_palettes.RotatingSpikeTeeth.colors` in
+  `palettes/penta_palettes_v097.yaml` for the tooth/drill row. Change
+  `bg_palettes.BG5.colors` for the Stage 1 rings and cylinder body; BG5 is also
+  shared by attack/form pickups, so those colors should be judged together on
+  stream. Rebuilding selects the hazard BG7 only for Stage 1 and restores the
+  ordinary YAML BG7 in the bonus and later stages.
 - Stages 2–4 and 6 use a neutral baseline instead of misinterpreting reused
   tile IDs through the Stage 1 table.
 - Stages 5 and 7 retain only their captured and verified lava-field mappings.
@@ -192,15 +211,17 @@ stable-versus-candidate sheet.
   DMA. The ordinary `D880=0x0A` gameplay demo remains on its normal boss
   mapping, so its Gargoyle palette no longer changes once per second.
 - The release ROM now colorizes the OPENING book, Sara, and dragon-eye panels
-  from their committed story identities. Artwork rows use BG1/BG2/BG3 while
-  the separator, border, and dialogue remain neutral BG0. The first title
-  option enters this intro; DOWN selects GAME START.
+  from their committed story identities. Each 20×8 illustration uses its exact
+  multi-region YAML mask while the separator, border, and 20×10 dialogue area
+  remain neutral BG0. The first title option enters this intro; DOWN selects
+  GAME START.
 - The Penta Dragon pre-battle speech and the Lisa/Sara post-final ending are
-  separate paths. Their committed artwork uses BG4–BG7 above neutral dialogue;
-  credits, END, and epilogue use full-screen BG1, BG2, and BG3. The scene deck
-  loads ROM-matched states so audience edits preview the same mappings that the
-  builder bakes into release. Their corrected control-flow map and verification
-  evidence are in `docs/audit/cutscenes_intro_ending.md`.
+  separate paths. Their committed art uses exact Penta, Sara, dragon, and
+  Lisa/dragon region masks above neutral dialogue; credits, END, and epilogue
+  use full-screen BG1, BG2, and BG3. The scene deck loads ROM-matched states so
+  audience edits preview the same mappings that the builder bakes into release.
+  Their corrected control-flow map and verification evidence are in
+  `docs/audit/cutscenes_intro_ending.md`.
 
 ### DMA-ordered Shadow OAM palette pass (unreleased)
 
@@ -225,10 +246,13 @@ The title-idle reel and ordinary gameplay intentionally use separate maps:
 
 ### Arena-Dispatched Inline Hook
 The inline hook at bank1:0x42A7 dispatches based on scene:
-- `D880=0x0A`, `DCFD=0` (prerecorded attract gameplay) → stock-width
-  tile-only copying; the VBlank sweep owns its attributes without imposing the
-  live three-tile cadence on the recording
-- D880 `0x02` (Stage 1) → the stock `$DC00` future-map phase selects the
+
+- `D880=0x02`, `DCFD=0` (the main prerecorded Stage 1 demo) → stock-width
+  tile-only copying; the native room-expander seam stamps only actual pickup
+  metatiles into both attribute maps before they become visible
+- `D880=0x0A`, `DCFD=0` (the later Gargoyle miniboss demo) → stock-width
+  tile-only copying with its separate bounded Shield-row repair
+- `D880=0x02`, `DCFD=1` (live Stage 1) → the stock `$DC00` future-map phase selects the
   per-map cache; changed maps copy tile+attribute atomically in native row
   order, while steady maps retain the exact stock-width tile-only path
 - D880 `0x06`/`0x08` (Stage 5/7 lava) → atomic tile+attribute copy when
@@ -312,6 +336,21 @@ exact parent guardian of mGBA. If another emulator owns the slot, wait for it;
 never use a broad `pkill` or `killall`.
 
 ### Run verification probes
+
+The pre-stream live profile is one command. It runs 21 historically fragile
+emulator paths serially—including exact prerecorded/live pickup palettes,
+rotating spikes, the bonus room, Stage 1 tile-copy integrity, and visible color
+bleed—and writes a hash-bound manifest plus every gate's screenshots and JSON
+receipts below the requested output directory. The prerecorded pickup gate
+binds six native screenshots to exact visible pickup rectangles and requires
+chromatic pixels inside each rectangle; unrelated screen color cannot make it
+pass. Any failing gate leaves the profile red:
+
+```bash
+python3 scripts/diagnostics/verify_live_regression.py \
+  rom/working/penta_dragon_dx_FIXED.gb \
+  --output /tmp/penta-live-regression
+```
 
 The authoritative deterministic suite refuses an occupied emulator slot,
 builds the candidate twice under `/tmp`, requires byte-identical output, runs
@@ -525,6 +564,7 @@ scripts/
     ├── generate_stream_story_states.py
     ├── verify_live_palette_session.py
     ├── verify_mister_release_workflow.py
+    ├── verify_live_regression.py
     ├── verify_release_candidate.py
     ├── verify_levelselect_screen.py
     ├── verify_final_cutscene_mgba.py

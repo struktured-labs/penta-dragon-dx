@@ -19,10 +19,21 @@ DEFAULT_STATES = (
     "level1_sara_w_alone.ss0",
 )
 STAGE1_SETUP_ROM_OFFSET = 0x37B13
-PURE_COMPLETION_PATTERN = bytes.fromhex("F1 3D 28 03 F5 18 D1 C9")
+PURE_COMPLETION_PATTERNS = (
+    bytes.fromhex("F1 3D 28 03 F5 18 D1 C9"),
+    # Live cache hits restore their bounded IE mask through the atomic wrap;
+    # title/attract retain the trailing ordinary RET at this second pattern.
+    bytes.fromhex("F1 3D 28 03 F5 18 D1 78 B7 C2 98 34 C9"),
+)
 STOCK_COPY_PREFIX = bytes.fromhex("2E 00 11 A0 C1 0E 08 06 18 F3")
 STOCK_COPY_COMPLETION = 0x436D
 WRAM_BG_TABLE_HIGH = 0xC6
+DOUBLE_BUFFER_PREFIX = bytes.fromhex(
+    "2E 00 FA 80 D8 FE 02 F3 C2"
+)
+DOUBLE_BUFFER_COMPLETION_PATTERN = bytes.fromhex(
+    "AF E0 4F 3C E0 70 AF FB C9"
+)
 
 
 def parse_report(path: Path) -> dict[str, str]:
@@ -53,51 +64,85 @@ def run_state(
     stock_copy = rom_bytes[
         0x42A7:0x42A7 + len(STOCK_COPY_PREFIX)
     ] == STOCK_COPY_PREFIX
-    if stock_copy:
+    double_buffer = rom_bytes[
+        0x42A7:0x42A7 + len(DOUBLE_BUFFER_PREFIX)
+    ] == DOUBLE_BUFFER_PREFIX
+    if stock_copy or double_buffer:
         # The unmodified game finishes its 24x24 copy at the RET at $436D.
         # Supporting it here lets the same long-running gate prove that a
         # production candidate restored the timing-sensitive stock routine.
-        pure_completion = STOCK_COPY_COMPLETION
+        pure_completion = (
+            STOCK_COPY_COMPLETION if stock_copy else 0xFFFF
+        )
     else:
         pure_matches = [
-            index
+            (index, pattern)
+            for pattern in PURE_COMPLETION_PATTERNS
             for index in range(
-                0x42A7, 0x436E - len(PURE_COMPLETION_PATTERN) + 1
+                0x42A7, 0x436E - len(pattern) + 1
             )
-            if rom_bytes[index:index + len(PURE_COMPLETION_PATTERN)]
-            == PURE_COMPLETION_PATTERN
+            if rom_bytes[index:index + len(pattern)] == pattern
         ]
         if len(pure_matches) != 1:
             raise RuntimeError("candidate pure-copy completion is not unique")
-        pure_completion = (
-            pure_matches[0] + len(PURE_COMPLETION_PATTERN) - 1
-        )
-    atomic_wrap_matches = [
-        index
-        for index in range(0x3482, 0x34A2)
-        if rom_bytes[index:index + 2] == bytes.fromhex("FB C9")
-    ]
-    if len(atomic_wrap_matches) != 1:
-        raise RuntimeError("candidate atomic EI/RET completion is not unique")
-    atomic_wrap = atomic_wrap_matches[0]
+        pure_index, pure_pattern = pure_matches[0]
+        pure_completion = pure_index + len(pure_pattern) - 1
+    atomic_wrap_mode = "stock-order"
+    if stock_copy:
+        # A stock-copier isolation build intentionally has neither an atomic
+        # row nor its exit. Keep inert breakpoint addresses so the same probe
+        # can still prove every native tile-only completion byte-for-byte.
+        atomic_wrap = atomic_row = atomic_first_tile_write = 0xFFFF
+        atomic_wrap_mode = "disabled"
+    elif double_buffer:
+        completion_matches = [
+            index
+            for index in range(
+                0x42A7,
+                0x436E - len(DOUBLE_BUFFER_COMPLETION_PATTERN) + 1,
+            )
+            if rom_bytes[
+                index:index + len(DOUBLE_BUFFER_COMPLETION_PATTERN)
+            ] == DOUBLE_BUFFER_COMPLETION_PATTERN
+        ]
+        if len(completion_matches) != 1:
+            raise RuntimeError(
+                "double-buffer completion is not unique"
+            )
+        # Break on EI after both GDMA planes have completed. Unlike the
+        # row-wise atomic copier, H is already the exact $98/$9C map base.
+        atomic_wrap = completion_matches[0] + 7
+        atomic_row = atomic_first_tile_write = 0xFFFF
+        atomic_wrap_mode = "direct-map"
+    else:
+        atomic_wrap_matches = [
+            index
+            for index in range(0x3482, 0x34A2)
+            if rom_bytes[index:index + 2] == bytes.fromhex("FB C9")
+        ]
+        if len(atomic_wrap_matches) != 1:
+            raise RuntimeError(
+                "candidate atomic EI/RET completion is not unique"
+            )
+        atomic_wrap = atomic_wrap_matches[0]
 
-    atomic_row_matches = [
-        index
-        for index in range(0x42A7, pure_completion)
-        if rom_bytes[index:index + 6]
-        in (
-            bytes([0x06, WRAM_BG_TABLE_HIGH, 0x3E, 0x06, 0xE0, 0xE0]),
-            bytes([0x06, WRAM_BG_TABLE_HIGH, 0x3E, 0x08, 0xE0, 0xE0]),
+        atomic_row_matches = [
+            index
+            for index in range(0x42A7, pure_completion)
+            if rom_bytes[index:index + 6]
+            in (
+                bytes([0x06, WRAM_BG_TABLE_HIGH, 0x3E, 0x06, 0xE0, 0xE0]),
+                bytes([0x06, WRAM_BG_TABLE_HIGH, 0x3E, 0x08, 0xE0, 0xE0]),
+            )
+        ]
+        if len(atomic_row_matches) != 1:
+            raise RuntimeError("candidate atomic-row entry is not unique")
+        atomic_row = atomic_row_matches[0]
+        atomic_first_tile_write = rom_bytes.find(
+            bytes.fromhex("1A 13 22"), atomic_row + 6, pure_completion
         )
-    ]
-    if len(atomic_row_matches) != 1:
-        raise RuntimeError("candidate atomic-row entry is not unique")
-    atomic_row = atomic_row_matches[0]
-    atomic_first_tile_write = rom_bytes.find(
-        bytes.fromhex("1A 13 22"), atomic_row + 6, pure_completion
-    )
-    if atomic_first_tile_write < 0:
-        raise RuntimeError("candidate atomic tile writer is missing")
+        if atomic_first_tile_write < 0:
+            raise RuntimeError("candidate atomic tile writer is missing")
 
     setup_path = ""
     if state is not None:
@@ -148,6 +193,7 @@ def run_state(
             "STAGE1_TILEMAP_ATOMIC_FIRST_WRITE": (
                 f"{atomic_first_tile_write:04X}"
             ),
+            "STAGE1_TILEMAP_ATOMIC_WRAP_MODE": atomic_wrap_mode,
         }
     )
     command = [str(mgba), "--fastforward"]

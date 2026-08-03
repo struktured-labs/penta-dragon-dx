@@ -23,7 +23,8 @@ local samples = {[0x01] = 0, [0x1B] = 0, [0x1C] = 0}
 local nonzero_total, max_nonzero = 0, 0
 local unsafe_total, table_non_neutral_samples = 0, 0
 local banner_table_bad_samples, cram_bad_samples = 0, 0
-local cram_bad_details = {}
+local cram_blank_transition_samples = 0
+local cram_bad_details, cram_blank_transition_details = {}, {}
 
 local function visible_attr_counts()
     local lcdc = emu:read8(0xFF40)
@@ -95,6 +96,14 @@ local function finish(status, message)
     report:write(string.format(
         "cram_bad_details=%s\n", table.concat(cram_bad_details, ",")
     ))
+    report:write(string.format(
+        "cram_blank_transition_samples=%d\n",
+        cram_blank_transition_samples
+    ))
+    report:write(string.format(
+        "cram_blank_transition_details=%s\n",
+        table.concat(cram_blank_transition_details, ",")
+    ))
     report:write(string.format("screenshots=%d\n", screenshot_count))
     report:close()
     local marker = assert(io.open(OUT .. ".done", "w"))
@@ -136,12 +145,38 @@ callbacks:add("frame", function()
             end
             local bg0_valid, bg0_actual = bg0_is_expected()
             if not bg0_valid then
-                cram_bad_samples = cram_bad_samples + 1
-                if #cram_bad_details < 16 then
-                    cram_bad_details[#cram_bad_details + 1] = string.format(
-                        "f%d/s%02X/e%d:%s",
-                        frame, scene, scene_elapsed, bg0_actual
-                    )
+                local bgp = emu:read8(0xFF47)
+                local detail = string.format(
+                    "f%d/s%02X/e%d:%s/bgp%02X/lcdc%02X/stat%02X/ly%02X",
+                    frame, scene, scene_elapsed, bg0_actual, bgp,
+                    emu:read8(0xFF40), emu:read8(0xFF41),
+                    emu:read8(0xFF44)
+                )
+                -- BGP=$00 maps every pixel to DMG color zero. Stock uses this
+                -- fully white startup hold before any title art is visible.
+                -- Preserve it as explicit rendered evidence, but never let it
+                -- exempt a CRAM mismatch under a visible BGP mapping.
+                if bgp == 0 then
+                    cram_blank_transition_samples =
+                        cram_blank_transition_samples + 1
+                    if #cram_blank_transition_details < 16 then
+                        cram_blank_transition_details[
+                            #cram_blank_transition_details + 1
+                        ] = detail
+                        emu:screenshot(string.format(
+                            "%s.cram-blank.f%d.scene%02X.e%d.png",
+                            OUT, frame, scene, scene_elapsed
+                        ))
+                    end
+                else
+                    cram_bad_samples = cram_bad_samples + 1
+                    if #cram_bad_details < 16 then
+                        cram_bad_details[#cram_bad_details + 1] = detail
+                        emu:screenshot(string.format(
+                            "%s.cram-bad.f%d.scene%02X.e%d.png",
+                            OUT, frame, scene, scene_elapsed
+                        ))
+                    end
                 end
             end
         end

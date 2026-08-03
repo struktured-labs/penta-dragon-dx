@@ -26,6 +26,8 @@ local PURE_COMPLETION = tonumber(
 local KEY_A = 0x01
 local KEY_RIGHT, KEY_LEFT, KEY_UP, KEY_DOWN = 0x10, 0x20, 0x40, 0x80
 local ATOMIC_WRAP = tonumber(assert(os.getenv("STAGE1_TILEMAP_ATOMIC_WRAP")), 16)
+local ATOMIC_WRAP_MODE = os.getenv("STAGE1_TILEMAP_ATOMIC_WRAP_MODE") or
+  "stock-order"
 local ATOMIC_ROW = tonumber(
   assert(os.getenv("STAGE1_TILEMAP_ATOMIC_ROW")), 16)
 local ATOMIC_FIRST_TILE_WRITE = tonumber(
@@ -352,7 +354,11 @@ pcall(function()
     wrap_a_values[a] = (wrap_a_values[a] or 0) + 1
     wrap_h_values[h] = (wrap_h_values[h] or 0) + 1
     local base
-    if STOCK_ORDER_WRAP then
+    if ATOMIC_WRAP_MODE == "direct-map" then
+      -- Complete tile and attribute planes were already published by GDMA;
+      -- the double-buffered path retains the exact destination base in H.
+      base = h * 0x100
+    elseif STOCK_ORDER_WRAP then
       -- Stock-order candidate: one final visit with H=base+$03. The row-end
       -- discriminator may legitimately leave A=$00, $E0, or another value;
       -- the unique EI/RET completion itself proves that all rows finished.

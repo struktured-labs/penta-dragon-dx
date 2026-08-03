@@ -9,6 +9,15 @@ local SPEC = assert(os.getenv("PICKUP_LIVE_SPEC"), "PICKUP_LIVE_SPEC required")
 local SETTLE = tonumber(os.getenv("PICKUP_LIVE_SETTLE") or "180")
 local DEMO_REARM_ROWS = tonumber(
     os.getenv("PICKUP_LIVE_DEMO_REARM_ROWS") or "18")
+local function read_register(name)
+    for _, spelling in ipairs({string.lower(name), string.upper(name)}) do
+        local ok, value = pcall(function() return emu:readRegister(spelling) end)
+        if ok and value then return value & 0xFFFF end
+        ok, value = pcall(function() return emu:getRegister(spelling) end)
+        if ok and value then return value & 0xFFFF end
+    end
+    return 0xFFFF
+end
 
 local entries = {}
 for line in io.lines(SPEC) do
@@ -79,6 +88,9 @@ local function finish()
     handle:write(string.format("LCDC=%02X\n", lcdc))
     handle:write(string.format("SCX=%02X\n", emu:read8(0xFF43)))
     handle:write(string.format("SCY=%02X\n", emu:read8(0xFF42)))
+    handle:write(string.format("PC=%04X\n", read_register("PC")))
+    handle:write(string.format("SP=%04X\n", read_register("SP")))
+    handle:write(string.format("FF99=%02X\n", emu:read8(0xFF99)))
     handle:write(string.format("DF02=%02X\n", emu:read8(0xDF02)))
     handle:write(string.format("main_loop_hits=%d\n", main_loop_hits))
     handle:write(string.format("tile_copy_hits=%d\n", tile_copy_hits))

@@ -17,12 +17,18 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import sys
 import zlib
 
 from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from build_v301_gdma import _bg_table  # noqa: E402
+
+
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 DEFAULT_STATES = ROOT / "save_states_for_claude"
 BANK13 = 13 * 0x4000
@@ -162,15 +168,8 @@ PICKUPS = (
     ),
 )
 
-EXPECTED_TABLE_HISTOGRAM = {
-    0: 146,
-    1: 5,
-    2: 16,
-    3: 8,
-    4: 24,
-    5: 20,
-    6: 37,
-}
+EXPECTED_TABLE = bytes(_bg_table())
+EXPECTED_TABLE_HISTOGRAM = dict(sorted(Counter(EXPECTED_TABLE).items()))
 
 
 def digest(path: Path, algorithm: str = "sha256") -> str:
@@ -321,6 +320,9 @@ def main() -> int:
 
     checks = {
         "73 unique pickup tile IDs": len(expected_tiles) == 73,
+        "complete Stage 1 table equals its YAML compilation": (
+            table == EXPECTED_TABLE
+        ),
         "exact Stage 1 table histogram": (
             table_histogram == EXPECTED_TABLE_HISTOGRAM
         ),

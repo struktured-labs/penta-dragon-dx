@@ -7,11 +7,58 @@ emulator save/state files are never release artifacts in this repository.
 
 ### Added
 
+- Add `verify_live_regression.py` as the one-command pre-stream profile. Its
+  21 serial, hash-isolated gates cover cold/warm GAME START, post-attract
+  start, gameplay speed, the natural Stage 1 north route, transient tile-copy
+  integrity and visible color bleed, all 38 spotlight actors, prerecorded and
+  live semantic pickups, rotating spikes, the Stage 1 bonus room,
+  normal/low-health flicker, every opening/pre/post-final illustration, and the
+  complete credits/END/epilogue trajectory. The current hash-bound receipt is
+  21/21. The natural north route is 89
+  gameplay frames behind stock, within the shared 10% OG-speed policy's
+  computed 96-frame budget, while all 576 terrain bytes remain exact.
+- Enforce the dedicated live profile as a checked contract instead of an
+  optional local script. `--check-contract` requires the exact 21-gate
+  manifest, the installed pre-commit hook rejects a missing/stale full-suite
+  receipt, and both profiles bind their results to an unchanged source
+  fingerprint and exact candidate ROM hash. The fingerprint explicitly owns
+  the cutscene-region compiler and palette-approval recorder as well as the
+  builder and diagnostics, so editing either helper invalidates the receipt.
+- Add exact 20×8 YAML region masks for every opening/final illustration. A
+  compact bank-6 row-RLE writer emits the position-aware palette attributes
+  above a neutral dialogue frame; the live opening and both final-story gates
+  reject any per-cell mismatch and retain native screenshots/contact sheets.
+- Add a canonical Stage 1 hazard-art compiler driven by
+  `palettes/bg_tile_categories.yaml`. It emits 24 reviewed rotating-cylinder
+  variants (258 changed bytes of 384), preserves the exact 20-variant
+  audience-approved preview hash, and shares one contract with the builder,
+  offline analyzer, static verifier, and live mGBA probe.
+- Add `stage1_hazard_palettes.RotatingSpikeTeeth` to
+  `penta_palettes_v097.yaml`. The release loader selects this independent BG7
+  row only in Stage 1, while bonus/later play restores ordinary YAML BG7. The
+  palette round-trip gate deliberately edits the row, rebuilds the ROM, and
+  proves the changed bytes reach live Stage 1 CRAM.
+- Add `verify_low_health_flicker.py` as a mandatory 360-frame current-ROM
+  regression. It resumes the existing low-HP Stage 1 fixture, watches every
+  `FF47` write, samples BGP/CRAM and both physical attribute layouts, captures
+  every rendered frame, and fails on a palette mutation or white-flash
+  outlier. The restrained spike candidate records BGP=`E4`, zero non-E4
+  writes, one stable BG-CRAM variant, one stable layout per map, and only 1.95
+  levels of maximum luma movement above the median.
 - Add `verify_pickup_live_palettes.py` as a mandatory current-ROM runtime
   gate. It resumes all 19 labeled pickup forms across 14 Stage 1 states,
   verifies their semantic attributes on both physical maps, compares live
   BG1–BG5 CRAM with the candidate bytes, captures one native frame per state,
   and emits a contact sheet plus hash-bound JSON receipt.
+- Add `verify_attract_pickup_palettes.py` as a mandatory cold-boot, no-input
+  title-demo gate. It waits for the real prerecorded Stage 1 state
+  (`D880=$02`, `FFC1=1`, `DCFD=0`), checks every actually visible pickup cell
+  against the ROM-compiled YAML LUT on every frame, rejects neutral BG0,
+  captures six native frames, binds each capture to its exact visible pickup
+  rectangles, requires chromatic pixels inside every pickup-local region, and
+  enforces a two-sided 10% timing budget around the untouched ROM's 1,856-frame
+  Stage 1 segment. Whole-frame color elsewhere can no longer hide a grayscale
+  pickup regression.
 - Add `verify_bonus_stage_live.py` for the Stage 1 bonus SHMUP. It proves the
   historical state executes current ROM code, remains live bonus gameplay,
   uses the candidate's two Sara jet palette rows in hardware OAM, keeps visible
@@ -40,6 +87,57 @@ emulator save/state files are never release artifacts in this repository.
 
 ### Fixed
 
+- Make the complete title-cycle receipt distinguish the stock `BGP=$00`
+  startup hold from a visible palette regression. A CRAM mismatch is exempt
+  only while every DMG color maps to zero, and only when its dedicated native
+  160×144 receipt is exactly all white; any mismatch under a visible BGP
+  mapping remains fatal. This preserves the strict no-red/no-bleed title gate
+  without treating an intentional blank transition as colored title output.
+- Make cutscene palette ownership state-independent. A bounded scene-family
+  bridge loads all eight YAML BG rows before story attributes are dispatched;
+  the epilogue follows the same service through a cycle-preserving title-path
+  trampoline. Production fixtures now reject an incorrect 64-byte CRAM deck,
+  an empty tile/glyph buffer, a blank or nearblank screenshot, or missing
+  chromatic pixels. This closes the old false-positive where credits or END
+  could have correct attribute indices but render as an all-white frame.
+- Extend the title visual receipt horizon to 26,000 frames so one cold boot
+  must prove both the initial and post-attract footer/banner cycles. Harden
+  generated story and boss fixtures against early Qt serialization and
+  inherited stock attack timers, then reload every fixture in a clean mGBA
+  process before accepting it.
+- Replace the retired uniform-palette assertions in the complete final-story
+  inventory with exact 360-byte position-mask checks. Pre-final now proves arts
+  4/7, two independent 154-panel endings prove arts 5/6/7 plus every
+  credits/END/epilogue phase, and the discriminator rejects misplaced colors
+  even when aggregate palette counts happen to match. Receipts bind the ROM,
+  palette YAML, full attribute maps, screenshots, and required art/phase sets.
+  The audit also reproduces the stock ending's `$C600` script-workspace writes
+  on the original ROM, so the neutral-LUT assertion is correctly limited to
+  story scenes `$19/$1A` while all direct-written ending pages retain complete
+  visible-layout checks.
+- Normalize the two pickup fixtures whose serialized PCs land in replaced
+  code before resuming them in the current ROM. The Sara W teleport fixture no
+  longer times out, while transient one-frame pickup fixtures retain their
+  native resume points; the combined live receipt passes all 19 forms and all
+  14 screenshots.
+- Restore original-ROM attract timing without dropping semantic pickup color.
+  A named 36-cycle alignment at each prerecorded dual-map pickup publish gives
+  1,940 Stage-1 frames and 387 Gargoyle frames versus OG 1,856/395. The shared
+  `D880=$0A` path now uses `DCFD` to keep prerecorded Gargoyle out of the
+  expensive sweep while preserving the historical live Shield repair on both
+  physical maps.
+- Color the live rotating/thrusting Stage 1 spike family. Saved-state room
+  sources prove the repeated assemblies are BG tiles `$60-$7F`, not OBJ
+  sprites; the old YAML covered only the legacy `$2A-$3D` family. The final
+  material split maps 12 protruding tooth IDs to independently tuneable BG7,
+  10 ring/body IDs to fire BG5, and 10 support/shadow IDs to metallic BG6.
+  Every one of the 40 visible full-cycle cells matches that split in live
+  mGBA, with normal BG7 restored in the bonus stage. This leaves title/menu
+  and OAM actors untouched and avoids the rejected whole-cylinder “disco”.
+- Make the speed-parity scene sampler deterministic around the stock HRAM
+  OAM-DMA routine. Every WRAM `$FF` sample is now classified from its exact PC
+  and DMA source; all proven DMA-bus-unreadable samples are excluded, while
+  every real scene mismatch remains fatal.
 - Move the mutable 256-byte BG palette lookup table from fixed WRAM `$CC00`
   to the audited `$C600-$C6FF` gap. The original game stores its procedural
   dungeon/world template map in `$C780-$CFFF`; the old DX table copy erased
@@ -52,11 +150,15 @@ emulator save/state files are never release artifacts in this repository.
   to read the relocated `$C600` LUT. This prevents the old `$CC00` assumptions
   from falsely passing a corrupt world map or falsely rejecting the repaired
   inline copier.
-- Repair the prerecorded-attract pickup sweep without extending its original
-  18-VBlank cadence. The `D880=$0A` pending-room path alternates semantic rows
-  6 and 7 on whichever physical map is active, so Shield and other pickup rows
-  are colored after attract/demo transitions while the title reel and Stage 1
-  timing retain the proven stock-width tile-copy path.
+- Repair the actual prerecorded Stage 1 pickup path. The main recording is
+  `D880=$02` with `DCFD=0`; `$0A` is only its later Gargoyle miniboss. A cached
+  hook at the native room-expander return now classifies only real pickup
+  metatiles and stamps their YAML palette attributes into both physical maps
+  during two fresh HBlanks before the stock-width tile copier exposes them.
+  The natural receipt observes 5,708/5,708 exact colored pickup cells, zero
+  neutral or mismatched cells, and 1,940 demo frames versus the untouched
+  ROM's 1,856. Live `D880=$02` gameplay remains on its independent
+  atomic attribute path; the `$0A` Shield repair remains bounded separately.
 - Stop validating or restoring the level-select trampoline at `$CFAA` during
   gameplay. Stage 1 legitimately reuses that address as live workspace while
   scrolling north; the old per-VBlank `$E5` check recopied 36 bytes of title
@@ -74,7 +176,7 @@ emulator save/state files are never release artifacts in this repository.
 - Route prerecorded attract gameplay through the stock-width pure tile copier
   before live-room signature work. Live Stage 1 retains its three-tile atomic
   safety path, while the Gargoyle reel drops from the regressed 528 frames to
-  406 versus the untouched ROM's 395, with all spotlight/demo palettes intact.
+  387 versus the untouched ROM's 395, with all spotlight/demo palettes intact.
 - Cache Stage 1 atomic refreshes by destination-map content signature instead
   of input direction. Natural vertical traversal keeps exact tile/attribute
   pairing without refreshing unchanged maps every frame.
@@ -125,15 +227,13 @@ emulator save/state files are never release artifacts in this repository.
 
 ### Known issues
 
-- A new headed-play reproduction shows intermittent white flicker after Sara
-  reaches low health and the warning music begins. The current automated
-  ordinary-gameplay flicker route passes because it does not enter this state.
-  A local `penta_dragon_dx_FIXED.ss2` state and capture preserve the trigger
-  for the next dedicated low-HP regression probe; neither artifact is tracked.
-- Stage 5 speed is 150/164 main loops (91.5% of stock), below the release gate.
-- The rotating spike visible in the low-health capture is not yet colorized.
-  Its BG tile/attribute and hardware-OAM presence must be inventoried before a
-  palette implementation is selected.
+- The current RC8 passes both the dedicated 21-gate stream profile and the
+  complete source-bound 51-gate release matrix. The audience palette vote and
+  reservation-backed MiSTer validation remain required before a distributable
+  release is approved.
+- The historical low-health flicker, Stage 5 speed sampler, and uncolored
+  rotating-spike items above are resolved in the current candidate and retained in this
+  changelog only as provenance for their dedicated regression gates.
 
 ## [v3.01-stream-rc5] - 2026-07-30
 
@@ -626,8 +726,8 @@ emulator save/state files are never release artifacts in this repository.
   with zero palette mismatches. The same trace observed 4,889 ordinary demo
   miniboss sprites with zero deviations from its fixed boss palette.
 - The default title choice reaches `D880=0x15`. Across all 33 sampled OPENING
-  panels through frame 11,779, every committed art page reaches an exact
-  160-cell BG1/BG2/BG3 top region above 200 BG0 dialogue cells, with no unsafe
+  panels through frame 11,779, every committed art page reaches its exact
+  160-cell multi-region YAML mask above 200 BG0 dialogue cells, with no unsafe
   attributes. The capture tolerates only the single verified one-sample
   previous-page handoff immediately before a newly announced art page commits.
 - Corrected the cutscene map: the `0x54C0` path begins after Faze, sets
@@ -636,9 +736,9 @@ emulator save/state files are never release artifacts in this repository.
   ending are captured independently with their ROM-native position-aware
   BG4–BG7 artwork and BG0 dialogue layouts.
 - Original final-story routines pass the mGBA pixel-pipeline gate: the
-  pre-final branch sampled 50 panels through `0x19→0x18→0x14`, and the
-  post-final branch sampled 15 panels through `0x1A→0x16`, with zero layout
-  mismatches or bad active tables. Two full PyBoy inventories each captured
+  pre-final branch sampled 57 panels through `0x19→0x18→0x14`, and the
+  post-final branch sampled 21 panels after reaching `0x1A`, with zero layout
+  mismatches or bad active story tables. Two full PyBoy inventories each captured
   154 post-final panels through the `D880=0x00` epilogue with the required
   BG5/BG6/BG7 dialogue art and full BG1/BG2/BG3 ending layouts.
 - The complete post-final trace now proves independent guards for the

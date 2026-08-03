@@ -18,6 +18,7 @@ local STABLE_TARGET = tonumber(os.getenv("BOSS_STABLE_FRAMES") or "240")
 local ENTRY_TIMEOUT = tonumber(os.getenv("BOSS_ENTRY_TIMEOUT") or "1200")
 local EXPECTED_SCENE = 0x0C + TARGET
 local f, reached, stable, done = 0, false, 0, false
+local trace = assert(io.open(OUT .. ".trace", "w"))
 
 local function register(name)
     local accessors = {
@@ -66,6 +67,7 @@ end
 local function finish(status, message)
     if done then return end
     done = true
+    trace:close()
     local report = assert(io.open(OUT .. ".report", "w"))
     report:write(string.format(
         "status=%s target=%d expected_scene=%02X frame=%d d880=%02X " ..
@@ -93,8 +95,24 @@ callbacks:add("frame", function()
     -- Keep Sara alive while the arena settles.
     emu:write8(0xDCDC, 0xFF)
     emu:write8(0xDCDD, 0xFF)
+    -- The synthetic Stage-1 dispatcher route can inherit an attack phase that
+    -- decrements DCBB before serialization (Troop arms D888/DD06; Ted and
+    -- Penta can leave for the splash shortly after reload). Keep every visual
+    -- fixture in its arena; boss-exit behavior has a separate death/game-over
+    -- gate.
+    emu:write8(0xDCBB, 0xF0)
 
     local scene = emu:read8(0xD880)
+    if f <= ENTRY_TIMEOUT and (not reached or stable < 80) then
+        trace:write(string.format(
+            "frame=%d pc=%04X d880=%02X ffb7=%02X ffba=%02X " ..
+            "dcbb=%02X d888=%02X dd06=%02X\n",
+            f, register("PC"), scene, emu:read8(0xFFB7),
+            emu:read8(0xFFBA), emu:read8(0xDCBB),
+            emu:read8(0xD888), emu:read8(0xDD06)
+        ))
+        trace:flush()
+    end
     if not reached then
         if scene == EXPECTED_SCENE then
             reached = true

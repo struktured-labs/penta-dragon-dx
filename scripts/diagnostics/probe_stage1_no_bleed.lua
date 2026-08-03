@@ -35,6 +35,10 @@ local seeded, confirmed, finished = false, false, false
 local stable_frames, play_frames = 0, 0
 local sampled_frames, checked_cells = 0, 0
 local pal1_cells, unexpected_cells, unsafe_cells = 0, 0, 0
+local runtime_lut_mismatch_frames, runtime_lut_mismatch_cells = 0, 0
+local runtime_lut_mismatch_max = 0
+local first_runtime_lut_mismatch_frame = -1
+local first_runtime_lut_mismatch_details = ""
 local pal1_tiles = {}
 local first_pal1_frame, first_unexpected_frame = -1, -1
 local scene_frames, active_frames = 0, 0
@@ -56,7 +60,13 @@ local trace_layouts = tonumber(os.getenv("STAGE1_TRACE_LAYOUTS") or "0") ~= 0
 local layout_records, layout_seen = {}, {}
 local debug_destination = 0
 local packed_signatures
-local previous_pickup_rects, previous_oam_rects = "", ""
+local pickup_rect_history, oam_rect_history = {}, {}
+
+local function recent_rectangles(history, value)
+  if value ~= "" then history[#history + 1] = value end
+  while #history > 12 do table.remove(history, 1) end
+  return table.concat(history, ";")
+end
 
 local function register_layout(raw_layout, attr_layout)
   if not trace_layouts then return 0 end
@@ -202,6 +212,31 @@ local function scan_visible()
       table.concat(frame_unexpected_details, ";")
 end
 
+local function scan_runtime_lut()
+  local mismatches = 0
+  local details = {}
+  for tile = 0, 255 do
+    local actual = emu:read8(0xC600 + tile) & 0x07
+    local expected = string.byte(lut, tile + 1) & 0x07
+    if actual ~= expected then
+      mismatches = mismatches + 1
+      if #details < 32 then
+        details[#details + 1] = string.format(
+          "t%02X,p%d,e%d", tile, actual, expected)
+      end
+    end
+  end
+  if mismatches > 0 then
+    runtime_lut_mismatch_frames = runtime_lut_mismatch_frames + 1
+    runtime_lut_mismatch_cells = runtime_lut_mismatch_cells + mismatches
+    runtime_lut_mismatch_max = math.max(runtime_lut_mismatch_max, mismatches)
+    if first_runtime_lut_mismatch_frame < 0 then
+      first_runtime_lut_mismatch_frame = play_frames
+      first_runtime_lut_mismatch_details = table.concat(details, ";")
+    end
+  end
+end
+
 local function hist_text(hist)
   local parts = {}
   for palette = 0, 7 do
@@ -281,6 +316,18 @@ local function finish()
   handle:write(string.format("pal1_cells=%d\n", pal1_cells))
   handle:write(string.format("unexpected_cells=%d\n", unexpected_cells))
   handle:write(string.format("unsafe_cells=%d\n", unsafe_cells))
+  handle:write(string.format(
+    "runtime_lut_mismatch_frames=%d\n", runtime_lut_mismatch_frames))
+  handle:write(string.format(
+    "runtime_lut_mismatch_cells=%d\n", runtime_lut_mismatch_cells))
+  handle:write(string.format(
+    "runtime_lut_mismatch_max=%d\n", runtime_lut_mismatch_max))
+  handle:write(string.format(
+    "first_runtime_lut_mismatch_frame=%d\n",
+    first_runtime_lut_mismatch_frame))
+  handle:write(
+    "first_runtime_lut_mismatch_details=" ..
+    first_runtime_lut_mismatch_details .. "\n")
   handle:write(string.format("first_pal1_frame=%d\n", first_pal1_frame))
   handle:write(string.format(
     "first_unexpected_frame=%d\n", first_unexpected_frame))
@@ -398,23 +445,22 @@ end
 callbacks:add("frame", function()
   if finished then return end
   frame = frame + 1
-  emu:write8(0xDCFD, 0x01)
   if not seeded and frame >= 100 then seed_sram(); seeded = true end
 
   if phase == "title" then
-    if frame >= 300 and frame < 306 then emu:setKeys(KEY_START)
-    elseif frame >= 360 and frame < 366 then emu:setKeys(KEY_START)
-    else emu:setKeys(0) end
-    if frame >= 330 then phase = "level_select" end
-    return
-  end
-
-  if phase == "level_select" and not confirmed then
-    emu:write8(0xFFBA, 0)
-    seed_sram()
-    if frame % 60 >= 10 and frame % 60 < 16 then emu:setKeys(KEY_A)
-    else emu:setKeys(0) end
-    if emu:read8(0xD880) == 0x18 or emu:read8(0xFFC1) == 1 then
+    -- Match the independently verified natural north route. INTRO is selected
+    -- by default; the released pulses traverse GAME START and the stock
+    -- score/stage cards without writing scene or controller state.
+    local keys = 0
+    if frame >= 180 and frame < 186 then keys = keys | KEY_DOWN end
+    if frame >= 193 and frame < 199 then keys = keys | KEY_A end
+    if frame >= 241 and frame < 247 then keys = keys | KEY_A end
+    if frame >= 291 and frame < 297 then keys = keys | KEY_A end
+    if frame >= 341 and frame < 347 then keys = keys | KEY_START end
+    if frame >= 391 and frame < 397 then keys = keys | KEY_A end
+    emu:setKeys(keys)
+    if emu:read8(0xD880) == EXPECTED_SCENE
+        and emu:read8(0xFFC1) == 1 then
       confirmed = true
       phase = "loading"
     end
@@ -497,6 +543,7 @@ callbacks:add("frame", function()
 
   local hist, frame_pal1, frame_unexpected, frame_unsafe,
       frame_pal1_details, frame_unexpected_now = scan_visible()
+  scan_runtime_lut()
   if frame_unexpected > 0 and first_unexpected_path == "" then
     first_unexpected_path = OUT .. "/first-unexpected.png"
     first_unexpected_details = frame_unexpected_now
@@ -515,12 +562,15 @@ callbacks:add("frame", function()
       pal1_details = frame_pal1_details,
     }
   end
+  local current_pickups = active_pickup_rects()
+  local current_oam = active_oam_rects()
+  local past_pickups = recent_rectangles(
+    pickup_rect_history, current_pickups)
+  local past_oam = recent_rectangles(oam_rect_history, current_oam)
   if raster_window > 0 then
     local raw_hash, attr_hash, raw_layout, attr_layout = packed_signatures()
     local layout_id = 0
     layout_id = register_layout(raw_layout, attr_layout)
-    local current_pickups = active_pickup_rects()
-    local current_oam = active_oam_rects()
     local path = string.format("%s/raster-%04d.png", OUT, play_frames)
     emu:screenshot(path)
     raster_captures[#raster_captures + 1] = {
@@ -550,22 +600,11 @@ callbacks:add("frame", function()
         emu:read8(0xC1A5),
         emu:read8(0xC1A6),
         emu:read8(0xC1A7)),
-      pickups = (
-        previous_pickup_rects ~= ""
-        and (previous_pickup_rects .. ";" .. current_pickups)
-        or current_pickups
-      ),
-      oam = (
-        previous_oam_rects ~= ""
-        and (previous_oam_rects .. ";" .. current_oam)
-        or current_oam
-      ),
+      pickups = past_pickups,
+      oam = past_oam,
     }
     raster_window = raster_window - 1
   end
-  previous_pickup_rects = active_pickup_rects()
-  previous_oam_rects = active_oam_rects()
-
   -- Leave several rendered frames after the final screenshot before exiting.
   if play_frames >= LIMIT + 6 then finish() end
 end)

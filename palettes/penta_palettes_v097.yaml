@@ -94,6 +94,73 @@ bg_palettes:
   BG7:
     colors: ["7FFF", "7E10", "3800", "0000"]  # White background, Royal blue, Navy, Black
 
+# Stage-local BG rows. These are loaded only for the named scene and do not
+# replace the normal BG palette with the same hardware slot in title, bonus,
+# story, or later-stage play. Edit this row during the livestream to tune the
+# rotating tooth/drill material without changing Python or patching ROM bytes.
+stage1_hazard_palettes:
+  RotatingSpikeTeeth:
+    slot: 7
+    colors: ["7FFF", "7E94", "03FF", "0000"]  # White, floor blue, gold, black
+
+# Story illustrations occupy the top 20x8 cells; the lower 20x10 dialogue
+# area always stays neutral BG0. These rectangles select the named tuneable
+# BG rows without baking palette numbers into Python or assembly. Coordinates
+# are inclusive tile-cell bounds, with (0,0) at the illustration's top-left.
+cutscene_region_palettes:
+  OpeningBook:
+    art_ids: [1]
+    default: BG6
+    regions:
+      - {x: [6, 13], y: [0, 5], palette: BG5}  # warm open pages
+      - {x: [7, 12], y: [6, 6], palette: BG5}
+
+  SaraPortrait:
+    art_ids: [2, 7]
+    default: BG2
+    regions:
+      - {x: [0, 5], y: [0, 0], palette: BG7}
+      - {x: [14, 19], y: [0, 0], palette: BG7}
+      - {x: [0, 4], y: [1, 1], palette: BG7}
+      - {x: [15, 19], y: [1, 1], palette: BG7}
+      - {x: [0, 3], y: [2, 7], palette: BG7}
+      - {x: [16, 19], y: [2, 7], palette: BG7}
+      - {x: [8, 11], y: [4, 6], palette: BG5}  # face / warm highlight
+      - {x: [7, 12], y: [7, 7], palette: BG4}  # costume / armor
+
+  DragonEye:
+    art_ids: [3]
+    default: BG7
+    regions:
+      - {x: [13, 16], y: [1, 1], palette: BG6}  # stone eye socket
+      - {x: [12, 16], y: [2, 4], palette: BG3}  # eye
+      - {x: [13, 15], y: [5, 5], palette: BG3}
+
+  PreFinalPenta:
+    art_ids: [4]
+    default: BG4
+    regions:
+      - {x: [7, 12], y: [0, 7], palette: BG5}  # center head
+      - {x: [13, 19], y: [0, 7], palette: BG3} # right head
+
+  PostFinalDragon:
+    art_ids: [5]
+    default: BG6
+    regions:
+      - {x: [8, 11], y: [0, 2], palette: BG5}  # central crest
+
+  LisaDragonPortrait:
+    art_ids: [6]
+    default: BG7
+    regions:
+      - {x: [8, 14], y: [0, 0], palette: BG2}
+      - {x: [7, 14], y: [1, 1], palette: BG2}
+      - {x: [5, 8], y: [2, 4], palette: BG2}
+      - {x: [9, 12], y: [2, 4], palette: BG5}  # horn / crest
+      - {x: [13, 14], y: [2, 4], palette: BG2}
+      - {x: [7, 14], y: [5, 5], palette: BG2}
+      - {x: [8, 14], y: [6, 6], palette: BG2}
+
 # ============================================
 # SPRITE PALETTES - VERIFIED MAPPINGS
 # ============================================

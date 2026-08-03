@@ -1,5 +1,5 @@
--- Prove tuned YAML palettes survive the title-safe boot mask and become live
--- CRAM values after the stock GAME START transition.
+-- Prove tuned YAML palettes survive the title-safe boot mask and that Stage 1
+-- selects its independently tuned hazard BG7 after GAME START.
 
 local OUT = os.getenv("PENTA_ROUNDTRIP_OUT")
     or "/tmp/penta-palette-build-roundtrip"
@@ -166,7 +166,7 @@ callbacks:add("frame", function()
         )
         finish(
             clean and "ok" or "failed",
-            "title-mask-to-gameplay-roundtrip",
+            "title-mask-to-stage1-hazard-roundtrip",
             gameplay_bg0,
             gameplay_bg7,
             gameplay_obj2

@@ -9,7 +9,9 @@ or post-Penta continuation at 0x5514.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import sys
 import zlib
 from collections import Counter
 from dataclasses import dataclass
@@ -19,8 +21,17 @@ from pyboy import PyBoy
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+
+from cutscene_region_palettes import (  # noqa: E402
+    load_cutscene_region_palettes,
+    panel_mask,
+)
+
+
 DEFAULT_ROM = PROJECT_ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 DEFAULT_OUTPUT = Path("/tmp/penta-final-cutscene")
+DEFAULT_PALETTES = PROJECT_ROOT / "palettes/penta_palettes_v097.yaml"
 
 D880 = 0xD880
 FFC1 = 0xFFC1
@@ -56,6 +67,12 @@ STORY_STATE_BYTES = {
 }
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 @dataclass
 class Panel:
     frame: int
@@ -69,6 +86,7 @@ class Panel:
     df02: int
     df0d: int
     tilemap: bytes
+    attributes: bytes
     tilemap_crc32: int
     image_crc32: int
     story_state: dict[str, int]
@@ -77,7 +95,7 @@ class Panel:
 
 def visible_bg(
     pyboy: PyBoy,
-) -> tuple[Counter[int], int, bytes]:
+) -> tuple[Counter[int], int, bytes, bytes]:
     """Return palette usage and tile IDs for the visible BG viewport."""
     memory = pyboy.memory
     lcdc = memory[0xFF40]
@@ -87,6 +105,7 @@ def visible_bg(
     palettes: Counter[int] = Counter()
     unsafe_attrs = 0
     tilemap = bytearray()
+    attributes = bytearray()
     for row in range(18):
         for column in range(20):
             map_y = ((scy + row * 8) >> 3) & 0x1F
@@ -94,10 +113,11 @@ def visible_bg(
             address = base + map_y * 32 + map_x
             tilemap.append(pyboy.memory[0, address])
             attribute = pyboy.memory[1, address]
+            attributes.append(attribute)
             palettes[attribute & 7] += 1
             if attribute & 0xF8:
                 unsafe_attrs += 1
-    return palettes, unsafe_attrs, bytes(tilemap)
+    return palettes, unsafe_attrs, bytes(tilemap), bytes(attributes)
 
 
 def story_state(pyboy: PyBoy) -> dict[str, int]:
@@ -149,6 +169,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--palette-yaml", type=Path, default=DEFAULT_PALETTES
+    )
     parser.add_argument("--frames", type=int, default=10000)
     parser.add_argument(
         "--entry",
@@ -176,6 +199,15 @@ def main() -> int:
     rom = args.rom.resolve()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    cutscene_panels = load_cutscene_region_palettes(args.palette_yaml)
+    expected_story_attrs = {
+        art_id: bytes(
+            value
+            for row in panel_mask(panel)
+            for value in row
+        ) + bytes(200)
+        for art_id, panel in cutscene_panels.items()
+    }
 
     pyboy = PyBoy(str(rom), window="null", cgb=True, sound=False)
     pyboy.set_emulation_speed(0)
@@ -216,7 +248,7 @@ def main() -> int:
             if ending and frame >= 60 and frame - last_capture >= 90:
                 image = pyboy.screen.image
                 image_crc = zlib.crc32(image.tobytes())
-                palettes, unsafe_attrs, tilemap = visible_bg(pyboy)
+                palettes, unsafe_attrs, tilemap, attributes = visible_bg(pyboy)
                 current_story_state = story_state(pyboy)
                 tilemap_crc = zlib.crc32(tilemap)
                 # Attribute repairs can progress while the rendered pixels
@@ -228,6 +260,7 @@ def main() -> int:
                     image_crc,
                     tilemap_crc,
                     tuple(sorted(palettes.items())),
+                    zlib.crc32(attributes),
                     unsafe_attrs,
                     scene,
                     current_story_state["fff9"],
@@ -254,6 +287,7 @@ def main() -> int:
                             pyboy.memory[DF02],
                             pyboy.memory[DF0D],
                             tilemap,
+                            attributes,
                             tilemap_crc,
                             image_crc,
                             current_story_state,
@@ -347,10 +381,10 @@ def main() -> int:
             f"OBSERVED: ending has {contaminated} sampled non-neutral "
             "BG-attribute cells."
         )
+    full_story_arts: set[int] = set()
+    full_phases: set[str] = set()
     if args.expect_production:
         failures = []
-        full_story_arts: set[int] = set()
-        full_phases: set[str] = set()
         previous_full_story_art: int | None = None
         story_transition_art: int | None = None
         story_transition_samples = 0
@@ -362,12 +396,17 @@ def main() -> int:
                     f"panel {index} f{panel.frame}: "
                     f"{panel.unsafe_attrs} unsafe high-bit attributes"
                 )
-            if panel.table_values != Counter({0: 256}):
-                failures.append(
-                    f"panel {index} f{panel.frame}: active table is "
-                    f"{dict(sorted(panel.table_values.items()))}"
-                )
             if panel.scene in {0x19, 0x1A}:
+                # The story renderer can still call the inline tile writer, so
+                # its LUT must remain neutral while the position-mask service
+                # owns attributes. Credits/END/epilogue use the stock direct
+                # writer and stock also reuses C600 as ordinary ending-script
+                # workspace; their exact visible attributes are checked below.
+                if panel.table_values != Counter({0: 256}):
+                    failures.append(
+                        f"panel {index} f{panel.frame}: active story table is "
+                        f"{dict(sorted(panel.table_values.items()))}"
+                    )
                 art = state["dcf0"]
                 sequence = 0x04 if panel.scene == 0x19 else 0x05
                 art_committed = (
@@ -376,12 +415,13 @@ def main() -> int:
                     and 1 <= art <= 7
                     and ((state["dd07"] + 1) & 0xFF) == art
                 )
-                expected = (
-                    Counter({art: 160, 0: 200})
+                expected_attributes = (
+                    expected_story_attrs[art]
                     if art_committed
-                    else Counter({0: 360})
+                    else bytes(360)
                 )
-                if palettes == expected:
+                expected = Counter(expected_attributes)
+                if panel.attributes == expected_attributes:
                     if art_committed:
                         full_story_arts.add(art)
                         previous_full_story_art = art
@@ -389,32 +429,49 @@ def main() -> int:
                     story_transition_samples = 0
                     continue
 
-                nonneutral = sum(
-                    count
-                    for palette, count in palettes.items()
-                    if palette != 0
+                previous_attributes = (
+                    expected_story_attrs[previous_full_story_art]
+                    if previous_full_story_art is not None
+                    else None
                 )
                 committed_transition = (
                     art_committed
-                    and previous_full_story_art is not None
+                    and previous_attributes is not None
                     and previous_full_story_art != art
-                    and palettes.get(0, 0) == 200
-                    and nonneutral == 160
-                    and set(palettes)
-                    <= {0, previous_full_story_art, art}
+                    and panel.attributes[160:] == bytes(200)
+                    and all(
+                        actual in {old, new}
+                        for actual, old, new in zip(
+                            panel.attributes[:160],
+                            previous_attributes[:160],
+                            expected_story_attrs[art][:160],
+                        )
+                    )
                 )
-                precommit_transition = (
+                next_state = (
+                    panels[index].story_state
+                    if index < len(panels)
+                    else None
+                )
+                next_commits_art = (
+                    next_state is not None
+                    and next_state["dce8"] == sequence
+                    and next_state["dcea"] == 0x01
+                    and next_state["dcf0"] == art
+                    and ((next_state["dd07"] + 1) & 0xFF) == art
+                )
+                previous_page_handoff = (
                     not art_committed
                     and state["dce8"] == sequence
                     and state["dcea"] == 0x01
                     and 1 <= art <= 7
-                    and previous_full_story_art is not None
+                    and previous_attributes is not None
                     and previous_full_story_art != art
-                    and palettes
-                    == Counter({previous_full_story_art: 160, 0: 200})
+                    and panel.attributes == previous_attributes
+                    and next_commits_art
                 )
                 bounded_transition = (
-                    committed_transition or precommit_transition
+                    committed_transition or previous_page_handoff
                 )
                 if bounded_transition:
                     if story_transition_art != art:
@@ -427,7 +484,7 @@ def main() -> int:
                     story_transition_art = None
                     story_transition_samples = 0
 
-                if palettes != expected:
+                if panel.attributes != expected_attributes:
                     failures.append(
                         f"panel {index} f{panel.frame}: story attrs "
                         f"{dict(sorted(palettes.items()))} != "
@@ -498,8 +555,38 @@ def main() -> int:
             "to a settled title."
         )
     manifest = {
+        "schema": "penta-dragon-dx-final-cutscene-v3",
+        "status": "pass",
+        "verification_mode": (
+            "production"
+            if args.expect_production
+            else "neutral" if args.expect_neutral else "inventory"
+        ),
         "route": args.entry,
         "rom": str(rom),
+        "rom_sha256": sha256(rom),
+        "palette_yaml": str(args.palette_yaml.resolve()),
+        "palette_yaml_sha256": sha256(args.palette_yaml.resolve()),
+        "checks": {
+            "route_reached": True,
+            "panels_captured": bool(panels),
+            "unsafe_attributes_zero": unsafe == 0,
+            "required_region_masks_observed": (
+                full_story_arts
+                >= ({4, 7} if args.entry == "pre-final" else {5, 6, 7})
+                if args.expect_production
+                else None
+            ),
+            "required_ending_phases_observed": (
+                full_phases
+                >= {"credits", "end", "epilogue_preamble", "epilogue_text"}
+                if args.expect_production and args.entry == "post-final"
+                else None
+            ),
+            "returned_to_title": finished if args.entry == "post-final" else None,
+        },
+        "full_story_arts": sorted(full_story_arts),
+        "full_phases": sorted(full_phases),
         "story_state_bytes": STORY_STATE_BYTES,
         "panels": [
             {
@@ -513,6 +600,7 @@ def main() -> int:
                 "tilemap_crc32": f"{panel.tilemap_crc32:08X}",
                 "image_crc32": f"{panel.image_crc32:08X}",
                 "tilemap_hex": panel.tilemap.hex().upper(),
+                "attribute_hex": panel.attributes.hex().upper(),
                 "story_state": panel.story_state,
                 "image": panel.path.name,
             }

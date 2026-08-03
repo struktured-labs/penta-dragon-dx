@@ -176,18 +176,23 @@ def main() -> int:
         candidate_scene_mismatch_frames = (
             args.frames - candidate["expected_scene_frames"]
         )
-        # The full-map commit can move the frame callback into the stock HRAM
-        # OAM-DMA loop. CPU-bus reads of WRAM correctly return $FF while DMA
-        # owns the bus, so classify one such sample as unreadable rather than
-        # a scene transition. Every non-DMA value/duration remains fatal.
+        # A frame callback can land inside the stock HRAM OAM-DMA routine.
+        # During that bounded interval CPU-bus reads of WRAM correctly return
+        # $FF. The probe classifies every such sample from its PC and DMA
+        # source, so tolerate all proven DMA-unreadable samples while keeping
+        # every real scene mismatch fatal. This is cadence-independent and
+        # therefore deterministic across otherwise equivalent builds.
+        dma_unreadable_scene_samples = candidate.get(
+            "dma_unreadable_scene_samples", 0
+        )
+        non_dma_scene_mismatch_frames = candidate.get(
+            "non_dma_scene_mismatch_frames",
+            candidate_scene_mismatch_frames,
+        )
         candidate_scene_ok = (
-            candidate_scene_mismatch_frames == 0
-            or (
-                candidate_scene_mismatch_frames == 1
-                and candidate.get("first_scene_mismatch_value") == 0xFF
-                and 0xFF80 <= candidate.get("mismatch_cpu_pc", -1) <= 0xFF9F
-                and candidate.get("mismatch_dma_source") in (0xC0, 0xC1)
-            )
+            non_dma_scene_mismatch_frames == 0
+            and candidate_scene_mismatch_frames
+            == dma_unreadable_scene_samples
         )
         passed = (
             baseline["breakpoints_available"]
@@ -206,6 +211,12 @@ def main() -> int:
             "ratio": round(ratio, 4),
             "candidate_scene_ok": candidate_scene_ok,
             "candidate_scene_mismatch_frames": candidate_scene_mismatch_frames,
+            "candidate_dma_unreadable_scene_samples": (
+                dma_unreadable_scene_samples
+            ),
+            "candidate_non_dma_scene_mismatch_frames": (
+                non_dma_scene_mismatch_frames
+            ),
             "passed": passed,
             "original": baseline,
             "dx": candidate,

@@ -10,9 +10,26 @@ python3 scripts/diagnostics/run_deterministic_suite.py
 
 The command refuses to start while any mGBA process is active, builds twice
 under `/tmp`, requires byte-identical candidates, and runs the current
-47-gate matrix serially. Only a complete pass writes the ROM-free,
+51-gate matrix serially. Only a complete pass writes the ROM-free,
 source-fingerprint-bound receipt at
 `docs/release/verification/latest.json`.
+
+Before presenting a build for headed play or a livestream, run the dedicated
+21-gate live profile:
+
+```bash
+python3 scripts/diagnostics/verify_live_regression.py \
+  rom/working/penta_dragon_dx_FIXED.gb \
+  --output /tmp/penta-live-regression
+```
+
+Its `manifest.json` is the hash-bound receipt for the exact candidate. The
+profile includes separate natural-attract and live-gameplay pickup gates, both
+GAME START paths, Stage 1 traversal/copy/bleed, speed, spikes, bonus gameplay,
+ordinary and low-health flicker, the complete spotlight roster, and the
+opening/pre-final/post-final story scenes and the complete credits/END/epilogue
+trajectory. Success is accepted only when the manifest contains exactly 21
+passing results; a subprocess exit code without that exact receipt is rejected.
 
 During the matrix, a random per-run token identifies only that run's emulator
 descendants across `xvfb` sessions and PID namespaces. A foreign emulator is
@@ -30,9 +47,12 @@ Install the repository hook once per clone:
 scripts/install_git_hooks.sh
 ```
 
-The pre-commit hook rechecks the emulator single-flight policy, rejects a
-missing or stale full-suite receipt, and rejects staged ROM/save/state files.
-It does not run mGBA during commit.
+The pre-commit hook rechecks the dedicated live-profile inventory and emulator
+single-flight policy, rejects a missing or stale full-suite receipt, and
+rejects staged ROM/save/state files. It does not run mGBA during commit. This
+means a source change cannot be committed against an old receipt, while the
+emulator remains a deliberate serial pre-commit step instead of spawning from
+inside Git.
 
 `scripts/build_release_bundle.py` creates a deterministic, ROM-free archive
 from the checked-in IPS and a successful full release-matrix manifest. It

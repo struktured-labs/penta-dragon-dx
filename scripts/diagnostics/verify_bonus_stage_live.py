@@ -23,6 +23,7 @@ PROBE = ROOT / "scripts/diagnostics/probe_bonus_stage_live.lua"
 BANK13 = 13 * 0x4000
 WITCH_JET_ADDR = 0x68D0
 DRAGON_JET_ADDR = 0x68D8
+TUNED_BG7_ADDR = 0x68F8
 
 
 def digest(path: Path, algorithm: str = "sha256") -> str:
@@ -128,6 +129,12 @@ def main() -> int:
             1: palette_words(rom_bytes, DRAGON_JET_ADDR),
             2: palette_words(rom_bytes, WITCH_JET_ADDR),
         }
+        expected_bg7 = palette_words(rom_bytes, TUNED_BG7_ADDR)
+        observed_bg7 = [
+            int(value, 16)
+            for value in str(observed.get("bg7", "")).split(",")
+            if value
+        ]
         screenshots = sorted(output.glob("bonus-stage-*.png"))
         images = [image_receipt(path) for path in screenshots]
         checks = {
@@ -142,6 +149,9 @@ def main() -> int:
             ),
             "both jet OBJ palette rows equal the candidate ROM": (
                 observed["objcram"] == expected_cram
+            ),
+            "bonus stage restores normal YAML BG7, not Stage-1 hazard BG7": (
+                observed_bg7 == expected_bg7
             ),
             "visible Sara hardware OAM uses her jet slot": (
                 int(observed.get("sara_oam_checked", "0")) > 0
@@ -169,6 +179,7 @@ def main() -> int:
             "checks": checks,
             "observed": observed,
             "expected_obj_cram": expected_cram,
+            "expected_bg7": [f"{word:04X}" for word in expected_bg7],
             "screenshots": images,
             "failures": failures,
         }

@@ -19,8 +19,9 @@ Palette mapping (bg_table):
   - pal4 (defense/nav):    Shield, four arrow classes, Teleport
   - pal5 (attack/form):    Spiral, Turbo, Flash, Rock, Dragon
   - pal0 (font/reused art): exact gaps around the 73 pickup tile IDs
-  - pal6 (walls):          0x14-0x1E, 0x25-0x26, 0x34-0x38, 0x41-0x49,
-                           0x54-0x57, 0x59 (slate blue-gray)
+  - pal6 (walls/spikes):   0x14-0x1E, 0x25-0x26, 0x2A-0x2E, 0x34-0x3D,
+                           0x41-0x49, 0x54-0x57, 0x59, 0x60-0x7F
+                           (slate blue-gray; Stage 1 scene only)
   - pal7 overridden to pal0 colors (hides stale CGB boot-ROM attrs)
 """
 import sys
@@ -1046,14 +1047,20 @@ def create_inline_tile_copy_stage1_buffered_attrs(
     for _ in range(4):
         emit([0x1A, 0x13, 0x22])
 
-    # The DX VBlank path may borrow DE. Give it one deterministic service slot
-    # per stock-width group while the exact post-write source is protected.
-    emit([0xD5, 0xFB, 0x00, 0xF3, 0xD1, 0x0D])
+    # Keep the complete row under one source-pointer contract. The ISR can
+    # mutate a stacked DE save, so the register-safe service point belongs
+    # after the row and uses fixed scratch bytes instead.
+    emit([0x0D])
     jr_back(0x20, "group")
 
     emit([
         0x7D, 0xC6, 0x08, 0x6F,
         0x30, 0x01, 0x24,
+        0x7A, 0xEA, 0x30, 0xDF,
+        0x7B, 0xEA, 0x31, 0xDF,
+        0xE5, 0xFB, 0x00, 0xF3, 0xE1,
+        0xFA, 0x30, 0xDF, 0x57,
+        0xFA, 0x31, 0xDF, 0x5F,
         0x05,
     ])
     jr_back(0x20, "row")
@@ -1107,6 +1114,8 @@ def create_inline_tile_copy_stage1_buffered_attrs(
 def create_inline_tile_copy_stage1_double_buffered_attrs(
     external_decision_helper_addr: int,
     external_gdma_register_helper_addr: int,
+    *,
+    always_stage1: bool = False,
 ) -> bytes:
     """Build both Stage-1 VRAM planes off-screen and publish them by GDMA.
 
@@ -1140,17 +1149,23 @@ def create_inline_tile_copy_stage1_double_buffered_attrs(
         code[position] = address & 0xFF
         code[position + 1] = address >> 8
 
-    emit([
-        0x2E, 0x00,
-        0x03, 0x0B,                         # established 16T setup cadence
-        0x16, 0xDF,
-        0xCD,
-        external_decision_helper_addr & 0xFF,
-        external_decision_helper_addr >> 8,
-    ])
+    if always_stage1:
+        emit([
+            0x2E, 0x00,
+            0xFA, 0x80, 0xD8, 0xFE, 0x02,  # only Stage 1 is double-buffered
+        ])
+    else:
+        emit([
+            0x2E, 0x00,
+            0x03, 0x0B,                     # established 16T setup cadence
+            0x16, 0xDF,
+            0xCD,
+            external_decision_helper_addr & 0xFF,
+            external_decision_helper_addr >> 8,
+        ])
     mark("common_decision")
     emit([0xF3])                            # freeze source + bank contracts
-    j_pure = jp_fwd(0xCA)
+    j_pure = jp_fwd(0xC2 if always_stage1 else 0xCA)
 
     # One packed source pass writes attrs to bank 2 and the same tile IDs to
     # bank 3. No stack value survives an SVBK change: the CPU stack itself is
@@ -1218,10 +1233,12 @@ def create_inline_tile_copy_stage1_double_buffered_attrs(
         0xAF, 0xFB, 0xC9,                   # A=0/Z; IE untouched; EI/RET
     ])
 
-    # Cache hits and all neutral callers use one stock-width tile-only loop.
+    # Cache hits, neutral scenes, and the title tail use the byte-exact
+    # stock-cadence tile-only loop. The title menu is timing-sensitive enough
+    # that replacing its stack row counter with B shifts deterministic input.
     patch_jp(j_pure)
     mark("pure_setup")
-    emit([0x11, 0xA0, 0xC1, 0x06, 0x18])
+    emit([0x11, 0xA0, 0xC1, 0x3E, 0x18, 0xF5])
     mark("pure_row")
     emit([0x0E, 0x06])
     mark("pure_group")
@@ -1239,21 +1256,24 @@ def create_inline_tile_copy_stage1_double_buffered_attrs(
     emit([
         0x7D, 0xC6, 0x08, 0x6F,
         0x30, 0x01, 0x24,
-        0x05,
+        0xF1, 0x3D,
+        0xC8, 0xF5,
     ])
     jr_back(0x20, "pure_row")
-    emit([0xC9])
 
     mark("title_pure_entry")
     emit([
         0x26, 0x98, 0xAF, 0x6F,
         0xCD,
-        (external_gdma_register_helper_addr + 12) & 0xFF,
-        (external_gdma_register_helper_addr + 12) >> 8,
-        0x03,                               # CALL RET + INC BC = exact 48T
+        (external_gdma_register_helper_addr + 13) & 0xFF,
+        (external_gdma_register_helper_addr + 13) >> 8,
+        # The fixed delay helper plus NOP compensates for the bypassed
+        # decision JR and the final RET-Z/C9 timing difference, preserving the
+        # title-family copier's proven end-to-end cadence and registers.
+        0x00,
         0xC3,
-        (0x42A7 + targets["common_decision"]) & 0xFF,
-        (0x42A7 + targets["common_decision"]) >> 8,
+        (0x42A7 + targets["pure_setup"]) & 0xFF,
+        (0x42A7 + targets["pure_setup"]) >> 8,
     ])
     return bytes(code)
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -198,11 +199,31 @@ def main() -> int:
         type=int,
         help="maximum candidate gameplay-frame lag at the target coordinate",
     )
+    parser.add_argument(
+        "--max-frame-lag-ratio",
+        type=float,
+        help=(
+            "maximum lag as a fraction of the untouched ROM's gameplay "
+            "frames at the target coordinate"
+        ),
+    )
     args = parser.parse_args()
     if not 0 <= args.dynamic_prefix <= 0x240:
         parser.error("--dynamic-prefix must be between 0 and 576")
     if args.max_frame_lag is not None and args.max_frame_lag < 0:
         parser.error("--max-frame-lag cannot be negative")
+    if (
+        args.max_frame_lag_ratio is not None
+        and not 0 <= args.max_frame_lag_ratio < 1
+    ):
+        parser.error("--max-frame-lag-ratio must be in [0, 1)")
+    if (
+        args.max_frame_lag is not None
+        and args.max_frame_lag_ratio is not None
+    ):
+        parser.error(
+            "--max-frame-lag and --max-frame-lag-ratio are mutually exclusive"
+        )
 
     output = args.output.resolve()
     if output.exists():
@@ -251,9 +272,15 @@ def main() -> int:
         int(candidate_report["gameplay_frames"])
         - int(baseline_report["gameplay_frames"])
     )
+    max_frame_lag = args.max_frame_lag
+    if args.max_frame_lag_ratio is not None:
+        max_frame_lag = math.floor(
+            int(baseline_report["gameplay_frames"])
+            * args.max_frame_lag_ratio
+        )
     lag_ok = (
-        args.max_frame_lag is None
-        or abs(gameplay_frame_lag) <= args.max_frame_lag
+        max_frame_lag is None
+        or abs(gameplay_frame_lag) <= max_frame_lag
     )
     terrain_ok = terrain_differences == 0
     receipt = {
@@ -285,7 +312,8 @@ def main() -> int:
         "terrain_differences": terrain_differences,
         "first_terrain_difference": first_terrain_difference,
         "gameplay_frame_lag": gameplay_frame_lag,
-        "max_frame_lag": args.max_frame_lag,
+        "max_frame_lag": max_frame_lag,
+        "max_frame_lag_ratio": args.max_frame_lag_ratio,
     }
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps(receipt, indent=2))
@@ -301,7 +329,7 @@ def main() -> int:
         print(
             "FAIL: candidate reached the target "
             f"{gameplay_frame_lag:+d} gameplay frames from stock; allowed "
-            f"±{args.max_frame_lag}"
+            f"±{max_frame_lag}"
         )
         return 1
     print(
