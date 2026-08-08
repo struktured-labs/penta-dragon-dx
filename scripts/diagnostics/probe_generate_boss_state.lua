@@ -71,11 +71,12 @@ local function finish(status, message)
     local report = assert(io.open(OUT .. ".report", "w"))
     report:write(string.format(
         "status=%s target=%d expected_scene=%02X frame=%d d880=%02X " ..
-        "ffc1=%d ffba=%02X ffbf=%02X stable=%d message=%s " ..
+        "ffc1=%d ff91=%02X df0d=%02X ffba=%02X ffbf=%02X stable=%d message=%s " ..
         "pc=%04X sp=%04X ie=%02X lcdc=%02X " ..
         "active_table=%s bg_cram=%s\n",
         status, TARGET, EXPECTED_SCENE, f, emu:read8(0xD880),
-        emu:read8(0xFFC1), emu:read8(0xFFBA), emu:read8(0xFFBF),
+        emu:read8(0xFFC1), emu:read8(0xFF91), emu:read8(0xDF0D),
+        emu:read8(0xFFBA), emu:read8(0xFFBF),
         stable, message, register("PC"), register("SP"),
         emu:read8(0xFFFF), emu:read8(0xFF40),
         hex_range(0xC600, 0x100),
@@ -105,9 +106,10 @@ callbacks:add("frame", function()
     local scene = emu:read8(0xD880)
     if f <= ENTRY_TIMEOUT and (not reached or stable < 80) then
         trace:write(string.format(
-            "frame=%d pc=%04X d880=%02X ffb7=%02X ffba=%02X " ..
+            "frame=%d pc=%04X d880=%02X ff91=%02X df0d=%02X ffb7=%02X ffba=%02X " ..
             "dcbb=%02X d888=%02X dd06=%02X\n",
-            f, register("PC"), scene, emu:read8(0xFFB7),
+            f, register("PC"), scene, emu:read8(0xFF91),
+            emu:read8(0xDF0D), emu:read8(0xFFB7),
             emu:read8(0xFFBA), emu:read8(0xDCBB),
             emu:read8(0xD888), emu:read8(0xDD06)
         ))
@@ -115,6 +117,13 @@ callbacks:add("frame", function()
     end
     if not reached then
         if scene == EXPECTED_SCENE then
+            -- The serialized diagnostic landing waits in Stage 1 before
+            -- calling the stock boss dispatcher and can consume the pending
+            -- scene transition during that artificial wait. Rearm only after
+            -- the dispatcher publishes the real target; the unmodified ROM
+            -- then selects and renders its own arena table on the next VBlank.
+            emu:write8(0xFF91, 0x01)
+            emu:write8(0xDF0D, 0xFF)
             reached = true
         elseif f > ENTRY_TIMEOUT then
             finish("error", "arena-entry-timeout")

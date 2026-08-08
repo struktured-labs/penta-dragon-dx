@@ -622,6 +622,8 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     external_atomic_setup_addr: int | None = None,
     external_atomic_wrap_addr: int | None = None,
     external_attr_commit_addr: int | None = None,
+    external_post_copy_helper_addr: int | None = None,
+    external_attr_stack_helper_rst: int | None = None,
     atomic_group_width: int = 4,
 ) -> bytes:
     """Atomic Stage 1 attrs with precomputed HBlank-sized tile groups.
@@ -774,6 +776,15 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
                 0x1B, 0x1A,                 # DE--; tile=[DE]
                 0x4F, 0x0A, 0xF5,           # C=tile; PUSH table[tile]
             ])
+        if external_attr_stack_helper_rst is not None:
+            # A fixed/WRAM helper may rewrite the stacked A bytes before the
+            # following HBlank commit. This keeps position-owned CGB bank bits
+            # atomic with their tile IDs without adding any VRAM writes to the
+            # deliberately short three-cell access window.
+            assert external_attr_stack_helper_rst in (
+                0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF,
+            )
+            emit([external_attr_stack_helper_rst])
 
     # One wait per four tiles, matching the pure/stock cadence.  The external
     # atomic setup enters with IME clear, and every later group returns from
@@ -909,7 +920,26 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     emit([0xF5])
     emit_jr_back(0x18, "pure_row")
     patch_jr_fwd(j_pure_done)
-    emit([0xC9])
+    if external_post_copy_helper_addr is None:
+        emit([0xC9])
+    elif external_post_copy_helper_addr == 0:
+        # Immutable hazard travel cells need no work on a content-cache hit.
+        # Retain the established pure-path cadence byte-for-byte so the title
+        # and prerecorded input stream do not shift phase.
+        emit([0x78, 0xFE, 0x05, 0x00, 0x00, 0x00, 0xFB, 0xC9])
+    else:
+        # B is a post-copy route token supplied by the scene decider. Live
+        # Stage-1 copies carry FFBD; title and prerecorded play carry $05.
+        # Room $05 is also the long north-route approach, so testing it here
+        # avoids a fixed-bank CALL on both timing-sensitive paths. The fixed
+        # helper rejects ordinary room $03 after the call.
+        emit([
+            0x78, 0xFE, 0x05,
+            0xC4,
+            external_post_copy_helper_addr & 0xFF,
+            external_post_copy_helper_addr >> 8,
+            0xFB, 0xC9,
+        ])
 
     if external_decision_helper_addr is not None:
         # Stock RST $30 enters here for title-family $9800 copies. XOR A,
@@ -925,6 +955,10 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
             (external_decision_helper_addr - 3) & 0xFF,
             (external_decision_helper_addr - 3) >> 8,
         ])
+        if external_post_copy_helper_addr is not None:
+            # Title bypasses the gameplay decider, so publish its skip token
+            # explicitly before entering the shared pure-copy body.
+            emit([0x06, 0x05])
         common_setup_addr = 0x42A7 + targets["common_setup"]
         emit([
             0xC3, common_setup_addr & 0xFF, common_setup_addr >> 8,

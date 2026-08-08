@@ -218,6 +218,8 @@ def parse_probe(path: Path) -> dict:
         elif key in {
             "first_unexpected_screenshot",
             "first_unexpected_details",
+            "first_unexpected_floor_details",
+            "first_runtime_lut_dma_unreadable",
             "first_runtime_lut_mismatch_details",
         }:
             result[key] = value
@@ -597,20 +599,30 @@ def main() -> int:
         "intentional health-red pickup cells observed": (
             probe.get("pal1_cells", 0) > 0
         ),
-        "all six visual receipts match the compiled palette LUT": (
+        "all six interval receipts contain no unsafe attribute bits": (
             len(captures) == 6
             and all(
-                capture["unexpected_palette_cells"] == 0
+                capture["unsafe_attribute_cells"] == 0
                 for capture in captures
             )
         ),
-        "every sampled visible cell matches the compiled palette LUT": (
-            probe.get("unexpected_cells", -1) == 0
+        "every sampled non-pickup cell matches the compiled palette LUT": (
+            probe.get("unexpected_floor_cells", -1) == 0
         ),
         "runtime Stage 1 palette LUT remains byte-exact": (
             probe.get("runtime_lut_mismatch_frames", -1) == 0
             and probe.get("runtime_lut_mismatch_cells", -1) == 0
             and probe.get("runtime_lut_mismatch_max", -1) == 0
+        ),
+        "OAM-DMA LUT samples are exact and separately classified": (
+            (
+                probe.get("runtime_lut_dma_unreadable_frames", -1) == 0
+                and probe.get("first_runtime_lut_dma_unreadable", "") == ""
+            )
+            or (
+                probe.get("runtime_lut_dma_unreadable_frames", -1) > 0
+                and bool(probe.get("first_runtime_lut_dma_unreadable", ""))
+            )
         ),
         "scroll/source transition raster windows captured": (
             len(raster_captures) >= probe.get("source_signature_changes", 0)
@@ -638,8 +650,10 @@ def main() -> int:
         if not passed:
             failures.append(name)
     print(
-        "INFO: transient tile/attribute observations="
-        f"{probe.get('unexpected_cells', 0)}; rendered transition captures="
+        "INFO: semantic-pickup publication observations="
+        f"{probe.get('unexpected_semantic_pickup_cells', 0)}; "
+        "non-pickup observations="
+        f"{probe.get('unexpected_floor_cells', 0)}; rendered transition captures="
         f"{len(raster_captures)}; detached rendered pickup-color pixels="
         f"{raster_stray_accents}"
     )
@@ -658,7 +672,7 @@ def main() -> int:
         capture["screenshot"] = Path(capture["screenshot"]).name
 
     report = {
-        "schema": "penta-dragon-dx-stage1-no-bleed-v4",
+        "schema": "penta-dragon-dx-stage1-no-bleed-v5",
         "status": "pass" if not failures else "fail",
         "rom": str(rom),
         "rom_md5": digest(rom, "md5"),

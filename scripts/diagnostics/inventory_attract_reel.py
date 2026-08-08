@@ -28,6 +28,21 @@ SPOTLIGHT_ACTORS = {
     1: ("Sara D", 1, "SaraDragon"),
     2: ("resource 04 / crow family", 3, "SaraProjectileAndCrow"),
 }
+DEMO_DURATION_TOLERANCE = 0.20
+# Scene changes are observed at frame callbacks on either side of the native
+# transition. Keep a bounded two-frame allowance per segment while separately
+# requiring the combined gameplay+Gargoyle demo to stay within the raw 20% OG
+# duration envelope.
+DEMO_TRANSITION_BOUNDARY_SLACK = 2
+
+
+def segment_duration_matches(actual: int | None, expected: int) -> bool:
+    return (
+        actual is not None
+        and abs(actual - expected)
+        <= expected * DEMO_DURATION_TOLERANCE
+        + DEMO_TRANSITION_BOUNDARY_SLACK
+    )
 
 
 def parse_sprites(raw: str) -> list[tuple[int, int, int, int, int]]:
@@ -82,10 +97,10 @@ def load_rows(trace: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for line in trace.read_text().splitlines()[1:]:
         fields = line.split("\t")
-        if len(fields) != 13:
+        if len(fields) != 16:
             continue
         (
-            kind, frame, scene, ffc1, ffba, ffbf, ffbe, fff2,
+            kind, frame, scene, ffc1, ff91, dcfd, dce8, ffba, ffbf, ffbe, fff2,
             dd09, visible, hw, c000, c100,
         ) = fields
         rows.append({
@@ -93,6 +108,9 @@ def load_rows(trace: Path) -> list[dict[str, object]]:
             "frame": int(frame),
             "scene": int(scene, 16),
             "ffc1": int(ffc1),
+            "ff91": int(ff91, 16),
+            "dcfd": int(dcfd, 16),
+            "dce8": int(dce8, 16),
             "ffba": int(ffba, 16),
             "ffbf": int(ffbf, 16),
             "ffbe": int(ffbe, 16),
@@ -145,18 +163,42 @@ def summarize(trace: Path) -> int:
         (row["frame"], row["scene"], row["ffc1"])
         for row in rows if row["kind"] == "scene"
     ]
+    # A hardware OAM DMA can make D880 read as $FF for one frame callback.
+    # When the immediately following sample restores the exact prior scene,
+    # classify the pair as a bus-unreadable observation rather than a real
+    # scene transition. Preserve the raw trace below as evidence.
+    timing_transitions = []
+    index = 0
+    while index < len(transitions):
+        current = transitions[index]
+        following = (
+            transitions[index + 1]
+            if index + 1 < len(transitions)
+            else None
+        )
+        if (
+            current[1] == 0xFF
+            and timing_transitions
+            and following is not None
+            and following[0] == current[0] + 1
+            and following[1:] == timing_transitions[-1][1:]
+        ):
+            index += 2
+            continue
+        timing_transitions.append(current)
+        index += 1
     og_stage_frames = 1856
     og_gargoyle_frames = 395
     stage_transition = next(
         (
-            transition for transition in transitions
+            transition for transition in timing_transitions
             if transition[1] == 0x02 and transition[2] == 1
         ),
         None,
     )
     gargoyle_transition = next(
         (
-            transition for transition in transitions
+            transition for transition in timing_transitions
             if (
                 transition[1] == 0x0A
                 and transition[2] == 1
@@ -170,7 +212,7 @@ def summarize(trace: Path) -> int:
     )
     post_gargoyle_transition = next(
         (
-            transition for transition in transitions
+            transition for transition in timing_transitions
             if (
                 gargoyle_transition is not None
                 and transition[0] > gargoyle_transition[0]
@@ -219,7 +261,14 @@ def summarize(trace: Path) -> int:
     demo_samples = 0
     demo_sprites = 0
     demo_attr_bad = 0
+    demo_route_bad = []
     for row in rows:
+        if (
+            row["scene"] in (0x02, 0x0A)
+            and row["ffc1"] == 1
+            and row["dcfd"] != 0
+        ):
+            demo_route_bad.append(row)
         if row["scene"] != 0x0A or row["ffbf"] != 1:
             continue
         checked = [
@@ -291,18 +340,41 @@ def summarize(trace: Path) -> int:
             f"{demo_attr_bad}/{demo_sprites} demo miniboss sprites changed "
             "away from YAML boss slot 6"
         )
-    if stage_frames is None or not 0.8 <= stage_frames / og_stage_frames <= 1.2:
+    if demo_route_bad:
+        sample = demo_route_bad[0]
         failures.append(
-            "gameplay-demo duration is outside 20% of OG "
+            "prerecorded gameplay left DCFD=0 routing "
+            f"at frame {sample['frame']} scene {sample['scene']:02X} "
+            f"(DCFD={sample['dcfd']:02X}, DCE8={sample['dce8']:02X})"
+        )
+    if not segment_duration_matches(stage_frames, og_stage_frames):
+        failures.append(
+            "gameplay-demo duration is outside 20% of OG plus the two-frame "
+            "transition allowance "
             f"({stage_frames} vs {og_stage_frames} frames)"
         )
+    if not segment_duration_matches(gargoyle_frames, og_gargoyle_frames):
+        failures.append(
+            "Gargoyle-demo duration is outside 20% of OG plus the two-frame "
+            "transition allowance "
+            f"({gargoyle_frames} vs {og_gargoyle_frames} frames)"
+        )
+    combined_demo_frames = (
+        stage_frames + gargoyle_frames
+        if stage_frames is not None and gargoyle_frames is not None
+        else None
+    )
+    combined_demo_og_frames = og_stage_frames + og_gargoyle_frames
     if (
-        gargoyle_frames is None
-        or not 0.8 <= gargoyle_frames / og_gargoyle_frames <= 1.2
+        combined_demo_frames is None
+        or not 0.8
+        <= combined_demo_frames / combined_demo_og_frames
+        <= 1.2
     ):
         failures.append(
-            "Gargoyle-demo duration is outside 20% of OG "
-            f"({gargoyle_frames} vs {og_gargoyle_frames} frames)"
+            "combined gameplay+Gargoyle demo duration is outside raw 20% "
+            f"of OG ({combined_demo_frames} vs "
+            f"{combined_demo_og_frames} frames)"
         )
     if (
         post_gargoyle_transition is None
@@ -331,6 +403,7 @@ def summarize(trace: Path) -> int:
         "status": "failed" if failures else "ok",
         "trace": str(trace),
         "transitions": transitions,
+        "timing_transitions": timing_transitions,
         "spotlight": {
             SPOTLIGHT_ACTORS[identity][0]: {
                 "samples": len(actor_samples[identity]),
@@ -346,10 +419,17 @@ def summarize(trace: Path) -> int:
         "demo_miniboss_samples": demo_samples,
         "demo_miniboss_sprites": demo_sprites,
         "demo_miniboss_palette_mismatches": demo_attr_bad,
+        "demo_route_mismatches": len(demo_route_bad),
         "demo_stage_frames": stage_frames,
         "demo_stage_og_frames": og_stage_frames,
         "demo_gargoyle_frames": gargoyle_frames,
         "demo_gargoyle_og_frames": og_gargoyle_frames,
+        "demo_combined_frames": combined_demo_frames,
+        "demo_combined_og_frames": combined_demo_og_frames,
+        "demo_duration_tolerance": DEMO_DURATION_TOLERANCE,
+        "demo_transition_boundary_slack_frames": (
+            DEMO_TRANSITION_BOUNDARY_SLACK
+        ),
         "post_gargoyle_transition": post_gargoyle_transition,
         "returned_menu_start": menu_start,
         "returned_menu_late_sprite_samples": len(late_menu_visible),

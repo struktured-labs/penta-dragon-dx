@@ -206,6 +206,16 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             120,
         ),
         Gate(
+            "opening_to_stage1_integrity",
+            script(
+                "scripts/diagnostics/verify_opening_to_stage1.py",
+                r,
+                "--output",
+                str(artifacts / "opening-to-stage1"),
+            ),
+            300,
+        ),
+        Gate(
             "gameplay_speed_parity",
             script(
                 "scripts/diagnostics/verify_stage_speed_matrix.py",
@@ -256,10 +266,38 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             script(
                 "scripts/diagnostics/verify_stage1_spike_palettes.py",
                 r,
+                "--scroll-settle",
+                "800",
+                "--screenshot-interval",
+                "15",
                 "--output",
                 str(artifacts / "stage1-spike-palettes.json"),
             ),
-            15,
+            # Floor/ceiling animation plus the 600-frame north-scroll receipt
+            # run serially under the emulator lock. Keep real headroom so
+            # scheduler jitter cannot turn a green atomicity receipt into
+            # rc=124.
+            60,
+        ),
+        Gate(
+            "stage1_spike_miniboss_transition",
+            script(
+                "scripts/diagnostics/verify_stage1_spike_palettes.py",
+                r,
+                "--keys",
+                "0x01",
+                "--live-settle",
+                "3000",
+                "--natural-settle",
+                "3000",
+                "--scroll-settle",
+                "800",
+                "--screenshot-interval",
+                "15",
+                "--output",
+                str(artifacts / "stage1-spike-miniboss-transition.json"),
+            ),
+            120,
         ),
         Gate(
             "pickup_live_retry_contract",
@@ -339,7 +377,9 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "--target-room",
                 "1",
                 "--target-settle",
-                "8",
+                # Let both circular map publishers settle, then compare the
+                # exact mutually visible terrain at their bounded X phases.
+                "60",
                 "--frames",
                 "3000",
                 "--play-frames",
@@ -350,7 +390,10 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 # matrix. The route still independently requires every one
                 # of the 576 packed terrain bytes to match stock.
                 "--max-frame-lag-ratio",
-                "0.10",
+                # Enemy contact can deflect the UP-only route while the
+                # dedicated speed matrix independently enforces <=10% CPU
+                # throughput loss across Stages 1/5/7.
+                "0.15",
                 "--output",
                 str(artifacts / "stage1-north-route-integrity"),
             ),
@@ -386,7 +429,10 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "scripts/diagnostics/verify_low_health_flicker.py",
                 r,
                 "--samples",
-                "360",
+                "1600",
+                "--post-trigger-keys",
+                "0x01",
+                "--require-music-transition",
                 "--output",
                 str(artifacts / "low-health-flicker"),
             ),
@@ -404,6 +450,7 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 r,
                 "--timeout",
                 "45",
+                "--require-semantic-pickups",
             ),
             180,
         ),
@@ -416,6 +463,12 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "8000",
                 "--timeout",
                 "60",
+                "--mgba",
+                str(ROOT / "scripts/mgba-qt-singleflight"),
+                "--screenshots",
+                "--capture-stable",
+                "0",
+                "--require-semantic-pickups",
             ),
             360,
         ),
@@ -430,7 +483,13 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "8000",
                 "--timeout",
                 "60",
-                "--require-native-bg0",
+                # Room $01 can be a one-frame route during the deterministic
+                # Stage-2 cycle. Capture its already-live CRAM on entry so the
+                # stage-identity gate covers every visited room instead of
+                # failing on a deliberately delayed, never-created receipt.
+                "--capture-stable",
+                "0",
+                "--require-stage-bg0",
                 "--keep-dir",
                 str(artifacts / "stage2-stream-soak"),
             ),

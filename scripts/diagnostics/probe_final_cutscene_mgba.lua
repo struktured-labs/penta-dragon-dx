@@ -113,7 +113,7 @@ local function visible_attr_layout()
     if (
         committed_art == 0
         or emu:read8(0xDF49) ~= expected_key
-        or emu:read8(0xDF4A) < 0x22
+        or emu:read8(0xDF4A) < 0x20
     ) then
         emu:write8(0xFF4F, old_vbk)
         return 0, 0, false
@@ -235,6 +235,20 @@ callbacks:add("frame", function()
         end
     end
 
+    if scene == expected_scene and not reached then
+        -- The diagnostic stub deliberately jumps from prerecorded Stage 1,
+        -- whose prelude is disabled, straight into a final-story routine.
+        -- Rearm only after the stock routine publishes its target scene so
+        -- the unmodified candidate performs the same first scene/table pass
+        -- that normal live final-boss progression supplies.
+        emu:write8(0xFF91, 0x01)
+        emu:write8(0xDF0D, 0xFF)
+        trace(string.format(
+            "rearmed final scene f%d D880=%02X FF91=%02X DF0D=%02X",
+            frame, scene, emu:read8(0xFF91), emu:read8(0xDF0D)
+        ))
+    end
+
     local requested_art_committed = (
         ART_TARGET
         and scene == expected_scene
@@ -303,9 +317,10 @@ callbacks:add("frame", function()
             string.format("%d:%02X>%02X", frame, previous_scene & 0xFF, scene)
         )
         trace(string.format(
-            "f%d D880=%02X FFC1=%d FFBA=%02X FFE4=%d FF99=%02X",
-            frame, scene, emu:read8(0xFFC1), emu:read8(0xFFBA),
-            emu:read8(0xFFE4), emu:read8(0xFF99)
+            "f%d D880=%02X FFC1=%d FF91=%02X DF0D=%02X FFBA=%02X FFE4=%d FF99=%02X",
+            frame, scene, emu:read8(0xFFC1), emu:read8(0xFF91),
+            emu:read8(0xDF0D),
+            emu:read8(0xFFBA), emu:read8(0xFFE4), emu:read8(0xFF99)
         ))
         previous_scene = scene
     end

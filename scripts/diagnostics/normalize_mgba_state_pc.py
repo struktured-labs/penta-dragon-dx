@@ -22,6 +22,19 @@ CPU_PC = 0x002A
 CPU_EXECUTION_STATE = 0x0039
 CPU_FLAGS = 0x0044
 MEMORY_FLAGS = 0x0194
+MEMORY_CURRENT_BANK = 0x0168
+MBC1_BANK_LO = 0x0186
+MBC1_BANK_HI = 0x0187
+MAIN_LOOP_BANK = 1
+# DX uses this census-free HRAM byte as a transition-owned Gargoyle prelude
+# gate. Real boots initialize it on the title path. Cross-ROM fixtures bypass
+# that path, so arm the gate unless a diagnostic explicitly overrides it.
+ATTRACT_PRELUDE_FLAG = 0xFF91
+# A cross-ROM state can retain the source build's scene identity while its
+# mutable C600 palette table still belongs to an earlier scene/build. Force
+# one ordinary current-ROM transition; explicit diagnostic writes below may
+# intentionally override this default.
+SCENE_CACHE = 0xDF0D
 
 
 def png_chunks(data: bytes) -> list[tuple[bytes, bytes]]:
@@ -80,6 +93,7 @@ def normalize(
     pc: int,
     writes: list[tuple[int, int]],
     rom: Path | None = None,
+    bank: int | None = None,
 ) -> None:
     chunks = png_chunks(source.read_bytes())
     indices = [index for index, (kind, _) in enumerate(chunks) if kind == b"gbAs"]
@@ -94,12 +108,27 @@ def normalize(
     raw[CPU_PC:CPU_PC + 2] = pc.to_bytes(2, "little")
     raw[CPU_EXECUTION_STATE] = 3  # FETCH
     raw[CPU_FLAGS:CPU_FLAGS + 4] = bytes(4)
+    if bank is not None:
+        # Some fixtures were captured midway through a bank-13 helper while
+        # FF99 still advertised bank 1. A fixed-bank PC alone cannot repair
+        # that mismatch: the first Timer IRQ restores the wrong code page.
+        # Make bank normalization explicit because other live fixtures depend
+        # on retaining the captured switchable bank after their main-loop
+        # landing.
+        raw[MEMORY_CURRENT_BANK:MEMORY_CURRENT_BANK + 2] = (
+            bank
+        ).to_bytes(2, "little")
+        raw[MBC1_BANK_LO] = bank
+        raw[MBC1_BANK_HI] = 0
+        raw[state_offset(0xFF99)] = bank
     if rom is not None:
         raw[0x0004:0x0008] = (
             zlib.crc32(rom.read_bytes()) & 0xFFFFFFFF
         ).to_bytes(4, "little")
     memory_flags = int.from_bytes(raw[MEMORY_FLAGS:MEMORY_FLAGS + 2], "little")
     raw[MEMORY_FLAGS:MEMORY_FLAGS + 2] = (memory_flags | 0x0008).to_bytes(2, "little")
+    raw[state_offset(ATTRACT_PRELUDE_FLAG)] = 1
+    raw[state_offset(SCENE_CACHE)] = 0xFF
     for address, value in writes:
         raw[state_offset(address)] = value
     chunks[index] = (b"gbAs", zlib.compress(bytes(raw), level=9))
@@ -117,6 +146,11 @@ def main() -> int:
         help="retarget the serialized ROM CRC for a cross-build comparison",
     )
     parser.add_argument(
+        "--bank",
+        type=lambda value: int(value, 0),
+        help="also normalize the mapped MBC1 bank and FF99 bank shadow",
+    )
+    parser.add_argument(
         "--write",
         action="append",
         type=state_write,
@@ -126,7 +160,12 @@ def main() -> int:
     args = parser.parse_args()
     if not 0 <= args.pc <= 0xFFFF:
         parser.error("--pc must fit in 16 bits")
-    normalize(args.source, args.destination, args.pc, args.write, args.rom)
+    if args.bank is not None and not 1 <= args.bank <= 0x1F:
+        parser.error("--bank must be in the mapped MBC1 range 1..31")
+    normalize(
+        args.source, args.destination, args.pc, args.write, args.rom,
+        bank=args.bank,
+    )
     return 0
 
 

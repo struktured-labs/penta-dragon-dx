@@ -9,8 +9,10 @@ local TARGET = tonumber(os.getenv("SOAK_TARGET") or "1")
 local OUT = os.getenv("SOAK_OUT") or "/tmp/penta_later_stage_soak"
 local LIMIT = tonumber(os.getenv("SOAK_FRAMES") or "8000")
 local TRACE_ADDRS = os.getenv("SOAK_TRACE_ADDRS") or ""
+local PALETTE_TRACE = tonumber(os.getenv("SOAK_PALETTE_TRACE") or "0")
 local TRACE_SEGMENT = tonumber(os.getenv("SOAK_TRACE_SEGMENT") or "")
 local ATTR_TRACE_PATH = os.getenv("SOAK_ATTR_TRACE")
+local STREAM_TRACE_PATH = os.getenv("SOAK_STREAM_TRACE")
 local AUDIT_WRAM = os.getenv("SOAK_WRAM_AUDIT") == "1"
 local CAPTURE_SCREENSHOTS = os.getenv("SOAK_SCREENSHOTS") == "1"
 local CAPTURE_STABLE = tonumber(os.getenv("SOAK_CAPTURE_STABLE") or "4")
@@ -22,6 +24,8 @@ local f, phase, seeded, confirmed = 0, "title", false, false
 local play_frame, expected_samples = 0, 0
 local unsafe_attrs, unexpected_attrs, lava_mismatches = 0, 0, 0
 local max_unsafe, max_unexpected, max_lava_mismatch = 0, 0, 0
+local pickup_expected, pickup_mismatches, max_pickup_mismatch = 0, 0, 0
+local material_expected, material_mismatches, max_material_mismatch = 0, 0, 0
 local last_room, room_stable = -1, 0
 local rooms, scenes, captured_rooms, captured_mismatches = {}, {}, {}, {}
 local done = false
@@ -29,6 +33,8 @@ local attr_trace = ATTR_TRACE_PATH and assert(io.open(ATTR_TRACE_PATH, "w")) or 
 local tile_copy_hits = 0
 local tile_copy_map = 0
 local wram_baseline, wram_changed = nil, 0
+local stream_writer_counts, stream_writer_events = {}, {}
+local STREAM_EVENT_LIMIT = 256
 -- Audit only DX-owned immutable WRAM. C4xx-CBxx is ordinary game state and
 -- changes more often when a faster build advances farther through a route.
 -- DAFA-DAFF is deliberately excluded because it is live Stage-7 metadata.
@@ -39,6 +45,40 @@ local LAVA5 = {
   [0x12]=true, [0x13]=true, [0x14]=true, [0x15]=true,
 }
 local LAVA7 = {[0x19]=true, [0x1A]=true}
+-- Collision-audited against all 24 committed Stage 2-7 room captures. Apply
+-- each family only in the tilesets where the corpus proves a complete pickup;
+-- Stage 4's ambiguous pickup aliases remain neutral while its collision-free
+-- floor and wall families are validated separately below.
+local HEALTH_PICKUPS = {
+  [0x88]=1, [0x89]=1, [0x96]=1, [0x98]=1, [0x99]=1,
+}
+local RARE_PICKUPS = {
+  [0xAE]=2, [0xAF]=2, [0xBE]=2, [0xBF]=2,
+  [0xC6]=2, [0xC7]=2, [0xD6]=2, [0xD7]=2,
+}
+local ARROW_PICKUPS = {
+  [0xA0]=4, [0xA1]=4, [0xB0]=4, [0xB1]=4,
+}
+local STAGE4_FLOOR = {
+  [0x01]=4, [0x02]=4, [0x03]=4, [0x04]=4,
+  [0x05]=4, [0x06]=4, [0x07]=4, [0x08]=4,
+}
+
+local function stage_material(tile)
+  if TARGET == 3 then
+    if tile == 0x2D or tile == 0x2E then return 2 end
+    return STAGE4_FLOOR[tile]
+  end
+  return nil
+end
+
+local function semantic_pickup(tile)
+  if TARGET == 1 then return RARE_PICKUPS[tile] end
+  if TARGET == 2 or TARGET == 5 then return HEALTH_PICKUPS[tile] end
+  if TARGET == 4 then return HEALTH_PICKUPS[tile] or RARE_PICKUPS[tile] end
+  if TARGET == 6 then return ARROW_PICKUPS[tile] or RARE_PICKUPS[tile] end
+  return nil
+end
 
 if attr_trace then
   -- The stock caller selects the destination map immediately before the
@@ -47,8 +87,7 @@ if attr_trace then
   emu:setBreakpoint(function() tile_copy_map = 0x9C00 end, 0x42A0)
   emu:setBreakpoint(function() tile_copy_map = 0x9800 end, 0x42A5)
   emu:setBreakpoint(function()
-    if phase ~= "play" or (TARGET ~= 4 and TARGET ~= 6)
-        or emu:read8(0xD880) ~= EXPECTED_SCENE then
+    if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE then
       return
     end
     tile_copy_hits = tile_copy_hits + 1
@@ -56,7 +95,8 @@ if attr_trace then
     for offset = 0, 575 do
       local tile = emu:read8(0xC1A0 + offset)
       rawset[#rawset + 1] = string.format("%02X", tile)
-      local desired = ((TARGET == 4 and LAVA5[tile])
+      local desired = ((TARGET == 3 and stage_material(tile))
+        or (TARGET == 4 and LAVA5[tile])
         or (TARGET == 6 and LAVA7[tile])) and 1 or 0
       if desired ~= 0 then packed_bits = packed_bits + 2 ^ (offset % 8) end
       if offset % 8 == 7 then
@@ -77,7 +117,33 @@ if attr_trace then
       emu:read8(0xDAFD), emu:read8(0xDAFE), emu:read8(0xDAFF),
       table.concat(bitset), table.concat(rawset), tile_copy_map))
     attr_trace:flush()
-  end, 0x42C0)
+  end, 0x42A7)
+end
+
+if STREAM_TRACE_PATH then
+  -- Whole-map publication is already covered at $42A7. This optional trace
+  -- identifies the direct packed-map writers used by later scrolling rooms,
+  -- where tile IDs can otherwise outrun their CGB attribute plane. mGBA does
+  -- not expose CPU VRAM writes through range watchpoints, so C1A0-C3DF is the
+  -- nearest observable publication boundary.
+  assert(emu:setRangeWatchpoint(function(info)
+    if phase ~= "play" or play_frame < 40 or play_frame > 1200
+        or (TARGET ~= 3 and TARGET ~= 4 and TARGET ~= 6)
+        or emu:read8(0xD880) ~= EXPECTED_SCENE then
+      return
+    end
+    local pc = emu:readRegister("PC") & 0xFFFF
+    local bank = emu:read8(0xFF99) & 0xFF
+    local key = string.format("%02X:%04X", bank, pc)
+    stream_writer_counts[key] = (stream_writer_counts[key] or 0) + 1
+    if #stream_writer_events < STREAM_EVENT_LIMIT then
+      stream_writer_events[#stream_writer_events + 1] = string.format(
+        "f=%d room=%02X bank=%02X pc=%04X addr=%04X old=%02X new=%02X scx=%02X scy=%02X",
+        play_frame, emu:read8(0xFFBD), bank, pc,
+        info.address & 0xFFFF, info.oldValue & 0xFF,
+        info.newValue & 0xFF, emu:read8(0xFF43), emu:read8(0xFF42))
+    end
+  end, 0xC1A0, 0xC3E0, C.WATCHPOINT_TYPE.WRITE_CHANGE) > 0)
 end
 
 local function log(message)
@@ -169,6 +235,11 @@ local function capture_room(room)
   emu:write8(0xFF4F, 1)
   dump_range(prefix .. ".vram1.bin", 0x8000, 0x97FF)
   dump_range(prefix .. ".attr.bin", 0x9800, 0x9FFF)
+  dump_range(prefix .. ".bg-lut.bin", 0xC600, 0xC6FF)
+  -- Preserve the exact hardware sprites that produced the screenshot.  This
+  -- is essential for semantic objects (pickups and hazards) whose artwork can
+  -- be emitted as OBJ in one stage but baked into the BG map in another.
+  dump_range(prefix .. ".oam.bin", 0xFE00, 0xFE9F)
 
   local old_bcps = emu:read8(0xFF68)
   local bgp = assert(io.open(prefix .. ".bgp.bin", "wb"))
@@ -183,10 +254,12 @@ local function capture_room(room)
   local meta = assert(io.open(prefix .. ".meta", "w"))
   meta:write(string.format(
     "frame=%d target=%d expected_scene=%02X D880=%02X FFC1=%02X FFBA=%02X " ..
-    "LCDC=%02X SCX=%02X SCY=%02X active_map=%04X room=%02X\n",
+    "LCDC=%02X SCX=%02X SCY=%02X phase=%02X prelude=%02X " ..
+    "active_map=%04X room=%02X\n",
     f, TARGET, EXPECTED_SCENE, emu:read8(0xD880), emu:read8(0xFFC1),
     emu:read8(0xFFBA), emu:read8(0xFF40), emu:read8(0xFF43),
-    emu:read8(0xFF42), active_base, room))
+    emu:read8(0xFF42), emu:read8(0xDF4C), emu:read8(0xFF91),
+    active_base, room))
   meta:close()
   emu:write8(0xFF4F, old_vbk)
   log(string.format("captured room=%02X", room))
@@ -213,23 +286,47 @@ local function sample_visible()
 
   emu:write8(0xFF4F, 0)
   local sample_unsafe, sample_unexpected, sample_lava_mismatch = 0, 0, 0
+  local sample_pickup_expected, sample_pickup_mismatch = 0, 0
+  local sample_material_expected, sample_material_mismatch = 0, 0
   local lava_mismatch_xy = {}
+  local pickup_mismatch_xy = {}
   for index, address in ipairs(addresses) do
     local attr, tile = attrs[index], emu:read8(address)
+    local semantic = semantic_pickup(tile)
+    local material = stage_material(tile)
+    local expected = semantic or material
+    local lava = ((TARGET == 4 and LAVA5[tile])
+      or (TARGET == 6 and LAVA7[tile])) and 5 or 0
     if (attr & 0xF8) ~= 0 then sample_unsafe = sample_unsafe + 1 end
-    if TARGET == 4 or TARGET == 6 then
-      if attr ~= 0 and attr ~= 5 then sample_unexpected = sample_unexpected + 1 end
-      if attr == 5 then
-        local valid = (TARGET == 4 and LAVA5[tile]) or (TARGET == 6 and LAVA7[tile])
-        if not valid then
-          sample_lava_mismatch = sample_lava_mismatch + 1
-          local zero = index - 1
-          lava_mismatch_xy[#lava_mismatch_xy + 1] = string.format(
-            "%d:%d:%02X", zero % cols, math.floor(zero / cols), tile)
-        end
+    if expected then
+      if semantic then
+        sample_pickup_expected = sample_pickup_expected + 1
+      else
+        sample_material_expected = sample_material_expected + 1
       end
-    elseif attr ~= 0 then
+      if attr ~= expected then
+        if semantic then
+          sample_pickup_mismatch = sample_pickup_mismatch + 1
+        else
+          sample_material_mismatch = sample_material_mismatch + 1
+        end
+        sample_unexpected = sample_unexpected + 1
+        local zero = index - 1
+        pickup_mismatch_xy[#pickup_mismatch_xy + 1] = string.format(
+          "%d:%d:%02X:%d>%d", zero % cols, math.floor(zero / cols),
+          tile, attr, expected)
+      end
+    elseif attr ~= 0 and not (lava == 5 and attr == 5) then
       sample_unexpected = sample_unexpected + 1
+    end
+    -- Retain the established lava contract: reject palette-5 bleed onto
+    -- non-lava art. A briefly neutral lava cell during direct streaming is a
+    -- separately tracked historical limitation and is not this pickup fix.
+    if attr == 5 and lava ~= 5 then
+      sample_lava_mismatch = sample_lava_mismatch + 1
+      local zero = index - 1
+      lava_mismatch_xy[#lava_mismatch_xy + 1] = string.format(
+        "%d:%d:%02X", zero % cols, math.floor(zero / cols), tile)
     end
   end
   emu:write8(0xFF4F, old_vbk)
@@ -237,16 +334,36 @@ local function sample_visible()
   unsafe_attrs = unsafe_attrs + sample_unsafe
   unexpected_attrs = unexpected_attrs + sample_unexpected
   lava_mismatches = lava_mismatches + sample_lava_mismatch
+  pickup_expected = pickup_expected + sample_pickup_expected
+  pickup_mismatches = pickup_mismatches + sample_pickup_mismatch
+  material_expected = material_expected + sample_material_expected
+  material_mismatches = material_mismatches + sample_material_mismatch
   if sample_unsafe > max_unsafe then max_unsafe = sample_unsafe end
   if sample_unexpected > max_unexpected then max_unexpected = sample_unexpected end
   if sample_lava_mismatch > max_lava_mismatch then max_lava_mismatch = sample_lava_mismatch end
-  if sample_lava_mismatch > 0 then
+  if sample_pickup_mismatch > max_pickup_mismatch then
+    max_pickup_mismatch = sample_pickup_mismatch
+  end
+  if sample_material_mismatch > max_material_mismatch then
+    max_material_mismatch = sample_material_mismatch
+  end
+  if sample_lava_mismatch > 0 or sample_pickup_mismatch > 0
+      or sample_material_mismatch > 0 then
+    local signature_a, signature_b = 0, 0
+    for _, offset in ipairs({444, 148, 19, 251}) do
+      signature_a = signature_a ~ emu:read8(0xC1A0 + offset)
+    end
+    for _, offset in ipairs({0, 59, 333}) do
+      signature_b = signature_b ~ emu:read8(0xC1A0 + offset)
+    end
     local mismatch_room = emu:read8(0xFFBD)
-    if CAPTURE_SCREENSHOTS and not captured_mismatches[mismatch_room] then
+    if not captured_mismatches[mismatch_room] then
       captured_mismatches[mismatch_room] = true
       local mismatch_prefix = OUT .. string.format(
         ".mismatch.room%02X.f%06d", mismatch_room, play_frame)
-      emu:screenshot(mismatch_prefix .. ".png")
+      if CAPTURE_SCREENSHOTS then
+        emu:screenshot(mismatch_prefix .. ".png")
+      end
       dump_range(mismatch_prefix .. ".source.bin", 0xC1A0, 0xC3DF)
       local mismatch_vbk = emu:read8(0xFF4F)
       emu:write8(0xFF4F, 0)
@@ -260,10 +377,15 @@ local function sample_visible()
       emu:write8(0xFF70, mismatch_svbk)
     end
     log(string.format(
-      "lava_mismatch=%d room=%02X scene=%02X scx=%02X scy=%02X count=%02X cache=%02X xy=%s",
-      sample_lava_mismatch, emu:read8(0xFFBD), emu:read8(0xD880),
+      "lava_mismatch=%d pickup_mismatch=%d material_mismatch=%d room=%02X scene=%02X scx=%02X scy=%02X count=%02X cache=%02X sig=%02X/%02X meta=%02X%02X%02X/%02X%02X%02X xy=%s pickup_xy=%s",
+      sample_lava_mismatch, sample_pickup_mismatch, sample_material_mismatch,
+      emu:read8(0xFFBD), emu:read8(0xD880),
       emu:read8(0xFF43), emu:read8(0xFF42), emu:read8(0xDF4E),
-      emu:read8(0xDF4F), table.concat(lava_mismatch_xy, ",")))
+      emu:read8(0xDF4F), signature_a, signature_b,
+      emu:read8(0xDF53), emu:read8(0xDF54), emu:read8(0xDF55),
+      emu:read8(0xDF56), emu:read8(0xDF57), emu:read8(0xDF58),
+      table.concat(lava_mismatch_xy, ","),
+      table.concat(pickup_mismatch_xy, ",")))
   end
   expected_samples = expected_samples + 1
 end
@@ -281,13 +403,30 @@ local function write_report()
   fh:write(string.format(
     "target=%d stage=%d frames=%d expected_scene=%02X samples=%d rooms=%d " ..
     "unsafe=%d unexpected=%d lava_mismatch=%d max_unsafe=%d " ..
-    "max_unexpected=%d max_lava_mismatch=%d wram_changed=%d\n",
+    "max_unexpected=%d max_lava_mismatch=%d pickup_expected=%d " ..
+    "pickup_mismatch=%d max_pickup_mismatch=%d material_expected=%d " ..
+    "material_mismatch=%d max_material_mismatch=%d wram_changed=%d\n",
     TARGET, TARGET + 1, play_frame, EXPECTED_SCENE, expected_samples,
     #room_list, unsafe_attrs, unexpected_attrs, lava_mismatches,
-    max_unsafe, max_unexpected, max_lava_mismatch, wram_changed))
+    max_unsafe, max_unexpected, max_lava_mismatch, pickup_expected,
+    pickup_mismatches, max_pickup_mismatch, material_expected,
+    material_mismatches, max_material_mismatch, wram_changed))
   fh:write("room_ids=" .. table.concat(room_text, ",") .. "\n")
   fh:write("scene_ids=" .. table.concat(scene_text, ",") .. "\n")
   fh:close()
+  if STREAM_TRACE_PATH then
+    local trace = assert(io.open(STREAM_TRACE_PATH, "w"))
+    local keys = {}
+    for key in pairs(stream_writer_counts) do keys[#keys + 1] = key end
+    table.sort(keys)
+    trace:write("writers\n")
+    for _, key in ipairs(keys) do
+      trace:write(string.format("%s\t%d\n", key, stream_writer_counts[key]))
+    end
+    trace:write("events\n")
+    for _, event in ipairs(stream_writer_events) do trace:write(event .. "\n") end
+    trace:close()
+  end
   if attr_trace then attr_trace:close(); attr_trace = nil end
   done = true
   log("DONE")
@@ -346,6 +485,18 @@ callbacks:add("frame", function()
   end
 
   play_frame = play_frame + 1
+  if PALETTE_TRACE > 0 and play_frame <= PALETTE_TRACE then
+    local old_bcps = emu:read8(0xFF68)
+    emu:write8(0xFF68, 0)
+    local bg0_0 = emu:read8(0xFF69)
+    emu:write8(0xFF68, 2)
+    local bg0_2 = emu:read8(0xFF69)
+    emu:write8(0xFF68, old_bcps)
+    log(string.format(
+      "palette phase=%02X prelude=%02X scene=%02X bgp=%02X bg0=%02X,%02X",
+      emu:read8(0xDF4C), emu:read8(0xFF91), emu:read8(0xD880),
+      emu:read8(0xFF47), bg0_0, bg0_2))
+  end
   audit_wram()
   local scene, room = emu:read8(0xD880), emu:read8(0xFFBD)
   scenes[scene] = true
@@ -356,7 +507,12 @@ callbacks:add("frame", function()
       last_room, room_stable = room, 0
       log(string.format("room=%02X", room))
     end
-    if room_stable == CAPTURE_STABLE and not captured_rooms[room] then
+    -- Do not freeze a room receipt while the native entry fade still owns
+    -- BGP or the bounded CRAM scheduler is mid-pass. Those frames are hidden
+    -- by the DMG fade and can precede the stage-specific BG0 repair by dozens
+    -- of frames; a release receipt must represent the stable rendered room.
+    if room_stable >= CAPTURE_STABLE and emu:read8(0xFF47) == 0xE4
+        and emu:read8(0xDF4C) == 0 and not captured_rooms[room] then
       captured_rooms[room] = true
       capture_room(room)
     end

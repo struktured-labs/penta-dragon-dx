@@ -194,6 +194,23 @@ def main() -> int:
             and candidate_scene_mismatch_frames
             == dma_unreadable_scene_samples
         )
+        # FFC1 is a stage sub-mode flag and legitimately clears in some
+        # layouts. Continuity is instead proven from the stock main-loop
+        # breakpoint: reject a long internal stall or a run that stops making
+        # progress before the final 30 rendered frames.
+        max_continuity_gap = 30
+        baseline_continuity_ok = (
+            baseline.get("max_main_loop_gap", max_continuity_gap + 1)
+            <= max_continuity_gap
+            and baseline.get("last_main_loop_frame", -1)
+            >= args.frames - max_continuity_gap
+        )
+        candidate_continuity_ok = (
+            candidate.get("max_main_loop_gap", max_continuity_gap + 1)
+            <= max_continuity_gap
+            and candidate.get("last_main_loop_frame", -1)
+            >= args.frames - max_continuity_gap
+        )
         passed = (
             baseline["breakpoints_available"]
             and candidate["breakpoints_available"]
@@ -203,6 +220,8 @@ def main() -> int:
             and candidate["final_scene"] == target + 2
             and baseline["expected_scene_frames"] == args.frames
             and candidate_scene_ok
+            and baseline_continuity_ok
+            and candidate_continuity_ok
             and abs(1.0 - ratio) <= args.tolerance + 1e-9
         )
         row = {
@@ -217,6 +236,9 @@ def main() -> int:
             "candidate_non_dma_scene_mismatch_frames": (
                 non_dma_scene_mismatch_frames
             ),
+            "max_continuity_gap": max_continuity_gap,
+            "baseline_continuity_ok": baseline_continuity_ok,
+            "candidate_continuity_ok": candidate_continuity_ok,
             "passed": passed,
             "original": baseline,
             "dx": candidate,
@@ -228,7 +250,18 @@ def main() -> int:
             f"{candidate['scroll_changes']} {'PASS' if passed else 'FAIL'}"
         )
         if not passed:
-            failures.append(f"Stage {target + 1}: throughput ratio {ratio:.3f}")
+            reasons = []
+            if abs(1.0 - ratio) > args.tolerance + 1e-9:
+                reasons.append(f"throughput ratio {ratio:.3f}")
+            if not candidate_scene_ok:
+                reasons.append("scene mismatch")
+            if not baseline_continuity_ok:
+                reasons.append("baseline main-loop continuity missing")
+            if not candidate_continuity_ok:
+                reasons.append("candidate main-loop continuity missing")
+            failures.append(
+                f"Stage {target + 1}: " + (", ".join(reasons) or "gate failed")
+            )
 
     manifest = {
         "status": "pass" if not failures else "fail",

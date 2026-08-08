@@ -1,5 +1,6 @@
 -- Cold-boot Stage 1, play continuously, and prove that every visible tile's
--- palette attribute matches the ROM's Stage 1 tile-to-palette table.
+-- palette attribute matches the ROM's Stage 1 tile table or an exact semantic
+-- pickup override derived from the packed room source.
 --
 -- Environment:
 --   STAGE1_BLEED_OUT       output directory
@@ -35,12 +36,17 @@ local seeded, confirmed, finished = false, false, false
 local stable_frames, play_frames = 0, 0
 local sampled_frames, checked_cells = 0, 0
 local pal1_cells, unexpected_cells, unsafe_cells = 0, 0, 0
+local unexpected_semantic_pickup_cells, unexpected_floor_cells = 0, 0
 local runtime_lut_mismatch_frames, runtime_lut_mismatch_cells = 0, 0
 local runtime_lut_mismatch_max = 0
+local runtime_lut_dma_unreadable_frames = 0
+local first_runtime_lut_dma_unreadable = ""
 local first_runtime_lut_mismatch_frame = -1
 local first_runtime_lut_mismatch_details = ""
 local pal1_tiles = {}
 local first_pal1_frame, first_unexpected_frame = -1, -1
+local first_unexpected_floor_frame = -1
+local first_unexpected_floor_details = ""
 local scene_frames, active_frames = 0, 0
 local previous_scx, previous_scy = -1, -1
 local scroll_changes, scx_changes, scy_changes = 0, 0, 0
@@ -61,6 +67,43 @@ local layout_records, layout_seen = {}, {}
 local debug_destination = 0
 local packed_signatures
 local pickup_rect_history, oam_rect_history = {}, {}
+local PICKUP_METATILE_PALETTES = {
+  4, 4, 4, 4, 4, 5, 5, 5,
+  1, 1, 1, 3, 3, 4, 4, 4,
+  0, 0, 2, 5, 2, 2, 5, 2,
+}
+local last_semantic_pickup_cells = {}
+
+local function semantic_pickup_cells()
+  local cells = {}
+  local source = emu:read8(0xDC0E) | (emu:read8(0xDC0F) << 8)
+  -- Lua observes the CPU bus, so WRAM reads are FF during the game's OAM-DMA
+  -- HRAM routine. Reuse the preceding valid semantic map for that exact
+  -- inaccessible sample instead of misclassifying pickups as floor tiles.
+  if source < 0xC000 or source > 0xDFFF then
+    if source == 0xFFFF then return last_semantic_pickup_cells end
+    return cells
+  end
+  for row = 0, 9 do
+    for column = 0, 10 do
+      local metatile = emu:read8(source + row * 16 + column)
+      if metatile >= 0xD7 then metatile = metatile - 0xB1 end
+      local index = metatile - 0x26
+      if index >= 0 and index < #PICKUP_METATILE_PALETTES then
+        local palette = PICKUP_METATILE_PALETTES[index + 1]
+        if palette ~= 0 then
+          local offset = row * 64 + column * 2
+          cells[offset] = palette
+          cells[offset + 1] = palette
+          cells[offset + 32] = palette
+          cells[offset + 33] = palette
+        end
+      end
+    end
+  end
+  last_semantic_pickup_cells = cells
+  return cells
+end
 
 local function recent_rectangles(history, value)
   if value ~= "" then history[#history + 1] = value end
@@ -164,6 +207,7 @@ local function scan_visible()
   local frame_pal1, frame_unexpected, frame_unsafe = 0, 0, 0
   local frame_pal1_details = {}
   local frame_unexpected_details = {}
+  local pickup_cells = semantic_pickup_cells()
 
   for screen_row = 0, rows - 1 do
     local row = (first_row + screen_row) % 32
@@ -175,7 +219,8 @@ local function scan_visible()
       emu:write8(0xFF4F, 1)
       local attr = emu:read8(address)
       local palette = attr & 0x07
-      local expected = string.byte(lut, tile + 1) & 0x07
+      local expected = pickup_cells[address - base]
+          or (string.byte(lut, tile + 1) & 0x07)
       hist[palette + 1] = hist[palette + 1] + 1
       checked_cells = checked_cells + 1
       if palette == 1 then
@@ -186,6 +231,19 @@ local function scan_visible()
       end
       if palette ~= expected then
         frame_unexpected = frame_unexpected + 1
+        if pickup_cells[address - base] then
+          unexpected_semantic_pickup_cells =
+              unexpected_semantic_pickup_cells + 1
+        else
+          unexpected_floor_cells = unexpected_floor_cells + 1
+          if first_unexpected_floor_frame < 0 then
+            first_unexpected_floor_frame = play_frames
+            first_unexpected_floor_details = string.format(
+              "r%d,c%d,t%02X,p%d,e%d,addr%04X,base%04X",
+              screen_row, screen_col, tile, palette, expected,
+              address, base)
+          end
+        end
         frame_unexpected_details[#frame_unexpected_details + 1] =
             string.format(
               "r%d,c%d,t%02X,p%d,e%d",
@@ -215,8 +273,11 @@ end
 local function scan_runtime_lut()
   local mismatches = 0
   local details = {}
+  local ff_reads = 0
   for tile = 0, 255 do
-    local actual = emu:read8(0xC600 + tile) & 0x07
+    local raw = emu:read8(0xC600 + tile)
+    if raw == 0xFF then ff_reads = ff_reads + 1 end
+    local actual = raw & 0x07
     local expected = string.byte(lut, tile + 1) & 0x07
     if actual ~= expected then
       mismatches = mismatches + 1
@@ -227,12 +288,34 @@ local function scan_runtime_lut()
     end
   end
   if mismatches > 0 then
+    local pc_ok, pc = pcall(function() return emu:getRegister("PC") end)
+    local dma_source = emu:read8(0xFF46)
+    -- mGBA deliberately makes CPU-bus reads return FF during OAM DMA and
+    -- does not expose CPU registers to Lua in this callback. Require the
+    -- exact all-FF signature plus the game's known C0/C1 OAM DMA page; a
+    -- partially changed table can never enter this exemption.
+    local dma_unreadable = ff_reads == 256
+        and (dma_source == 0xC0 or dma_source == 0xC1)
+    if dma_unreadable then
+      runtime_lut_dma_unreadable_frames =
+          runtime_lut_dma_unreadable_frames + 1
+      if first_runtime_lut_dma_unreadable == "" then
+        first_runtime_lut_dma_unreadable = string.format(
+          "f%d:pc%s:dma%02X", play_frames,
+          pc_ok and string.format("%04X", pc) or "unavailable",
+          dma_source)
+      end
+      return
+    end
     runtime_lut_mismatch_frames = runtime_lut_mismatch_frames + 1
     runtime_lut_mismatch_cells = runtime_lut_mismatch_cells + mismatches
     runtime_lut_mismatch_max = math.max(runtime_lut_mismatch_max, mismatches)
     if first_runtime_lut_mismatch_frame < 0 then
       first_runtime_lut_mismatch_frame = play_frames
-      first_runtime_lut_mismatch_details = table.concat(details, ";")
+      first_runtime_lut_mismatch_details = string.format(
+          "pc%s:dma%02X:ff%d:%s",
+          pc_ok and string.format("%04X", pc) or "unavailable",
+          dma_source, ff_reads, table.concat(details, ";"))
     end
   end
 end
@@ -268,16 +351,15 @@ local function active_pickup_rects()
   local first_col, first_row = math.floor(scx / 8), math.floor(scy / 8)
   local x_offset, y_offset = scx % 8, scy % 8
   local parts = {}
-  emu:write8(0xFF4F, 1)
+  local pickup_cells = semantic_pickup_cells()
   for screen_row = 0, 18 do
     local row = (first_row + screen_row) % 32
     local y = screen_row * 8 - y_offset
     for screen_col = 0, 20 do
       local col = (first_col + screen_col) % 32
       local x = screen_col * 8 - x_offset
-      local attr = emu:read8(base + row * 32 + col)
-      local palette = attr & 0x07
-      if palette >= 1 and palette <= 5 then
+      local offset = row * 32 + col
+      if pickup_cells[offset] then
         parts[#parts + 1] = string.format(
           "%d,%d,%d,%d", x, y, x + 7, y + 7)
       end
@@ -315,6 +397,11 @@ local function finish()
   handle:write(string.format("checked_cells=%d\n", checked_cells))
   handle:write(string.format("pal1_cells=%d\n", pal1_cells))
   handle:write(string.format("unexpected_cells=%d\n", unexpected_cells))
+  handle:write(string.format(
+    "unexpected_semantic_pickup_cells=%d\n",
+    unexpected_semantic_pickup_cells))
+  handle:write(string.format(
+    "unexpected_floor_cells=%d\n", unexpected_floor_cells))
   handle:write(string.format("unsafe_cells=%d\n", unsafe_cells))
   handle:write(string.format(
     "runtime_lut_mismatch_frames=%d\n", runtime_lut_mismatch_frames))
@@ -322,6 +409,12 @@ local function finish()
     "runtime_lut_mismatch_cells=%d\n", runtime_lut_mismatch_cells))
   handle:write(string.format(
     "runtime_lut_mismatch_max=%d\n", runtime_lut_mismatch_max))
+  handle:write(string.format(
+    "runtime_lut_dma_unreadable_frames=%d\n",
+    runtime_lut_dma_unreadable_frames))
+  handle:write(
+    "first_runtime_lut_dma_unreadable=" ..
+    first_runtime_lut_dma_unreadable .. "\n")
   handle:write(string.format(
     "first_runtime_lut_mismatch_frame=%d\n",
     first_runtime_lut_mismatch_frame))
@@ -331,6 +424,11 @@ local function finish()
   handle:write(string.format("first_pal1_frame=%d\n", first_pal1_frame))
   handle:write(string.format(
     "first_unexpected_frame=%d\n", first_unexpected_frame))
+  handle:write(string.format(
+    "first_unexpected_floor_frame=%d\n", first_unexpected_floor_frame))
+  handle:write(
+    "first_unexpected_floor_details=" ..
+    first_unexpected_floor_details .. "\n")
   handle:write(string.format("scene_frames=%d\n", scene_frames))
   handle:write(string.format("active_frames=%d\n", active_frames))
   handle:write(string.format("scroll_changes=%d\n", scroll_changes))

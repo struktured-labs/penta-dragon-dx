@@ -76,7 +76,7 @@ bg_palettes:
 
   # Palette 3 - Nature/organic (green tones)
   BG3:
-    colors: ["7FFF", "03E0", "0160", "0000"]  # White background, Forest green, Dark green, Black
+    colors: ["7FFF", "03E0", "10EC", "0000"]  # White, vivid green, earthy brown, black
 
   # Palette 4 - Water/ice (cyan/teal)
   BG4:
@@ -88,11 +88,22 @@ bg_palettes:
 
   # Palette 6 - Stone/castle (blue-gray)
   BG6:
-    colors: ["7FFF", "6F7B", "2D4A", "0000"]  # White background, Blue-gray, Dark slate, Black
+    colors: ["7FFF", "7F1B", "3D08", "0000"]  # White, Light sky blue, Deep navy, Black
 
   # Palette 7 - Mystery/special (deep blue)
   BG7:
     colors: ["7FFF", "7E10", "3800", "0000"]  # White background, Royal blue, Navy, Black
+
+# Base world ramp selected for each later dungeon. These names reference the
+# tuneable rows above; Stage 1 keeps Dungeon. Stage 5/7 retain Dungeon because
+# their lava tile classifiers already layer BG5 over the base world.
+later_stage_bg0_palettes:
+  Stage2: BG4       # icy cyan / teal
+  Stage3: Dungeon   # native base
+  Stage4: BG6       # blue-gray stone; stage-local floor/bridge attrs add color
+  Stage5: Dungeon   # native base + red/orange lava attrs
+  Stage6: BG3       # green / dark green
+  Stage7: Dungeon   # native base + red/orange lava attrs
 
 # Stage-local BG rows. These are loaded only for the named scene and do not
 # replace the normal BG palette with the same hardware slot in title, bonus,
@@ -112,7 +123,8 @@ cutscene_region_palettes:
     art_ids: [1]
     default: BG6
     regions:
-      - {x: [6, 13], y: [0, 5], palette: BG5}  # warm open pages
+      - {x: [7, 12], y: [0, 0], palette: BG5}  # top corners stay stone
+      - {x: [6, 13], y: [1, 5], palette: BG5}  # warm open pages
       - {x: [7, 12], y: [6, 6], palette: BG5}
 
   SaraPortrait:
@@ -125,7 +137,6 @@ cutscene_region_palettes:
       - {x: [15, 19], y: [1, 1], palette: BG7}
       - {x: [0, 3], y: [2, 7], palette: BG7}
       - {x: [16, 19], y: [2, 7], palette: BG7}
-      - {x: [8, 11], y: [4, 6], palette: BG5}  # face / warm highlight
       - {x: [7, 12], y: [7, 7], palette: BG4}  # costume / armor
 
   DragonEye:
@@ -133,8 +144,10 @@ cutscene_region_palettes:
     default: BG7
     regions:
       - {x: [13, 16], y: [1, 1], palette: BG6}  # stone eye socket
-      - {x: [12, 16], y: [2, 4], palette: BG3}  # eye
-      - {x: [13, 15], y: [5, 5], palette: BG3}
+      - {x: [16, 17], y: [2, 2], palette: BG3}  # upper iris
+      - {x: [15, 18], y: [3, 3], palette: BG3}  # widest eye row
+      - {x: [15, 17], y: [4, 4], palette: BG3}
+      - {x: [16, 17], y: [5, 5], palette: BG3}  # lower iris
 
   PreFinalPenta:
     art_ids: [4]

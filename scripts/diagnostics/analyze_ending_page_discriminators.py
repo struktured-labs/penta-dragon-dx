@@ -87,6 +87,8 @@ def analyze_manifest(
         phase: set() for phase in PHASE_TARGETS
     }
     previous_full_story_art: int | None = None
+    story_repair_art: int | None = None
+    story_repair_samples = 0
     for panel in panels:
         state = panel.get("story_state", {})
         missing = {"d889", "dce2", "fff9"} - state.keys()
@@ -159,6 +161,8 @@ def analyze_manifest(
             if valid and art_committed:
                 full_targets[phase].add(art)
                 previous_full_story_art = art
+                story_repair_art = None
+                story_repair_samples = 0
             elif art_committed and previous_full_story_art is not None:
                 previous = expected_story_attrs[previous_full_story_art]
                 valid = (
@@ -173,6 +177,24 @@ def analyze_manifest(
                         )
                     )
                 )
+                same_art_repair = (
+                    previous_full_story_art == art
+                    and state.get("df4a", 0x20) < 0x20
+                    and attributes[160:] == bytes(200)
+                    and all(
+                        actual in {0, final}
+                        for actual, final in zip(
+                            attributes[:160],
+                            expected_story_attrs[art][:160],
+                        )
+                    )
+                )
+                if same_art_repair:
+                    if story_repair_art != art:
+                        story_repair_art = art
+                        story_repair_samples = 0
+                    story_repair_samples += 1
+                    valid = story_repair_samples <= 1
             elif (
                 not art_committed
                 and art in {5, 6, 7}

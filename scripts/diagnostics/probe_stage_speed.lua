@@ -21,10 +21,15 @@ local KEY_RIGHT, KEY_LEFT = 0x10, 0x20
 local frame, phase, seeded, confirmed = 0, "title", false, false
 local stable_frames, play_frames = 0, 0
 local main_loop_hits, central_emitter_hits, free_emitter_hits = 0, 0, 0
+local last_main_loop_frame, max_main_loop_gap = -1, 0
 local tile_copy_hits, atomic_attr_passes = 0, 0
 local atomic_call_indices = {}
 local previous_scx, scroll_changes = -1, 0
+-- FFC1 is a gameplay sub-mode flag, not a universal active/inactive bit.
+-- Retain its high-frame count and first transition as diagnostic telemetry;
+-- scene stability and main-loop throughput are the actual continuity gates.
 local active_frames, first_inactive_frame = 0, -1
+local first_inactive_state = ""
 local expected_scene_frames, first_scene_mismatch = 0, -1
 local dma_unreadable_scene_samples, non_dma_scene_mismatch_frames = 0, 0
 local first_scene_mismatch_value = -1
@@ -146,7 +151,14 @@ breakpoints_available = pcall(function()
   emu:setBreakpoint(function() tile_copy_map_hi = 0x9C end, 0x42A0)
   emu:setBreakpoint(function() tile_copy_map_hi = 0x98 end, 0x42A5)
   emu:setBreakpoint(function()
-    if phase == "play" then main_loop_hits = main_loop_hits + 1 end
+    if phase == "play" then
+      main_loop_hits = main_loop_hits + 1
+      if last_main_loop_frame >= 0 then
+        local gap = play_frames - last_main_loop_frame
+        if gap > max_main_loop_gap then max_main_loop_gap = gap end
+      end
+      last_main_loop_frame = play_frames
+    end
   end, 0x016C)
   emu:setBreakpoint(function()
     if phase == "play" then
@@ -186,6 +198,10 @@ local function finish()
     '  "breakpoints_available": %s,\n', tostring(breakpoints_available)))
   handle:write(string.format('  "main_loop_hits": %d,\n', main_loop_hits))
   handle:write(string.format(
+    '  "last_main_loop_frame": %d,\n', last_main_loop_frame))
+  handle:write(string.format(
+    '  "max_main_loop_gap": %d,\n', max_main_loop_gap))
+  handle:write(string.format(
     '  "central_emitter_hits": %d,\n', central_emitter_hits))
   handle:write(string.format('  "free_emitter_hits": %d,\n', free_emitter_hits))
   handle:write(string.format('  "tile_copy_hits": %d,\n', tile_copy_hits))
@@ -206,6 +222,8 @@ local function finish()
   handle:write(string.format('  "active_frames": %d,\n', active_frames))
   handle:write(string.format(
     '  "first_inactive_frame": %d,\n', first_inactive_frame))
+  handle:write(string.format(
+    '  "first_inactive_state": "%s",\n', first_inactive_state))
   handle:write(string.format(
     '  "expected_scene_frames": %d,\n', expected_scene_frames))
   handle:write(string.format(
@@ -308,6 +326,14 @@ callbacks:add("frame", function()
     active_frames = active_frames + 1
   elseif first_inactive_frame < 0 then
     first_inactive_frame = play_frames
+    first_inactive_state = string.format(
+      "pc:%04X room:%02X scx:%02X scy:%02X ffe4:%02X " ..
+        "dc00:%02X dc01:%02X dc02:%02X dc03:%02X",
+      read_register("PC") & 0xFFFF, emu:read8(0xFFBD),
+      emu:read8(0xFF43), emu:read8(0xFF42), emu:read8(0xFFE4),
+      emu:read8(0xDC00), emu:read8(0xDC01),
+      emu:read8(0xDC02), emu:read8(0xDC03))
+    emu:screenshot(OUT .. ".first-inactive.png")
   end
   if INPUT_MODE == "stationary" then
     emu:setKeys(0)

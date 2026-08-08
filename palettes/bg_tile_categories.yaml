@@ -56,12 +56,15 @@ bg_table:
       tiles: [0x41, 0x42, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
               0x54, 0x55, 0x56, 0x57, 0x59]
 
-    - name: hazard_spike_legacy_accent
-      palette: 5
+    - name: dungeon_patterned_floor
+      palette: 0
       description: |
-        Legacy 2A-3D spike accents. They do not share the large rotating
-        cylinder's floor-bearing art. Excludes 0x47/0x57, which remain wall
-        corners after the 2026-05-23 headed regression.
+        Patterned floor and transition art used heavily by Stage-1 room $05.
+        A vertical-scroll trace found 252 of these cells in one legitimate
+        floor layout; classifying them as legacy spikes painted the complete
+        floor with the rotating BG5 red/gold row. Keep them on the tuneable
+        Dungeon BG0 environment palette. The reviewed rotating cylinder is
+        exclusively the scene-gated 0x60-0x7F family below.
       tiles: [0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x3A, 0x3B, 0x3C, 0x3D]
 
     - name: hazard_spike_teeth
@@ -222,6 +225,10 @@ stage1_hazard_art:
       0x7C: 0x7E
       0x7D: 0x7E
     environment_remap: [0, 1, 1, 3]
+    # Retained as the reviewed moving-art classification ramp for ring/body
+    # tooling. Tooth fills are owned exclusively by tooth_row_spans; pixels
+    # outside those black-outline spans always use environment_remap so a
+    # moving cast shadow can never become a detached gold fleck.
     hazard_remap: [2, 2, 2, 3]
     ring_regions:
       0x6C: [0, 4, 8, 8]

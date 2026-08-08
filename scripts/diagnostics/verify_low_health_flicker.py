@@ -11,10 +11,11 @@ import os
 from pathlib import Path
 import statistics
 import subprocess
+import zlib
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
-from normalize_mgba_state_pc import normalize
+from normalize_mgba_state_pc import normalize, png_chunks, write_png
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,6 +26,11 @@ DEFAULT_STATE = (
 )
 DEFAULT_MGBA = ROOT / "scripts/mgba-qt-singleflight"
 PROBE = Path(__file__).with_name("probe_low_health_flicker.lua")
+OAM_WRAM_SENTINEL = 0xDF51
+SERIALIZED_VRAM0 = 0x400
+SERIALIZED_VRAM1 = 0x2400
+VRAM_MAP_BASES = (0x1800, 0x1C00)
+STAGE1_LUT_OFFSET = 13 * 0x4000 + (0x7000 - 0x4000)
 
 
 def digest(path: Path) -> str:
@@ -36,14 +42,59 @@ def rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle, delimiter="\t"))
 
 
+def normalize_fixture_attrs(state: Path, rom: Path) -> dict[str, int]:
+    """Compile both legacy fixture maps through this candidate's Stage-1 LUT.
+
+    The checked-in hazard state predates semantic attributes and serializes
+    most offscreen cells as palette zero. Runtime settling repairs every tooth
+    travel cell, but deliberately does not broad-sweep ordinary walls because
+    that was the source of the miniboss flicker regression. Normalize only the
+    test input here, then require zero semantic drift for the complete soak.
+    """
+    chunks = png_chunks(state.read_bytes())
+    indices = [
+        index for index, (kind, _) in enumerate(chunks) if kind == b"gbAs"
+    ]
+    if len(indices) != 1:
+        raise RuntimeError(f"expected one gbAs chunk, found {len(indices)}")
+    index = indices[0]
+    raw = bytearray(zlib.decompress(chunks[index][1]))
+    table = rom.read_bytes()[STAGE1_LUT_OFFSET:STAGE1_LUT_OFFSET + 0x100]
+    if len(table) != 0x100:
+        raise RuntimeError("candidate Stage-1 LUT is incomplete")
+    changed: dict[str, int] = {}
+    for base in VRAM_MAP_BASES:
+        count = 0
+        for offset in range(0x400):
+            tile = raw[SERIALIZED_VRAM0 + base + offset]
+            attr_offset = SERIALIZED_VRAM1 + base + offset
+            expected = table[tile] & 0x07
+            count += raw[attr_offset] != expected
+            raw[attr_offset] = expected
+        changed[f"{0x8000 + base:04X}"] = count
+    chunks[index] = (b"gbAs", zlib.compress(bytes(raw), level=9))
+    write_png(state, chunks)
+    return changed
+
+
 def frame_metrics(paths: list[Path]) -> dict[str, object]:
     near_white = []
     white = []
     means = []
+    changed_pixels = []
+    mean_rgb_deltas = []
+    previous = None
     for path in paths:
         with Image.open(path) as source:
             image = source.convert("RGB")
             pixels = list(image.getdata())
+        if previous is not None:
+            difference = ImageChops.difference(image, previous)
+            changed_pixels.append(sum(
+                pixel != (0, 0, 0) for pixel in difference.getdata()
+            ))
+            mean_rgb_deltas.append(sum(ImageStat.Stat(difference).mean) / 3)
+        previous = image
         near_white.append(sum(
             red >= 224 and green >= 224 and blue >= 224
             for red, green, blue in pixels
@@ -67,6 +118,18 @@ def frame_metrics(paths: list[Path]) -> dict[str, object]:
         "mean_luma_median": round(median_mean, 3),
         "mean_luma_max": round(max(means), 3),
         "mean_luma_max_above_median": round(max(means) - median_mean, 3),
+        "successive_changed_pixels_max": max(changed_pixels, default=0),
+        "successive_changed_pixels_max_sample": (
+            changed_pixels.index(max(changed_pixels)) + 2
+            if changed_pixels else 0
+        ),
+        "successive_mean_rgb_delta_max": round(
+            max(mean_rgb_deltas, default=0), 3
+        ),
+        "successive_mean_rgb_delta_max_sample": (
+            mean_rgb_deltas.index(max(mean_rgb_deltas)) + 2
+            if mean_rgb_deltas else 0
+        ),
     }
 
 
@@ -79,6 +142,24 @@ def main() -> int:
     parser.add_argument("--mgba", type=Path, default=DEFAULT_MGBA)
     parser.add_argument("--settle", type=int, default=120)
     parser.add_argument("--samples", type=int, default=240)
+    parser.add_argument(
+        "--pre-trigger", type=int, default=60,
+        help=(
+            "captured healthy frames before forcing the fixture across the "
+            "low-health/music-warning threshold"
+        ),
+    )
+    parser.add_argument(
+        "--post-trigger-keys", type=lambda value: int(value, 0), default=0,
+        help="input mask held after the deterministic health transition",
+    )
+    parser.add_argument(
+        "--require-music-transition", action="store_true",
+        help=(
+            "require the Stage-1 to Gargoyle scene/song transition and its "
+            "native $FFF7 pulse countdown while health is low"
+        ),
+    )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
 
@@ -87,7 +168,17 @@ def main() -> int:
     for path in args.output.glob("low-health.*"):
         path.unlink()
     normalized = args.output / "low-health-current.ss0"
-    normalize(args.state.resolve(), normalized, 0x016C, [], args.rom.resolve())
+    # Cross-ROM fixtures serialize the old candidate's executable DAxx/DBxx
+    # helpers. Force the existing sentinel-gated initializer to refresh those
+    # bytes from this ROM before the first atomic Stage-1 copy can use them.
+    normalize(
+        args.state.resolve(), normalized, 0x016C,
+        [(OAM_WRAM_SENTINEL, 0), (0xDF5B, 0)],
+        args.rom.resolve(),
+    )
+    fixture_attr_normalization = normalize_fixture_attrs(
+        normalized, args.rom.resolve()
+    )
 
     environment = os.environ.copy()
     environment.update({
@@ -96,6 +187,8 @@ def main() -> int:
         "LOW_HEALTH_OUT": str(prefix),
         "LOW_HEALTH_SETTLE": str(args.settle),
         "LOW_HEALTH_SAMPLES": str(args.samples),
+        "LOW_HEALTH_PRE_TRIGGER": str(args.pre_trigger),
+        "LOW_HEALTH_POST_TRIGGER_KEYS": str(args.post_trigger_keys),
     })
     log = args.output / "mgba.log"
     with log.open("w") as stream:
@@ -132,6 +225,22 @@ def main() -> int:
     readable_frames = [
         row for row in frames if row.get("dma_unreadable") == "0"
     ]
+    pre_frames = [
+        row for row in readable_frames if row["health_phase"] == "pre"
+    ]
+    low_frames = [
+        row for row in readable_frames if row["health_phase"] == "low"
+    ]
+    scene_values = [row["d880"] for row in readable_frames]
+    music_transition_sample = next((
+        int(row["sample"]) for row in readable_frames if row["d880"] == "0A"
+    ), 0)
+    pulse_values = [int(row["fff7"], 16) for row in readable_frames]
+    post_music_pulse_values = [
+        int(row["fff7"], 16)
+        for row in readable_frames
+        if int(row["sample"]) >= music_transition_sample
+    ] if music_transition_sample else []
     cram_values = {row["bg_cram"] for row in readable_frames}
     attr_layouts = {
         map_name: {
@@ -154,12 +263,21 @@ def main() -> int:
                 for row in dma_unreadable
             )
         ),
-        "fixture stays in live Stage 1": all(
-            row["d880"] == "02" and row["ffc1"] == "01"
+        "fixture stays in live Stage 1/Gargoyle gameplay": all(
+            row["d880"] in (
+                {"02", "0A"} if args.require_music_transition else {"02"}
+            )
+            and row["ffc1"] == "01"
             for row in readable_frames
         ),
-        "fixture remains in low-health warning band": all(
-            row["hp_main"] == "00" for row in readable_frames
+        "fixture crosses the low-health warning threshold once": (
+            0 < args.pre_trigger < args.samples
+            and len(pre_frames) >= args.pre_trigger - len(dma_unreadable)
+            and len(low_frames) >= (
+                args.samples - args.pre_trigger - len(dma_unreadable)
+            )
+            and all(row["hp_main"] == "01" for row in pre_frames)
+            and all(row["hp_main"] == "00" for row in low_frames)
         ),
         "BGP remains normal E4 at every rendered frame": all(
             row["bgp"] == "E4" for row in frames
@@ -169,7 +287,14 @@ def main() -> int:
             row["unexpected_mismatches"] == "0"
             for row in readable_frames
         ),
-        "visible attributes never expose unsafe high bits": all(
+        "bank-1 bits occur only at exact Stage-1 tooth travel cells": (
+            all(row["unsafe"] == "0" for row in readable_frames)
+            and max(
+                (int(row["approved_bank1"]) for row in readable_frames),
+                default=0,
+            ) > 0
+        ),
+        "visible non-tooth attributes never expose unsafe high bits": all(
             row["unsafe"] == "0" for row in readable_frames
         ),
         "BG CRAM is byte-stable after settling": len(cram_values) == 1,
@@ -177,13 +302,45 @@ def main() -> int:
             metrics["near_white_max_above_median"] < 6000
             and metrics["mean_luma_max_above_median"] < 35
         ),
+        "no rendered whole-background discontinuity at warning transition": (
+            metrics["successive_changed_pixels_max"] < 12000
+            and metrics["successive_mean_rgb_delta_max"] < 50
+        ),
     }
+    if args.require_music_transition:
+        checks.update({
+            "low-health run naturally enters the Gargoyle music scene": (
+                bool(scene_values)
+                and scene_values[0] == "02"
+                and music_transition_sample > args.pre_trigger
+                and "0A" in scene_values
+            ),
+            "music init and native pulse countdown execute while BGP stays neutral": (
+                any(row["d885"] != "00" for row in readable_frames)
+                and max(pulse_values, default=0) >= 0x28
+                and len(set(post_music_pulse_values)) >= 40
+                and max(post_music_pulse_values, default=0) >= 0x27
+                and min(post_music_pulse_values, default=0xFF) == 0
+                and all(row["bgp"] == "E4" for row in low_frames)
+            ),
+        })
     receipt = {
         "rom": str(args.rom.resolve()),
         "rom_sha256": digest(args.rom),
         "state": str(args.state.resolve()),
         "state_sha256": digest(args.state),
+        "fixture_attr_normalization": fixture_attr_normalization,
         "settle_frames": args.settle,
+        "pre_trigger_frames": args.pre_trigger,
+        "post_trigger_input_mask": args.post_trigger_keys,
+        "music_transition_required": args.require_music_transition,
+        "music_transition_sample": music_transition_sample,
+        "native_pulse_timer_range": {
+            "minimum": min(pulse_values, default=0),
+            "maximum": max(pulse_values, default=0),
+        },
+        "healthy_samples": len(pre_frames),
+        "low_health_frames": len(low_frames),
         "sample_frames": len(frames),
         "dma_unreadable_samples": len(dma_unreadable),
         "readable_samples": len(readable_frames),
@@ -201,6 +358,14 @@ def main() -> int:
             int(row["unexpected_mismatches"])
             for row in readable_frames
         ),
+        "approved_bank1_tooth_cells_visible": {
+            "minimum": min(
+                int(row["approved_bank1"]) for row in readable_frames
+            ),
+            "maximum": max(
+                int(row["approved_bank1"]) for row in readable_frames
+            ),
+        },
         "render_metrics": metrics,
         "checks": checks,
         "passed": all(checks.values()),
@@ -213,8 +378,10 @@ def main() -> int:
         print(f"Receipt: {receipt_path}")
         return 1
     print(
-        f"PASS: {len(frames)} low-health frames; BGP stayed E4, "
-        "BG CRAM/attributes stayed stable, and no white-flash outlier rendered."
+        f"PASS: crossed the warning threshold after {args.pre_trigger} healthy "
+        f"frames and captured {len(low_frames)} low-health "
+        "frames; BGP stayed E4, BG CRAM/attributes stayed stable, and no "
+        "background-flash discontinuity rendered."
     )
     print(f"Receipt: {receipt_path}")
     return 0

@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PROBE = ROOT / "scripts/diagnostics/probe_later_stage_soak.lua"
 BANK13 = 13 * 0x4000
 NATIVE_BG0_ALIAS_ADDR = 0x6838
+TITLE_PALETTE_SOURCE_ADDR = 0x6800
+LATER_STAGE_BG0_SOURCE_TABLE_ADDR = 0x4CE4
 
 
 def read_fields(report: Path) -> tuple[dict[str, int], list[int], list[int]]:
@@ -32,8 +34,8 @@ def read_fields(report: Path) -> tuple[dict[str, int], list[int], list[int]]:
 
 def run_stage(mgba: str, rom: Path, target: int, frames: int,
               output: Path, timeout: float, screenshots: bool,
-              attr_trace: bool, wram_audit: bool,
-              capture_stable: int) -> Path:
+              attr_trace: bool, stream_trace: bool, wram_audit: bool,
+              capture_stable: int, trace_addrs: str) -> Path:
     prefix = output / f"stage{target + 1}"
     env = os.environ.copy()
     env.update({
@@ -48,18 +50,23 @@ def run_stage(mgba: str, rom: Path, target: int, frames: int,
     })
     if attr_trace:
         env["SOAK_ATTR_TRACE"] = str(prefix.with_suffix(".attr-events.tsv"))
+    if stream_trace:
+        env["SOAK_STREAM_TRACE"] = str(prefix.with_suffix(".stream-writers.tsv"))
+    if trace_addrs:
+        env["SOAK_TRACE_ADDRS"] = trace_addrs
     command = [mgba]
     # The Qt frontend accepts --fastforward; mgba-headless already runs as
     # fast as possible and rejects that option.
-    if (screenshots or attr_trace or wram_audit) and "mgba-qt" in Path(mgba).name:
+    if (screenshots or attr_trace or stream_trace or wram_audit) and "mgba-qt" in Path(mgba).name:
         command.append("--fastforward")
     command.extend(["--script", str(PROBE), str(rom)])
+    error_log = prefix.with_suffix(".emulator.log").open("wb")
     proc = subprocess.Popen(
         command,
         cwd=ROOT,
         env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=error_log,
+        stderr=subprocess.STDOUT,
     )
     report = prefix.with_suffix(".report")
     deadline = time.monotonic() + timeout
@@ -79,6 +86,7 @@ def run_stage(mgba: str, rom: Path, target: int, frames: int,
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
+        error_log.close()
 
 
 def main() -> int:
@@ -111,6 +119,14 @@ def main() -> int:
         help="trace each Stage 5/7 desired lava map for cache-key analysis",
     )
     parser.add_argument(
+        "--stream-trace", action="store_true",
+        help="trace direct Stage 5/7 packed-map writers after initial load",
+    )
+    parser.add_argument(
+        "--trace-addrs", default="",
+        help="comma-separated optional mGBA breakpoint addresses for diagnosis",
+    )
+    parser.add_argument(
         "--wram-audit", action="store_true",
         help="prove candidate fixed-WRAM ranges remain unchanged during play",
     )
@@ -121,9 +137,31 @@ def main() -> int:
             "ROM's title-safe native BG0 alias"
         ),
     )
+    parser.add_argument(
+        "--require-stage-bg0", action="store_true",
+        help=(
+            "require every captured room to retain its Stage 2-7 palette "
+            "selected by the candidate ROM's stage-source table"
+        ),
+    )
+    parser.add_argument(
+        "--require-stage-base-palette", action="store_true",
+        help=(
+            "require every captured Stage 2-7 scene LUT to retain its "
+            "candidate-ROM YAML palette slot (plus BG5 lava overrides)"
+        ),
+    )
+    parser.add_argument(
+        "--require-semantic-pickups", action="store_true",
+        help=(
+            "require the route to encounter collision-audited pickup tiles; "
+            "their exact palettes are always validated"
+        ),
+    )
     args = parser.parse_args()
     if args.capture_stable < 0:
         parser.error("--capture-stable must be non-negative")
+    semantic_pickup_samples = 0
     try:
         stages = [int(value) for value in args.stages.split(",") if value]
     except ValueError:
@@ -148,6 +186,15 @@ def main() -> int:
     ]
     if args.require_native_bg0 and len(native_bg0) != 8:
         parser.error("candidate ROM does not contain a complete native BG0 alias")
+    rom_bytes = args.rom.resolve().read_bytes()
+    source_table_offset = (
+        BANK13 + LATER_STAGE_BG0_SOURCE_TABLE_ADDR - 0x4000
+    )
+    stage_source_lows = rom_bytes[source_table_offset:source_table_offset + 6]
+    if args.require_stage_bg0 and len(stage_source_lows) != 6:
+        parser.error("candidate ROM does not contain the Stage 2-7 BG0 table")
+    if args.require_stage_base_palette and len(stage_source_lows) != 6:
+        parser.error("candidate ROM does not contain the Stage 2-7 palette table")
     try:
         for stage in stages:
             target = stage - 1
@@ -155,7 +202,8 @@ def main() -> int:
                 report = run_stage(
                     args.mgba, args.rom.resolve(), target, args.frames,
                     output, args.timeout, args.screenshots, args.attr_trace,
-                    args.wram_audit, args.capture_stable,
+                    args.stream_trace, args.wram_audit, args.capture_stable,
+                    args.trace_addrs,
                 )
                 fields, rooms, scenes = read_fields(report)
             except Exception as exc:
@@ -167,14 +215,27 @@ def main() -> int:
                 f"rooms={[f'{room:02X}' for room in rooms]} "
                 f"scenes={[f'{scene:02X}' for scene in scenes]} "
                 f"unexpected={fields['unexpected']} unsafe={fields['unsafe']} "
-                f"lava_mismatch={fields['lava_mismatch']}"
+                f"lava_mismatch={fields['lava_mismatch']} "
+                f"pickup_expected={fields['pickup_expected']} "
+                f"pickup_mismatch={fields['pickup_mismatch']} "
+                f"material_expected={fields['material_expected']} "
+                f"material_mismatch={fields['material_mismatch']}"
             )
+            semantic_pickup_samples += fields["pickup_expected"]
             if fields["frames"] < args.frames:
                 failures.append(f"Stage {target + 1}: stopped at {fields['frames']} frames")
             if fields["samples"] < 20:
                 failures.append(f"Stage {target + 1}: too few stable samples")
-            if fields["unexpected"] or fields["unsafe"] or fields["lava_mismatch"]:
+            if (
+                fields["unexpected"]
+                or fields["unsafe"]
+                or fields["lava_mismatch"]
+                or fields["pickup_mismatch"]
+                or fields["material_mismatch"]
+            ):
                 failures.append(f"Stage {target + 1}: invalid BG attributes observed")
+            if stage == 4 and fields["material_expected"] == 0:
+                failures.append("Stage 4: no floor/wall material cells observed")
             if args.wram_audit and fields["wram_changed"]:
                 failures.append(
                     f"Stage {target + 1}: audited WRAM changed "
@@ -206,6 +267,67 @@ def main() -> int:
                         f"Stage {target + 1}: non-native BG0 in "
                         + ",".join(bg0_mismatches)
                     )
+            if args.require_stage_bg0:
+                source_low = stage_source_lows[target - 1]
+                source_offset = (
+                    BANK13 + TITLE_PALETTE_SOURCE_ADDR - 0x4000
+                    + source_low
+                )
+                expected_bg0 = rom_bytes[source_offset:source_offset + 8]
+                bg0_mismatches: list[str] = []
+                for room in rooms:
+                    bgp = output / f"stage{target + 1}.room{room:02X}.bgp.bin"
+                    if not bgp.is_file() or len(bgp.read_bytes()) != 64:
+                        bg0_mismatches.append(f"{room:02X}:missing")
+                        continue
+                    observed_bg0 = bgp.read_bytes()[:8]
+                    if observed_bg0 != expected_bg0:
+                        bg0_mismatches.append(
+                            f"{room:02X}:{observed_bg0.hex().upper()}"
+                        )
+                print(
+                    f"Stage {target + 1}: stage_bg0="
+                    f"{'PASS' if not bg0_mismatches else 'FAIL'} "
+                    f"source=$68{source_low:02X} "
+                    f"expected={expected_bg0.hex().upper()}"
+                )
+                if bg0_mismatches:
+                    failures.append(
+                        f"Stage {target + 1}: wrong stage BG0 in "
+                        + ",".join(bg0_mismatches)
+                    )
+            if args.require_stage_base_palette:
+                expected_slot = stage_source_lows[target - 1] // 8
+                allowed_slots = {expected_slot}
+                if target + 1 in (5, 7):
+                    allowed_slots.add(5)
+                lut_mismatches: list[str] = []
+                for room in rooms:
+                    lut = output / f"stage{target + 1}.room{room:02X}.bg-lut.bin"
+                    if not lut.is_file() or len(lut.read_bytes()) != 256:
+                        lut_mismatches.append(f"{room:02X}:missing")
+                        continue
+                    observed_slots = set(lut.read_bytes())
+                    if not observed_slots <= allowed_slots or expected_slot not in observed_slots:
+                        lut_mismatches.append(
+                            f"{room:02X}:"
+                            + ",".join(str(value) for value in sorted(observed_slots))
+                        )
+                print(
+                    f"Stage {target + 1}: stage_base_palette="
+                    f"{'PASS' if not lut_mismatches else 'FAIL'} "
+                    f"expected=BG{expected_slot} "
+                    f"allowed={sorted(allowed_slots)}"
+                )
+                if lut_mismatches:
+                    failures.append(
+                        f"Stage {target + 1}: wrong scene LUT in "
+                        + ",".join(lut_mismatches)
+                    )
+        if args.require_semantic_pickups and semantic_pickup_samples == 0:
+            failures.append(
+                "no collision-audited later-stage pickup tile was observed"
+            )
     finally:
         if temporary is not None:
             temporary.cleanup()

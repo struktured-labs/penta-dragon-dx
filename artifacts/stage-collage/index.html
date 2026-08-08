@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Penta Dragon DX — Stage Palette Review</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f8f5ff;
+      --muted: #bdb6cf;
+      --panel: rgba(24, 18, 39, 0.92);
+      --line: #4b3b65;
+      --hot: #ffcf4a;
+      --cool: #6fe7ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, #3b184e 0, transparent 34rem),
+        radial-gradient(circle at 90% 15%, #103b4c 0, transparent 30rem),
+        #0b0812;
+      font: 16px/1.5 ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    }
+    main { width: min(1180px, calc(100% - 32px)); margin: auto; padding: 42px 0 64px; }
+    h1 { margin: 0; font-size: clamp(1.75rem, 5vw, 3.35rem); line-height: 1.05; letter-spacing: -0.06em; }
+    .lede { max-width: 760px; margin: 14px 0 20px; color: var(--muted); }
+    .chips, .actions { display: flex; flex-wrap: wrap; gap: 9px; }
+    .chip, .button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(11, 8, 18, 0.66);
+      color: var(--muted);
+      font-size: 0.79rem;
+    }
+    .chip.pass { border-color: #287759; color: #84f3ba; }
+    .actions { margin-top: 14px; }
+    .button { color: var(--ink); text-decoration: none; transition: 120ms ease; }
+    .button:hover, .button:focus-visible { border-color: var(--hot); color: var(--hot); transform: translateY(-1px); }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 285px), 1fr));
+      gap: 18px;
+      margin-top: 32px;
+    }
+    figure {
+      margin: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--panel);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+    }
+    figure > a { display: block; padding: 14px; background: #050408; }
+    figure img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 10 / 9;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      transition: 130ms ease;
+    }
+    figure a:hover img, figure a:focus-visible img { filter: brightness(1.09); transform: scale(1.012); }
+    figcaption { min-height: 106px; padding: 14px 16px 17px; }
+    h2 { margin: 0 0 5px; font-size: 1rem; color: var(--cool); }
+    figcaption p { margin: 0; color: var(--muted); font: 0.86rem/1.45 system-ui, sans-serif; }
+    footer { margin-top: 28px; color: #8e879f; font-size: 0.78rem; }
+    code { color: #d9d3e8; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Penta Dragon DX<br>Stage Palette Review</h1>
+    <p class="lede">Current seven-stage review set for live palette tuning. Click any frame to inspect its native 160×144 capture.</p>
+    <div class="chips">
+      <span class="chip pass">Current Stage 4 material split</span>
+      <span class="chip pass">32,526 Stage 4 cells / 0 headed mismatches</span>
+      <span class="chip pass">Current Stage 6 green + earth</span>
+      <span class="chip pass">Stage 6 Qt + headless soaks passed</span>
+      <span class="chip">Unpromoted palette prototype</span>
+      <span class="chip">Prototype MD5: e8baabaaa6b5d5073dba12985e8cfe00</span>
+    </div>
+    <nav class="actions" aria-label="Gallery downloads">
+      <a class="button" href="panels-preview/stage4-before-after.png" target="_blank">Stage 4 before / after ↗</a>
+      <a class="button" href="panels-preview/stage6-before-after.png" target="_blank">Stage 6 before / after ↗</a>
+      <a class="button" href="penta-dragon-dx-stages-current.png" target="_blank">Open current combined sheet ↗</a>
+    </nav>
+
+    <section class="gallery" aria-label="Stage screenshots">
+      <figure>
+        <a href="panels-current/stage1.png" target="_blank"><img src="panels-current/stage1.png" alt="Stage 1 ceiling-mounted rotating cylinder" loading="eager"></a>
+        <figcaption><h2>Stage 1 — Rotating cylinder</h2><p>Clean current-ROM ceiling fixture; the adversarial cat/fish/moth stress state is intentionally excluded.</p></figcaption>
+      </figure>
+      <figure>
+        <a href="panels-current/stage2.png" target="_blank"><img src="panels-current/stage2.png" alt="Stage 2 cyan ice terrain with purple rare pickups" loading="eager"></a>
+        <figcaption><h2>Stage 2 — Cyan ice</h2><p>Cyan terrain; rare/life pickups are independently purple.</p></figcaption>
+      </figure>
+      <figure>
+        <a href="panels-current/stage3.png" target="_blank"><img src="panels-current/stage3.png" alt="Stage 3 blue-violet chamber with red health pickups" loading="eager"></a>
+        <figcaption><h2>Stage 3 — Blue-violet chamber</h2><p>Neutral terrain; health pickups use the red semantic row.</p></figcaption>
+      </figure>
+      <figure>
+        <a href="panels-current/stage4.png" target="_blank"><img src="panels-current/stage4.png" alt="Stage 4 cyan floor with blue-gray masonry and magenta bridge accents" loading="eager"></a>
+        <figcaption><h2>Stage 4 — Material split</h2><p>Cyan diamond floor, blue-gray masonry, and magenta restricted to bridge accents.</p></figcaption>
+      </figure>
+      <figure>
+        <a href="panels-current/stage5.png" target="_blank"><img src="panels-current/stage5.png" alt="Stage 5 lava hall with red health pickups" loading="eager"></a>
+        <figcaption><h2>Stage 5 — Orange lava hall</h2><p>Verified lava stays independent while health pickups render red.</p></figcaption>
+      </figure>
+      <figure>
+        <a href="panels-current/stage6.png" target="_blank"><img src="panels-current/stage6.png" alt="Stage 6 with vivid green and earthy brown terrain" loading="eager"></a>
+        <figcaption><h2>Stage 6 — Green + earth</h2><p>Vivid organic green with earthy brown structure and shadows; health pickups remain semantic red.</p></figcaption>
+      </figure>
+      <figure>
+        <a href="panels-current/stage7.png" target="_blank"><img src="panels-current/stage7.png" alt="Stage 7 red lava with cyan arrow and purple rare pickups" loading="eager"></a>
+        <figcaption><h2>Stage 7 — Red lava / ice walls</h2><p>Cyan arrows and purple rare pickups remain distinct from red lava and gray walls.</p></figcaption>
+      </figure>
+    </section>
+
+    <footer>RC9 palette checkpoint · audience vote pending · candidate SHA-256 <code>32c3ab3daba362f6…f4bbf7e</code></footer>
+  </main>
+</body>
+</html>

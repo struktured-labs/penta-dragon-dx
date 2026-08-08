@@ -17,6 +17,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
@@ -137,6 +139,20 @@ def main() -> int:
         source_yaml = ROOT / "palettes/penta_palettes_v097.yaml"
         shutil.copy2(source_yaml, palette_yaml)
         original_yaml = palette_yaml.read_text()
+        original_palette_data = yaml.safe_load(original_yaml)
+        expected_bg3 = [
+            str(color).upper().zfill(4)
+            for color in original_palette_data["bg_palettes"]["BG3"]["colors"]
+        ]
+        expected_bg3[1] = "001F"
+        expected_bg3_quoted = ", ".join(
+            f'"{color}"' for color in expected_bg3
+        )
+        expected_bg3_yaml = f"colors: [{expected_bg3_quoted}]"
+        expected_bg3_protocol = "BG3:" + ",".join(
+            f"{index}={color}" for index, color in enumerate(expected_bg3)
+        )
+        expected_bg3_cram = ",".join(expected_bg3)
         conversion_env = os.environ.copy()
         conversion_env.update(
             PENTA_LIVE_PALETTE_FILE=str(live_file),
@@ -227,7 +243,13 @@ def main() -> int:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            timeout=max(args.timeout * 3, 60),
+            # The generator serially captures twelve opening/final/ending
+            # states, each with its own ``--timeout`` budget. Three multiples
+            # left no scheduler margin and killed otherwise healthy runs at
+            # exactly 180 seconds. Keep this bounded below the release gate's
+            # 600-second outer limit while allowing the complete deck to
+            # finish on a loaded workstation.
+            timeout=max(args.timeout * 5, 120),
             check=False,
         )
         if generated_story is not None and generated_story.returncode != 0:
@@ -386,8 +408,7 @@ def main() -> int:
                     and changed_lines == 7
                 ),
                 "BG edit persisted to YAML": (
-                    'colors: ["7FFF", "001F", "0160", "0000"]'
-                    in saved_yaml
+                    expected_bg3_yaml in saved_yaml
                 ),
                 "OBJ edit persisted to YAML": (
                     'colors: ["0000", "03FF", "7C00", "0000"]'
@@ -427,7 +448,7 @@ def main() -> int:
             protocol_checks = {
                 "rapid concurrent edits are serialized": not concurrent_errors,
                 "only edited BG palette is emitted": (
-                    "BG3:0=7FFF,1=001F,2=0160,3=0000" in protocol
+                    expected_bg3_protocol in protocol
                     and all(f"BG{index}:" not in protocol for index in range(8) if index != 3)
                 ),
                 "only edited OBJ palette is emitted": (
@@ -515,7 +536,7 @@ def main() -> int:
                 ),
                 "loaded state is active gameplay": fields.get("ffc1") == "1",
                 "edited BG3 reached CGB CRAM": (
-                    fields.get("bg3") == "7FFF,001F,0160,0000"
+                    fields.get("bg3") == expected_bg3_cram
                 ),
                 "edited OBJ4 reached CGB CRAM": (
                     fields.get("obj4") == "0000,03FF,7C00,0000"

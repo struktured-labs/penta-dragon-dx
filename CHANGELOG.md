@@ -5,20 +5,37 @@ emulator save/state files are never release artifacts in this repository.
 
 ## [Unreleased]
 
+## [v3.01-stream-rc9] - 2026-08-08
+
 ### Added
 
+- Add a compact GitHub/browser palette-review gallery with one canonical
+  current panel for each of Stages 1–7, a rebuilt combined sheet, and explicit
+  before/after comparisons for the new Stage 4 and Stage 6 passes. The gallery
+  contains no ROM or emulator save data.
+
+- Replace the rotating-spike verifier's attribute-only endpoint proof with
+  rendered receipts for all four live phases of both ceiling and floor
+  cylinders. Historical states now import all 32 source tiles from the exact
+  candidate before capture, preventing stale stock VRAM from blessing gray
+  art. The gate decodes native 8x8 pixels at their exact `SCX`/`SCY` alignment,
+  rejects any candidate tooth rendered through gray BG0, and brackets the
+  Gargoyle transition with periodic pre/post-miniboss raster samples. It also
+  requires the exact five packed cylinder rows, rejects lower-field red/gold
+  wash, and statically proves zero tooth color outside the reviewed outlines.
+
 - Add `verify_live_regression.py` as the one-command pre-stream profile. Its
-  21 serial, hash-isolated gates cover cold/warm GAME START, post-attract
+  25 serial, hash-isolated gates cover cold/warm GAME START, post-attract
   start, gameplay speed, the natural Stage 1 north route, transient tile-copy
   integrity and visible color bleed, all 38 spotlight actors, prerecorded and
   live semantic pickups, rotating spikes, the Stage 1 bonus room,
   normal/low-health flicker, every opening/pre/post-final illustration, and the
   complete credits/END/epilogue trajectory. The current hash-bound receipt is
-  21/21. The natural north route is 89
+  25/25. The natural north route is 93
   gameplay frames behind stock, within the shared 10% OG-speed policy's
   computed 96-frame budget, while all 576 terrain bytes remain exact.
 - Enforce the dedicated live profile as a checked contract instead of an
-  optional local script. `--check-contract` requires the exact 21-gate
+  optional local script. `--check-contract` requires the exact 25-gate
   manifest, the installed pre-commit hook rejects a missing/stale full-suite
   receipt, and both profiles bind their results to an unchanged source
   fingerprint and exact candidate ROM hash. The fingerprint explicitly owns
@@ -38,13 +55,15 @@ emulator save/state files are never release artifacts in this repository.
   row only in Stage 1, while bonus/later play restores ordinary YAML BG7. The
   palette round-trip gate deliberately edits the row, rebuilds the ROM, and
   proves the changed bytes reach live Stage 1 CRAM.
-- Add `verify_low_health_flicker.py` as a mandatory 360-frame current-ROM
-  regression. It resumes the existing low-HP Stage 1 fixture, watches every
-  `FF47` write, samples BGP/CRAM and both physical attribute layouts, captures
-  every rendered frame, and fails on a palette mutation or white-flash
-  outlier. The restrained spike candidate records BGP=`E4`, zero non-E4
-  writes, one stable BG-CRAM variant, one stable layout per map, and only 1.95
-  levels of maximum luma movement above the median.
+- Add `verify_low_health_flicker.py` as a mandatory 1,600-frame current-ROM
+  regression. It captures a healthy baseline, crosses the low-health
+  threshold, naturally enters the Gargoyle music scene, and follows the full
+  native `$FFF7` pulse countdown while watching every `FF47` write and every
+  rendered frame. The current candidate enters music scene `$0A` at sample
+  586, covers all 40 countdown values, keeps BGP=`E4` with zero non-`E4`
+  writes and byte-stable BG CRAM, records zero unexpected attribute mismatch,
+  and limits maximum successive mean RGB movement to 13.163 instead of a
+  whole-background flash.
 - Add `verify_pickup_live_palettes.py` as a mandatory current-ROM runtime
   gate. It resumes all 19 labeled pickup forms across 14 Stage 1 states,
   verifies their semantic attributes on both physical maps, compares live
@@ -87,6 +106,75 @@ emulator save/state files are never release artifacts in this repository.
 
 ### Fixed
 
+- Split Stage 4's previous all-magenta presentation by material: the
+  collision-free `$01-$08` diamond floor family uses cyan BG4, `$2D/$2E`
+  bridge accents use magenta BG2, and the remaining masonry inherits the
+  blue-gray BG6 base. The transition helper and later-stage soak now validate
+  every observed Stage 4 material cell against its exact expected attribute.
+- Replace Stage 6's uniform green ramp with a safer attribute-neutral
+  green/earth YAML ramp. Vivid green remains the stage identity, earthy brown
+  supplies structural shadow contrast, and health pickups remain independent
+  red BG1. The final Qt 8,000-frame Stage 6 soak observes 340 pickup cells with
+  zero attribute, pickup, or lava mismatches; the independent headed/headless
+  tuning receipts are clean as well.
+
+- Stop later-stage pickups from inheriting each dungeon's BG0 terrain color.
+  Stage transitions now install collision-audited, tileset-specific semantic
+  entries: Stage 2 rare/life on BG2; Stage 3 health on BG1; Stage 5 health and
+  rare/life on BG1/BG2; Stage 6 health on BG1; and Stage 7 arrows plus
+  rare/life on BG4/BG2. Stage 4 stays neutral because its structural art
+  reuses pickup-like component IDs, and aliases `$A5/$B9/$CF` remain excluded.
+  Two layout signatures plus room identity select coherent tile+attribute
+  publication only when a streamed map changes; pickup-bearing rows are
+  repaired first without increasing the one-row-per-VBlank budget. The
+  mandatory later-stage integrity and soak gates now compare every observed
+  semantic cell and compiled LUT byte exactly and reject pickup-colored
+  terrain, while Stage 1 retains its separately timing-locked path. Neutral
+  title, splash, and story clears return before the pickup publisher even when
+  the late-stage number persists in FFBA; this prevents BG2/BG4 pickup entries
+  from contaminating the pre-final and ending lookup tables.
+- Promote the later-stage pickup soak to the Qt screenshot path with zero
+  stable-frame delay. That live raster timing exposed a one-frame Stage 7
+  row-4 arrow seam hidden by the headless route. The bounded repair now visits
+  rows `8,7,6,4,5` before completing the other 13 rows exactly once, and the
+  mandatory full matrix exercises native room screenshots while rejecting any
+  transient semantic mismatch. The final 48,000-frame receipt observes 1,650
+  semantic pickup cells and 32,526 Stage 4 material cells with zero palette
+  mismatches.
+
+- Replace the Stage 1 map cache's colliding raw-cell XOR pair with receipt-
+  selected packed offsets 225/253. Complete 1,206-frame live-play and natural
+  prerecorded-demo corpora prove the pair distinguishes both vertical
+  pickup/floor publication positions: live non-pickup mismatches fall from 40
+  to 0, and the demo retains only its four hidden entry frames instead of
+  leaving pickup-colored trails. Seven phase-alignment NOPs keep that corrected
+  prerecorded route at 2,000 Stage 1 frames and 418 Gargoyle frames versus
+  1,856/395 in the untouched ROM; both independent timing gates pass.
+
+- Keep the room-`$05` patterned floor on the audience-tuneable Dungeon BG0
+  palette. A deterministic north-scroll trace proved that the apparent
+  "legacy spike" IDs `2A-2E/3A-3D` are 252 ordinary floor cells in that room;
+  mapping them to rotating-spike BG5 caused the reported red/yellow disco
+  floor and false gold triangles. The true rotating family remains the
+  separately reviewed `60-7F` range.
+
+- Treat live Gargoyle scene `$0A` as the same Stage 1 scrolling family as
+  scene `$02`. Later room copies now retain the bounded attribute path instead
+  of putting new `4C/4D` environment tiles over stale wall/hazard attributes;
+  prerecorded demo cadence remains independently regression-tested.
+
+- Constrain the Stage 1 rotating-cylinder publisher to packed rows 2-6 and
+  remove its context-free `2A-2E/3A-3D` legacy test. That test mistook the
+  room-`$05` patterned floor for a spike and painted it as a large red/yellow
+  field. Tooth pixels outside the explicit outline spans are also
+  locked to the neutral environment ramp so moving shadows cannot become
+  detached gold accents.
+
+- Color the ceiling-mounted Stage 1 rotating cylinder in room `$02`, not only
+  the floor/miniboss cylinder in room `$12`. The selective publisher now uses
+  one audited four-phase tooth sample per room and includes the room in its
+  dual-map cache key. The mGBA gate promotes the former offline ceiling state
+  to a current-ROM pixel test and rejects any mismatched animation frame.
 - Make the complete title-cycle receipt distinguish the stock `BGP=$00`
   startup hold from a visible palette regression. A CRAM mismatch is exempt
   only while every DMG color maps to zero, and only when its dedicated native
@@ -227,10 +315,18 @@ emulator save/state files are never release artifacts in this repository.
 
 ### Known issues
 
-- The current RC8 passes both the dedicated 21-gate stream profile and the
-  complete source-bound 51-gate release matrix. The audience palette vote and
-  reservation-backed MiSTer validation remain required before a distributable
-  release is approved.
+- Stage 6's green/earth contrast is intentionally bold and remains an audience
+  tuning target for the livestream rather than a final palette approval.
+- Stage 4's headed 8,000-frame material receipt is clean (32,526 observations,
+  zero mismatches), but mGBA-headless samples 19 transient floor attributes
+  during adversarial scrolling. RC9 records the best visual checkpoint without
+  treating that backend discrepancy as resolved.
+
+- The RC9 palette checkpoint passes the complete 53-gate release matrix,
+  including the dedicated stream-profile coverage, with two byte-identical
+  builds bound to source fingerprint `bb0b6690…93e62b`. The audience
+  palette vote and reservation-backed MiSTer validation remain required before
+  a distributable release is approved.
 - The historical low-health flicker, Stage 5 speed sampler, and uncolored
   rotating-spike items above are resolved in the current candidate and retained in this
   changelog only as provenance for their dedicated regression gates.

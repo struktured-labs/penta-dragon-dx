@@ -122,6 +122,122 @@ def screenshot_metrics(path: Path) -> dict[str, int | float]:
     }
 
 
+def visual_semantic_contract(
+    panels: dict,
+    bg_data: bytes,
+) -> tuple[dict[str, object], list[str]]:
+    """Lock the reviewed panel silhouettes, not merely YAML self-consistency."""
+
+    failures: list[str] = []
+    masks = {art_id: panel_mask(panel) for art_id, panel in panels.items()}
+
+    def cells_with(art_id: int, palette: int) -> set[tuple[int, int]]:
+        return {
+            (x, y)
+            for y, row in enumerate(masks[art_id])
+            for x, value in enumerate(row)
+            if value == palette
+        }
+
+    def require(name: str, condition: bool) -> None:
+        if not condition:
+            failures.append(name)
+
+    # The reviewed book keeps its masonry corners outside the warm page mask.
+    book_warm = (
+        {(x, 0) for x in range(7, 13)}
+        | {(x, y) for y in range(1, 6) for x in range(6, 14)}
+        | {(x, 6) for x in range(7, 13)}
+    )
+    require(
+        "OpeningBook warm mask follows the page silhouette",
+        cells_with(1, 5) == book_warm,
+    )
+    require(
+        "OpeningBook top masonry corners remain BG6",
+        masks[1][0][6] == 6 and masks[1][0][13] == 6,
+    )
+
+    # A tile-wide warm face rectangle cannot follow mixed face/hair pixels.
+    # The native purple portrait row keeps those mixed cells continuous.
+    require(
+        "Sara portrait contains no blocky BG5 face rectangle",
+        not cells_with(2, 5) and not cells_with(7, 5),
+    )
+    require(
+        "Sara face cells remain continuous BG2",
+        all(
+            masks[2][y][x] == 2
+            for y in range(4, 7)
+            for x in range(8, 12)
+        ),
+    )
+
+    eye_green = (
+        {(x, 2) for x in range(16, 18)}
+        | {(x, 3) for x in range(15, 19)}
+        | {(x, 4) for x in range(15, 18)}
+        | {(x, 5) for x in range(16, 18)}
+    )
+    eye_socket = {(x, 1) for x in range(13, 17)}
+    require(
+        "DragonEye green mask follows the eyeball silhouette",
+        cells_with(3, 3) == eye_green,
+    )
+    require(
+        "DragonEye BG6 mask follows the surrounding socket",
+        cells_with(3, 6) == eye_socket,
+    )
+
+    expected_palette_sets = {
+        1: {5, 6},
+        2: {2, 4, 7},
+        3: {3, 6, 7},
+        4: {3, 4, 5},
+        5: {5, 6},
+        6: {2, 5, 7},
+        7: {2, 4, 7},
+    }
+    actual_palette_sets = {
+        art_id: {value for row in mask for value in row}
+        for art_id, mask in masks.items()
+    }
+    require(
+        "all opening and unstudied final panels retain reviewed palette sets",
+        actual_palette_sets == expected_palette_sets,
+    )
+
+    words = [
+        bg_data[index] | (bg_data[index + 1] << 8)
+        for index in range(0, len(bg_data), 2)
+    ]
+    bg6 = words[6 * 4:7 * 4]
+
+    def rgb5(word: int) -> tuple[int, int, int]:
+        return word & 31, (word >> 5) & 31, (word >> 10) & 31
+
+    bg6_rgb = [rgb5(word) for word in bg6]
+    require(
+        "BG6 light and dark stone shades are visibly blue-gray",
+        all(
+            blue > red and max(red, green, blue) - min(red, green, blue) >= 5
+            for red, green, blue in bg6_rgb[1:3]
+        ),
+    )
+    return {
+        "status": "pass" if not failures else "fail",
+        "covered_art_ids": sorted(masks),
+        "palette_sets": {
+            str(key): sorted(value)
+            for key, value in actual_palette_sets.items()
+        },
+        "book_warm_cells": len(book_warm),
+        "dragon_eye_green_cells": len(eye_green),
+        "dragon_socket_cells": len(eye_socket),
+        "bg6_words": [f"{word:04X}" for word in bg6],
+    }, failures
+
+
 def run_one(
     mgba: str,
     rom: Path,
@@ -246,6 +362,10 @@ def main() -> int:
     expected_cram = bg_data.hex().upper()
 
     failures: list[str] = []
+    visual_semantics, semantic_failures = visual_semantic_contract(
+        panels, bg_data
+    )
+    failures.extend(semantic_failures)
     results: list[dict[str, object]] = []
     specs = SPECS
     if args.only_state:
@@ -319,7 +439,8 @@ def main() -> int:
             "all 160 top-panel cells exactly match the YAML region mask; "
             "all 200 dialogue cells remain BG0 with no unsafe attr bits; "
             "the live 64-byte BG CRAM deck exactly matches the YAML and the "
-            "native screenshot is nonblank/chromatic"
+            "native screenshot is nonblank/chromatic; reviewed page, face, "
+            "eye/socket, and every final-panel palette silhouette is locked"
         ),
         "ending_contract": (
             "all 360 visible cells exactly match the selected BG palette "
@@ -329,6 +450,7 @@ def main() -> int:
             "it as script workspace"
         ),
         "results": results,
+        "visual_semantics": visual_semantics,
         "contact_sheet": str(contact_sheet) if contact_sheet else None,
         "failures": failures,
     }

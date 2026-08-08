@@ -62,16 +62,14 @@ tile it overlays:
 | `77/79` | shadow `03` |
 | `7C/7D` | stationary lower rail `7E` |
 
-Pixels equal to the baseline keep environment colors. Changed non-black tooth
-pixels become one dedicated hazard index, while black outlines stay black.
-That comparison alone left a few floor/shadow-colored pixels inside the tooth
-tips where moving art coincidentally equaled its baseline. The final prototype
-therefore traces an explicit row-span silhouette inside each of the 12 tooth
-animation frames. Every span starts and ends on original black outline pixels;
-all enclosed non-black pixels become gold, while every pixel outside the span
-still uses the conservative baseline comparison. The receipt tests all three
-properties across all 12 frames, so the fill cannot silently spread into the
-checkerboard or cast shadow.
+The baseline comparison identified the moving art, but it cannot distinguish a
+moving tooth from that tooth's moving cast shadow. The final implementation
+therefore gives the 12 tooth frames a stricter rule: every explicit row span
+starts and ends on original black outline pixels, all enclosed non-black pixels
+become gold, and every pixel outside the outline always stays on the neutral
+environment ramp. A changed cast-shadow pixel is never allowed to inherit the
+hazard color merely because it moved. The static receipt reports zero detached
+tooth-accent pixels across all 12 frames.
 The four ring tiles also use tiny art-audited masks for their complete arcs:
 `6C` rows 4-7, `7C` rows 0-3, `6D` rows 0-4, and `7D` rows 3-7. Those masks
 cover ring pixels that coincidentally equal the stationary rail and would
@@ -96,6 +94,52 @@ needed for this Stage 1 family. The lower-risk implementation is:
    deliberately leaving the `63/73` vertical shadow column out of that set;
 4. keep the 10 declared support/end-shadow IDs on metallic BG6; and
 5. leave hardware OAM and every OBJ palette path untouched.
+
+The live publisher is equally context-bound. In both reviewed cylinder rooms,
+it writes only packed rows 2-6 (`C1D0`, `C1E8`, `C200`, `C218`, `C230`). The
+old context-free `2A-2E/3A-3D` test mistook 252 patterned-floor cells in room
+`$05` for a legacy spike and painted a large red/gold field below the cylinder.
+Those IDs now stay on the audience-tuneable Dungeon BG0 row; the true rotating
+family remains `60-7F`. Every four-phase ceiling/floor receipt includes a
+rendered 2x2 contact sheet and rejects either an unexpected publisher row or a
+lower-field red/gold wash.
+
+The audience capture review exposed why that first visual check still was not
+strong enough. In captures `137`, `138`, and `142`, four aligned 8x8 cells
+matched the candidate's current tooth patterns but were rasterized with gray
+BG0; capture `144` contained twelve such cells after the Gargoyle appeared.
+Other captures in the same set happened to land on correct phases. A final
+VRAM attribute snapshot could therefore pass even though an actual presented
+frame was wrong.
+
+The production verifier now refreshes all 32 `60-7F` source tiles in each old
+state from the exact ROM under test, records `SCX`/`SCY` with every capture,
+and decodes each aligned 8x8 raster block against the candidate's own 2bpp art
+and CGB palette rows. A tooth-pattern match through BG0 is an exact failure;
+candidate BG7 gold is required in every phase. The miniboss gate samples every
+15th native frame before and after the scene/song change, so a transient gray
+phase can no longer hide behind a later-correct attribute map. No copyrighted
+capture is committed; the hash-bound JSON records cell coordinates, candidate
+tile IDs, scroll position, scene, room, and miniboss state.
+
+The map copier also has a dedicated 600-frame north-scroll receipt. Every
+tile that can contribute pixels to the current LCD viewport is checked on
+every frame, including partially exposed edge tiles and the live Gargoyle
+transition from scene `$02` to `$0A`; forty periodic native frames form a
+separate early-to-late contact sheet. This visual contract deliberately keeps
+the alternate map's stock-speed preparation path: it becomes test-visible the
+instant stock selects it, without forcing a whole-map atomic copy for every
+four-pixel movement. Scene `$0A` is normalized onto the same bounded Stage 1
+attribute route as `$02`, while stationary maps retain the stock-width
+tile-only fast path.
+
+The transition cache is bound to complete live and prerecorded-demo layout
+corpora, not only the original north fixture. Packed offsets 225 and 253
+straddle the two observed vertical pickup/floor publication positions; the
+older samples could XOR to the same value while the visible semantic map had
+changed. The dedicated 1,206-frame box route and natural demo now record zero
+persistent non-pickup mismatches, while the north receipt keeps the patterned
+floor neutral and the true cylinder atomic.
 
 This keeps the 384-byte source window the same size and changes 258 bytes. It
 uses no VRAM-bank switch, WRAM art state, or runtime art rewrite, and keeps
@@ -173,14 +217,20 @@ sprite is not enough to choose the path.
 
 ## Promotion receipts
 
-The hash-isolated RC7 candidate completes the focused promotion set:
+The hash-isolated stream candidate completes the focused promotion set:
 
 1. all 24 source tiles, the exact LUT, and the approved 20-tile artifact hash;
-2. 32/32 visible full-cycle cells: 10 teeth, 20 ring/body, 2 supports;
+2. zero live tile/attribute mismatches through complete current-ROM mGBA
+   cycles for both the room-`$02` ceiling cylinder and room-`$12` floor
+   cylinder, plus four current-art rendered phase captures per fixture, exact
+   candidate-pixel decoding across the pre/post-miniboss trace, exact five-row
+   publisher containment, zero detached tooth-accent pixels, zero gray BG0
+   tooth matches, and no lower-field legacy palette wash;
 3. exact live BG5 and Stage-1 BG7 CRAM, plus ordinary BG7 in bonus play;
 4. pickup-class, pickup-art, 1,200-frame rendered no-bleed, tilemap,
    low-health, speed, title/demo, opening-story, and palette-roundtrip gates;
-5. a byte-identical deterministic rebuild.
+5. two byte-identical deterministic builds and a source-bound 53/53 release
+   matrix receipt.
 
-The complete release matrix, audience color vote, and reservation-backed
-MiSTer validation remain release-level checkpoints.
+The complete release matrix is green. The audience color vote and reservation-
+backed MiSTer validation remain release-level checkpoints.

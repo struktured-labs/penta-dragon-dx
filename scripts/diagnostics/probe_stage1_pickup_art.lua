@@ -5,6 +5,22 @@
 local OUT = assert(os.getenv("PICKUP_ART_OUT"))
 local KEY_A, KEY_START, KEY_DOWN = 0x01, 0x08, 0x80
 local frame, stable, done = 0, 0, false
+local bg_sweep_hits = 0
+local bg_sweep_trace = {}
+local lcdc_trace, last_lcdc = {}, nil
+
+pcall(function()
+    emu:setBreakpoint(function()
+        if emu:read8(0xFF99) == 0x0D then
+            bg_sweep_hits = bg_sweep_hits + 1
+            table.insert(bg_sweep_trace, string.format(
+                "%d:%02X/%02X/%02X",
+                frame, emu:read8(0xFF40), emu:read8(0xDF04),
+                emu:read8(0xDF4E)
+            ))
+        end
+    end, 0x6CD0)
+end)
 
 local function keys()
     local schedule = {
@@ -51,9 +67,14 @@ local function dump()
 
     local state = assert(io.open(OUT .. ".state.txt", "w"))
     state:write(string.format(
-        "frame=%d\nD880=%02X\nFFC1=%02X\nLCDC=%02X\nSCX=%02X\nSCY=%02X\n",
+        "frame=%d\nD880=%02X\nFFC1=%02X\nLCDC=%02X\nSCX=%02X\nSCY=%02X\n" ..
+        "DF04=%02X\nDF4E=%02X\nDF4F=%02X\nbg_sweep_hits=%d\n" ..
+        "bg_sweep_trace=%s\nlcdc_trace=%s\n",
         frame, emu:read8(0xD880), emu:read8(0xFFC1),
-        emu:read8(0xFF40), emu:read8(0xFF43), emu:read8(0xFF42)
+        emu:read8(0xFF40), emu:read8(0xFF43), emu:read8(0xFF42),
+        emu:read8(0xDF04), emu:read8(0xDF4E), emu:read8(0xDF4F),
+        bg_sweep_hits, table.concat(bg_sweep_trace, ","),
+        table.concat(lcdc_trace, ",")
     ))
     state:close()
     emu:screenshot(OUT .. ".png")
@@ -68,6 +89,11 @@ callbacks:add("frame", function()
     if done then return end
     frame = frame + 1
     emu:setKeys(keys())
+    local lcdc = emu:read8(0xFF40)
+    if lcdc ~= last_lcdc then
+        table.insert(lcdc_trace, string.format("%d:%02X", frame, lcdc))
+        last_lcdc = lcdc
+    end
     if emu:read8(0xD880) == 0x02 and emu:read8(0xFFC1) == 1 then
         stable = stable + 1
         if stable >= 180 then dump() end

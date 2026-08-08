@@ -28,18 +28,43 @@ DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 
 LIVE_GATES = (
     "emulator_singleflight_guard",
+    "title_footer_integration",
+    "title_animation_frames",
+    "flash_attribution",
+    "title_color",
+    "title_showcase",
+    "title_visual_receipts",
+    "title_cursor",
+    "stage_intro_timing",
+    "menu_hud_and_combo",
+    "menu_window_publish_order",
+    "stale_gameplay_window",
+    "levelselect_screen",
     "game_start_routes",
     "game_start_after_attract",
+    "opening_to_stage1_integrity",
     "gameplay_speed_parity",
+    "gameplay_bg_palettes",
+    "pickup_class_palettes",
+    "attract_pickup_palettes",
+    "stage1_spike_palettes",
+    "stage1_spike_miniboss_transition",
+    "pickup_live_retry_contract",
+    "pickup_live_palettes",
+    "stage1_pickup_art",
+    "bonus_stage_live",
     "stage1_north_route_integrity",
     "stage1_no_color_bleed",
     "stage1_tilemap_integrity",
-    "attract_pickup_palettes",
-    "pickup_live_palettes",
-    "stage1_spike_palettes",
-    "bonus_stage_live",
+    "gameplay_obj_palettes",
     "frame_flicker",
     "low_health_flicker",
+    "miniboss_color",
+    "later_stage_integrity",
+    "later_stage_soak",
+    "stage2_stream_soak",
+    "boss_arenas",
+    "death_gameover",
     "title_idle_reel",
     "spotlight_full_roster",
     "opening_cutscene",
@@ -48,6 +73,13 @@ LIVE_GATES = (
     "ending_inventory_a",
     "ending_inventory_b",
     "ending_discriminators",
+    "scroll_stability",
+    "phantom_sound",
+    "live_palette_deck",
+    "story_attr_production",
+    "palette_build_roundtrip",
+    "candidate_ips_roundtrip",
+    "mister_reservation_guard",
 )
 
 
@@ -71,6 +103,12 @@ def verify_contract() -> list[str]:
     if missing:
         failures.append(
             "live gate(s) absent from release matrix: " + ", ".join(missing)
+        )
+    omitted = sorted(registered_gate_names() - set(LIVE_GATES))
+    if omitted:
+        failures.append(
+            "release gate(s) omitted from pre-stream profile: "
+            + ", ".join(omitted)
         )
     return failures
 

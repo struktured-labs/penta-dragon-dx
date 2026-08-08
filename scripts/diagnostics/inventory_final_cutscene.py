@@ -48,6 +48,16 @@ ENDING_BANK = 1
 PRE_FINAL_ENTRY = 0x54C0
 POST_FINAL_ENTRY = 0x5514
 STORY_STATE_BYTES = {
+    # Display/cache telemetry is part of the receipt: it explains whether a
+    # palette change came from a story-page transition, a physical BG-map
+    # switch, or the bounded neutral cleaner racing the story sweep.
+    "lcdc": 0xFF40,
+    "scy": 0xFF42,
+    "scx": 0xFF43,
+    "df07": 0xDF07,
+    "df49": 0xDF49,
+    "df4a": 0xDF4A,
+    "df4b": 0xDF4B,
     "d889": 0xD889,
     "dce2": 0xDCE2,
     "dce5": 0xDCE5,
@@ -174,6 +184,11 @@ def main() -> int:
     )
     parser.add_argument("--frames", type=int, default=10000)
     parser.add_argument(
+        "--dump-wram",
+        action="store_true",
+        help="save D800-DFFF beside each captured panel for discriminator audits",
+    )
+    parser.add_argument(
         "--entry",
         choices=("post-final", "pre-final"),
         default="post-final",
@@ -271,6 +286,10 @@ def main() -> int:
                         f"panel{len(panels) + 1:02d}_f{frame}_s{scene:02X}.png"
                     )
                     image.save(path)
+                    if args.dump_wram:
+                        path.with_suffix(".wram.bin").write_bytes(
+                            bytes(pyboy.memory[address] for address in range(0xD800, 0xE000))
+                        )
                     panels.append(
                         Panel(
                             frame,
@@ -448,6 +467,26 @@ def main() -> int:
                         )
                     )
                 )
+                # Stock can redraw the same committed art page with neutral
+                # attributes. Production detects its nonzero upper-panel
+                # sentinel and republishes one exact five-cell quarter per
+                # VBlank. Admit one captured in-progress sample only when the
+                # row cursor proves that bounded repair and every cell is
+                # either neutral or its final YAML value.
+                same_art_repair = (
+                    art_committed
+                    and previous_attributes is not None
+                    and previous_full_story_art == art
+                    and state["df4a"] < 0x20
+                    and panel.attributes[160:] == bytes(200)
+                    and all(
+                        actual in {0, expected}
+                        for actual, expected in zip(
+                            panel.attributes[:160],
+                            expected_story_attrs[art][:160],
+                        )
+                    )
+                )
                 next_state = (
                     panels[index].story_state
                     if index < len(panels)
@@ -471,7 +510,9 @@ def main() -> int:
                     and next_commits_art
                 )
                 bounded_transition = (
-                    committed_transition or previous_page_handoff
+                    committed_transition
+                    or previous_page_handoff
+                    or same_art_repair
                 )
                 if bounded_transition:
                     if story_transition_art != art:

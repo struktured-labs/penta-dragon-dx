@@ -516,12 +516,6 @@ def main() -> int:
     tooth_mask_exteriors_are_conservative = True
     for tile in sorted(TOOTH_TILES):
         source_pixels = decode_tile(originals[tile])
-        baseline_tile = SEMANTIC_BASE_TILES[tile]
-        baseline = rom[
-            STAGE1_TILE_SOURCE + baseline_tile * 16:
-            STAGE1_TILE_SOURCE + (baseline_tile + 1) * 16
-        ]
-        baseline_pixels = decode_tile(baseline)
         variant_pixels = decode_tile(variants[tile])
         for y in range(8):
             span = TOOTH_ROW_SPANS[tile].get(y)
@@ -541,13 +535,8 @@ def main() -> int:
                         variant_pixels[index] == expected
                     )
                 else:
-                    mapping = (
-                        ENVIRONMENT_REMAP
-                        if source == baseline_pixels[index]
-                        else HAZARD_REMAP
-                    )
                     tooth_mask_exteriors_are_conservative &= (
-                        variant_pixels[index] == mapping[source]
+                        variant_pixels[index] == ENVIRONMENT_REMAP[source]
                     )
 
     current_image = render_bg(state, rom, cells, metadata, proposed=False)
@@ -632,7 +621,7 @@ def main() -> int:
         "every enclosed non-black tooth pixel receives the gold index": (
             tooth_mask_interiors_are_complete
         ),
-        "pixels outside tooth silhouettes retain baseline classification": (
+        "pixels outside tooth silhouettes always retain neutral classification": (
             tooth_mask_exteriors_are_conservative
         ),
     }

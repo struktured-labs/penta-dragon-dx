@@ -57,9 +57,11 @@ WRAM_START = 0xC000
 DCBB = WRAM + (0xDCBB - WRAM_START)
 DF53 = WRAM + (0xDF53 - WRAM_START)
 DF54 = WRAM + (0xDF54 - WRAM_START)
+DF0D = WRAM + (0xDF0D - WRAM_START)
 FF99 = HRAM + (0xFF99 - 0xFF80)
 FFBA = HRAM + (0xFFBA - 0xFF80)
 FFBF = HRAM + (0xFFBF - 0xFF80)
+FF91 = HRAM + (0xFF91 - 0xFF80)
 BOSS_NAMES = (
     "shalamar",
     "riff",
@@ -176,6 +178,8 @@ def generate_safe_stage1(
         "expected_scene=02",
         "D880=02",
         "FFC1=01",
+        "FF91=01",
+        "DF0D=02",
         "FFBA=00",
         "unsafe_attr=0",
         "state_saved=true",
@@ -265,6 +269,11 @@ def patch_state(source: Path, destination: Path, target: int) -> None:
     raw[FF99] = 3
     raw[FFBA] = target
     raw[FFBF] = 0
+    # The serialized jump deliberately bypasses the normal scene-change path.
+    # Ask the unmodified candidate to perform that transition on its first
+    # VBlank instead of inheriting Stage 1's cache/table from the source state.
+    raw[FF91] = 1
+    raw[DF0D] = 0xFF
     # Match the proven main-loop landing-pad route: preserve both IE and IME.
     # The boss loop HALTs for VBlank and becomes permanently white if IE is
     # cleared here. Seed boss HP before entry so the synthetic arena cannot

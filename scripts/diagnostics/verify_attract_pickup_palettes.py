@@ -133,6 +133,10 @@ def main() -> int:
         "ATTRACT_PICKUP_IDS": str(pickup_path),
         "ATTRACT_PICKUP_MAX_FRAMES": str(args.max_frames),
     })
+    if "ATTRACT_PICKUP_TRACE_LAYOUTS" in os.environ:
+        environment["ATTRACT_PICKUP_TRACE_LAYOUTS"] = os.environ[
+            "ATTRACT_PICKUP_TRACE_LAYOUTS"
+        ]
     log_path = output / "mgba.log"
     with log_path.open("w") as stream:
         process = subprocess.Popen(
@@ -188,10 +192,32 @@ def main() -> int:
         })
 
     target_frames = int(one("target_frames", "0"))
+    target_start = int(one("target_start", "-1"))
     visible = int(one("visible_pickup_cells", "0"))
     colored = int(one("colored_pickup_cells", "0"))
     neutral = int(one("neutral_pickup_cells", "0"))
     mismatches = int(one("pickup_mismatches", "0"))
+    visible_background = int(one("visible_background_cells", "0"))
+    background_mismatches = int(one("background_palette_mismatches", "0"))
+    nonpickup_mismatches = int(one("nonpickup_palette_mismatches", "0"))
+    unsafe_attributes = int(one("unsafe_attribute_cells", "0"))
+    mismatch_frames = int(one("background_mismatch_frames", "0"))
+    last_mismatch_frame = int(one("last_background_mismatch_frame", "-1"))
+    clean_after_entry_boundary = (
+        mismatch_frames == 0
+        or (
+            target_start >= 0
+            and mismatch_frames <= 4
+            and last_mismatch_frame <= target_start + 3
+        )
+    )
+    pickup_capture_receipts = [
+        receipt for receipt in capture_receipts if receipt["pickup_cells"]
+    ]
+    late_capture_receipts = [
+        receipt for receipt in capture_receipts
+        if "-late-clean-" in receipt["path"]
+    ]
     checks = {
         "natural prerecorded Stage 1 was reached and exited": (
             one("status") == "ok" and target_frames >= 1000
@@ -207,24 +233,40 @@ def main() -> int:
         "no visible pickup cell remained on neutral BG0": (
             visible > 0 and neutral == 0
         ),
+        "the full demo BG reaches the compiled YAML LUT within four hidden entry frames": (
+            visible_background > 0 and clean_after_entry_boundary
+        ),
+        "pickup palettes leave no persistent trails on non-pickup tiles": (
+            visible_background > 0
+            and clean_after_entry_boundary
+            and last_mismatch_frame < target_start + 4
+        ),
+        "demo BG attributes contain no unsafe priority/bank/flip bits": (
+            visible_background > 0 and unsafe_attributes == 0
+        ),
         "six native pickup screenshots render chroma inside pickup cells": (
-            len(capture_receipts) >= 6
+            len(pickup_capture_receipts) >= 6
             and all(
                 receipt["size"] == [160, 144]
                 and receipt["chromatic_pixels"] > 100
                 and receipt["pickup_region_pixels"] > 0
                 and receipt["pickup_chromatic_pixels"] >= 4
-                for receipt in capture_receipts
+                for receipt in pickup_capture_receipts
             )
+        ),
+        "three late-demo screenshots cover the formerly corrupted route": (
+            len(late_capture_receipts) == 3
+            and all(receipt["size"] == [160, 144]
+                    for receipt in late_capture_receipts)
         ),
     }
     receipt = {
-        "schema": "penta-dragon-dx-attract-pickups-v3",
+        "schema": "penta-dragon-dx-attract-pickups-v5",
         "status": "pass" if all(checks.values()) else "fail",
         "rom": str(rom),
         "rom_sha256": sha256(rom),
         "route": "cold boot; no input; D880=02/FFC1=1/DCFD=0",
-        "target_start": int(one("target_start", "-1")),
+        "target_start": target_start,
         "target_frames": target_frames,
         "og_demo_stage_frames": OG_DEMO_STAGE_FRAMES,
         "max_demo_stage_drift": MAX_DEMO_STAGE_DRIFT,
@@ -234,6 +276,26 @@ def main() -> int:
         "neutral_pickup_cells": neutral,
         "pickup_mismatches": mismatches,
         "first_mismatch": one("first_mismatch"),
+        "visible_background_cells": visible_background,
+        "background_palette_mismatches": background_mismatches,
+        "nonpickup_palette_mismatches": nonpickup_mismatches,
+        "unsafe_attribute_cells": unsafe_attributes,
+        "max_background_mismatches_per_frame": int(
+            one("max_background_mismatches_per_frame", "0")
+        ),
+        "background_mismatch_frames": int(
+            one("background_mismatch_frames", "0")
+        ),
+        "last_background_mismatch_frame": int(
+            one("last_background_mismatch_frame", "-1")
+        ),
+        "background_mismatch_trace": fields.get(
+            "background_mismatch_frame", []
+        ),
+        "background_mismatch_cells": fields.get(
+            "background_mismatch_cell", []
+        ),
+        "first_background_mismatch": one("first_background_mismatch"),
         "pickup_tiles": [
             tile for tile in one("pickup_tiles").split(",") if tile
         ],
@@ -248,6 +310,12 @@ def main() -> int:
     print(
         f"INFO: pickup cells={visible}, colored={colored}, neutral={neutral}, "
         f"mismatches={mismatches}; first={receipt['first_mismatch']}"
+    )
+    print(
+        "INFO: demo BG cells="
+        f"{visible_background}, mismatches={background_mismatches}, "
+        f"nonpickup={nonpickup_mismatches}, unsafe={unsafe_attributes}; "
+        f"first={receipt['first_background_mismatch']}"
     )
     print(f"Receipt: {receipt_path}")
     return 0 if receipt["status"] == "pass" else 1

@@ -24,6 +24,16 @@ PURE_COMPLETION_PATTERNS = (
     # Live cache hits restore their bounded IE mask through the atomic wrap;
     # title/attract retain the trailing ordinary RET at this second pattern.
     bytes.fromhex("F1 3D 28 03 F5 18 D1 78 B7 C2 98 34 C9"),
+    # Current live maps tail-call the fixed-bank hazard stamper after the
+    # complete 24x24 tile plane is visible.  Break on the final RET after the
+    # stamper and explicit EI; this remains the exact tile-copy completion,
+    # not an implementation-internal row address.
+    bytes.fromhex(
+        "F1 3D 28 03 F5 18 D1 FA FD DC B7 C4 42 08 FB C9"
+    ),
+    # A register route token avoids even a fixed-bank CALL after ordinary
+    # room-$03 and prerecorded copies while retaining hazard publication.
+    bytes.fromhex("F1 3D 28 03 F5 18 D1 78 FE 05 C4 44 08 FB C9"),
 )
 STOCK_COPY_PREFIX = bytes.fromhex("2E 00 11 A0 C1 0E 08 06 18 F3")
 STOCK_COPY_COMPLETION = 0x436D
@@ -115,14 +125,29 @@ def run_state(
         atomic_row = atomic_first_tile_write = 0xFFFF
         atomic_wrap_mode = "direct-map"
     else:
-        atomic_wrap_matches = [
+        # The completed map is already stable on entry to the atomic wrapper.
+        # Break before its hazard publisher can legitimately use H as scratch;
+        # the older EI/RET/RETI fallback remains for historical candidates.
+        atomic_wrap_entries = [
             index
-            for index in range(0x3482, 0x34A2)
-            if rom_bytes[index:index + 2] == bytes.fromhex("FB C9")
+            for index in range(0x3482, 0x34A3)
+            if rom_bytes[index:index + 4] in (
+                bytes.fromhex("CD 42 08 F3"),
+                bytes.fromhex("C4 42 08 F3"),
+            )
         ]
+        atomic_wrap_returns = [
+            index
+            for index in range(0x3482, 0x34A3)
+            if (
+                rom_bytes[index:index + 2] == bytes.fromhex("FB C9")
+                or rom_bytes[index] == 0xD9
+            )
+        ]
+        atomic_wrap_matches = atomic_wrap_entries or atomic_wrap_returns
         if len(atomic_wrap_matches) != 1:
             raise RuntimeError(
-                "candidate atomic EI/RET completion is not unique"
+                "candidate atomic wrapper completion is not unique"
             )
         atomic_wrap = atomic_wrap_matches[0]
 
@@ -147,6 +172,12 @@ def run_state(
     setup_path = ""
     if state is not None:
         if rom_bytes[
+            STAGE1_SETUP_ROM_OFFSET:STAGE1_SETUP_ROM_OFFSET + 4
+        ] in (bytes.fromhex("78 E0 A5 F3"), bytes.fromhex("78 E0 E1 F3")):
+            # Current route-caching setup: preserve the caller's B token in
+            # verified-free FFA5 before entering the bounded interrupt window.
+            setup_length = 14
+        elif rom_bytes[
             STAGE1_SETUP_ROM_OFFSET:STAGE1_SETUP_ROM_OFFSET + 2
         ] == bytes.fromhex("F3 C9"):
             setup_length = 2
@@ -170,7 +201,7 @@ def run_state(
             STAGE1_SETUP_ROM_OFFSET:
             STAGE1_SETUP_ROM_OFFSET + setup_length
         ]
-        if len(setup) != setup_length or setup[0] not in (0x11, 0xF3):
+        if len(setup) != setup_length or setup[0] not in (0x11, 0x78, 0xF3):
             raise RuntimeError("candidate Stage 1 setup is missing or malformed")
         setup_file = runtime / "stage1_atomic_setup.bin"
         setup_file.write_bytes(setup)

@@ -14,7 +14,7 @@ import tempfile
 
 from PIL import Image, ImageDraw
 
-from normalize_mgba_state_pc import normalize
+from normalize_mgba_state_pc import MAIN_LOOP_BANK, normalize
 from verify_pickup_class_palettes import (
     BG_PALETTE_OFFSET,
     DEFAULT_ROM,
@@ -26,6 +26,12 @@ from verify_pickup_class_palettes import (
 
 ROOT = Path(__file__).resolve().parents[2]
 PROBE = ROOT / "scripts/diagnostics/probe_pickup_live_palettes.lua"
+NORMALIZED_RESUME_STATES = {
+    "level1_sara_spiral_powerup_item.ss0",
+    "level1_sara_w_dragon_powerup_item.ss0",
+    "level1_sara_w_rock_item.ss0",
+    "level1_sara_w_teleport.ss0",
+}
 
 
 def digest(path: Path, algorithm: str = "sha256") -> str:
@@ -247,16 +253,14 @@ def main() -> int:
         for state_name, expected_pickups in grouped.items():
             state = states / state_name
             runtime_state = state
-            # These two fixtures serialize a PC inside code replaced by the
-            # current build.  Preserve their game/video memory, retarget the
-            # ROM CRC, and resume at the shared fixed-bank main loop.  Other
-            # fixtures intentionally keep their native resume points: several
-            # capture one-frame/transient pickup forms that disappear if they
-            # are advanced through the generic main-loop entry first.
-            if state_name in {
-                "level1_sara_w_rock_item.ss0",
-                "level1_sara_w_teleport.ss0",
-            }:
+            # These fixtures serialize a PC inside code replaced by the
+            # current build. Preserve their game/video memory, retarget the
+            # ROM CRC, and resume at the shared fixed-bank main loop. The
+            # spiral/dragon fixtures point at $6AA6/$6AB8, now occupied by
+            # story/ending helpers. Other fixtures intentionally retain their
+            # native resume points: several capture one-frame pickup forms
+            # that disappear after a generic main-loop resume.
+            if state_name in NORMALIZED_RESUME_STATES:
                 normalized = output / "normalized" / state.name
                 normalized.parent.mkdir(parents=True, exist_ok=True)
                 writes = (
@@ -264,7 +268,10 @@ def main() -> int:
                     if state_name == "level1_sara_w_rock_item.ss0"
                     else []
                 )
-                normalize(state, normalized, 0x016C, writes, rom)
+                normalize(
+                    state, normalized, 0x016C, writes, rom,
+                    bank=MAIN_LOOP_BANK,
+                )
                 runtime_state = normalized
             try:
                 result = run_state(

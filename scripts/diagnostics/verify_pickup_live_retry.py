@@ -8,9 +8,20 @@ import subprocess
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
+import zlib
 
 from PIL import Image
 
+from normalize_mgba_state_pc import (
+    GB_STATE_SIZE,
+    MBC1_BANK_HI,
+    MBC1_BANK_LO,
+    MEMORY_CURRENT_BANK,
+    normalize,
+    png_chunks,
+    state_offset,
+    write_png,
+)
 from verify_pickup_live_palettes import run_state
 
 
@@ -64,6 +75,55 @@ def main() -> int:
                 and all(Path(item["log"]).is_file() for item in attempts)
             ),
         }
+
+        source_state = output / "bank13-source.ss0"
+        explicit_state = output / "bank1-explicit.ss0"
+        retained_state = output / "bank13-retained.ss0"
+        raw = bytearray(GB_STATE_SIZE)
+        raw[MEMORY_CURRENT_BANK:MEMORY_CURRENT_BANK + 2] = (13).to_bytes(
+            2, "little"
+        )
+        raw[MBC1_BANK_LO] = 13
+        raw[MBC1_BANK_HI] = 0
+        raw[state_offset(0xFF99)] = 1
+        write_png(
+            source_state,
+            [(b"gbAs", zlib.compress(bytes(raw))), (b"IEND", b"")],
+        )
+        normalize(source_state, explicit_state, 0x016C, [], bank=1)
+        normalize(source_state, retained_state, 0x016C, [])
+
+        def state_bytes(path: Path) -> bytes:
+            payloads = [
+                payload for kind, payload in png_chunks(path.read_bytes())
+                if kind == b"gbAs"
+            ]
+            return zlib.decompress(payloads[0])
+
+        explicit = state_bytes(explicit_state)
+        retained = state_bytes(retained_state)
+        checks.update({
+            "explicit pickup-state bank repair updates MBC and FF99 together": (
+                int.from_bytes(
+                    explicit[
+                        MEMORY_CURRENT_BANK:MEMORY_CURRENT_BANK + 2
+                    ],
+                    "little",
+                ) == 1
+                and explicit[MBC1_BANK_LO] == 1
+                and explicit[MBC1_BANK_HI] == 0
+                and explicit[state_offset(0xFF99)] == 1
+            ),
+            "ordinary normalized fixtures retain their captured bank": (
+                int.from_bytes(
+                    retained[
+                        MEMORY_CURRENT_BANK:MEMORY_CURRENT_BANK + 2
+                    ],
+                    "little",
+                ) == 13
+                and retained[MBC1_BANK_LO] == 13
+            ),
+        })
         for description, passed in checks.items():
             print(f"{'PASS' if passed else 'FAIL'}: {description}")
         if not all(checks.values()):

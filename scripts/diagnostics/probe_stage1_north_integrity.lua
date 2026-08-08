@@ -17,6 +17,8 @@ local SNAP_INTERVAL = tonumber(os.getenv("STAGE1_NORTH_SNAP_INTERVAL") or "0")
 local FIRE = os.getenv("STAGE1_NORTH_FIRE") == "1"
 local TRACE_FILE = os.getenv("STAGE1_NORTH_TRACE_FILE")
 local TRACE_WRITES = os.getenv("STAGE1_NORTH_TRACE_WRITES") == "1"
+local TRACE_OPENING_STATE = os.getenv("STAGE1_NORTH_TRACE_OPENING_STATE") == "1"
+local VIA_OPENING = os.getenv("STAGE1_NORTH_VIA_OPENING") == "1"
 
 local KEY_A = 0x01
 local KEY_START = 0x08
@@ -50,6 +52,11 @@ local atomic_wrap_hits = 0
 local hazard_helper_hits = 0
 local stage1_cache_trace = {}
 local last_stage1_cache = ""
+local opening_started = false
+local opening_completed = false
+local opening_title_frame = -1
+local route_down_frame = VIA_OPENING and -1 or 180
+local opening_state_writes = {}
 
 pcall(function()
   emu:setBreakpoint(function()
@@ -68,6 +75,54 @@ local function register(name)
   ok, value = pcall(function() return emu:readRegister(string.lower(name)) end)
   if ok and value then return value end
   return 0
+end
+
+if TRACE_OPENING_STATE then
+  -- The stock ROM has nine direct LDH [$C1],A sites. Range watchpoints do
+  -- not consistently fire for high-memory I/O in every mGBA build, so keep
+  -- executable breakpoints as the authoritative write-site receipt.
+  local ffc1_sites = {
+    {0x0A20, 0x00}, {0x15CC, 0x00}, {0x15EE, 0x00},
+    {0x19D0, 0x00}, {0x19FD, 0x00}, {0x25C8, 0x00},
+    {0x40EE, 0x01}, {0x7896, 0x01}, {0x5C51, 0x07},
+  }
+  for _, row in ipairs(ffc1_sites) do
+    local site, bank = row[1], row[2]
+    assert(emu:setBreakpoint(function()
+      if bank ~= 0 and emu:read8(0xFF99) ~= bank then return end
+      if #opening_state_writes >= 256 then return end
+      local sp = register("SP") & 0xFFFF
+      local return1 = emu:read8(sp) | (emu:read8(sp + 1) << 8)
+      local return2 = emu:read8(sp + 2) | (emu:read8(sp + 3) << 8)
+      opening_state_writes[#opening_state_writes + 1] = string.format(
+        "f%d:aFFC1:o%02X:n%02X:p%04X:b%02X:af%04X:bc%04X:de%04X:hl%04X:sp%04X:r%04X/%04X:s%02X:i%02X",
+        frame, emu:read8(0xFFC1), register("A") & 0xFF,
+        site, emu:read8(0xFF99), register("AF") & 0xFFFF,
+        register("BC") & 0xFFFF, register("DE") & 0xFFFF,
+        register("HL") & 0xFFFF, sp, return1, return2,
+        emu:read8(0xD880), emu:read8(0xFFC1))
+    end, site) > 0)
+  end
+  assert(emu:setRangeWatchpoint(function(info)
+    if #opening_state_writes >= 256 then return end
+    opening_state_writes[#opening_state_writes + 1] = string.format(
+      "f%d:a%04X:o%02X:n%02X:p%04X:b%02X:af%04X:bc%04X:de%04X:hl%04X:s%02X:i%02X",
+      frame, info.address & 0xFFFF, info.oldValue & 0xFF,
+      info.newValue & 0xFF, register("PC") & 0xFFFF,
+      emu:read8(0xFF99), register("AF") & 0xFFFF,
+      register("BC") & 0xFFFF, register("DE") & 0xFFFF,
+      register("HL") & 0xFFFF, emu:read8(0xD880), emu:read8(0xFFC1))
+  end, 0xFFC1, 0xFFC1, C.WATCHPOINT_TYPE.WRITE_CHANGE) > 0)
+  assert(emu:setRangeWatchpoint(function(info)
+    if #opening_state_writes >= 256 then return end
+    opening_state_writes[#opening_state_writes + 1] = string.format(
+      "f%d:a%04X:o%02X:n%02X:p%04X:b%02X:af%04X:bc%04X:de%04X:hl%04X:s%02X:i%02X",
+      frame, info.address & 0xFFFF, info.oldValue & 0xFF,
+      info.newValue & 0xFF, register("PC") & 0xFFFF,
+      emu:read8(0xFF99), register("AF") & 0xFFFF,
+      register("BC") & 0xFFFF, register("DE") & 0xFFFF,
+      register("HL") & 0xFFFF, emu:read8(0xD880), emu:read8(0xFFC1))
+  end, 0xDCFD, 0xDCFD, C.WATCHPOINT_TYPE.WRITE_CHANGE) > 0)
 end
 
 if TRACE_WRITES then
@@ -184,12 +239,69 @@ local function finish(status)
   dump_bytes(OUT .. "/vram9c00.bin", function(address)
     return raw_vram:read8(address - 0x8000)
   end, 0x9C00, 0x400)
+  dump_bytes(OUT .. "/vram9800-attrs.bin", function(address)
+    return raw_vram:read8(0x2000 + address - 0x8000)
+  end, 0x9800, 0x400)
+  dump_bytes(OUT .. "/vram9c00-attrs.bin", function(address)
+    return raw_vram:read8(0x2000 + address - 0x8000)
+  end, 0x9C00, 0x400)
+  local lcdc = emu:read8(0xFF40)
+  local scx = emu:read8(0xFF43)
+  local scy = emu:read8(0xFF42)
+  local map_base = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
+  local visible_tiles = assert(io.open(OUT .. "/visible-tiles.bin", "wb"))
+  local visible_attrs = assert(io.open(OUT .. "/visible-attrs.bin", "wb"))
+  for row = 0, 17 do
+    for column = 0, 19 do
+      local map_y = ((scy + row * 8) >> 3) & 0x1F
+      local map_x = ((scx + column * 8) >> 3) & 0x1F
+      local offset = map_base - 0x8000 + map_y * 32 + map_x
+      visible_tiles:write(string.char(raw_vram:read8(offset)))
+      visible_attrs:write(string.char(raw_vram:read8(0x2000 + offset)))
+    end
+  end
+  visible_tiles:close()
+  visible_attrs:close()
+  local old_bcps = emu:read8(0xFF68)
+  local bg_cram = assert(io.open(OUT .. "/bg-cram.bin", "wb"))
+  for index = 0, 63 do
+    emu:write8(0xFF68, index)
+    bg_cram:write(string.char(emu:read8(0xFF69)))
+  end
+  bg_cram:close()
+  emu:write8(0xFF68, old_bcps)
+  local old_ocps = emu:read8(0xFF6A)
+  local obj_cram = assert(io.open(OUT .. "/obj-cram.bin", "wb"))
+  for index = 0, 63 do
+    emu:write8(0xFF6A, index)
+    obj_cram:write(string.char(emu:read8(0xFF6B)))
+  end
+  obj_cram:close()
+  emu:write8(0xFF6A, old_ocps)
+  dump_bytes(OUT .. "/hardware-oam.bin", function(address)
+    return emu:read8(address)
+  end, 0xFE00, 0xA0)
+  dump_bytes(OUT .. "/shadow-oam.bin", function(address)
+    return emu:read8(address)
+  end, 0xDA00, 0xA0)
+  dump_bytes(OUT .. "/vram-low-tiles.bin", function(address)
+    return raw_vram:read8(address - 0x8000)
+  end, 0x8000, 0x800)
+  dump_bytes(OUT .. "/vram-high-tiles.bin", function(address)
+    return raw_vram:read8(address - 0x8000)
+  end, 0x8800, 0x800)
 
   local report = assert(io.open(OUT .. "/probe.txt", "w"))
   report:write("status=" .. status .. "\n")
   report:write(string.format("frames=%d\n", frame))
   report:write(string.format("first_gameplay=%d\n", first_gameplay))
   report:write(string.format("gameplay_frames=%d\n", gameplay_frame))
+  report:write(string.format("via_opening=%d\n", VIA_OPENING and 1 or 0))
+  report:write(string.format(
+    "opening_started=%d\n", opening_started and 1 or 0))
+  report:write(string.format(
+    "opening_completed=%d\n", opening_completed and 1 or 0))
+  report:write(string.format("opening_title_frame=%d\n", opening_title_frame))
   report:write(string.format("initial_room=%02X\n", initial_room & 0xFF))
   report:write(string.format("final_room=%02X\n", emu:read8(0xFFBD)))
   report:write(string.format("room_changes=%d\n", room_changes))
@@ -198,6 +310,7 @@ local function finish(status)
   report:write(string.format("target_settle_frames=%d\n", TARGET_SETTLE))
   report:write(string.format("window_frames=%d\n", window_frames))
   report:write(string.format("final_cfaa=%02X\n", emu:read8(0xCFAA)))
+  report:write(string.format("final_dcfd=%02X\n", emu:read8(0xDCFD)))
   report:write(string.format(
     "final_state=scene:%02X room:%02X ffc1:%02X ffe4:%02X lcdc:%02X " ..
     "scx:%02X scy:%02X wx:%02X wy:%02X dc00:%02X dc01:%02X " ..
@@ -226,6 +339,7 @@ local function finish(status)
   report:write(string.format("atomic_wrap_hits=%d\n", atomic_wrap_hits))
   report:write(string.format("hazard_helper_hits=%d\n", hazard_helper_hits))
   report:write("stage1_cache_trace=" .. table.concat(stage1_cache_trace, ";") .. "\n")
+  report:write("opening_state_writes=" .. table.concat(opening_state_writes, ";") .. "\n")
   report:close()
   emu:quit()
 end
@@ -266,22 +380,44 @@ callbacks:add("frame", function()
 
   local keys = 0
   if first_gameplay < 0 then
-    -- Intro is selected by default. DOWN selects GAME START. Repeated released
-    -- confirmations cover the stock score/stage cards without memory writes.
-    if TRACE_FILE then
-      keys = keys | pulse(180, 186, KEY_DOWN)
-      keys = keys | pulse(201, 207, KEY_A)
-      keys = keys | pulse(261, 267, KEY_A)
-      keys = keys | pulse(321, 327, KEY_A)
-      keys = keys | pulse(381, 387, KEY_START)
-      keys = keys | pulse(431, 437, KEY_A)
+    if VIA_OPENING and not opening_completed then
+      -- The first title option is OPENING. Use only released A pulses until
+      -- the complete stock story returns to a freshly drawn title; never
+      -- write a scene/script byte from the probe.
+      if not opening_started then
+        keys = pulse(180, 186, KEY_A)
+          | pulse(300, 306, KEY_A)
+          | pulse(420, 426, KEY_A)
+        if scene == 0x15 then opening_started = true end
+      elseif scene == 0x15 then
+        keys = ((frame % 90) < 4) and KEY_A or 0
+      elseif active == 1 and scene ~= 0x15 then
+        -- OPENING transitions directly into the ordinary Stage-intro/gameplay
+        -- route. There is no second title selection after a completed story.
+        opening_completed = true
+        opening_title_frame = frame
+        keys = 0
+      end
     else
-      keys = keys | pulse(180, 186, KEY_DOWN)
-      keys = keys | pulse(193, 199, KEY_A)
-      keys = keys | pulse(241, 247, KEY_A)
-      keys = keys | pulse(291, 297, KEY_A)
-      keys = keys | pulse(341, 347, KEY_START)
-      keys = keys | pulse(391, 397, KEY_A)
+      -- DOWN selects GAME START. Repeated released confirmations cover the
+      -- stock score/stage cards without memory writes. The opening route uses
+      -- the identical relative schedule after its returned title settles.
+      local down = route_down_frame
+      if TRACE_FILE and not VIA_OPENING then
+        keys = keys | pulse(down, down + 6, KEY_DOWN)
+        keys = keys | pulse(down + 21, down + 27, KEY_A)
+        keys = keys | pulse(down + 81, down + 87, KEY_A)
+        keys = keys | pulse(down + 141, down + 147, KEY_A)
+        keys = keys | pulse(down + 201, down + 207, KEY_START)
+        keys = keys | pulse(down + 251, down + 257, KEY_A)
+      else
+        keys = keys | pulse(down, down + 6, KEY_DOWN)
+        keys = keys | pulse(down + 13, down + 19, KEY_A)
+        keys = keys | pulse(down + 61, down + 67, KEY_A)
+        keys = keys | pulse(down + 111, down + 117, KEY_A)
+        keys = keys | pulse(down + 161, down + 167, KEY_START)
+        keys = keys | pulse(down + 211, down + 217, KEY_A)
+      end
     end
     if scene == 0x02 and active == 1 then
       first_gameplay = frame

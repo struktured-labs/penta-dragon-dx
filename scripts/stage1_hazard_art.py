@@ -260,12 +260,14 @@ def remap_hazard_tile(
         if _inside_span(tooth_rows, x, y):
             result.append(3 if source == 3 else 2)
             continue
-        mapping = (
-            config.environment_remap
-            if source == background
-            else config.hazard_remap
-        )
-        result.append(mapping[source])
+        # The animated tooth cells also contain their moving cast shadow.
+        # A difference-from-baseline test cannot distinguish that shadow from
+        # the tooth: both pixels move.  Painting every changed pixel therefore
+        # produced detached gold flecks below the black tooth outline.  The
+        # explicit, outline-bounded spans above are the complete tooth mask;
+        # everything outside them must stay on the neutral environment ramp,
+        # whether or not it differs from the stationary baseline.
+        result.append(config.environment_remap[source])
     return encode_tile(result)
 
 
