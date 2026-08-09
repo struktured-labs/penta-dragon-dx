@@ -50,6 +50,11 @@ evidence.
   cross-process lock, execs the real emulator, and arms Linux parent-death
   cleanup so a killed verifier cannot strand a Qt process. Lock failure
   (status 75) is a hard stop, not permission to bypass it.
+- **LAUNCH GATE REQUIRED:** Before headed play, run
+  `python3 scripts/launch_gate.py <rom>` to verify that the ROM reaches a
+  rendered title and responds to START. If it exits non-zero, do not launch
+  the ROM. A passing preflight does not replace the single-flight rule: the
+  subsequent human launch must still use `scripts/launch_mgba.sh`.
 
 - **PyBoy memory-register dumps are NEVER sufficient for timing bugs.** PyBoy does not enforce VBlank/STAT mode-3 write blocking. Writes that miss their VBlank window land cleanly in PyBoy's virtual memory. This means any test that only reads OAM/attribute registers and asserts "no orange" is fundamentally broken for flicker verification.
 

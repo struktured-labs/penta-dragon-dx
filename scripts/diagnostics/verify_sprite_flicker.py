@@ -4,7 +4,7 @@ import sys
 import numpy as np
 from pyboy import PyBoy
 
-ROM_PATH = os.path.expanduser("~/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_teleport.gb")
+ROM_PATH = os.path.expanduser("~/projects/penta-dragon-dx-claude/rom/working/penta_dragon_dx_FIXED.gb")
 
 def check_sprite_flicker():
     print("=== COLD-BOOT SUB-FRAME SPRITE FLICKER AUDIT ===")
