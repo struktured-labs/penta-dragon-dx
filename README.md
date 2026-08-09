@@ -35,6 +35,16 @@ audience palette vote and reserved MiSTer validation.
 
 [![Current seven-stage palette review](artifacts/stage-collage/penta-dragon-dx-stages-current.png)](artifacts/stage-collage/index.html)
 
+### Gameplay screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="artifacts/stage-collage/panels-current/stage1.png" alt="Stage 1 rotating spike room" width="256"><br><sub>Stage 1 — rotating hazard and semantic pickups</sub></td>
+    <td align="center"><img src="artifacts/stage-collage/panels-current/stage4.png" alt="Stage 4 cyan floor and blue-gray masonry" width="256"><br><sub>Stage 4 — cyan flooring, blue-gray stone, magenta accents</sub></td>
+    <td align="center"><img src="artifacts/stage-collage/panels-current/stage6.png" alt="Stage 6 green chamber" width="256"><br><sub>Stage 6 — green chamber with earthy material separation</sub></td>
+  </tr>
+</table>
+
 Stage 4 now separates cyan diamond flooring, blue-gray masonry, and restrained
 magenta bridge accents instead of applying one magenta ramp to the whole room.
 Stage 6 retains its vivid green identity but uses an earthy brown second shade
@@ -49,7 +59,7 @@ before-and-after receipts; no ROM image is stored in Git.
 | Dedicated live regression | `verify_live_regression.py` | Last standalone profile: **PASS, 25/25** on MD5 `5ab49289505bd04d7a04197f4e30cc96`. The current candidate passes the equivalent gates inside the complete matrix: terrain, rendered spike phases and containment, bleed, pickup-local chroma, bonus, flicker, spotlight, starts, every story illustration, and the complete ending pass |
 | Manual low-health flicker | Headed mGBA + saved state/capture | Historical report is now covered by the deterministic low-health fixture; one final headed audience pass remains part of stream preparation |
 | Deterministic low-health flicker | `verify_low_health_flicker.py` | **PASS on the current candidate**, 1,600 consecutive rendered frames: 60-frame healthy baseline, forced low-health threshold, natural Gargoyle music init at sample 586, and the complete 40→0 native pulse countdown. BGP stayed `$E4`, zero non-`E4` writes, byte-stable BG CRAM, zero unexpected attribute mismatches, and only 13.163 maximum successive mean RGB movement |
-| Full deterministic suite | `run_deterministic_suite.py` | **PASS, 53/53** on MD5 `e8baabaaa6b5d5073dba12985e8cfe00`; two builds were byte-identical and the candidate plus source fingerprint `bb0b6690…93e62b` are bound by the [receipt](docs/release/verification/latest.json) |
+| Full deterministic suite | `run_deterministic_suite.py` | **PASS, 53/53** on MD5 `e8baabaaa6b5d5073dba12985e8cfe00`; two builds were byte-identical and the candidate plus source fingerprint `58aa788c…5ed50` are bound by the [receipt](docs/release/verification/latest.json) |
 | Candidate-only IPS round trip | `verify_release_patch.py --candidate-only` | Historical **PASS** for MD5 `798a4363…`; the checked-in distributable IPS remains the historical RC5 artifact pending hardware/audience approval |
 | Checked-in distributable IPS (RC5) | `verify_release_patch.py` | **PASS**: historical 6,749-byte IPS MD5 `5a4f5d1a4a8f47802d654021ef4e2a8e` reconstructs RC5 ROM MD5 `95d98e40…` from the supported Japanese base |
 | MiSTer reservation guard | `verify_mister_reservation_guard.py` | PASS, unreserved hardware commands stop before SSH/SCP; local-only commands remain usable |
