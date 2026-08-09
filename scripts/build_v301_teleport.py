@@ -153,9 +153,7 @@ POSMAP_SCRATCH_ADDR = 0xDF47  # vram_hi (+1: rows_left)
 FOOTPRINT_LOG = "scripts/diagnostics/posmap_maps.log"
 ARENA_ORDER = ["shalamar", "riff", "crystal_dragon", "cameo", "ted",
                "troop", "faze", "angela", "penta_dragon"]
-TELEPORT_ADDR = 0x6E90     # teleport check + state setup + stack redirect
-                              # 0x6E80 conflicts with v301's colorize handler tail
-                              # (FFC1 gate + shadow_main + OAM DMA at 0x6E7E-0x6E8C)
+TELEPORT_ADDR = 0x6E80     # teleport check + state setup + stack redirect
 LANDING_PAD_ROM_ADDR = 0x6F80  # landing pad source (gets copied to WRAM CF82)
                               # — moved from 0x6F00 because the teleport
                               # routine grew past 128 bytes and was
@@ -208,25 +206,6 @@ TROOP_TABLE_ADDR = 0x7700
 FAZE_TABLE_ADDR = 0x7800
 ANGELA_TABLE_ADDR = 0x7900
 PENTA_DRAGON_TABLE_ADDR = 0x7A00
-# ---- Digit tiles for version number (replace letter lookalikes) ----
-# The game has no digit glyphs in its font (the year '199' on the title screen
-# uses decorative logo tiles). The version line "DX V3.01" uses letter lookalikes
-# T=3, O=0, I=1 which look like letters, not digits. We store proper digit tiles
-# in bank 13 and copy them to VRAM tile positions 7, 8, 9 during cold-boot.
-# Tile 7 = '3', tile 8 = '0', tile 9 = '1'.
-DIGIT_TILES_ADDR = 0x69F0  # bank 13 — 120+ bytes of dead space before trampolines at 0x6A70
-DIGIT_TILES = bytes([
-    # '3' (Tile 7): high-contrast 2bpp (Color 0 = white, Color 3 = black)
-    0x7C, 0x7C, 0x04, 0x04, 0x04, 0x04, 0x3C, 0x3C,
-    0x04, 0x04, 0x04, 0x04, 0x7C, 0x7C, 0x00, 0x00,
-    # '0' (Tile 8): high-contrast 2bpp (Color 0 = white, Color 3 = black)
-    0x3C, 0x3C, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
-    0x42, 0x42, 0x42, 0x42, 0x3C, 0x3C, 0x00, 0x00,
-    # '1' (Tile 9): high-contrast 2bpp (Color 0 = white, Color 3 = black)
-    0x18, 0x18, 0x38, 0x38, 0x18, 0x18, 0x18, 0x18,
-    0x18, 0x18, 0x18, 0x18, 0x3C, 0x3C, 0x00, 0x00,
-])  # 48 bytes total (3 tiles x 16 bytes)
-
 # ---- Lava colorization (later stages reuse stage-1 floor/wall tile IDs as a
 # molten field). scene_detect, after copying the dungeon table to WRAM 0xCC00,
 # tail-jumps to this helper which (in a lava stage, keyed on FFBA) over-writes
@@ -790,7 +769,6 @@ def build_teleport_routine() -> bytes:
     c.extend([0x2A, 0x12, 0x13, 0x05])    # LD A,[HL+]; LD [DE],A; INC DE; DEC B
     off = ls_loop - (len(c) + 2)
     c.extend([0x20, off & 0xFF])          # JR NZ, ls_loop
-
     # Set sentinel only. Do NOT touch FFBA in cold-boot — writing 0xFF
     # there causes the game's dispatch tables (FFBA-indexed) to read
     # garbage and crash. First user press goes to Riff (FFBA 0→1);
@@ -944,7 +922,7 @@ def main():
         + [0x04, 0x0A] + _txt("GAME    START") + [E]
         + [0x00, 0x0E, 0xC0, E]                                 # (c) glyph
         + [0x00, 0x0F] + JAM + [E]                              # JAPAN ART MEDIA
-        + [0x00, 0x11] + _txt("DX V") + [7, 8, 9] + [0x00] + _txt("STRUK LABS") + [E]  # "DX V3.01 STRUK LABS" (tiles 7='3', 8='0', 9='1' loaded from bank 13)
+        + [0x00, 0x11, 0x83, 0x97, 0x00, 0x95, 0xD7, 0xD8, 0xD8, 0x00] + _txt("STRUK LABS") + [E]  # "DX V199 STRUK LABS" (row 17)
     )
     assert len(title_list) <= 125, f"title list {len(title_list)} > 125 (need room for trailing 0x9A terminator)"
     assert rom[0x4EA5:0x4EA7] == bytes([0x07, 0x03]), "title list head moved"
@@ -980,23 +958,6 @@ def main():
             f"levelsel stub site at 0x{LEVELSEL_STUB_ROM_ADDR + i:04X} not free "
             f"(byte {rom[off + i]:02X}) — choose a different free run")
     rom[off:off + len(ls)] = ls
-
-    # 2c. Write digit tiles to bank 13 at DIGIT_TILES_ADDR (0x69F0).
-    # This region overlaps the tail of shadow_main (0x69D0..0x6A01) and the head of the
-    # old OBJ colorizer/stamper (0x6A10..0x6A70). The colorizer CALL was removed in the
-    # OAM intercept build (patch_oam_intercept.py). We terminate shadow_main with RET
-    # at 0x69D0 so digit tiles at 0x69F0 don't corrupt live code. The trampoline source
-    # at 0x6A70 (TRAMP_ROM_SRC) is now collision-free.
-    assert len(DIGIT_TILES) == 48, f"Digit tiles size {len(DIGIT_TILES)} != 48"
-    off = BANK13 + (DIGIT_TILES_ADDR - 0x4000)
-    rom[off:off + len(DIGIT_TILES)] = DIGIT_TILES
-    print(f"  digit tiles: {len(DIGIT_TILES)} bytes (3 tiles) at bank13:0x{DIGIT_TILES_ADDR:04X}")
-    # Terminate shadow_main early (RET at 0x69D0) — it only called the dead colorizer
-    off_sm = BANK13 + (0x69D0 - 0x4000)
-    rom[off_sm:off_sm + 1] = bytes([0xC9])  # RET
-    # NOP-pad the rest of 0x69D1..0x69EF (no longer live code)
-    for i in range(1, 0x20):
-        rom[off_sm + i] = 0x00
 
     # 2a. Scene-aware bg_table system (Phase 1b: all 9 boss arenas)
     arena_tables = [
@@ -1178,35 +1139,6 @@ def main():
     off = BANK13 + (TELEPORT_ADDR - 0x4000)
     rom[off:off + len(tp)] = tp
 
-    # === Fix: relocate colorize handler tail (FFC1 gate + shadow_main + OAM DMA + VBK restore + RET)
-    # The colorize handler at 0x6E00 ends with a tail at ~0x6E7E that includes the FFC1 check,
-    # shadow_main CALL, OAM DMA CALL, VBK restore, and RET. The teleport routine at 0x6E80
-    # OVERWRITES this tail. Replace the falling-through bytes 'F0 C1' at 0x6E7E with
-    # JP 0x6F20 (relocated tail), and write the actual tail code at 0x6F20 (free space
-    # between teleport routine end ~0x6F1E and wrapper at 0x6F30).
-    SHADOW_MAIN_ADDR = 0x69D0
-    COLORIZE_TAIL_ADDR = 0x6F40  # free space between teleport routine end (~0x6F31) and wrapper (0x6F50)
-    # JP to relocated tail at 0x6E7E (overwrites 'F0 C1')
-    off = BANK13 + (0x6E7E - 0x4000)
-    rom[off:off + 3] = bytearray([0xC3,
-                                   COLORIZE_TAIL_ADDR & 0xFF,
-                                   (COLORIZE_TAIL_ADDR >> 8) & 0xFF])
-    # Tail code at COLORIZE_TAIL_ADDR:
-    #   LDH A,[FFC1]; OR A; JR Z,+6; CALL shadow_main; CALL OAM DMA; POP AF; LDH [VBK],A; RET
-    tail = bytearray([
-        0xF0, 0xC1,                               # LDH A, [FFC1]
-        0xB7,                                      # OR A
-        0x28, 0x06,                                # JR Z, +6 (skip shadow_main + OAM DMA)
-        0xCD, SHADOW_MAIN_ADDR & 0xFF, (SHADOW_MAIN_ADDR >> 8) & 0xFF,  # CALL shadow_main
-        0xCD, 0x80, 0xFF,                          # CALL OAM DMA (0xFF80)
-        0xF1, 0xE0, 0x4F,                          # POP AF; LDH [VBK], A
-        0xC9,                                      # RET
-    ])
-    assert len(tail) == 15, f"tail code length: {len(tail)}"
-    off = BANK13 + (COLORIZE_TAIL_ADDR - 0x4000)
-    rom[off:off + len(tail)] = tail
-    print(f"  colorize handler tail relocated: JP 0x06E7E -> 0x{COLORIZE_TAIL_ADDR:04X} ({len(tail)} bytes)")
-
     # 4. Write new VBlank hook at 0x0824 and wrapper at WRAPPER_ADDR.
     # Wrapper moved 0x6F10 -> 0x6F20 -> 0x6F30: the teleport routine grew (per-
     # frame CALL lava_override, then the levelsel-stub cold-boot copy block)
@@ -1214,7 +1146,7 @@ def main():
     # between WRAPPER_ADDR end and LANDING_PAD_ROM_ADDR=0x6F80 are unused.
     # would clobber the teleport routine's final `JP colorize`, breaking the
     # whole colorize chain (symptom: entire screen renders uncolored/white).
-    WRAPPER_ADDR = 0x6F50
+    WRAPPER_ADDR = 0x6F30
     assert TELEPORT_ADDR + len(tp) <= WRAPPER_ADDR, \
         f"teleport routine 0x{TELEPORT_ADDR + len(tp):04X} overruns wrapper 0x{WRAPPER_ADDR:04X}"
 
@@ -1264,8 +1196,8 @@ def main():
         0xC9,                                 # RET
     ])
 
-    assert WRAPPER_ADDR + len(wrapper) <= 0x6FA0, \
-        f"wrapper 0x{WRAPPER_ADDR + len(wrapper):04X} overruns scene_detect/lava"
+    assert WRAPPER_ADDR + len(wrapper) <= LANDING_PAD_ROM_ADDR, \
+        f"wrapper 0x{WRAPPER_ADDR + len(wrapper):04X} overruns landing pad 0x{LANDING_PAD_ROM_ADDR:04X}"
     wrapper_off = BANK13 + (WRAPPER_ADDR - 0x4000)
     rom[wrapper_off:wrapper_off + len(wrapper)] = wrapper
     print(f"  VBlank wrapper written: {len(wrapper)} bytes at bank13:0x{WRAPPER_ADDR:04X}")
