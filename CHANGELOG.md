@@ -5,6 +5,85 @@ emulator save/state files are never release artifacts in this repository.
 
 ## [Unreleased]
 
+### Added
+
+- Add a ROM-free OG/DX boss-animation comparison harness with frame hashes,
+  tuneable-material metadata, and temporal low-detail landmarks. Receipts call
+  the footage frame-aligned rather than phase-synchronized, so a slower DX
+  animation cannot hide an effect merely because a shorter source clip loops.
+- Add a deterministic Crystal Dragon ghost-material gate. It traces live OAM
+  and OBJ CRAM through both visible and native translucent phases, then runs
+  Shalamar and ordinary Stage 3 as negative controls so the scene-local
+  override cannot leak through their shared boss-selection index.
+- Extend the shared boss geometry audit to every partially visible edge cell
+  and 1,800 rendered frames per arena. Crystal uses a scene-correct cached
+  portal contract that rejects partial publications, rapid alternation, and
+  excess tile/material drift while reporting the raw tile-LUT disagreements.
+- Make boss fixtures hold the arena for at least 60 frames and then require
+  eight consecutive phase-zero palette frames. Every palette row actually
+  referenced by an arena table is byte-exact with its tuneable YAML source;
+  inactive CRAM rows are reported without manufacturing a rendered failure.
+
+### Changed
+
+- Give Crystal Dragon one YAML-selected frost material across its OBJ4-OBJ7
+  animation families. This removes the green/orange/blue bands that amplified
+  the original game's ghost cadence into a harsh strobe while leaving that
+  deliberate visible/invisible timing intact.
+- Correct boss-review metadata: Cameo, Ted, and Penta Dragon use the current
+  cherry-red/crimson BG1 material, while Penta's connected lower body and tail
+  are no longer misclassified as empty staging terrain.
+
+### Fixed
+
+- Color Cameo's traced `$0C-$0F` upper-contour tiles with its editable BG1
+  cherry-red/crimson material. The checker field remains outside that range,
+  and a targeted 120-frame geometry receipt observes 148 contour samples with
+  zero neutral, unsafe, or table-contract mismatches.
+- Route Crystal Dragon's OBJ-bodied arena through the cached BG-layout copier
+  instead of the always-atomic BG-boss path. Its 720-frame receipt now matches
+  the original ghost behavior with no settled disappearance longer than one
+  frame, while portal camera wraps remain large, atomic updates.
+- Arm Crystal's OBJ4-OBJ7 material pass synchronously on the exact `$0E`
+  scene transition. The idle clock stops during the native boss-entry fade,
+  while public `D880` briefly uses `$FF` during legal map handoffs; neither can
+  now suppress or spuriously restart the bounded palette loader.
+- Restrict the Stage 1 rotating-hazard BG7 row to Stage 1 and its Gargoyle
+  overlay. Boss arenas that render BG7, including Troop, now reload the
+  ordinary YAML row rather than inheriting neon spike gold from the preceding
+  dungeon.
+- Retarget curated final-boss fixtures with the candidate's exact C600, DA60,
+  and DB80 payloads without replaying scene detection inside the live Penta
+  Dragon loop. This removes synthetic final-story exits from the boss audit.
+
+## [v3.01-stream-rc10] - 2026-08-09
+
+### Added
+
+- Add deterministic visual-inventory tools for all 16 miniboss indices, the
+  complete 42-scene livestream deck, and the hidden secret-jet route. Receipts
+  distinguish intentionally YAML-defined miniboss palettes from the eight
+  currently undefined table-overrun entries instead of presenting accidental
+  colors as finished work.
+- Add four-frame boss temporal receipts and a mandatory atomic-attribute
+  contract gate. Each arena is sampled for 85 settled animation frames and
+  roughly 30,000–33,000 visible tile/attribute pairs; stale markers are removed
+  before every run, and zero mismatched, unsafe, or alternating attributes are
+  required.
+- Add representative Stage 1, Stage 4, Stage 6, and Shalamar gameplay images
+  to the GitHub README. ROM images, saves, and savestates remain excluded.
+
+### Changed
+
+- Publish animated boss-arena BG tiles and their table-derived attributes
+  atomically. This removes the RC9 position-inheritance patchwork; a negative
+  control rejects RC9 in all nine arenas while the new path passes all nine.
+- Replace Shalamar's raw tile-number color bands and blanket `$A0–$FF` red
+  mapping with a coherent cyan/teal BG4 body and compact BG5 gold/red
+  crest/core accents.
+- Delay title-spotlight gallery captures until the native English name glyphs
+  are visible, keeping roster receipts self-identifying.
+
 ## [v3.01-stream-rc9] - 2026-08-08
 
 ### Added
@@ -105,6 +184,14 @@ emulator save/state files are never release artifacts in this repository.
   the following VBlank, with no stale Window frames after the grace frame.
 
 ### Fixed
+
+- Fix the shared animated-arena dispatcher discriminator so boss map copies
+  actually enter the atomic tile-and-attribute path. Shalamar now clears its
+  stock animation-staging cells before publication instead of scattering
+  detached body/claw fragments across the checkerboard; four independent
+  phases report zero forbidden terrain tiles and zero palette mismatches. The
+  strict gallery now withholds its standard contact sheet whenever any defined
+  boss staging contract fails.
 
 - Split Stage 4's previous all-magenta presentation by material: the
   collision-free `$01-$08` diamond floor family uses cyan BG4, `$2D/$2E`
