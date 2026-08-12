@@ -18,10 +18,12 @@ import signal
 import sys
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_TMP = PROJECT_ROOT / "tmp"
 LOCK_PATH = Path(
     os.environ.get(
         "PENTA_MGBA_LOCK",
-        "/tmp/penta-dragon-dx.mgba-singleflight.lock",
+        str(PROJECT_TMP / "penta-dragon-dx.mgba-singleflight.lock"),
     )
 )
 PR_SET_PDEATHSIG = 1
@@ -74,7 +76,7 @@ def publish_matrix_ownership(token: str | None) -> None:
     registry = Path(
         os.environ.get(
             "PENTA_MGBA_OWNER_REGISTRY",
-            f"/tmp/penta-dragon-dx.mgba-owners-{os.getuid()}",
+            str(PROJECT_TMP / f"penta-dragon-dx.mgba-owners-{os.getuid()}"),
         )
     )
     owner_dir = registry / token

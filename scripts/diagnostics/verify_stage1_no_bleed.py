@@ -585,6 +585,20 @@ def main() -> int:
             and probe.get("scene_frames", 0) >= args.frames
             and probe.get("active_frames", 0) >= args.frames
         ),
+        "private-WRAM compiler scene samples are exactly bounded": (
+            0 <= probe.get("compiler_unreadable_scene_frames", -1)
+            <= probe.get("scene_frames", -1)
+            and (
+                probe.get("final_compiler_unreadable", 0) == 0
+                or (
+                    probe.get("final_svbk", 0) & 0x07 == 0x03
+                    and (
+                        0x42A7 <= probe.get("final_pc", -1) <= 0x436D
+                        or 0xD400 <= probe.get("final_pc", -1) <= 0xD478
+                    )
+                )
+            )
+        ),
         "every actual-play frame sampled": (
             probe.get("sampled_frames", 0) >= args.frames
         ),
@@ -642,7 +656,11 @@ def main() -> int:
             and all(capture.get("native_size") == [160, 144] for capture in captures)
         ),
         "final state remains Stage 1 gameplay": (
-            probe.get("final_scene") == 2 and probe.get("final_ffc1") == 1
+            (
+                probe.get("final_scene") == 2
+                or probe.get("final_compiler_unreadable") == 1
+            )
+            and probe.get("final_ffc1") == 1
         ),
     }
     for name, passed in checks.items():

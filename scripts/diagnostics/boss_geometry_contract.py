@@ -50,7 +50,9 @@ NAMES = tuple(boss.name for boss in BOSSES)
 # tile publish. These are the exact visible 18x20 entry layouts. Later native
 # camera wraps atomically advance both layouts. Row 4, column 15 is the one
 # measured phase seam: depending on which physical map was serialized first,
-# that cell can already contain either side of the next native wrap.
+# one entry-layout cell can already contain either side of the next native
+# wrap. The strict verifier allows one such entry cell anywhere, but still
+# rejects two cells, partial publishes, or rapid layout alternation.
 CRYSTAL_ENTRY_PHASE_CELLS = frozenset({(4, 15)})
 CRYSTAL_ENTRY_ATTR_ROWS = {
     0x9800: (

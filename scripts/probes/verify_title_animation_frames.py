@@ -54,7 +54,10 @@ def format_distribution(distribution: Counter[tuple[int, int, int]]) -> str:
 
 
 def run_probe(rom_path: Path) -> bool:
-    pyboy = PyBoy(str(rom_path), window="null", cgb=True)
+    pyboy = PyBoy(
+        str(rom_path), window="null", cgb=True,
+        sound_emulated=False, log_level=5,
+    )
     pyboy.set_emulation_speed(0)
 
     white_ratios: dict[int, float] = {}

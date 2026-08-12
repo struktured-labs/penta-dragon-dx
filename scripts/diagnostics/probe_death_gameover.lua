@@ -33,6 +33,25 @@ local function bg0_hex()
     return table.concat(bytes)
 end
 
+local function bg_cram_hex()
+    local old_bcps = emu:read8(0xFF68)
+    local bytes = {}
+    for index = 0, 63 do
+        emu:write8(0xFF68, index)
+        bytes[#bytes + 1] = string.format("%02X", emu:read8(0xFF69))
+    end
+    emu:write8(0xFF68, old_bcps)
+    return table.concat(bytes)
+end
+
+local function oam_hex()
+    local bytes = {}
+    for address = 0xFE00, 0xFE9F do
+        bytes[#bytes + 1] = string.format("%02X", emu:read8(address))
+    end
+    return table.concat(bytes)
+end
+
 local function count_region(base, start_row, start_col, rows, columns)
     local old_vbk = emu:read8(0xFF4F)
     local hist = {}
@@ -90,6 +109,8 @@ local function art_layout()
         window_unsafe = window_unsafe,
         window_hist = window_hist,
         window_cells = window_cells,
+        bg_cram = bg_cram_hex(),
+        oam = oam_hex(),
         lcdc = lcdc,
         scy = emu:read8(0xFF42),
         scx = emu:read8(0xFF43),
@@ -131,11 +152,12 @@ local function finish(status, message)
             "art_future_window_nonzero=%d art_future_window_unsafe=%d " ..
             "art_future_window_hist=%s art_lcdc=%02X art_scy=%02X " ..
             "art_scx=%02X art_base=%04X art_window_base=%04X " ..
-            "art_cells=%s art_future_window_cells=%s\n",
+            "art_cells=%s art_future_window_cells=%s art_bg_cram=%s " ..
+            "art_oam=%s\n",
             art.nonzero, art.unsafe, art.hist,
             art.window_nonzero, art.window_unsafe, art.window_hist,
             art.lcdc, art.scy, art.scx, art.base, art.window_base,
-            art.cells, art.window_cells
+            art.cells, art.window_cells, art.bg_cram, art.oam
         ))
     end
     if gameover then

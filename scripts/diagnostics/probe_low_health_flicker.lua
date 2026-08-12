@@ -10,10 +10,63 @@ local POST_TRIGGER_KEYS = tonumber(
   os.getenv("LOW_HEALTH_POST_TRIGGER_KEYS") or "0")
 local TRACE_SCANNER = os.getenv("LOW_HEALTH_TRACE_SCANNER") == "1"
 local TRACE_ATTR = os.getenv("LOW_HEALTH_TRACE_ATTR") == "1"
+local TRACE_LAYOUTS = os.getenv("LOW_HEALTH_TRACE_LAYOUTS") == "1"
 local frame, sample, done = 0, 0, false
 local music_transition_seen = false
 local scanner_path = "entry"
 local scanner_trace_count = 0
+local layout_records, layout_seen, layout_events = {}, {}, {}
+local debug_destination = 0
+
+local function register_layout()
+  if not TRACE_LAYOUTS then return 0 end
+  local raw, attr = {}, {}
+  for offset = 0, 0x23F do
+    local tile = emu:read8(0xC1A0 + offset)
+    raw[#raw + 1] = string.char(tile)
+    attr[#attr + 1] = string.char(emu:read8(0xC600 + tile) & 0x07)
+  end
+  local raw_blob = table.concat(raw)
+  if not layout_seen[raw_blob] then
+    layout_records[#layout_records + 1] = {
+      raw = raw_blob,
+      attr = table.concat(attr),
+    }
+    layout_seen[raw_blob] = #layout_records
+  end
+  return layout_seen[raw_blob]
+end
+
+if TRACE_LAYOUTS then
+  pcall(function()
+    emu:setBreakpoint(function() debug_destination = 0x9C end, 0x42A0)
+    emu:setBreakpoint(function() debug_destination = 0x98 end, 0x42A5)
+    emu:setBreakpoint(function()
+      local scene = emu:read8(0xD880) & 0xF7
+      if scene == 0x02 and #layout_events < 2048 then
+        layout_events[#layout_events + 1] = {
+          destination = debug_destination,
+          lcdc = emu:read8(0xFF40),
+          scx = emu:read8(0xFF43),
+          scy = emu:read8(0xFF42),
+          dc00 = emu:read8(0xDC00),
+          dc01 = emu:read8(0xDC01),
+          dc02 = emu:read8(0xDC02),
+          dc03 = emu:read8(0xDC03),
+          dc0b = emu:read8(0xDC0B),
+          dc0c = emu:read8(0xDC0C),
+          dc0d = emu:read8(0xDC0D),
+          dc0e = emu:read8(0xDC0E),
+          dc0f = emu:read8(0xDC0F),
+          dc81 = emu:read8(0xDC81),
+          ffcf = emu:read8(0xFFCF),
+          room = emu:read8(0xFFBD),
+          layout = register_layout(),
+        }
+      end
+    end, 0x3485)
+  end)
+end
 
 if TRACE_ATTR then
   local attr_trace = assert(io.open(OUT .. ".attr-writes.tsv", "w"))
@@ -295,7 +348,7 @@ end
 
 local trace = assert(io.open(OUT .. ".frames.tsv", "w"))
 trace:write(
-  "sample\tframe\thealth_phase\tpc\tdma_source\tdma_unreadable\td880\tffc1\troom\tscy\tdc0b\tdc0e\thazard_rows\tdestination_hazard_rows\thp_sub\thp_main\td887\td885\td888\tbggate\tbgp\tfff7\tffe2\tffe3" ..
+  "sample\tframe\thealth_phase\tpc\tdma_source\tdma_unreadable\tcompiler_unreadable\td880\tffc1\troom\tscy\tdc0b\tdc0e\thazard_rows\tdestination_hazard_rows\thp_sub\thp_main\td887\td885\td888\tbggate\tbgp\tfff7\tffe2\tffe3" ..
   "\tmap\tmismatches\tunexpected_mismatches\tmismatch_details" ..
   "\tunsafe\tapproved_bank1\tattrs\tattr_bytes\tbg_cram\n")
 trace:close()
@@ -337,12 +390,16 @@ callbacks:add("frame", function()
   local dma_unreadable = scene == 0xFF
     and pc >= 0xFF80 and pc <= 0xFF9F
     and (dma_source == 0xC0 or dma_source == 0xC1)
+  local compiler_unreadable = (emu:read8(0xFF70) & 0x07) == 0x03
+    and ((pc >= 0x42A7 and pc <= 0x436D)
+      or (pc >= 0xD400 and pc <= 0xD478))
   local handle = assert(io.open(OUT .. ".frames.tsv", "a"))
   handle:write(string.format(
-    "%d\t%d\t%s\t%04X\t%02X\t%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%s\t%s\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X" ..
+    "%d\t%d\t%s\t%04X\t%02X\t%d\t%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%s\t%s\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X" ..
     "\t%04X\t%d\t%d\t%s\t%d\t%d\t%s\t%s\t%s\n",
     sample, frame, hp_main == 0 and "low" or "pre",
     pc, dma_source, dma_unreadable and 1 or 0,
+    compiler_unreadable and 1 or 0,
     scene, emu:read8(0xFFC1),
     emu:read8(0xFFBD), emu:read8(0xFF42), emu:read8(0xDC0B),
     emu:read8(0xDC0E), source_hazard_rows(), destination_hazard_rows(),
@@ -357,6 +414,28 @@ callbacks:add("frame", function()
 
   if sample >= SAMPLES then
     done = true
+    if TRACE_LAYOUTS then
+      local layouts = assert(io.open(OUT .. ".layouts.bin", "wb"))
+      for _, record in ipairs(layout_records) do
+        layouts:write(record.raw)
+        layouts:write(record.attr)
+      end
+      layouts:close()
+      local events = assert(io.open(OUT .. ".layout-events.tsv", "w"))
+      events:write(
+        "destination\tlcdc\tscx\tscy\tdc00\tdc01\tdc02\tdc03\t" ..
+        "dc0b\tdc0c\tdc0d\tdc0e\tdc0f\tdc81\tffcf\troom\tlayout\n")
+      for _, event in ipairs(layout_events) do
+        events:write(string.format(
+          "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t" ..
+          "%d\t%d\t%d\t%d\t%d\n",
+          event.destination, event.lcdc, event.scx, event.scy,
+          event.dc00, event.dc01, event.dc02, event.dc03,
+          event.dc0b, event.dc0c, event.dc0d, event.dc0e, event.dc0f,
+          event.dc81, event.ffcf, event.room, event.layout))
+      end
+      events:close()
+    end
     local marker = assert(io.open(OUT .. ".done", "w"))
     marker:write("ok\n")
     marker:close()

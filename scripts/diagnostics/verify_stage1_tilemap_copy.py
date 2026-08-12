@@ -9,11 +9,25 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from build_v301_gdma import (  # noqa: E402
+    create_inline_tile_copy_postcomputed_attrs,
+)
+from build_v302_title_fix import (  # noqa: E402
+    INLINE_ATTR_DECISION_HELPER_ADDR,
+    STAGE1_ATOMIC_SETUP_ADDR,
+    STAGE1_ATOMIC_WRAP_ADDR,
+    STAGE1_HAZARD_PURE_MAP_ADDR,
+    STAGE1_SOURCE_GENERATION_RST,
+)
+
 PROBE = ROOT / "scripts/diagnostics/probe_stage1_tilemap_copy.lua"
 DEFAULT_STATES = (
     "level1_sara_w_alone.ss0",
@@ -77,7 +91,38 @@ def run_state(
     double_buffer = rom_bytes[
         0x42A7:0x42A7 + len(DOUBLE_BUFFER_PREFIX)
     ] == DOUBLE_BUFFER_PREFIX
-    if stock_copy or double_buffer:
+    postcomputed_inline = create_inline_tile_copy_postcomputed_attrs(
+        INLINE_ATTR_DECISION_HELPER_ADDR + 3,
+        STAGE1_ATOMIC_SETUP_ADDR,
+        STAGE1_ATOMIC_WRAP_ADDR,
+        STAGE1_HAZARD_PURE_MAP_ADDR,
+        STAGE1_SOURCE_GENERATION_RST,
+    )
+    postcomputed = (
+        rom_bytes[0x42A7:0x42A7 + len(postcomputed_inline)]
+        == postcomputed_inline
+    )
+    tile_row = 0xFFFF
+    if postcomputed:
+        # Cache hits/title copies finish at this one shared EI/RET. Changed
+        # Stage-1 maps branch to the attribute compiler immediately before it.
+        pure_tail = bytes([
+            0xCD,
+            STAGE1_HAZARD_PURE_MAP_ADDR & 0xFF,
+            STAGE1_HAZARD_PURE_MAP_ADDR >> 8,
+            0xFB,
+            0xC9,
+        ])
+        pure_offset = postcomputed_inline.find(pure_tail)
+        if pure_offset < 0 or postcomputed_inline.count(pure_tail) != 1:
+            raise RuntimeError("postcomputed pure completion is not unique")
+        pure_completion = 0x42A7 + pure_offset + len(pure_tail) - 1
+        common_setup = bytes.fromhex("11 A0 C1 3E 18 F5")
+        common_offset = postcomputed_inline.find(common_setup)
+        if common_offset < 0 or postcomputed_inline.count(common_setup) != 1:
+            raise RuntimeError("postcomputed tile-row entry is not unique")
+        tile_row = 0x42A7 + common_offset + len(common_setup)
+    elif stock_copy or double_buffer:
         # The unmodified game finishes its 24x24 copy at the RET at $436D.
         # Supporting it here lets the same long-running gate prove that a
         # production candidate restored the timing-sensitive stock routine.
@@ -98,6 +143,7 @@ def run_state(
         pure_index, pure_pattern = pure_matches[0]
         pure_completion = pure_index + len(pure_pattern) - 1
     atomic_wrap_mode = "stock-order"
+    atomic_wrap_segment = -1
     if stock_copy:
         # A stock-copier isolation build intentionally has neither an atomic
         # row nor its exit. Keep inert breakpoint addresses so the same probe
@@ -124,6 +170,23 @@ def run_state(
         atomic_wrap = completion_matches[0] + 7
         atomic_row = atomic_first_tile_write = 0xFFFF
         atomic_wrap_mode = "direct-map"
+        atomic_wrap_segment = 1
+    elif postcomputed:
+        # Break on the unique bank-1 jump after attribute DMA completion. The
+        # fixed wrapper is shared by other attribute work, so treating every
+        # visit there as a terrain-copy completion creates false mismatches.
+        atomic_jump = bytes([
+            0xC3,
+            STAGE1_ATOMIC_WRAP_ADDR & 0xFF,
+            STAGE1_ATOMIC_WRAP_ADDR >> 8,
+        ])
+        atomic_offset = postcomputed_inline.find(atomic_jump)
+        if atomic_offset < 0 or postcomputed_inline.count(atomic_jump) != 1:
+            raise RuntimeError("postcomputed atomic completion is not unique")
+        atomic_wrap = 0x42A7 + atomic_offset
+        atomic_row = atomic_first_tile_write = 0xFFFF
+        atomic_wrap_mode = "direct-map"
+        atomic_wrap_segment = 1
     else:
         # The completed map is already stable on entry to the atomic wrapper.
         # Break before its hazard publisher can legitimately use H as scratch;
@@ -225,6 +288,8 @@ def run_state(
                 f"{atomic_first_tile_write:04X}"
             ),
             "STAGE1_TILEMAP_ATOMIC_WRAP_MODE": atomic_wrap_mode,
+            "STAGE1_TILEMAP_ATOMIC_WRAP_SEGMENT": str(atomic_wrap_segment),
+            "STAGE1_TILEMAP_TILE_ROW": f"{tile_row:04X}",
         }
     )
     command = [str(mgba), "--fastforward"]
@@ -316,6 +381,9 @@ def main() -> int:
                 pure = int(report["pure_completions"])
                 completions = atomic + pure
                 mismatches = int(report["mismatch_cells"])
+                wrong_destination_wraps = int(
+                    report.get("wrong_destination_wrap_hits", "0")
+                )
                 total_completions += completions
                 print(
                     f"{name}: entries={report['copy_entries']} "
@@ -337,6 +405,11 @@ def main() -> int:
                 )
                 if mismatches:
                     failures.append(f"{name}: {report['first_mismatch']}")
+                if wrong_destination_wraps:
+                    failures.append(
+                        f"{name}: {wrong_destination_wraps} atomic wrappers "
+                        "targeted a map other than the pending tile copy"
+                    )
             except Exception as exc:
                 failures.append(f"{name}: {exc}")
     finally:

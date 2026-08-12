@@ -222,8 +222,13 @@ def main() -> int:
     dma_unreadable = [
         row for row in frames if row.get("dma_unreadable") == "1"
     ]
+    compiler_unreadable = [
+        row for row in frames if row.get("compiler_unreadable") == "1"
+    ]
     readable_frames = [
-        row for row in frames if row.get("dma_unreadable") == "0"
+        row for row in frames
+        if row.get("dma_unreadable") == "0"
+        and row.get("compiler_unreadable") == "0"
     ]
     pre_frames = [
         row for row in readable_frames if row["health_phase"] == "pre"
@@ -255,12 +260,22 @@ def main() -> int:
             len(frames) == args.samples == len(screenshots)
         ),
         "DMA-unreadable samples are exactly classified by HRAM PC/source": (
-            len(readable_frames) + len(dma_unreadable) == len(frames)
-            and all(
+            all(
                 0xFF80 <= int(row["pc"], 16) <= 0xFF9F
                 and row["dma_source"] in {"C0", "C1"}
                 and row["d880"] == "FF"
                 for row in dma_unreadable
+            )
+        ),
+        "private-WRAM compiler samples are exactly classified by PC/SVBK": (
+            len(readable_frames) + len(dma_unreadable)
+            + len(compiler_unreadable) == len(frames)
+            and all(
+                (
+                    0x42A7 <= int(row["pc"], 16) <= 0x436D
+                    or 0xD400 <= int(row["pc"], 16) <= 0xD478
+                )
+                for row in compiler_unreadable
             )
         ),
         "fixture stays in live Stage 1/Gargoyle gameplay": all(
@@ -272,9 +287,15 @@ def main() -> int:
         ),
         "fixture crosses the low-health warning threshold once": (
             0 < args.pre_trigger < args.samples
-            and len(pre_frames) >= args.pre_trigger - len(dma_unreadable)
+            and len(pre_frames) >= (
+                args.pre_trigger
+                - len(dma_unreadable)
+                - len(compiler_unreadable)
+            )
             and len(low_frames) >= (
-                args.samples - args.pre_trigger - len(dma_unreadable)
+                args.samples - args.pre_trigger
+                - len(dma_unreadable)
+                - len(compiler_unreadable)
             )
             and all(row["hp_main"] == "01" for row in pre_frames)
             and all(row["hp_main"] == "00" for row in low_frames)
@@ -343,6 +364,7 @@ def main() -> int:
         "low_health_frames": len(low_frames),
         "sample_frames": len(frames),
         "dma_unreadable_samples": len(dma_unreadable),
+        "compiler_unreadable_samples": len(compiler_unreadable),
         "readable_samples": len(readable_frames),
         "bgp_writes_total": len(sampled_writes),
         "non_e4_bgp_writes": bad_writes[:32],

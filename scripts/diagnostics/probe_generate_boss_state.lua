@@ -16,8 +16,9 @@ local STATE_OUT = assert(os.getenv("BOSS_STATE_OUT"), "BOSS_STATE_OUT required")
 local OUT = os.getenv("BOSS_OUT") or "/tmp/penta-stream-boss"
 local STABLE_TARGET = tonumber(os.getenv("BOSS_STABLE_FRAMES") or "240")
 local ENTRY_TIMEOUT = tonumber(os.getenv("BOSS_ENTRY_TIMEOUT") or "1200")
+local OBJ_EXPECTED = os.getenv("BOSS_OBJ_EXPECTED") or ""
 local EXPECTED_SCENE = 0x0C + TARGET
-local f, reached, stable, done = 0, false, 0, false
+local f, reached, stable, palette_settled, done = 0, false, 0, 0, false
 local trace = assert(io.open(OUT .. ".trace", "w"))
 
 local function register(name)
@@ -71,16 +72,18 @@ local function finish(status, message)
     local report = assert(io.open(OUT .. ".report", "w"))
     report:write(string.format(
         "status=%s target=%d expected_scene=%02X frame=%d d880=%02X " ..
-        "ffc1=%d ff91=%02X df0d=%02X ffba=%02X ffbf=%02X stable=%d message=%s " ..
+        "ffc1=%d ff91=%02X df0d=%02X ffba=%02X ffbf=%02X phase=%02X " ..
+        "stable=%d palette_settled=%d message=%s " ..
         "pc=%04X sp=%04X ie=%02X lcdc=%02X " ..
-        "active_table=%s bg_cram=%s\n",
+        "active_table=%s bg_cram=%s obj_cram=%s\n",
         status, TARGET, EXPECTED_SCENE, f, emu:read8(0xD880),
         emu:read8(0xFFC1), emu:read8(0xFF91), emu:read8(0xDF0D),
-        emu:read8(0xFFBA), emu:read8(0xFFBF),
-        stable, message, register("PC"), register("SP"),
+        emu:read8(0xFFBA), emu:read8(0xFFBF), emu:read8(0xDF4C),
+        stable, palette_settled, message, register("PC"), register("SP"),
         emu:read8(0xFFFF), emu:read8(0xFF40),
         hex_range(0xC600, 0x100),
-        palette_hex("cgbBgPalette", 0xFF68, 0xFF69)
+        palette_hex("cgbBgPalette", 0xFF68, 0xFF69),
+        palette_hex("cgbObjPalette", 0xFF6A, 0xFF6B)
     ))
     report:close()
     local marker = assert(io.open(OUT .. ".done", "w"))
@@ -107,10 +110,16 @@ callbacks:add("frame", function()
     if f <= ENTRY_TIMEOUT and (not reached or stable < 80) then
         trace:write(string.format(
             "frame=%d pc=%04X d880=%02X ff91=%02X df0d=%02X ffb7=%02X ffba=%02X " ..
-            "dcbb=%02X d888=%02X dd06=%02X\n",
+            "ffbf=%02X ffc0=%02X ffd0=%02X ffc1=%02X tick=%02X bgp=%02X hash=%02X " ..
+            "phase=%02X bg7=%s dcbb=%02X d888=%02X dd06=%02X\n",
             f, register("PC"), scene, emu:read8(0xFF91),
             emu:read8(0xDF0D), emu:read8(0xFFB7),
-            emu:read8(0xFFBA), emu:read8(0xDCBB),
+            emu:read8(0xFFBA), emu:read8(0xFFBF), emu:read8(0xFFC0),
+            emu:read8(0xFFD0), emu:read8(0xFFC1), emu:read8(0xFFD4),
+            emu:read8(0xFF47), emu:read8(0xDF00),
+            emu:read8(0xDF4C),
+            palette_hex("cgbBgPalette", 0xFF68, 0xFF69):sub(113, 128),
+            emu:read8(0xDCBB),
             emu:read8(0xD888), emu:read8(0xDD06)
         ))
         trace:flush()
@@ -136,7 +145,19 @@ callbacks:add("frame", function()
             return
         end
         stable = stable + 1
-        if stable == STABLE_TARGET then
+        -- A scene can be visually stable while the bounded CRAM loader is
+        -- still carrying Stage 1 rows into the arena. Require a separate
+        -- eight-frame quiet hold after phase zero, but do not demand another
+        -- full minute from short-lived synthetic boss entry fixtures.
+        if emu:read8(0xDF4C) == 0 then
+            palette_settled = palette_settled + 1
+        else
+            palette_settled = 0
+        end
+        local obj_cram = palette_hex("cgbObjPalette", 0xFF6A, 0xFF6B)
+        local obj_expected = OBJ_EXPECTED == "" or
+            obj_cram:sub(65, 128) == OBJ_EXPECTED
+        if stable >= STABLE_TARGET and palette_settled >= 8 and obj_expected then
             emu:screenshot(OUT .. ".png")
             local save_ok, result = pcall(function()
                 return emu:saveStateFile(STATE_OUT)

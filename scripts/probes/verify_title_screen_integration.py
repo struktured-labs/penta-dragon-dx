@@ -180,7 +180,10 @@ def capture_with_pyboy(rom_path: str, frames: int = 600, verbose: bool = False) 
     from pyboy import PyBoy
     if verbose:
         print(f"  Booting PyBoy: {rom_path} for {frames} frames...")
-    boy = PyBoy(rom_path, window="null", cgb=True)
+    boy = PyBoy(
+        rom_path, window="null", cgb=True,
+        sound_emulated=False, log_level=5,
+    )
     for i in range(frames):
         boy.tick()
     img = boy.screen.image

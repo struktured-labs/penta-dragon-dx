@@ -73,6 +73,7 @@ def run_one(
             "STAGE_SPEED_OUT": str(receipt),
             "STAGE_SPEED_DONE": str(marker),
             "STAGE_SPEED_TRACE": str(run_dir / "attr-events.tsv"),
+            "STAGE_SPEED_LIFECYCLE": str(run_dir / "lifecycle.tsv"),
             "STAGE_SPEED_MODE": mode,
             "STAGE_SPEED_FRAMES": str(frames),
             "STAGE_SPEED_ATOMIC_ADDR": str(atomic_addr),
@@ -185,6 +186,9 @@ def main() -> int:
         dma_unreadable_scene_samples = candidate.get(
             "dma_unreadable_scene_samples", 0
         )
+        compiler_unreadable_scene_samples = candidate.get(
+            "compiler_unreadable_scene_samples", 0
+        )
         non_dma_scene_mismatch_frames = candidate.get(
             "non_dma_scene_mismatch_frames",
             candidate_scene_mismatch_frames,
@@ -232,6 +236,9 @@ def main() -> int:
             "candidate_scene_mismatch_frames": candidate_scene_mismatch_frames,
             "candidate_dma_unreadable_scene_samples": (
                 dma_unreadable_scene_samples
+            ),
+            "candidate_compiler_unreadable_scene_samples": (
+                compiler_unreadable_scene_samples
             ),
             "candidate_non_dma_scene_mismatch_frames": (
                 non_dma_scene_mismatch_frames

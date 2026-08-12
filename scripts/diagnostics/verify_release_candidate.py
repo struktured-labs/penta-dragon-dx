@@ -3,7 +3,7 @@
 
 The older ``full_verification_loop*.sh`` scripts rebuild and test the retired
 teleport ROM. This harness never builds or patches a ROM. It copies the chosen
-candidate to /tmp, runs every current release gate sequentially, retains each
+candidate to repo-local ``tmp/``, runs every current release gate sequentially, retains each
 gate's log/artifacts, and fails if either the source ROM or tested copy changes.
 
 Passing this matrix proves the emulator-visible release requirements only.
@@ -496,6 +496,14 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             180,
         ),
         Gate(
+            "boss_atomic_attr_contract",
+            script(
+                "scripts/diagnostics/verify_boss_atomic_attr_contract.py",
+                r,
+            ),
+            30,
+        ),
+        Gate(
             "boss_arenas",
             script(
                 "scripts/probes/verify_boss_arena_palettes.py",
@@ -504,6 +512,100 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 str(artifacts / "boss-arenas"),
             ),
             600,
+        ),
+        Gate(
+            "boss_geometry_all9",
+            script(
+                "scripts/diagnostics/verify_boss_geometry.py",
+                r,
+                "--states",
+                str(artifacts / "boss-arenas"),
+                "--frames",
+                "360",
+                "--warmup-frames",
+                "24",
+                "--require-all-strict",
+                "--output",
+                str(artifacts / "boss-geometry/report.json"),
+                "--trace-dir",
+                str(artifacts / "boss-geometry/traces"),
+            ),
+            180,
+            dependencies=("boss_arenas",),
+        ),
+        Gate(
+            "boss_semantic_cadence",
+            script(
+                "scripts/diagnostics/verify_boss_semantic_cadence.py",
+                r,
+                "--states",
+                str(artifacts / "boss-arenas"),
+                "--frames",
+                "120",
+                "--output",
+                str(artifacts / "boss-semantic-cadence.json"),
+            ),
+            180,
+            dependencies=("boss_arenas",),
+        ),
+        Gate(
+            "boss_og_states",
+            script(
+                "scripts/diagnostics/generate_stream_boss_states.py",
+                str(ROOT / "rom/Penta Dragon (J).gb"),
+                "--output",
+                str(artifacts / "boss-og-states"),
+                "--force",
+            ),
+            600,
+        ),
+        Gate(
+            "boss_publication_cadence",
+            script(
+                "scripts/diagnostics/verify_boss_publication_cadence.py",
+                r,
+                "--dx-states",
+                str(artifacts / "boss-arenas"),
+                "--og-states",
+                str(artifacts / "boss-og-states"),
+                "--warmup",
+                "60",
+                "--frames",
+                "600",
+                "--output",
+                str(artifacts / "boss-publication-cadence.json"),
+            ),
+            300,
+            dependencies=("boss_arenas", "boss_og_states"),
+        ),
+        Gate(
+            "crystal_dragon_ghost",
+            script(
+                "scripts/diagnostics/verify_crystal_dragon_ghost.py",
+                r,
+                "--states",
+                str(artifacts / "boss-arenas"),
+                "--frames",
+                "720",
+            ),
+            90,
+            dependencies=("boss_arenas",),
+        ),
+        Gate(
+            "boss_material_gallery_all9",
+            script(
+                "scripts/diagnostics/capture_boss_material_gallery.py",
+                r,
+                "--states",
+                str(artifacts / "boss-arenas"),
+                "--output",
+                str(artifacts / "boss-material-gallery"),
+                "--frames",
+                "120",
+                "--require-clean-staging",
+            ),
+            240,
+            dependencies=("boss_geometry_all9", "crystal_dragon_ghost"),
         ),
         Gate(
             "death_gameover",
@@ -718,7 +820,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        help="artifact directory (default: timestamped directory under /tmp)",
+        help="artifact directory (default: timestamped directory under repo tmp/)",
     )
     parser.add_argument(
         "--only",
@@ -755,7 +857,7 @@ def main() -> int:
     output = (
         args.output.resolve()
         if args.output
-        else Path(f"/tmp/penta-release-candidate-{stamp}")
+        else ROOT / "tmp" / f"penta-release-candidate-{stamp}"
     )
     output.mkdir(parents=True, exist_ok=True)
     (output / "logs").mkdir(exist_ok=True)

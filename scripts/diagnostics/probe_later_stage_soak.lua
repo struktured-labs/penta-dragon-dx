@@ -350,7 +350,7 @@ local function sample_visible()
   if sample_lava_mismatch > 0 or sample_pickup_mismatch > 0
       or sample_material_mismatch > 0 then
     local signature_a, signature_b = 0, 0
-    for _, offset in ipairs({444, 148, 19, 251}) do
+    for _, offset in ipairs({444, 149, 19, 251}) do
       signature_a = signature_a ~ emu:read8(0xC1A0 + offset)
     end
     for _, offset in ipairs({0, 59, 333}) do

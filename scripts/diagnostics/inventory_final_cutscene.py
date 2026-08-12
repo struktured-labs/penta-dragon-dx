@@ -224,7 +224,10 @@ def main() -> int:
         for art_id, panel in cutscene_panels.items()
     }
 
-    pyboy = PyBoy(str(rom), window="null", cgb=True, sound=False)
+    pyboy = PyBoy(
+        str(rom), window="null", cgb=True,
+        sound_emulated=False, log_level=5,
+    )
     pyboy.set_emulation_speed(0)
     transitions: list[tuple[int, int, int, int, int]] = []
     panels: list[Panel] = []
@@ -239,9 +242,30 @@ def main() -> int:
         pyboy.tick(600, True)
         direct_enter_final(pyboy, args.entry)
         entered = True
+        capture_scenes = (
+            {0x19, 0x18} if args.entry == "pre-final" else {0x1A, 0x16}
+        )
 
         while frame < args.frames:
-            pyboy.tick(1, True)
+            # Scene/state transitions remain frame-exact. Between receipts,
+            # avoid SDL work for the existing 90-frame minimum interval; once
+            # the next receipt is eligible, render every frame until the first
+            # distinct stable production panel is captured. This preserves
+            # the original capture semantics and avoids sampling a coarse
+            # ten-frame point in the middle of an attribute publication.
+            current_scene = pyboy.memory[D880]
+            current_ending = current_scene in capture_scenes or (
+                args.entry == "post-final"
+                and current_scene == 0x00
+                and pyboy.memory[FFE4] == 1
+                and pyboy.memory[FFC1] == 0
+            )
+            rendered = (
+                current_ending
+                and frame + 1 >= 60
+                and frame + 1 - last_capture >= 90
+            )
+            pyboy.tick(1, rendered)
             frame += 1
             scene = pyboy.memory[D880]
             ffc1 = pyboy.memory[FFC1]
@@ -251,16 +275,18 @@ def main() -> int:
                 transitions.append((frame, scene, ffc1, ffba, ffe4))
                 previous_scene = scene
 
-            capture_scenes = (
-                {0x19, 0x18} if args.entry == "pre-final" else {0x1A, 0x16}
-            )
             ending = scene in capture_scenes or (
                 args.entry == "post-final"
                 and scene == 0x00
                 and ffe4 == 1
                 and ffc1 == 0
             )
-            if ending and frame >= 60 and frame - last_capture >= 90:
+            if (
+                rendered
+                and ending
+                and frame >= 60
+                and frame - last_capture >= 90
+            ):
                 image = pyboy.screen.image
                 image_crc = zlib.crc32(image.tobytes())
                 palettes, unsafe_attrs, tilemap, attributes = visible_bg(pyboy)

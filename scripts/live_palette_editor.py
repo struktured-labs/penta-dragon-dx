@@ -2,11 +2,14 @@
 """Live palette editor — browser-based GUI for tuning Penta Dragon DX CGB colors.
 
 Workflow:
-  1. Start this script:  python3 scripts/live_palette_editor.py
-  2. Open http://localhost:8077 in browser
-  3. Launch mGBA with live palette script:
-       mgba-qt rom/working/penta_dragon_dx_FIXED.gb --script scripts/lua/live_palettes.lua
-  4. Adjust colors in browser. Changes apply to running game within ~0.5s.
+  1. Start the guarded emulator/editor pair:
+       scripts/palette_session.sh start
+  2. Open http://localhost:8077 in a browser.
+  3. Adjust colors. Emulator-side CRAM changes appear within ~0.5s.
+
+Live adjustment is intentionally a development/streaming tool. It does not
+modify the running ROM. "Save to YAML" followed by a deterministic rebuild is
+the separate path for making an audience-selected palette ship in the patch.
 
 The browser saves color picks to rom/working/live_palettes.txt. The mGBA Lua
 script polls that file every 30 frames (~0.5s) and rewrites CGB palette

@@ -175,7 +175,10 @@ def main() -> int:
         parser.error(f"ROM not found: {rom}")
     output.mkdir(parents=True, exist_ok=True)
 
-    pyboy = PyBoy(str(rom), window="null", cgb=True, sound=False)
+    pyboy = PyBoy(
+        str(rom), window="null", cgb=True,
+        sound_emulated=False, log_level=5,
+    )
     pyboy.set_emulation_speed(0)
     failures: list[str] = []
     try:

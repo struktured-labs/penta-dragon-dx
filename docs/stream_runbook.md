@@ -2,7 +2,9 @@
 
 This is the release-safe path for the Twitch color-picking stream. It uses the
 exact production ROM in mGBA, curated ROM-matched states, and the browser
-editor. It does not enable the retired SELECT+START teleport.
+editor. Live tuning is external tooling: the browser/Lua bridge may load
+curated emulator states and write mGBA's CGB palette RAM without adding those
+controls to the ROM. It does not enable the retired SELECT+START teleport.
 
 ## Before going live
 
@@ -55,6 +57,10 @@ indices, so changing one boss can affect another that shares that BG row.
 Revisit every affected boss button before locking a shared color. Story
 artwork colors only the top artwork region; separator, border, and dialogue
 must remain neutral.
+
+An on-screen live change proves the tuning bridge only; it does not alter the
+ROM file. **Save to YAML** followed by a fresh build proves that the chosen
+colors survive reset and are part of the eventual patch.
 
 Use **Reset live colors from YAML** to abandon unsaved experiments. Use
 **Save to YAML** only after the audience has chosen a set. A changed save

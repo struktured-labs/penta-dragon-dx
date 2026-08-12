@@ -28,10 +28,14 @@ local KEY_RIGHT, KEY_LEFT, KEY_UP, KEY_DOWN = 0x10, 0x20, 0x40, 0x80
 local ATOMIC_WRAP = tonumber(assert(os.getenv("STAGE1_TILEMAP_ATOMIC_WRAP")), 16)
 local ATOMIC_WRAP_MODE = os.getenv("STAGE1_TILEMAP_ATOMIC_WRAP_MODE") or
   "stock-order"
+local ATOMIC_WRAP_SEGMENT = tonumber(
+  assert(os.getenv("STAGE1_TILEMAP_ATOMIC_WRAP_SEGMENT")))
 local ATOMIC_ROW = tonumber(
   assert(os.getenv("STAGE1_TILEMAP_ATOMIC_ROW")), 16)
 local ATOMIC_FIRST_TILE_WRITE = tonumber(
   assert(os.getenv("STAGE1_TILEMAP_ATOMIC_FIRST_WRITE")), 16)
+local TILE_ROW = tonumber(
+  assert(os.getenv("STAGE1_TILEMAP_TILE_ROW")), 16)
 local wrap_opcode = emu:read8(ATOMIC_WRAP)
 local STOCK_ORDER_WRAP = wrap_opcode ~= 0xB7
 
@@ -42,6 +46,7 @@ local did_setup = false
 local did_force_pure = false
 local copy_entries, atomic_completions, pure_completions = 0, 0, 0
 local wrap_hits, exact_copies = 0, 0
+local unmatched_wrap_hits, wrong_destination_wrap_hits = 0, 0
 local mismatch_copies, mismatch_cells = 0, 0
 local entry_mismatch_copies, entry_mismatch_cells = 0, 0
 local source_changed_cells = 0
@@ -58,6 +63,8 @@ local atomic_start_h_values, atomic_start_l_values = {}, {}
 local atomic_write_h_values, atomic_write_l_values = {}, {}
 local source_events = {}
 local target_row_events = {}
+local tile_row_events = {}
+local invalid_tile_row_events = 0
 local raw_vram = assert(emu.memory.vram)
 local finished = false
 
@@ -186,6 +193,9 @@ local function write_report()
   handle:write(string.format("atomic_completions=%d\n", atomic_completions))
   handle:write(string.format("pure_completions=%d\n", pure_completions))
   handle:write(string.format("wrap_hits=%d\n", wrap_hits))
+  handle:write(string.format("unmatched_wrap_hits=%d\n", unmatched_wrap_hits))
+  handle:write(string.format(
+    "wrong_destination_wrap_hits=%d\n", wrong_destination_wrap_hits))
   handle:write(string.format("exact_copies=%d\n", exact_copies))
   handle:write(string.format("mismatch_copies=%d\n", mismatch_copies))
   handle:write(string.format("mismatch_cells=%d\n", mismatch_cells))
@@ -235,6 +245,15 @@ local function write_report()
       "target_row_event=%d|%d|%02X|%02X|%d\n",
       event.frame, event.b, event.h, event.l, event.previous_mismatches))
   end
+  handle:write(string.format(
+    "invalid_tile_row_events=%d\n", invalid_tile_row_events))
+  for _, event in ipairs(tile_row_events) do
+    handle:write(string.format(
+      "tile_row_event=%d|%d|%04X|%04X|%04X|%04X|%02X|%02X|%02X|%02X\n",
+      event.frame, event.copy, event.de, event.hl,
+      event.expected_de, event.expected_hl, event.b,
+      event.scx, event.dc02, event.raw49))
+  end
   if first_mismatch then
     handle:write(string.format(
       "first_mismatch=frame:%d copy:%d base:%04X row:%d col:%d " ..
@@ -258,10 +277,10 @@ end
 pcall(function()
   emu:setBreakpoint(function()
     if emu:read8(0xFF99) == 1 then selected_base = 0x9C00 end
-  end, 0x42A0)
+  end, 0x42A0, 1)
   emu:setBreakpoint(function()
     if emu:read8(0xFF99) == 1 then selected_base = 0x9800 end
-  end, 0x42A5)
+  end, 0x42A5, 1)
   emu:setBreakpoint(function()
     if emu:read8(0xD880) ~= 0x02 or emu:read8(0xFF99) ~= 1 then return end
     local h = read_register("H")
@@ -307,7 +326,28 @@ pcall(function()
       }
     end
     pending_wraps = 0
-  end, 0x42A7)
+  end, 0x42A7, 1)
+
+  emu:setBreakpoint(function()
+    if pending_source == nil or emu:read8(0xD880) ~= 0x02
+        or emu:read8(0xFF99) ~= 1 then return end
+    local de = read_register("DE")
+    local hl = read_register("HL")
+    local row = ((hl - pending_base) >> 5) & 0xFF
+    local expected_de = 0xC1A0 + row * 24
+    local expected_hl = pending_base + row * 32
+    if de ~= expected_de or hl ~= expected_hl or row >= 24 then
+      invalid_tile_row_events = invalid_tile_row_events + 1
+    end
+    if #tile_row_events < 512 then
+      tile_row_events[#tile_row_events + 1] = {
+        frame=frame, copy=copy_entries, de=de, hl=hl,
+        expected_de=expected_de, expected_hl=expected_hl,
+        b=read_register("B"), scx=emu:read8(0xFF43),
+        dc02=emu:read8(0xDC02), raw49=emu:read8(0xC1D1),
+      }
+    end
+  end, TILE_ROW, 1)
 
   emu:setBreakpoint(function()
     if emu:read8(0xD880) ~= 0x02 or emu:read8(0xFF99) ~= 1 then return end
@@ -336,7 +376,7 @@ pcall(function()
     atomic_start_h_values[h] = (atomic_start_h_values[h] or 0) + 1
     atomic_start_l_values[l] = (atomic_start_l_values[l] or 0) + 1
     pending_first_atomic_write = true
-  end, ATOMIC_ROW)
+  end, ATOMIC_ROW, 1)
 
   emu:setBreakpoint(function()
     if emu:read8(0xD880) ~= 0x02 or emu:read8(0xFF99) ~= 1 then return end
@@ -345,10 +385,10 @@ pcall(function()
     local h, l = read_register("H"), read_register("L")
     atomic_write_h_values[h] = (atomic_write_h_values[h] or 0) + 1
     atomic_write_l_values[l] = (atomic_write_l_values[l] or 0) + 1
-  end, ATOMIC_FIRST_TILE_WRITE)
+  end, ATOMIC_FIRST_TILE_WRITE, 1)
 
   emu:setBreakpoint(function()
-    if emu:read8(0xD880) ~= 0x02 then return end
+    if emu:read8(0xD880) ~= 0x02 or emu:read8(0xFF99) ~= 1 then return end
     wrap_hits = wrap_hits + 1
     local a, h = read_register("A"), read_register("H")
     wrap_a_values[a] = (wrap_a_values[a] or 0) + 1
@@ -370,6 +410,14 @@ pcall(function()
       base = h * 0x100
     end
     if base ~= 0x9800 and base ~= 0x9C00 then return end
+    if pending_source == nil then
+      unmatched_wrap_hits = unmatched_wrap_hits + 1
+      return
+    end
+    if pending_base ~= base then
+      wrong_destination_wrap_hits = wrong_destination_wrap_hits + 1
+      return
+    end
     destinations[base] = true
     atomic_completions = atomic_completions + 1
     completion_stat_values[emu:read8(0xFF41) & 3] =
@@ -383,7 +431,7 @@ pcall(function()
     pending_source, pending_base = nil, nil
     pending_wraps = 0
     trace_target_copy = false
-  end, ATOMIC_WRAP)
+  end, ATOMIC_WRAP, ATOMIC_WRAP_SEGMENT)
 
   -- Stock-width/pure path completion, immediately before its RET. H is three
   -- pages past the base here, so retain the entry-time destination instead.
@@ -404,7 +452,7 @@ pcall(function()
     pending_source, pending_base = nil, nil
     pending_wraps = 0
     trace_target_copy = false
-  end, PURE_COMPLETION)
+  end, PURE_COMPLETION, 1)
 end)
 
 callbacks:add("frame", function()

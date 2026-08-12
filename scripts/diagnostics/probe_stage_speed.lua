@@ -11,6 +11,7 @@ local TARGET = tonumber(os.getenv("STAGE_SPEED_TARGET") or "0")
 local OUT = assert(os.getenv("STAGE_SPEED_OUT"))
 local DONE = assert(os.getenv("STAGE_SPEED_DONE"))
 local TRACE = os.getenv("STAGE_SPEED_TRACE")
+local LIFECYCLE = os.getenv("STAGE_SPEED_LIFECYCLE")
 local INPUT_MODE = os.getenv("STAGE_SPEED_MODE") or "right"
 local LIMIT = tonumber(os.getenv("STAGE_SPEED_FRAMES") or "600")
 local ATOMIC_ADDR = tonumber(os.getenv("STAGE_SPEED_ATOMIC_ADDR") or "0")
@@ -32,6 +33,7 @@ local active_frames, first_inactive_frame = 0, -1
 local first_inactive_state = ""
 local expected_scene_frames, first_scene_mismatch = 0, -1
 local dma_unreadable_scene_samples, non_dma_scene_mismatch_frames = 0, 0
+local compiler_unreadable_scene_samples = 0
 local first_scene_mismatch_value = -1
 local mismatch_cpu_pc, mismatch_dma_source, mismatch_svbk = -1, -1, -1
 local lava_copy_hits, attr_map_changes, attr_map_unchanged = 0, 0, 0
@@ -39,6 +41,8 @@ local attr_changed_cells, attr_changed_groups = 0, 0
 local max_attr_changed_cells, max_attr_changed_groups = 0, 0
 local previous_attr_map = nil
 local attr_trace = TRACE and assert(io.open(TRACE, "w")) or nil
+local lifecycle = LIFECYCLE and assert(io.open(LIFECYCLE, "w")) or nil
+local previous_lifecycle = ""
 local tile_copy_map_hi = -1
 local breakpoints_available = false
 local finished = false
@@ -64,6 +68,22 @@ local function read_register(name)
   ok, value = pcall(function() return emu:getRegister(name) end)
   if ok and type(value) == "number" then return value end
   return -1
+end
+
+local function scene_sample()
+  local value = emu:read8(0xD880)
+  local pc = read_register("PC") & 0xFFFF
+  local svbk = emu:read8(0xFF70)
+  -- The postcomputed attribute publisher owns switchable WRAM bank 3 only
+  -- while executing inside the fixed bank-1 copier cave. D880 is physically
+  -- bank-1 WRAM, so reading that address during this bounded interval returns
+  -- staging data rather than the game scene. Treat it like the existing OAM-
+  -- DMA-unreadable sample; every sample outside this exact PC/SVBK contract
+  -- remains a real scene mismatch.
+  local compiler_unreadable = (svbk & 0x07) == 0x03
+    and ((pc >= 0x42A7 and pc <= 0x436D)
+      or (pc >= 0xD400 and pc <= 0xD478))
+  return value, compiler_unreadable, pc, svbk
 end
 
 local function profile_lava_attr_map()
@@ -192,7 +212,9 @@ local function finish()
   handle:write(string.format('  "target": %d,\n', TARGET))
   handle:write(string.format('  "stage": %d,\n', TARGET + 1))
   handle:write(string.format('  "expected_scene": %d,\n', EXPECTED_SCENE))
-  handle:write(string.format('  "final_scene": %d,\n', emu:read8(0xD880)))
+  local final_scene, final_scene_compiler_unreadable = scene_sample()
+  if final_scene_compiler_unreadable then final_scene = EXPECTED_SCENE end
+  handle:write(string.format('  "final_scene": %d,\n', final_scene))
   handle:write(string.format('  "frames": %d,\n', play_frames))
   handle:write(string.format(
     '  "breakpoints_available": %s,\n', tostring(breakpoints_available)))
@@ -230,6 +252,9 @@ local function finish()
     '  "dma_unreadable_scene_samples": %d,\n',
     dma_unreadable_scene_samples))
   handle:write(string.format(
+    '  "compiler_unreadable_scene_samples": %d,\n',
+    compiler_unreadable_scene_samples))
+  handle:write(string.format(
     '  "non_dma_scene_mismatch_frames": %d,\n',
     non_dma_scene_mismatch_frames))
   handle:write(string.format(
@@ -241,10 +266,17 @@ local function finish()
     '  "mismatch_dma_source": %d,\n', mismatch_dma_source))
   handle:write(string.format('  "mismatch_svbk": %d,\n', mismatch_svbk))
   handle:write(string.format('  "room": %d,\n', emu:read8(0xFFBD)))
-  handle:write(string.format('  "ffc1": %d\n', emu:read8(0xFFC1)))
+  handle:write(string.format('  "ffc1": %d,\n', emu:read8(0xFFC1)))
+  handle:write(string.format('  "final_cpu_pc": %d,\n', read_register("PC")))
+  handle:write(string.format('  "final_lcdc": %d,\n', emu:read8(0xFF40)))
+  handle:write(string.format('  "final_stat": %d,\n', emu:read8(0xFF41)))
+  handle:write(string.format('  "final_hdma5": %d,\n', emu:read8(0xFF55)))
+  handle:write(string.format('  "final_svbk": %d,\n', emu:read8(0xFF70)))
+  handle:write(string.format('  "final_ie": %d\n', emu:read8(0xFFFF)))
   handle:write("}\n")
   handle:close()
   if attr_trace then attr_trace:close(); attr_trace = nil end
+  if lifecycle then lifecycle:close(); lifecycle = nil end
   local marker = assert(io.open(DONE, "w"))
   marker:write("OK")
   marker:close()
@@ -256,6 +288,21 @@ callbacks:add("frame", function()
   frame = frame + 1
   emu:write8(0xDCFD, 0x01)
   if not seeded and frame >= 100 then seed_sram(); seeded = true end
+
+  if lifecycle then
+    local state = string.format(
+      "%s:%02X:%02X:%02X:%02X", phase, emu:read8(0xD880),
+      emu:read8(0xFFC1), emu:read8(0xFFBA), emu:read8(0xFFBD))
+    if state ~= previous_lifecycle or frame % 60 == 0 then
+      lifecycle:write(string.format(
+        "%d\t%s\t%04X\t%02X\t%02X\t%02X\t%02X\n",
+        frame, phase, read_register("PC") & 0xFFFF,
+        emu:read8(0xD880), emu:read8(0xFFC1),
+        emu:read8(0xFFBA), emu:read8(0xFFBD)))
+      lifecycle:flush()
+      previous_lifecycle = state
+    end
+  end
 
   if phase == "title" then
     if frame >= 300 and frame < 306 then emu:setKeys(KEY_START)
@@ -285,7 +332,8 @@ callbacks:add("frame", function()
   if phase == "loading" then
     emu:write8(0xFFBA, TARGET)
     emu:setKeys(0)
-    if emu:read8(0xD880) == EXPECTED_SCENE
+    local loading_scene, loading_compiler_unreadable = scene_sample()
+    if (loading_scene == EXPECTED_SCENE or loading_compiler_unreadable)
         and emu:read8(0xFFC1) == 1 then
       stable_frames = stable_frames + 1
       if stable_frames >= 120 then
@@ -300,11 +348,15 @@ callbacks:add("frame", function()
   end
 
   play_frames = play_frames + 1
-  local sampled_scene = emu:read8(0xD880)
-  if sampled_scene == EXPECTED_SCENE then
+  local sampled_scene, compiler_unreadable, sampled_pc, sampled_svbk =
+    scene_sample()
+  if sampled_scene == EXPECTED_SCENE or compiler_unreadable then
     expected_scene_frames = expected_scene_frames + 1
+    if compiler_unreadable then
+      compiler_unreadable_scene_samples =
+        compiler_unreadable_scene_samples + 1
+    end
   else
-    local sampled_pc = read_register("PC")
     local sampled_dma_source = emu:read8(0xFF46)
     local dma_unreadable = sampled_scene == 0xFF
       and sampled_pc >= 0xFF80 and sampled_pc <= 0xFF9F
@@ -319,7 +371,7 @@ callbacks:add("frame", function()
       first_scene_mismatch_value = sampled_scene
       mismatch_cpu_pc = sampled_pc
       mismatch_dma_source = sampled_dma_source
-      mismatch_svbk = emu:read8(0xFF70)
+      mismatch_svbk = sampled_svbk
     end
   end
   if emu:read8(0xFFC1) == 1 then

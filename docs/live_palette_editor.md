@@ -22,8 +22,10 @@ Tune CGB palette colors in real time while the game runs in mGBA.
 4. On change detected, Lua decodes the BGR555 values and writes them to
    CGB BCPS/BCPD (BG palette) or OCPS/OCPD (OBJ palette).
 
-The game continues running. You see the color change in the running
-emulator within half a second of picking it in the browser.
+The game continues running. You see the color change in the running emulator
+within half a second of picking it in the browser. This is deliberately an
+emulator-side tuning aid: direct CRAM writes and curated mGBA state loads are
+allowed here and are not features added to the release ROM.
 
 The **Stream Scene Deck** loads 42 mGBA states: the title; 12 story/ending
 states; Stages 2–7; all nine stage/final boss arenas; both Sara forms; ordinary
@@ -81,12 +83,12 @@ on loopback only, and tracks its own PIDs:
 scripts/palette_session.sh start
 ```
 
-It defaults to:
+Under the hood the launcher selects the verified XWayland/NVIDIA environment
+and invokes the single-flight guard. Do not replace it with a raw `mgba-qt`
+command.
 
 ```bash
-DISPLAY=:0 QT_QPA_PLATFORM=xcb __GLX_VENDOR_LIBRARY_NAME=nvidia \
-  mgba-qt rom/working/penta_dragon_dx_FIXED.gb \
-  --script scripts/lua/live_palettes.lua
+scripts/palette_session.sh start rom/working/penta_dragon_dx_FIXED.gb
 ```
 
 Then open:
@@ -120,7 +122,8 @@ the current release candidate to bake the selected colors in:
 python3 scripts/build_v302_title_fix.py
 ```
 
-The ROM now has your tuned colors permanently.
+The rebuilt ROM now has your tuned colors permanently. Until this save and
+rebuild step, browser changes exist only in the emulator session.
 
 The builder keeps BG7 equal to BG0 only during the title's boot-attribute
 window, then restores the independently tuned YAML BG7 through a phased CRAM

@@ -58,6 +58,24 @@ local trace_layouts =
 local layout_records, layout_seen, layout_events = {}, {}, {}
 local debug_destination = 0
 
+local function snapshot_range(first, last)
+  local values = {}
+  for address = first, last do
+    values[#values + 1] = string.char(emu:read8(address))
+  end
+  return table.concat(values)
+end
+
+local function layout_state_snapshot()
+  -- These fixed ranges contain the native room-builder, camera, input-mode,
+  -- and HRAM state.  Keep the raw packed layout in the separate deduplicated
+  -- records below so cache-key investigations can correlate engine state
+  -- without inflating every event by another 576 bytes.
+  return snapshot_range(0xC000, 0xC19F)
+    .. snapshot_range(0xDC00, 0xDDFF)
+    .. snapshot_range(0xFF00, 0xFFFE)
+end
+
 local function byte(blob, index)
   return string.byte(blob, index + 1)
 end
@@ -98,6 +116,7 @@ pcall(function()
         cache9800 = emu:read8(0xDF53),
         cache9c00 = emu:read8(0xDF57),
         layout = register_layout(),
+        state = layout_state_snapshot(),
       }
     end
   end, 0x3485)
@@ -320,6 +339,9 @@ local function finish(status)
       layouts:write(record.attr)
     end
     layouts:close()
+    local states = assert(io.open(OUT .. "-states.bin", "wb"))
+    for _, event in ipairs(layout_events) do states:write(event.state) end
+    states:close()
   end
   local marker = assert(io.open(OUT .. ".done", "w"))
   marker:write(status .. "\n")

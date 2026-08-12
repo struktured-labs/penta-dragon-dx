@@ -79,7 +79,11 @@ def main() -> int:
 
     for target in range(ROSTER_SIZE):
         pyboy = PyBoy(
-            str(args.rom.resolve()), window="null", cgb=True, sound=False
+            str(args.rom.resolve()),
+            window="null",
+            cgb=True,
+            sound_emulated=False,
+            log_level=5,
         )
         pyboy.set_emulation_speed(0)
         seeded = False

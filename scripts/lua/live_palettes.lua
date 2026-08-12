@@ -8,6 +8,7 @@ local PAL_FILE = os.getenv("LIVE_PALETTE_FILE") or
 local SENTINEL = os.getenv("LIVE_PALETTE_LOG") or
     (ROOT .. "/rom/working/live_palettes_lua.log")
 local SMOKE_OUT = os.getenv("LIVE_PALETTE_SMOKE_OUT")
+local VISUAL_AUDIT_OUT = os.getenv("LIVE_PALETTE_VISUAL_AUDIT_OUT")
 local SCENE_AUDIT_OUT = os.getenv("LIVE_PALETTE_SCENE_AUDIT_OUT")
 local SPECIAL_AUDIT_OUT = os.getenv("LIVE_PALETTE_SPECIAL_AUDIT_OUT")
 local STATE_ROOT = ROOT .. "/save_states_for_claude"
@@ -344,6 +345,7 @@ end
 local cached = nil
 local loaded_scene = ""
 local smoke_done = false
+local visual_phase, visual_wait, visual_hash = 0, 0, 0
 local audit_index, audit_wait, audit_ok, audit_done = 1, 0, false, false
 local special_index, special_wait, special_ok, special_done = 1, 0, false, false
 local SPECIAL_AUDIT_SCENES = {
@@ -561,6 +563,42 @@ callbacks:add("frame", function()
     if loaded_scene ~= "" then
         apply_story_art_preview(loaded_scene)
         apply_ending_tail_preview(loaded_scene)
+    end
+
+    -- Test-only, same-process browser-to-pixels receipt. Python waits for the
+    -- baseline marker, changes BG3 through the HTTP editor, and then verifies
+    -- that this running emulator renders a materially different frame without
+    -- a reset. The production live editor never sets VISUAL_AUDIT_OUT.
+    if VISUAL_AUDIT_OUT and loaded_scene == "opening_dragon_eye" then
+        if visual_phase == 0 and f >= 180 then
+            emu:screenshot(VISUAL_AUDIT_OUT .. ".before.png")
+            local ready = assert(io.open(VISUAL_AUDIT_OUT .. ".ready", "w"))
+            ready:write(string.format("frame=%d hash=%08X\n", f, last_hash))
+            ready:close()
+            visual_hash = last_hash
+            visual_phase = 1
+        elseif visual_phase == 1 and last_hash ~= visual_hash then
+            -- Wait one complete browser polling interval after observing the
+            -- edit so both CRAM and the story-art attributes have rendered.
+            visual_wait = 30
+            visual_phase = 2
+        elseif visual_phase == 2 then
+            visual_wait = visual_wait - 1
+            if visual_wait <= 0 then
+                emu:screenshot(VISUAL_AUDIT_OUT .. ".after.png")
+                local report = assert(io.open(VISUAL_AUDIT_OUT, "w"))
+                report:write(string.format(
+                    "frame=%d scene=%s d880=%02X ffc1=%d bg3=%s\n",
+                    f, loaded_scene, emu:read8(0xD880),
+                    emu:read8(0xFFC1), read_palette(false, 3)
+                ))
+                report:close()
+                local done = assert(io.open(VISUAL_AUDIT_OUT .. ".done", "w"))
+                done:write("ok\n")
+                done:close()
+                visual_phase = 3
+            end
+        end
     end
 
     -- Optional automated bridge gate. The production session never sets this.

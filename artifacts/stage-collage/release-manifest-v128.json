@@ -1,0 +1,18 @@
+{
+  "candidate_md5": "72243b5adc5561cc0e6aa94edbe37a7e",
+  "candidate_sha256": "966803e44a07fed8626e476845c117e2eb0a6d29ad50f8d5105f0e80ada35bff",
+  "source_fingerprint": "22f1c1bd4df4107a1559260c501a1522539b5f1f79f13825b271a4c13d2fd0b1",
+  "deterministic_builds": 2,
+  "release_gates": {
+    "passed": 53,
+    "failed": 0
+  },
+  "headed_later_stage_soak": {
+    "frames": 48000,
+    "rooms_per_stage": 4,
+    "semantic_pickup_cells": 1806,
+    "pickup_mismatches": 0,
+    "unsafe_attributes": 0,
+    "lava_mismatches": 0
+  }
+}

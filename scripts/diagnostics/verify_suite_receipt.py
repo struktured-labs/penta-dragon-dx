@@ -146,8 +146,8 @@ def main() -> int:
     expected_names = [
         gate.name
         for gate in build_gates(
-            Path("/tmp/receipt-candidate.gb"),
-            Path("/tmp/receipt-artifacts"),
+            ROOT / "tmp" / "receipt-candidate.gb",
+            ROOT / "tmp" / "receipt-artifacts",
         )
     ]
     matrix = receipt.get("matrix", {})

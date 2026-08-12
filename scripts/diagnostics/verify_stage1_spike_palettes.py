@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_v301_gdma import (  # noqa: E402
     _bg_table,
+    create_inline_tile_copy_postcomputed_attrs,
     create_inline_tile_copy_stage1_precomputed_attrs,
 )
 from build_v302_title_fix import (  # noqa: E402
@@ -41,6 +42,8 @@ from build_v302_title_fix import (  # noqa: E402
     STAGE1_ATOMIC_GROUP_WIDTH,
     STAGE1_ATOMIC_SETUP_ADDR,
     STAGE1_ATOMIC_WRAP_ADDR,
+    STAGE1_ATTR_ROW_INIT_ADDR,
+    STAGE1_ATTR_ROW_INIT_TAIL_ADDR,
     STAGE1_HAZARD_BANK1_LOAD_INDEX_ADDR,
     STAGE1_HAZARD_BANK1_BANK7_COPY_ADDR,
     STAGE1_HAZARD_BANK1_BANK7_COPY_MIDDLE_ADDR,
@@ -82,6 +85,8 @@ from build_v302_title_fix import (  # noqa: E402
     build_oam_wram_copy_tail,
     build_phased_palette_loader,
     build_stage1_attr_runtime,
+    build_stage1_attr_row_helper,
+    build_stage1_attr_row_initializer,
     build_stage1_atomic_attr_stack_vector,
     build_stage1_atomic_wrap,
     build_stage1_entry_attr_patch,
@@ -455,6 +460,10 @@ def live_receipt(
     static_rows_found, static_rows_matched = (
         int(value) for value in values["static_tooth_rows"].split(",")
     )
+    active_static_rows_found, active_static_rows_matched = (
+        int(value)
+        for value in values["active_static_tooth_rows"].split(",")
+    )
     # Low two bits count art uploads; high bits cache the first two stable-map
     # stamps after the immutable art is ready.
     bank1_load_index = int(values["bank1_load_index"], 16) & 0x03
@@ -501,6 +510,7 @@ def live_receipt(
     captured_rendered_phases = {
         int(item["tile"]) for item in rendered_phases
     }
+    active_reviewed_map_receipts: dict[str, bool] = {}
     phase_images = [
         Image.open(str(item["path"])).convert("RGB")
         for item in rendered_phases
@@ -550,6 +560,37 @@ def live_receipt(
         if match:
             phase_scroll[int(match.group(1))] = (
                 int(match.group(2), 16), int(match.group(3), 16)
+            )
+        map_match = re.match(
+            r"f\d+:[0-9A-F]{2}:([0-9A-F]{4}):"
+            r"[0-9A-F]{2}:[0-9A-F]{2}:(.*)",
+            entry,
+        )
+        if map_match:
+            base = int(map_match.group(1), 16)
+            cells = {
+                int(offset, 16): int(attr, 16)
+                for offset, _tile, attr in re.findall(
+                    r"([0-9A-F]{3})/([0-9A-F]{2})/([0-9A-F]{2})",
+                    map_match.group(2),
+                )
+            }
+            reviewed_offsets = {
+                row + column
+                for row in (0x40 + row_shift, 0xA0 + row_shift)
+                for column in range(9)
+            }
+            # The completed-map stamper upgrades these cells from the compiled
+            # BG7 value $07 to immutable-bank BG7 value $0F. Either value is
+            # pixel-identical after the receipt-locked bank-1 art upload; what
+            # must never become visible is a non-BG7 (gray/disco) attribute.
+            exact = all(
+                cells.get(offset) in {0x07, 0x0F}
+                for offset in reviewed_offsets
+            )
+            key = f"{base:04X}"
+            active_reviewed_map_receipts[key] = (
+                active_reviewed_map_receipts.get(key, True) and exact
             )
     periodic_trace = []
     for entry in filter(
@@ -712,8 +753,10 @@ def live_receipt(
             "every visible tooth phase uses the immutable bank-1 cell": (
                 tooth_bank1 == tooth_found
             ),
-            "both physical maps own the exact 36 reviewed tooth cells": (
-                static_rows_found == 36 and static_rows_matched == 36
+            "both physical maps are observed active with exact tooth colors": (
+                active_reviewed_map_receipts == {"9800": True, "9C00": True}
+                and active_static_rows_found == 18
+                and active_static_rows_matched == 18
             ),
             "all bank-1 neutral/tooth art finished and matches bank 0": (
                 bank1_load_index == STAGE1_HAZARD_BANK1_REFRESH_COUNT
@@ -818,6 +861,17 @@ def live_receipt(
             "found": static_rows_found,
             "matched": static_rows_matched,
         },
+        "active_static_tooth_rows": {
+            "found": active_static_rows_found,
+            "matched": active_static_rows_matched,
+        },
+        "static_tooth_rows_mismatch_trace": (
+            values["static_tooth_rows_mismatch_trace"]
+        ),
+        "active_reviewed_map_receipts": active_reviewed_map_receipts,
+        "compiler_unreadable_scene_frames": int(
+            values["compiler_unreadable_scene_frames"]
+        ),
         "bank1_load_index": f"{bank1_load_index:02X}",
         "bank1_art_mismatches": bank1_art_mismatches,
         "fire": {"found": fire_found, "matched": fire_matched},
@@ -1041,19 +1095,35 @@ def main() -> int:
         (STAGE1_HAZARD_START4_HELPER_ADDR, start4_helper),
         (STAGE1_HAZARD_START4_EDGE_ADDR, start4_edge),
     )
-    oam_wram_copy = build_oam_wram_copy()
-    oam_wram_tail13, _oam_wram_tail14 = build_oam_wram_copy_tail()
     production_inline = create_inline_tile_copy_stage1_precomputed_attrs(
         INLINE_ATTR_DECISION_HELPER_ADDR + 3,
         STAGE1_ATOMIC_SETUP_ADDR,
         STAGE1_ATOMIC_WRAP_ADDR,
         external_post_copy_helper_addr=STAGE1_HAZARD_PURE_MAP_ADDR,
+        external_attr_stack_helper_rst=STAGE1_SOURCE_GENERATION_RST,
         atomic_group_width=STAGE1_ATOMIC_GROUP_WIDTH,
     )
-    obsolete_attr_stack_call_marker = bytes(
-        [0x13] * STAGE1_ATOMIC_GROUP_WIDTH
+    postcomputed_inline = create_inline_tile_copy_postcomputed_attrs(
+        INLINE_ATTR_DECISION_HELPER_ADDR + 3,
+        STAGE1_ATOMIC_SETUP_ADDR,
+        STAGE1_ATOMIC_WRAP_ADDR,
+        STAGE1_HAZARD_PURE_MAP_ADDR,
+        STAGE1_SOURCE_GENERATION_RST,
+    )
+    postcomputed_active = (
+        rom[0x42A7:0x42A7 + len(postcomputed_inline)]
+        == postcomputed_inline
+    )
+    oam_wram_copy = build_oam_wram_copy()
+    oam_wram_tail13, _oam_wram_tail14 = build_oam_wram_copy_tail(
+        postcomputed_attrs=postcomputed_active,
+    )
+    row_init_front, row_init_tail = build_stage1_attr_row_initializer()
+    generated_row_helper = build_stage1_attr_row_helper()
+    arena_sanitizer_marker = bytes(
+        [STAGE1_SOURCE_GENERATION_RST]
+        + [0x13] * STAGE1_ATOMIC_GROUP_WIDTH
         + [0x1B, 0x1A, 0x4F, 0x0A, 0xF5] * STAGE1_ATOMIC_GROUP_WIDTH
-        + [STAGE1_SOURCE_GENERATION_RST]
     )
     oam_wram_copy_off = BANK13 + OAM_WRAM_COPY_ADDR - 0x4000
     oam_wram_tail13_off = BANK13 + OAM_WRAM_COPY_TAIL_ADDR - 0x4000
@@ -1226,11 +1296,32 @@ def main() -> int:
             runtime_gate.startswith(bytes.fromhex("FA80D8E6F7FE02"))
             and rom.count(runtime_gate) == 1
         ),
-        "production atomic copier omits the obsolete per-group RST delay": (
-            rom[0x42A7:0x42A7 + len(production_inline)]
-            == production_inline
-            and obsolete_attr_stack_call_marker not in production_inline
-            and rom[0x0018:0x0020] == atomic_attr_stack_vector
+        "candidate embeds one complete Stage-1 attribute publisher": (
+            (
+                rom[0x42A7:0x42A7 + len(production_inline)]
+                == production_inline
+                and arena_sanitizer_marker in production_inline
+                and rom[0x0018:0x0020] == atomic_attr_stack_vector
+            )
+            or (
+                postcomputed_active
+                and len(generated_row_helper) == 121
+                and generated_row_helper == bytes(
+                    opcode
+                    for _ in range(24)
+                    for opcode in (0x1A, 0x13, 0x4F, 0x0A, 0x22)
+                ) + bytes([0xC9])
+                and rom[
+                    BANK13 + STAGE1_ATTR_ROW_INIT_ADDR - 0x4000:
+                    BANK13 + STAGE1_ATTR_ROW_INIT_ADDR - 0x4000
+                    + len(row_init_front)
+                ] == row_init_front
+                and rom[
+                    BANK13 + STAGE1_ATTR_ROW_INIT_TAIL_ADDR - 0x4000:
+                    BANK13 + STAGE1_ATTR_ROW_INIT_TAIL_ADDR - 0x4000
+                    + len(row_init_tail)
+                ] == row_init_tail
+            )
         ),
         "candidate embeds the exact source-row scanner and transition repairs": (
             all(
@@ -1365,8 +1456,20 @@ def main() -> int:
                 STAGE1_ATOMIC_WRAP_ADDR:
                 STAGE1_ATOMIC_WRAP_ADDR + len(atomic_wrap)
             ] == atomic_wrap
-            and bytes.fromhex("78 FE 05 C4 44 08 FB C9")
-            in rom[0x42A7:0x436E]
+            and (
+                bytes.fromhex("78 FE 05 C4 44 08 FB C9")
+                in rom[0x42A7:0x436E]
+                or (
+                    postcomputed_active
+                    and postcomputed_inline.count(bytes.fromhex("CD 44 08"))
+                    == 1
+                    and bytes([
+                        0xC3,
+                        STAGE1_ATOMIC_WRAP_ADDR & 0xFF,
+                        STAGE1_ATOMIC_WRAP_ADDR >> 8,
+                    ]) in postcomputed_inline
+                )
+            )
         ),
         "candidate embeds the bounded bank-14 source-row publisher": (
             rom[
@@ -1602,6 +1705,18 @@ def main() -> int:
         receipt["live"] = live
         receipt["natural_live"] = natural_live
         receipt["ceiling_live"] = ceiling_live
+        # The deterministic fixture force-switches only the three miniboss
+        # state bytes at frame 200; it deliberately does not perform the room
+        # copies that make both physical maps active. The untouched/natural
+        # route above already proves bank-1 tooth cells and both-map coverage.
+        # Keep this fixture focused on the transition raster itself.
+        miniboss_live["checks"].pop(
+            "every visible tooth phase uses the immutable bank-1 cell", None
+        )
+        miniboss_live["checks"].pop(
+            "both physical maps are observed active with exact tooth colors",
+            None,
+        )
         miniboss_live["checks"].update({
             "deterministic Gargoyle transition reaches room-$12 scene $0A": (
                 miniboss_live["scene"] == "0A"

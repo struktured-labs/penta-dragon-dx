@@ -14,7 +14,10 @@ def check_sprite_flicker():
         sys.exit(1)
         
     print("Booting emulator core headlessly...")
-    pb = PyBoy(ROM_PATH, window="null", cgb=True)
+    pb = PyBoy(
+        ROM_PATH, window="null", cgb=True,
+        sound_emulated=False, log_level=5,
+    )
     pb.set_emulation_speed(0)
     
     # 1. Navigate past title screen to enter active gameplay

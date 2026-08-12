@@ -150,7 +150,13 @@ def main() -> int:
         for art_id, panel in cutscene_panels.items()
     }
 
-    pyboy = PyBoy(str(args.rom.resolve()), window="null", cgb=True, sound=False)
+    pyboy = PyBoy(
+        str(args.rom.resolve()),
+        window="null",
+        cgb=True,
+        sound_emulated=False,
+        log_level=5,
+    )
     pyboy.set_emulation_speed(0)
     transitions = []
     panels = []

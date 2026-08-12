@@ -146,7 +146,16 @@ def format_distribution(distribution: Counter[int]) -> str:
 
 
 def run_probe(rom: Path, timeout: int) -> bool:
-    pyboy = PyBoy(str(rom), window="null", cgb=True, sound=False)
+    # ``sound`` is not the PyBoy 2.x switch for disabling audio emulation.
+    # Keeping it here left the audio ring buffer active during unthrottled
+    # headless runs, producing one CRITICAL buffer-overrun line per tick.
+    pyboy = PyBoy(
+        str(rom),
+        window="null",
+        cgb=True,
+        sound_emulated=False,
+        log_level=5,
+    )
     pyboy.set_emulation_speed(0)
     distributions = {SARA_SLOT: Counter(), MONSTER_SLOT: Counter()}
 

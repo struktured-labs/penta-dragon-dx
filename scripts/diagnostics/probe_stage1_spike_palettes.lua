@@ -28,6 +28,8 @@ local rendered_phase_seen = {}
 local rendered_phase_oam_trace = {}
 local rendered_phase_map_trace = {}
 local periodic_render_trace = {}
+local compiler_unreadable_scene_frames = 0
+local last_readable_scene = 0x02
 local memory_trace_path = os.getenv("STAGE1_SPIKE_MEMORY_TRACE")
 local memory_trace = memory_trace_path
   and assert(io.open(memory_trace_path, "wb")) or nil
@@ -74,6 +76,34 @@ local floor_tiles = {
   0x2A, 0x2B, 0x2C, 0x2D, 0x2E,
   0x3A, 0x3B, 0x3C, 0x3D, 0x4C, 0x4D,
 }
+
+local function read_register(name)
+  local readers = {
+    function() return emu:getRegister(string.lower(name)) end,
+    function() return emu:getRegister(string.upper(name)) end,
+    function() return emu:readRegister(string.lower(name)) end,
+    function() return emu:readRegister(string.upper(name)) end,
+  }
+  for _, reader in ipairs(readers) do
+    local ok, value = pcall(reader)
+    if ok and value then return value & 0xFFFF end
+  end
+  return -1
+end
+
+local function sampled_scene()
+  local pc = read_register("PC")
+  local compiler_unreadable = (emu:read8(0xFF70) & 0x07) == 0x03
+    and ((pc >= 0x42A7 and pc <= 0x436D)
+      or (pc >= 0xD400 and pc <= 0xD478))
+  if compiler_unreadable then
+    compiler_unreadable_scene_frames = compiler_unreadable_scene_frames + 1
+    return last_readable_scene, true, pc
+  end
+  local scene = emu:read8(0xD880)
+  last_readable_scene = scene
+  return scene, false, pc
+end
 
 local function is_floor_tile(tile)
   return (tile >= 0x2A and tile <= 0x2E)
@@ -430,6 +460,9 @@ local function inspect_static_tooth_rows()
   local room = emu:read8(0xFFBD)
   local shift = room == 0x02 and 4 or 0
   local found, matched = 0, 0
+  local active_found, active_matched = 0, 0
+  local mismatch_trace = {}
+  local active_base = (emu:read8(0xFF40) & 0x08) ~= 0 and 0x9C00 or 0x9800
   local old_vbk = emu:read8(0xFF4F)
   emu:write8(0xFF4F, 1)
   for _, base in ipairs({0x9800, 0x9C00}) do
@@ -438,11 +471,25 @@ local function inspect_static_tooth_rows()
         found = found + 1
         local attr = emu:read8(base + row + column)
         if attr == 0x0F then matched = matched + 1 end
+        if base == active_base then
+          active_found = active_found + 1
+          if attr == 0x0F then active_matched = active_matched + 1 end
+        end
+        if attr ~= 0x0F then
+          local old_tile_vbk = emu:read8(0xFF4F)
+          emu:write8(0xFF4F, 0)
+          local tile = emu:read8(base + row + column)
+          emu:write8(0xFF4F, old_tile_vbk)
+          mismatch_trace[#mismatch_trace + 1] = string.format(
+            "%04X/%02X/%02X/%s", base + row + column, tile, attr,
+            base == active_base and "active" or "inactive")
+        end
       end
     end
   end
   emu:write8(0xFF4F, old_vbk)
-  return found, matched
+  return found, matched, active_found, active_matched,
+    table.concat(mismatch_trace, ",")
 end
 
 local function bank1_art_mismatches()
@@ -484,7 +531,9 @@ local function finish()
   local found9c00, matched9c00, tooth_found, tooth_matched,
     fire_found, fire_matched, support_found, support_matched, tooth_bank1 =
     inspect_map(0x9C00)
-  local static_rows_found, static_rows_matched = inspect_static_tooth_rows()
+  local static_rows_found, static_rows_matched,
+    active_static_rows_found, active_static_rows_matched,
+    static_rows_mismatch_trace = inspect_static_tooth_rows()
   local bank1_mismatches, bank1_mismatch_trace, bank1_art =
     bank1_art_mismatches()
   local handle = assert(io.open(OUT .. ".txt", "w"))
@@ -504,6 +553,11 @@ local function finish()
   handle:write(string.format("tooth_bank1=%d\n", tooth_bank1))
   handle:write(string.format(
     "static_tooth_rows=%d,%d\n", static_rows_found, static_rows_matched))
+  handle:write(string.format(
+    "active_static_tooth_rows=%d,%d\n",
+    active_static_rows_found, active_static_rows_matched))
+  handle:write("static_tooth_rows_mismatch_trace=" ..
+    static_rows_mismatch_trace .. "\n")
   handle:write(string.format(
     "bank1_load_index=%02X\n", emu:read8(0xDF5B)))
   handle:write(string.format(
@@ -581,6 +635,9 @@ local function finish()
   handle:write(
     "periodic_render_trace=" ..
     table.concat(periodic_render_trace, ";") .. "\n")
+  handle:write(string.format(
+    "compiler_unreadable_scene_frames=%d\n",
+    compiler_unreadable_scene_frames))
   handle:write("hazard_event_trace=" .. table.concat(hazard_event_trace, ";") .. "\n")
   local helper_banks = {}
   for bank, _ in pairs(helper_bank_values) do
@@ -679,11 +736,12 @@ callbacks:add("frame", function()
       emu:read8(0xDCE8), emu:read8(0xDCE9))
   end
   if screenshot_interval > 0 and frame % screenshot_interval == 0 then
+    local scene = sampled_scene()
     local render_path = string.format("%s-frame%04d.png", OUT, frame)
     emu:screenshot(render_path)
     periodic_render_trace[#periodic_render_trace + 1] = string.format(
       "f%d:%02X:%02X:%02X:%02X:%02X:%s", frame,
-      emu:read8(0xFF43), emu:read8(0xFF42), emu:read8(0xD880),
+      emu:read8(0xFF43), emu:read8(0xFF42), scene,
       emu:read8(0xFFBD), emu:read8(0xFFBF), render_path)
   end
 

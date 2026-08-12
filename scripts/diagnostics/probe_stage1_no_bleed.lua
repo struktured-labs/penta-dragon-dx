@@ -48,6 +48,7 @@ local first_pal1_frame, first_unexpected_frame = -1, -1
 local first_unexpected_floor_frame = -1
 local first_unexpected_floor_details = ""
 local scene_frames, active_frames = 0, 0
+local compiler_unreadable_scene_frames = 0
 local previous_scx, previous_scy = -1, -1
 local scroll_changes, scx_changes, scy_changes = 0, 0, 0
 local previous_source_signature, source_signature_changes = -1, 0
@@ -73,6 +74,26 @@ local PICKUP_METATILE_PALETTES = {
   0, 0, 2, 5, 2, 2, 5, 2,
 }
 local last_semantic_pickup_cells = {}
+
+local function read_register(name)
+  local readers = {
+    function() return emu:getRegister(string.lower(name)) end,
+    function() return emu:getRegister(string.upper(name)) end,
+    function() return emu:readRegister(string.lower(name)) end,
+    function() return emu:readRegister(string.upper(name)) end,
+  }
+  for _, reader in ipairs(readers) do
+    local ok, value = pcall(reader)
+    if ok and value then return value & 0xFFFF end
+  end
+  return -1
+end
+
+local function compiler_scene_unreadable(pc)
+  return (emu:read8(0xFF70) & 0x07) == 0x03
+    and ((pc >= 0x42A7 and pc <= 0x436D)
+      or (pc >= 0xD400 and pc <= 0xD478))
+end
 
 local function semantic_pickup_cells()
   local cells = {}
@@ -430,19 +451,24 @@ local function finish()
     "first_unexpected_floor_details=" ..
     first_unexpected_floor_details .. "\n")
   handle:write(string.format("scene_frames=%d\n", scene_frames))
+  handle:write(string.format(
+    "compiler_unreadable_scene_frames=%d\n",
+    compiler_unreadable_scene_frames))
   handle:write(string.format("active_frames=%d\n", active_frames))
   handle:write(string.format("scroll_changes=%d\n", scroll_changes))
   handle:write(string.format("scx_changes=%d\n", scx_changes))
   handle:write(string.format("scy_changes=%d\n", scy_changes))
   handle:write(string.format(
     "source_signature_changes=%d\n", source_signature_changes))
+  local final_pc = read_register("PC")
   handle:write(string.format("final_scene=%d\n", emu:read8(0xD880)))
   handle:write(string.format("final_ffc1=%d\n", emu:read8(0xFFC1)))
-  local pc_ok, pc = pcall(function() return emu:getRegister("PC") end)
-  local sp_ok, sp = pcall(function() return emu:getRegister("SP") end)
-  handle:write(string.format("final_pc=%d\n", pc_ok and pc or -1))
-  handle:write(string.format("final_sp=%d\n", sp_ok and sp or -1))
+  handle:write(string.format("final_pc=%d\n", final_pc))
+  handle:write(string.format("final_sp=%d\n", read_register("SP")))
   handle:write(string.format("final_svbk=%d\n", emu:read8(0xFF70)))
+  handle:write(string.format(
+    "final_compiler_unreadable=%d\n",
+    compiler_scene_unreadable(final_pc) and 1 or 0))
   handle:write(string.format("debug_copy_hits=%d\n", debug_copy_hits))
   handle:write(string.format("debug_atomic_hits=%d\n", debug_atomic_hits))
   handle:write(string.format("debug_pure_hits=%d\n", debug_pure_hits))
@@ -590,8 +616,15 @@ callbacks:add("frame", function()
   end
 
   play_frames = play_frames + 1
-  if emu:read8(0xD880) == EXPECTED_SCENE then
+  local scene_pc = read_register("PC")
+  local scene = emu:read8(0xD880)
+  local compiler_unreadable = compiler_scene_unreadable(scene_pc)
+  if scene == EXPECTED_SCENE or compiler_unreadable then
     scene_frames = scene_frames + 1
+  end
+  if compiler_unreadable then
+    compiler_unreadable_scene_frames =
+      compiler_unreadable_scene_frames + 1
   end
   if emu:read8(0xFFC1) == 1 then active_frames = active_frames + 1 end
 

@@ -15,6 +15,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from PIL import Image, ImageChops
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_YAML = ROOT / "palettes/penta_palettes_v097.yaml"
@@ -111,8 +113,10 @@ def run_probe(
 ) -> dict[str, str]:
     report = Path(str(output) + ".report")
     done = Path(str(output) + ".done")
+    screenshot = Path(str(output) + ".png")
     report.unlink(missing_ok=True)
     done.unlink(missing_ok=True)
+    screenshot.unlink(missing_ok=True)
     environment = os.environ.copy()
     environment.update(
         QT_QPA_PLATFORM="offscreen",
@@ -141,6 +145,13 @@ def run_probe(
             time.sleep(0.05)
         else:
             raise TimeoutError(f"mGBA round-trip probe exceeded {timeout:g}s")
+        image_deadline = time.monotonic() + 2
+        while time.monotonic() < image_deadline:
+            if screenshot.is_file() and screenshot.stat().st_size > 100:
+                break
+            if process.poll() is not None:
+                break
+            time.sleep(0.02)
     finally:
         if process.poll() is None:
             process.terminate()
@@ -151,6 +162,8 @@ def run_probe(
                 process.wait()
     if not report.is_file():
         raise RuntimeError("mGBA produced no palette round-trip report")
+    if not screenshot.is_file() or screenshot.stat().st_size <= 100:
+        raise RuntimeError("mGBA produced no rendered palette round-trip frame")
     return parse_report(report)
 
 
@@ -312,10 +325,30 @@ def main() -> int:
             print("FAIL: tuned YAML bytes missing from ROM: " + ", ".join(failed_static))
             return 1
 
+        source_rom = args.candidate.read_bytes()
+        source_bg0 = source_rom[palette_data:palette_data + 8]
+        source_bg7 = source_rom[
+            BANK13 + (0x68C8 - 0x4000):
+            BANK13 + (0x68C8 - 0x4000) + 8
+        ]
+        source_obj2 = source_rom[
+            palette_data + 64 + 16:palette_data + 64 + 24
+        ]
+        baseline_output = work / "baseline-runtime"
+        baseline_report = run_probe(
+            args.mgba,
+            args.candidate,
+            baseline_output,
+            source_bg0,
+            source_bg7,
+            source_obj2,
+            args.timeout,
+        )
+        tuned_output = work / "runtime"
         report = run_probe(
             args.mgba,
             output_rom,
-            work / "runtime",
+            tuned_output,
             bg0,
             stage1_hazard_bg7,
             obj2,
@@ -334,6 +367,33 @@ def main() -> int:
             for field in expected_fields
             if report.get(field) != "1"
         ]
+        if baseline_report.get("status") != "ok":
+            failures.append(
+                "baseline runtime receipt failed: "
+                f"{baseline_report.get('message')!r}"
+            )
+        baseline_frame = Path(str(baseline_output) + ".png")
+        tuned_frame = Path(str(tuned_output) + ".png")
+        changed_pixels = 0
+        matching_sizes = False
+        with Image.open(baseline_frame) as baseline_source:
+            baseline_image = baseline_source.convert("RGB")
+        with Image.open(tuned_frame) as tuned_source:
+            tuned_image = tuned_source.convert("RGB")
+        matching_sizes = (
+            baseline_image.size == tuned_image.size == (160, 144)
+        )
+        if baseline_image.size == tuned_image.size:
+            delta = ImageChops.difference(baseline_image, tuned_image)
+            changed_pixels = sum(
+                pixel != (0, 0, 0) for pixel in delta.getdata()
+            )
+        if not matching_sizes or changed_pixels < 32:
+            failures.append(
+                "fresh YAML rebuild did not materially change the rendered "
+                f"Stage-1 frame (size={baseline_image.size}/"
+                f"{tuned_image.size}, changed_pixels={changed_pixels})"
+            )
         if report.get("status") != "ok":
             failures.append(
                 f"status={report.get('status')!r} "
@@ -361,6 +421,10 @@ def main() -> int:
             "hazard BG7 row"
         )
         print("PASS: tuned BG0 and OBJ2 reached live mGBA CRAM")
+        print(
+            "PASS: fresh YAML rebuild changed "
+            f"{changed_pixels} rendered Stage-1 pixels after reset"
+        )
         print("PASS: production rebuild preserves a hash-named rollback ROM")
         print(f"PASS: workspace candidate stayed {candidate_hash}")
         if args.keep:

@@ -35,6 +35,16 @@ ATTRACT_PRELUDE_FLAG = 0xFF91
 # one ordinary current-ROM transition; explicit diagnostic writes below may
 # intentionally override this default.
 SCENE_CACHE = 0xDF0D
+ARENA_GEOMETRY_SOURCE_BANK = 13
+ARENA_GEOMETRY_SOURCE_ADDR = 0x563A
+ARENA_GEOMETRY_RUNTIME_ADDR = 0xDB80
+ARENA_GEOMETRY_SIZE = 36
+RUNTIME_HELPER_BANK = 13
+RUNTIME_HELPER_SOURCE_A = 0x7BB2
+RUNTIME_HELPER_SOURCE_B = 0x7C4D
+RUNTIME_HELPER_SPLIT = 0x7BE0 - RUNTIME_HELPER_SOURCE_A
+RUNTIME_HELPER_ADDR = 0xDA60
+RUNTIME_HELPER_SIZE = 0xA0
 
 
 def png_chunks(data: bytes) -> list[tuple[bytes, bytes]]:
@@ -94,6 +104,9 @@ def normalize(
     writes: list[tuple[int, int]],
     rom: Path | None = None,
     bank: int | None = None,
+    retarget_only: bool = False,
+    preserve_machine: bool = False,
+    arena_table: int | None = None,
 ) -> None:
     chunks = png_chunks(source.read_bytes())
     indices = [index for index, (kind, _) in enumerate(chunks) if kind == b"gbAs"]
@@ -103,6 +116,79 @@ def normalize(
     raw = bytearray(zlib.decompress(chunks[index][1]))
     if len(raw) != GB_STATE_SIZE:
         raise RuntimeError(f"unexpected Game Boy state size 0x{len(raw):X}")
+
+    if retarget_only or preserve_machine:
+        if rom is None:
+            raise ValueError("machine-preserving modes require a ROM")
+        if writes or bank is not None:
+            raise ValueError(
+                "machine-preserving modes cannot use --write or --bank"
+            )
+        raw[0x0004:0x0008] = (
+            zlib.crc32(rom.read_bytes()) & 0xFFFFFFFF
+        ).to_bytes(4, "little")
+        if arena_table is not None:
+            rom_bytes = rom.read_bytes()
+            source = (
+                13 * 0x4000
+                + (0x7200 + arena_table * 0x100 - 0x4000)
+            )
+            table = rom_bytes[source:source + 0x100]
+            if len(table) != 0x100 or any(value > 7 for value in table):
+                raise ValueError("candidate arena table is missing or invalid")
+            table_destination = state_offset(0xC600)
+            raw[table_destination:table_destination + 0x100] = table
+            raw[state_offset(SCENE_CACHE)] = 0x0C + arena_table
+            # Live fixtures have already passed cold-boot initialization, so
+            # their DB80 helper belongs to the source ROM just like C600 did.
+            # Retarget both candidate-owned runtime payloads while leaving the
+            # CPU, stack, mapper, native game RAM, and video state untouched.
+            geometry_source = (
+                ARENA_GEOMETRY_SOURCE_BANK * 0x4000
+                + ARENA_GEOMETRY_SOURCE_ADDR - 0x4000
+            )
+            geometry = rom_bytes[
+                geometry_source:geometry_source + ARENA_GEOMETRY_SIZE
+            ]
+            if len(geometry) != ARENA_GEOMETRY_SIZE:
+                raise ValueError("candidate arena geometry helper is missing")
+            geometry_destination = state_offset(ARENA_GEOMETRY_RUNTIME_ADDR)
+            raw[
+                geometry_destination:
+                geometry_destination + len(geometry)
+            ] = geometry
+            # The always-mapped DA60-DAFF decision helper is likewise ROM-
+            # owned. Its source is split around the live free-slot emitter;
+            # concatenate the two exact bank-13 fragments so states remain
+            # valid when a candidate changes the helper's internal ABI.
+            helper_a_source = (
+                RUNTIME_HELPER_BANK * 0x4000
+                + RUNTIME_HELPER_SOURCE_A - 0x4000
+            )
+            helper_b_source = (
+                RUNTIME_HELPER_BANK * 0x4000
+                + RUNTIME_HELPER_SOURCE_B - 0x4000
+            )
+            helper = (
+                rom_bytes[
+                    helper_a_source:
+                    helper_a_source + RUNTIME_HELPER_SPLIT
+                ]
+                + rom_bytes[
+                    helper_b_source:
+                    helper_b_source
+                    + RUNTIME_HELPER_SIZE - RUNTIME_HELPER_SPLIT
+                ]
+            )
+            if len(helper) != RUNTIME_HELPER_SIZE:
+                raise ValueError("candidate DA60 helper is missing")
+            helper_destination = state_offset(RUNTIME_HELPER_ADDR)
+            raw[
+                helper_destination:helper_destination + len(helper)
+            ] = helper
+        chunks[index] = (b"gbAs", zlib.compress(bytes(raw), level=9))
+        write_png(destination, chunks)
+        return
 
     raw[CPU_SP:CPU_SP + 2] = (0xDFFF).to_bytes(2, "little")
     raw[CPU_PC:CPU_PC + 2] = pc.to_bytes(2, "little")
@@ -151,6 +237,28 @@ def main() -> int:
         help="also normalize the mapped MBC1 bank and FF99 bank shadow",
     )
     parser.add_argument(
+        "--retarget-only",
+        action="store_true",
+        help=(
+            "change only the serialized ROM CRC; preserve CPU, stack, bank, "
+            "fetch state, and all memory byte-for-byte"
+        ),
+    )
+    parser.add_argument(
+        "--preserve-machine",
+        action="store_true",
+        help=(
+            "preserve CPU, stack, bank, fetch state, and runtime memory while "
+            "retargeting the ROM CRC; may be combined with --arena-table"
+        ),
+    )
+    parser.add_argument(
+        "--arena-table",
+        type=int,
+        choices=range(9),
+        help="inject the selected candidate bank-13 arena LUT into WRAM C600",
+    )
+    parser.add_argument(
         "--write",
         action="append",
         type=state_write,
@@ -162,9 +270,20 @@ def main() -> int:
         parser.error("--pc must fit in 16 bits")
     if args.bank is not None and not 1 <= args.bank <= 0x1F:
         parser.error("--bank must be in the mapped MBC1 range 1..31")
+    if args.retarget_only and args.rom is None:
+        parser.error("--retarget-only requires --rom")
+    if args.preserve_machine and args.rom is None:
+        parser.error("--preserve-machine requires --rom")
+    if args.retarget_only and args.preserve_machine:
+        parser.error("choose only one machine-preserving mode")
+    if args.arena_table is not None and not args.preserve_machine:
+        parser.error("--arena-table requires --preserve-machine")
     normalize(
         args.source, args.destination, args.pc, args.write, args.rom,
         bank=args.bank,
+        retarget_only=args.retarget_only,
+        preserve_machine=args.preserve_machine,
+        arena_table=args.arena_table,
     )
     return 0
 

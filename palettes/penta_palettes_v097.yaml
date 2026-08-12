@@ -114,6 +114,18 @@ stage1_hazard_palettes:
     slot: 7
     colors: ["7FFF", "7E94", "03FF", "0000"]  # White, floor blue, gold, black
 
+# Crystal Dragon's body/projectile animation crosses the generic OBJ4-OBJ7
+# monster families and intentionally disappears on selected frames to mimic a
+# translucent ghost in the DMG game. Letting those generic families through
+# produced yellow/green/blue bands and made the native cadence read as a hard
+# strobe. This scene-local override keeps all four material slots on the same
+# frost ramp, tuneable below under boss_palettes.Boss4_Ice.
+arena_obj_palette_overrides:
+  CrystalDragonGhost:
+    scene: 0x0E
+    slots: [4, 5, 6, 7]
+    source_boss_palette: Boss4_Ice
+
 # Story illustrations occupy the top 20x8 cells; the lower 20x10 dialogue
 # area always stays neutral BG0. These rectangles select the named tuneable
 # BG rows without baking palette numbers into Python or assembly. Coordinates

@@ -76,7 +76,13 @@ def main() -> int:
     demo_sprites = 0
     demo_palette_mismatches = 0
 
-    pyboy = PyBoy(str(args.rom.resolve()), window="null", cgb=True, sound=False)
+    pyboy = PyBoy(
+        str(args.rom.resolve()),
+        window="null",
+        cgb=True,
+        sound_emulated=False,
+        log_level=5,
+    )
     pyboy.set_emulation_speed(0)
     try:
         for frame in range(1, args.max_frames + 1):
@@ -100,37 +106,39 @@ def main() -> int:
                 demo_seen = True
 
             phase = "returned" if demo_seen else "cold"
-            footer = bytes(
-                pyboy.memory[0, address]
-                for address in range(FOOTER_ADDR, FOOTER_ADDR + len(footer_tiles))
-            )
-            period = bytes(
-                pyboy.memory[0, address]
-                for address in range(PERIOD_TILE_ADDR, PERIOD_TILE_ADDR + 16)
-            )
             footer_key = f"{phase}_footer"
-            if (
-                footer_key not in captures
-                and footer == footer_tiles
-                and period == PERIOD_TILE
-                and rendered
-            ):
-                path = output / f"{footer_key}_f{frame}.png"
-                pyboy.screen.image.save(path)
-                captures[footer_key] = {
-                    "frame": frame,
-                    "d880": scene,
-                    "ffc1": ffc1,
-                    "footer_address": f"0x{FOOTER_ADDR:04X}",
-                    "footer_tiles": footer.hex(),
-                    "period_tile_address": f"0x{PERIOD_TILE_ADDR:04X}",
-                    "period_tile": period.hex(),
-                    "red_dominant_pixels": red_dominant_pixels(
-                        pyboy.screen.image
-                    ),
-                    "visible_oam": visible_oam(pyboy),
-                    "screenshot": str(path),
-                }
+            # A receipt can only be captured on a rendered frame. Avoid 35
+            # cross-boundary PyBoy memory reads on every one of the 26,000
+            # emulated frames (and stop reading entirely once each phase is
+            # captured); those reads dominated the old 180-second timeout.
+            if footer_key not in captures and rendered:
+                footer = bytes(
+                    pyboy.memory[0, address]
+                    for address in range(
+                        FOOTER_ADDR, FOOTER_ADDR + len(footer_tiles)
+                    )
+                )
+                period = bytes(
+                    pyboy.memory[0, address]
+                    for address in range(PERIOD_TILE_ADDR, PERIOD_TILE_ADDR + 16)
+                )
+                if footer == footer_tiles and period == PERIOD_TILE:
+                    path = output / f"{footer_key}_f{frame}.png"
+                    pyboy.screen.image.save(path)
+                    captures[footer_key] = {
+                        "frame": frame,
+                        "d880": scene,
+                        "ffc1": ffc1,
+                        "footer_address": f"0x{FOOTER_ADDR:04X}",
+                        "footer_tiles": footer.hex(),
+                        "period_tile_address": f"0x{PERIOD_TILE_ADDR:04X}",
+                        "period_tile": period.hex(),
+                        "red_dominant_pixels": red_dominant_pixels(
+                            pyboy.screen.image
+                        ),
+                        "visible_oam": visible_oam(pyboy),
+                        "screenshot": str(path),
+                    }
 
             if scene == 0x1C and banner_start is not None:
                 age = frame - banner_start

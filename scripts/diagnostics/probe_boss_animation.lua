@@ -5,6 +5,7 @@ local OUT = assert(os.getenv("BOSS_ANIMATION_OUT"), "BOSS_ANIMATION_OUT required
 local EXPECTED_SCENE = tonumber(os.getenv("BOSS_ANIMATION_SCENE") or "15")
 local FRAMES = tonumber(os.getenv("BOSS_ANIMATION_FRAMES") or "3600")
 local STEP = tonumber(os.getenv("BOSS_ANIMATION_STEP") or "2")
+local TRACE_STEP = tonumber(os.getenv("BOSS_ANIMATION_TRACE_STEP") or "1")
 local FLUSH_FRAMES = 20
 local frame, captured, finished = 0, 0, false
 local trace = assert(io.open(OUT .. ".trace", "w"))
@@ -64,7 +65,7 @@ callbacks:add("frame", function()
         captured = captured + 1
         emu:screenshot(OUT .. string.format(".f%04d.png", frame))
     end
-    if frame % 60 == 0 or frame >= 150 then
+    if frame % TRACE_STEP == 0 then
         trace:write(string.format(
             "frame=%d pc=%04X scene=%02X lcdc=%02X scx=%02X scy=%02X " ..
             "df4c=%02X ff91=%02X dcbb=%02X d888=%02X dd06=%02X\n",

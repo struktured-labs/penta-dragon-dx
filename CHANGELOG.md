@@ -7,6 +7,10 @@ emulator save/state files are never release artifacts in this repository.
 
 ### Added
 
+- Add hash-bound all-boss publication receipts to the deterministic release
+  matrix. The suite now proves that exact arena-layout repeats hit the cache,
+  real changes miss it, and every boss remains below 5% slowdown versus a
+  matched original-ROM fixture over 600 observed frames.
 - Add a ROM-free OG/DX boss-animation comparison harness with frame hashes,
   tuneable-material metadata, and temporal low-detail landmarks. Receipts call
   the footage frame-aligned rather than phase-synchronized, so a slower DX
@@ -36,6 +40,14 @@ emulator save/state files are never release artifacts in this repository.
 
 ### Fixed
 
+- Restore original-speed boss animation without sacrificing atomic color.
+  Eight BG-bodied arenas skip exact repeated 24x24 publications while every
+  real layout change remains atomic; Crystal Dragon retains its specialized
+  ghost-layout cache. The final matched receipt measures Crystal at 4.58% and
+  Penta Dragon at 4.59% slower than OG, with the other seven bosses faster.
+- Repair Penta Dragon's native `$992F` staging seam after each VBlank from the
+  active YAML-derived LUT. Its final 96-frame rendered receipt observes zero
+  mismatched or alternating tile attributes across 36,425 visible samples.
 - Color Cameo's traced `$0C-$0F` upper-contour tiles with its editable BG1
   cherry-red/crimson material. The checker field remains outside that range,
   and a targeted 120-frame geometry receipt observes 148 contour samples with

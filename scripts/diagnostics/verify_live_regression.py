@@ -63,7 +63,14 @@ LIVE_GATES = (
     "later_stage_integrity",
     "later_stage_soak",
     "stage2_stream_soak",
+    "boss_atomic_attr_contract",
     "boss_arenas",
+    "boss_geometry_all9",
+    "boss_semantic_cadence",
+    "boss_og_states",
+    "boss_publication_cadence",
+    "crystal_dragon_ghost",
+    "boss_material_gallery_all9",
     "death_gameover",
     "title_idle_reel",
     "spotlight_full_roster",
@@ -88,8 +95,8 @@ def registered_gate_names() -> set[str]:
 
     from verify_release_candidate import build_gates
 
-    placeholder_rom = Path("/tmp/penta-live-contract.gb")
-    placeholder_output = Path("/tmp/penta-live-contract")
+    placeholder_rom = ROOT / "tmp" / "penta-live-contract.gb"
+    placeholder_output = ROOT / "tmp" / "penta-live-contract"
     return {
         gate.name for gate in build_gates(placeholder_rom, placeholder_output)
     }

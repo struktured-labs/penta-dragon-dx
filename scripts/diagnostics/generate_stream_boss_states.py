@@ -25,6 +25,9 @@ from pathlib import Path
 
 from PIL import Image
 
+from boss_geometry_contract import BOSSES, NAMES as BOSS_NAMES
+from normalize_mgba_state_pc import normalize
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
@@ -41,6 +44,9 @@ ROM_BANK_SIZE = 0x4000
 PALETTE_ROM_BANK = 13
 ARENA_TABLE_BASE = 0x7200
 BG_TABLE_SIZE = 0x100
+TUNED_BG7_SOURCE_ADDR = 0x68F8
+CRYSTAL_TARGET = 2
+CRYSTAL_OBJ_SOURCE_ADDR = 0x6898
 GB_STATE_SIZE = 0x11800
 CPU_SP = 0x0028
 CPU_PC = 0x002A
@@ -55,6 +61,7 @@ IE = 0x03FF
 WRAM = 0x4400
 WRAM_START = 0xC000
 DCBB = WRAM + (0xDCBB - WRAM_START)
+DCFD = WRAM + (0xDCFD - WRAM_START)
 DF53 = WRAM + (0xDF53 - WRAM_START)
 DF54 = WRAM + (0xDF54 - WRAM_START)
 DF0D = WRAM + (0xDF0D - WRAM_START)
@@ -62,18 +69,6 @@ FF99 = HRAM + (0xFF99 - 0xFF80)
 FFBA = HRAM + (0xFFBA - 0xFF80)
 FFBF = HRAM + (0xFFBF - 0xFF80)
 FF91 = HRAM + (0xFF91 - 0xFF80)
-BOSS_NAMES = (
-    "shalamar",
-    "riff",
-    "crystal_dragon",
-    "cameo",
-    "ted",
-    "troop",
-    "faze",
-    "angela",
-    "penta_dragon",
-)
-
 def md5(path: Path) -> str:
     digest = hashlib.md5()
     with path.open("rb") as handle:
@@ -279,6 +274,11 @@ def patch_state(source: Path, destination: Path, target: int) -> None:
     # cleared here. Seed boss HP before entry so the synthetic arena cannot
     # immediately take the post-boss exit path.
     raw[DCBB] = 0x80
+    # The injected route represents a live boss fight, not prerecorded title
+    # demo playback. Leaving the safe Stage-1 state's zero discriminator here
+    # sent the arena through the demo-only pure copier and exposed transient
+    # C1A0 staging tiles as fake terrain in the visual gallery.
+    raw[DCFD] = 1
     raw[DF53] = 0
     raw[DF54] = 0
 
@@ -308,6 +308,17 @@ def capture_final(
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
     )
+    if target == CRYSTAL_TARGET:
+        source_offset = (
+            PALETTE_ROM_BANK * ROM_BANK_SIZE
+            + CRYSTAL_OBJ_SOURCE_ADDR
+            - ROM_BANK_SIZE
+        )
+        frost = rom.read_bytes()[source_offset:source_offset + 8]
+        # OBJ slots 4..7 must all carry the scene-local Crystal material row
+        # before the fixture can be serialized. This rejects an idle loader
+        # that has not yet observed the true Crystal scene publisher.
+        env["BOSS_OBJ_EXPECTED"] = (frost * 4).hex().upper()
     run_until_marker(
         [
             mgba,
@@ -347,8 +358,10 @@ def generate_one(
     timeout: float,
 ) -> tuple[int, str]:
     name = BOSS_NAMES[target]
-    expected_scene = 0x0C + target
-    with tempfile.TemporaryDirectory(prefix=f"penta-boss{target}-") as tmp:
+    expected_scene = BOSSES[target].scene
+    with tempfile.TemporaryDirectory(
+        prefix=f"penta-boss{target}-", dir="/mnt/data/tmp"
+    ) as tmp:
         tmpdir = Path(tmp)
         injected = tmpdir / "injected.ss0"
         patch_state(safe_state, injected, target)
@@ -371,7 +384,7 @@ def generate_one(
             # FFBA selects the boss at $1A2B but is ordinary runtime scratch
             # after that dispatcher consumes it.  D880 is the persistent,
             # production colorizer identity and must remain stable instead.
-            f"stable={BOSS_SETTLE_FRAMES}",
+            "phase=00",
             "message=saved",
         )
         missing = [token for token in required if token not in detail]
@@ -380,6 +393,15 @@ def generate_one(
             for field in detail.split()
             if "=" in field
         )
+        try:
+            stable_frames = int(fields.get("stable", "0"))
+        except ValueError:
+            stable_frames = 0
+        if stable_frames < BOSS_SETTLE_FRAMES:
+            missing.append(
+                f"at least {BOSS_SETTLE_FRAMES} arena frames "
+                f"(got {stable_frames})"
+            )
         actual_table_hex = fields.get("active_table", "")
         expected_table_hex = expected_table.hex().upper()
         if actual_table_hex != expected_table_hex:
@@ -406,7 +428,65 @@ def generate_one(
             missing.append(f"64-byte bg_cram (got {len(bg_cram)})")
         if not words - {0x0000, 0x7FFF}:
             missing.append("nontrivial bg_cram")
+        try:
+            palette_settled = int(fields.get("palette_settled", "0"))
+        except ValueError:
+            palette_settled = 0
+        if palette_settled < 1:
+            missing.append(
+                f"a phase-zero palette frame (got {palette_settled})"
+            )
+        expected_bg7_offset = (
+            PALETTE_ROM_BANK * ROM_BANK_SIZE
+            + TUNED_BG7_SOURCE_ADDR - ROM_BANK_SIZE
+        )
+        expected_bg7 = rom.read_bytes()[
+            expected_bg7_offset:expected_bg7_offset + 8
+        ]
+        # A stale inactive CRAM row is not a rendered defect. Crystal's cached
+        # portal table uses only BG0/BG4, so requiring BG7 there falsely fails
+        # a visually exact arena because its synthetic entry began in the
+        # Stage-1 spike room. Arenas that actually reference BG7 remain exact.
+        bg7_is_rendered = 7 in expected_table
+        if bg7_is_rendered and bg_cram[56:64] != expected_bg7:
+            missing.append(
+                "rendered BG7 exact tuned row "
+                f"({bg_cram[56:64].hex().upper()} != "
+                f"{expected_bg7.hex().upper()})"
+            )
+        try:
+            obj_cram = bytes.fromhex(fields.get("obj_cram", ""))
+        except ValueError:
+            obj_cram = b""
+        if len(obj_cram) != 64:
+            missing.append(f"64-byte obj_cram (got {len(obj_cram)})")
+        if target == CRYSTAL_TARGET:
+            source_offset = (
+                PALETTE_ROM_BANK * ROM_BANK_SIZE
+                + CRYSTAL_OBJ_SOURCE_ADDR
+                - ROM_BANK_SIZE
+            )
+            frost = rom.read_bytes()[source_offset:source_offset + 8]
+            expected_crystal = frost * 4
+            if obj_cram[32:64] != expected_crystal:
+                missing.append(
+                    "Crystal OBJ4-7 exact scene-local frost rows "
+                    f"({obj_cram[32:64].hex().upper()} != "
+                    f"{expected_crystal.hex().upper()})"
+                )
         if missing:
+            # Preserve the failing transition trace and rendered evidence;
+            # TemporaryDirectory cleanup must not erase the only receipt for
+            # a palette-trigger collision.
+            failed_stem = f"boss{target}_{name}.failed"
+            for artifact, suffix in (
+                (prefix.with_suffix(".report"), ".report"),
+                (prefix.with_suffix(".trace"), ".trace"),
+                (prefix.with_suffix(".png"), ".png"),
+                (prefix.with_suffix(".ss0"), ".ss0"),
+            ):
+                if artifact.is_file():
+                    shutil.copy2(artifact, output / f"{failed_stem}{suffix}")
             raise RuntimeError(
                 f"{name}: bad final report: missing {', '.join(missing)}; "
                 f"actual {detail}"
@@ -471,7 +551,11 @@ def recapture_one(
     env.update(
         BOSS_RECEIPT_OUT=str(prefix),
         BOSS_RECEIPT_STATE_OUT=str(state),
-        BOSS_RECEIPT_FRAMES="60",
+        BOSS_RECEIPT_FRAMES="120",
+        # The fixture is machine-preservingly retargeted below with the
+        # candidate's exact C600/DA60/DB80 payloads. Replaying scene_detect on
+        # a live final-boss state is synthetic and makes Penta leave its arena.
+        BOSS_RECEIPT_REARM="0",
         BOSS_TARGET=str(target),
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
@@ -499,7 +583,7 @@ def recapture_one(
         raise RuntimeError(f"{name}: fixture recapture failed")
     data = report_fields(report)
     failures: list[str] = []
-    expected_scene = f"{0x0C + target:02X}"
+    expected_scene = f"{BOSSES[target].scene:02X}"
     for field, wanted in (
         ("status", "ok"),
         ("d880", expected_scene),
@@ -537,13 +621,29 @@ def recapture_one(
     }
     if len(bg_cram) != 64 or not words - {0x0000, 0x7FFF}:
         failures.append("BG CRAM is missing or trivial")
+    expected_bg7_offset = (
+        PALETTE_ROM_BANK * ROM_BANK_SIZE
+        + TUNED_BG7_SOURCE_ADDR - ROM_BANK_SIZE
+    )
+    expected_bg7 = rom.read_bytes()[
+        expected_bg7_offset:expected_bg7_offset + 8
+    ]
+    if 7 in expected_table and bg_cram[56:64] != expected_bg7:
+        failures.append(
+            "rendered BG7 does not match the candidate's tuned YAML row "
+            f"({bg_cram[56:64].hex().upper()} != "
+            f"{expected_bg7.hex().upper()})"
+        )
     rendered_colors = 0
     if not screenshot.is_file() or screenshot.stat().st_size < 1000:
         failures.append("rendered screenshot is missing/structurally trivial")
     else:
         with Image.open(screenshot) as source:
             rendered_colors = len(set(source.convert("RGB").getdata()))
-        if rendered_colors < 8:
+        # A deliberately coherent single-material boss can render with six or
+        # seven RGB values; reject only the known five-color serialized stripe
+        # failure, matching the fresh-state gate above.
+        if rendered_colors < 6:
             failures.append(
                 f"rendered screenshot has only {rendered_colors} colors"
             )
@@ -580,13 +680,31 @@ def recapture_from_fixtures(
             + ", ".join(str(path) for path in missing)
         )
     rom_bytes = rom.read_bytes()
-    with tempfile.TemporaryDirectory(prefix="penta-boss-recapture-") as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix="penta-boss-recapture-", dir="/mnt/data/tmp"
+    ) as tmp:
         staging = Path(tmp)
+        normalized_states: dict[int, Path] = {}
+        for target in targets:
+            source_state = source / f"boss{target}_{BOSS_NAMES[target]}.ss0"
+            normalized_state = staging / (
+                f"boss{target}_{BOSS_NAMES[target]}.candidate.ss0"
+            )
+            normalize(
+                source_state,
+                normalized_state,
+                0,
+                [],
+                rom,
+                preserve_machine=True,
+                arena_table=target,
+            )
+            normalized_states[target] = normalized_state
         results = [
             recapture_one(
                 mgba,
                 rom,
-                source / f"boss{target}_{BOSS_NAMES[target]}.ss0",
+                normalized_states[target],
                 staging,
                 target,
                 rom_bytes[
@@ -714,41 +832,68 @@ def main() -> int:
         )
         return 0
 
-    with tempfile.TemporaryDirectory(prefix="penta-safe-stage1-") as tmp:
-        rom_bytes = args.rom.read_bytes()
-        safe_state = generate_safe_stage1(
-            args.mgba,
-            args.rom,
-            Path(tmp),
-            args.timeout,
-        )
-        results = [
-            generate_one(
+    rom_bytes = args.rom.read_bytes()
+    # Bosses 0..7 share the ordinary stage-boss dispatcher. Penta Dragon is
+    # entered by the native pre-final bridge and a synthetic Stage-1 CALL can
+    # legitimately fall through into final-story state before a long palette
+    # hold. Generate the ordinary eight from Stage 1, then retarget the curated
+    # live Penta fixture with the candidate's exact runtime/table payloads.
+    fresh_targets = [target for target in targets if target != 8]
+    results: list[tuple[int, str]] = []
+    if fresh_targets:
+        with tempfile.TemporaryDirectory(
+            prefix="penta-safe-stage1-",
+            dir="/mnt/data/tmp",
+        ) as tmp:
+            safe_state = generate_safe_stage1(
                 args.mgba,
                 args.rom,
-                safe_state,
-                output,
-                target,
-                rom_bytes[
-                    PALETTE_ROM_BANK * ROM_BANK_SIZE
-                    + ARENA_TABLE_BASE
-                    + target * BG_TABLE_SIZE
-                    - ROM_BANK_SIZE:
-                    PALETTE_ROM_BANK * ROM_BANK_SIZE
-                    + ARENA_TABLE_BASE
-                    + (target + 1) * BG_TABLE_SIZE
-                    - ROM_BANK_SIZE
-                ],
+                Path(tmp),
                 args.timeout,
             )
-            for target in targets
-        ]
+            results.extend(
+                generate_one(
+                    args.mgba,
+                    args.rom,
+                    safe_state,
+                    output,
+                    target,
+                    rom_bytes[
+                        PALETTE_ROM_BANK * ROM_BANK_SIZE
+                        + ARENA_TABLE_BASE
+                        + target * BG_TABLE_SIZE
+                        - ROM_BANK_SIZE:
+                        PALETTE_ROM_BANK * ROM_BANK_SIZE
+                        + ARENA_TABLE_BASE
+                        + (target + 1) * BG_TABLE_SIZE
+                        - ROM_BANK_SIZE
+                    ],
+                    args.timeout,
+                )
+                for target in fresh_targets
+            )
+    if 8 in targets:
+        results.extend(
+            recapture_from_fixtures(
+                args.mgba,
+                args.rom.resolve(),
+                args.source_states.resolve(),
+                output,
+                [8],
+                args.timeout,
+                False,
+            )
+        )
+    results.sort()
 
     manifest = {
         "rom": str(args.rom.resolve()),
         "rom_md5": rom_md5,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "method": "temporary mGBA serialized-state injection; release ROM capture",
+        "method": (
+            "fresh Stage-1 stock dispatcher for bosses 0-7; machine-preserved "
+            "native pre-final fixture for Penta Dragon; release ROM capture"
+        ),
         "bosses": [
             {"target": target, "name": BOSS_NAMES[target]}
             for target, _detail in results

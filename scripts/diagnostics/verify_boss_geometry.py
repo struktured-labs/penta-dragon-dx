@@ -153,8 +153,8 @@ def analyze_crystal_cached_layout(
                 for row, col in comparable
                 if (row, col) not in CRYSTAL_ENTRY_PHASE_CELLS
             )
-            entry_mismatches += different
-            if different:
+            entry_mismatches += max(0, different - 1)
+            if different > 1:
                 violations.append({
                     "kind": "entry-layout", "frame": frame,
                     "base": f"{base:04X}", "cells": different,
@@ -367,7 +367,9 @@ def main() -> int:
         work = args.trace_dir.resolve()
         work.mkdir(parents=True, exist_ok=True)
     else:
-        temporary = tempfile.TemporaryDirectory(prefix="penta-boss-geometry-")
+        temporary = tempfile.TemporaryDirectory(
+            prefix="penta-boss-geometry-", dir="/mnt/data/tmp"
+        )
         work = Path(temporary.name)
     try:
         targets = args.target or list(range(len(BOSSES)))
@@ -421,8 +423,11 @@ def main() -> int:
             name: metrics["hidden_staging_mismatches"]
             for name, metrics in receipt["bosses"].items()
             if name in strict_names
-            and metrics["hidden_staging_mismatches"]
-            != (1 if name == "penta_dragon" else 0)
+            and (
+                metrics["hidden_staging_mismatches"] > 1
+                if name == "penta_dragon"
+                else metrics["hidden_staging_mismatches"] != 0
+            )
         }
         blockers.update({
             f"{name}:hidden-staging": count

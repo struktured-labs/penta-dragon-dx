@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import yaml
+from PIL import Image, ImageChops
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -333,13 +334,123 @@ def main() -> int:
                 ),
             }
 
-            # Change base and guarded special palettes. The bridge must emit
-            # only those complete palettes, leaving unrelated CRAM alone.
+            # Prove a browser edit changes pixels in the *same running mGBA
+            # process*. The opening dragon-eye state explicitly maps its art
+            # to BG3, making this a deterministic browser -> file -> Lua ->
+            # CRAM -> rendered-frame contract rather than a PNG-exists smoke.
+            visual_audit = tmpdir / "live-visual.txt"
+            request(url, "/load_scene", {"scene": "opening_dragon_eye"})
+            visual_env = os.environ.copy()
+            visual_env.update(
+                LIVE_PALETTE_FILE=str(live_file),
+                LIVE_PALETTE_LOG=str(lua_log),
+                LIVE_PALETTE_VISUAL_AUDIT_OUT=str(visual_audit),
+                LIVE_PALETTE_STAGE_STATE_DIR=str(stage_state_dir),
+                LIVE_PALETTE_BOSS_STATE_DIR=str(boss_state_dir),
+                LIVE_PALETTE_STORY_STATE_DIR=str(story_state_dir),
+                QT_QPA_PLATFORM="offscreen",
+                SDL_AUDIODRIVER="dummy",
+            )
+            emulator = subprocess.Popen(
+                [
+                    args.mgba,
+                    "--fastforward",
+                    str(args.rom.resolve()),
+                    "--script",
+                    str(LUA),
+                ],
+                cwd=ROOT,
+                env=visual_env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            visual_ready = Path(str(visual_audit) + ".ready")
+            deadline = time.monotonic() + args.timeout
+            while time.monotonic() < deadline and not visual_ready.exists():
+                if emulator.poll() is not None:
+                    break
+                time.sleep(0.05)
+            if not visual_ready.exists():
+                log = lua_log.read_text() if lua_log.exists() else "(no Lua log)"
+                print(f"FAIL: live visual baseline did not render\n{log}")
+                return 1
+
+            # This is the same endpoint and payload emitted by the browser UI.
             request(
                 url,
                 "/update",
                 {"kind": "BG", "pal": 3, "color": 1, "bgr": "001F"},
             )
+            visual_done = Path(str(visual_audit) + ".done")
+            deadline = time.monotonic() + args.timeout
+            while time.monotonic() < deadline and not visual_done.exists():
+                if emulator.poll() is not None:
+                    break
+                time.sleep(0.05)
+            visual_before = Path(str(visual_audit) + ".before.png")
+            visual_after = Path(str(visual_audit) + ".after.png")
+            image_deadline = time.monotonic() + 2
+            while time.monotonic() < image_deadline:
+                if all(
+                    path.is_file() and path.stat().st_size > 100
+                    for path in (visual_before, visual_after)
+                ):
+                    break
+                if emulator.poll() is not None:
+                    break
+                time.sleep(0.02)
+            terminate(emulator)
+            emulator = None
+
+            visual_fields = (
+                parse_fields(visual_audit.read_text())
+                if visual_audit.exists()
+                else {}
+            )
+            changed_pixels = 0
+            red_before = 0
+            red_after = 0
+            matching_sizes = False
+            if visual_before.is_file() and visual_after.is_file():
+                with Image.open(visual_before) as before_source:
+                    before = before_source.convert("RGB")
+                with Image.open(visual_after) as after_source:
+                    after = after_source.convert("RGB")
+                matching_sizes = before.size == after.size == (160, 144)
+                if before.size == after.size:
+                    delta = ImageChops.difference(before, after)
+                    changed_pixels = sum(
+                        pixel != (0, 0, 0) for pixel in delta.getdata()
+                    )
+
+                    def strong_red_count(image: Image.Image) -> int:
+                        return sum(
+                            red >= 160 and red >= green * 2 and red >= blue * 2
+                            for red, green, blue in image.getdata()
+                        )
+
+                    red_before = strong_red_count(before)
+                    red_after = strong_red_count(after)
+            visual_checks = {
+                "live palette edit completed without emulator reset": (
+                    visual_done.is_file()
+                    and visual_done.read_text().strip() == "ok"
+                    and visual_fields.get("scene") == "opening_dragon_eye"
+                    and visual_fields.get("d880") == "15"
+                ),
+                "edited BG3 reached live CRAM in visual audit": (
+                    visual_fields.get("bg3") == expected_bg3_cram
+                ),
+                "live browser edit changed rendered native pixels": (
+                    matching_sizes
+                    and changed_pixels >= 32
+                    and red_after > red_before
+                ),
+            }
+
+            # Change the remaining base and guarded special palettes. The
+            # bridge must emit only complete edited palettes, leaving unrelated
+            # CRAM alone.
             request(
                 url,
                 "/update",
@@ -445,6 +556,15 @@ def main() -> int:
             first_scene_protocol = live_file.read_text()
             request(url, "/load_scene", {"scene": "gargoyle"})
             protocol = live_file.read_text()
+
+            def scene_request_id(text: str) -> int | None:
+                for line in text.splitlines():
+                    if line.startswith("# SCENE_REQUEST:"):
+                        return int(line.split(":", 1)[1])
+                return None
+
+            first_scene_id = scene_request_id(first_scene_protocol)
+            second_scene_id = scene_request_id(protocol)
             protocol_checks = {
                 "rapid concurrent edits are serialized": not concurrent_errors,
                 "only edited BG palette is emitted": (
@@ -472,8 +592,8 @@ def main() -> int:
                 "curated scene request is emitted": "SCENE:gargoyle" in protocol,
                 "repeated scene requests remain observable": (
                     first_scene_protocol != protocol
-                    and "# SCENE_REQUEST:1" in first_scene_protocol
-                    and "# SCENE_REQUEST:2" in protocol
+                    and first_scene_id is not None
+                    and second_scene_id == first_scene_id + 1
                 ),
                 "no ROM-state directive is emitted": not any(
                     marker in protocol
@@ -835,6 +955,7 @@ def main() -> int:
             print(report)
             all_checks = {
                 **ui_checks,
+                **visual_checks,
                 **protocol_checks,
                 **persistence_checks,
                 **runtime_checks,

@@ -26,7 +26,10 @@ def main() -> int:
     parser.add_argument("--frames", type=int, default=1800)
     args = parser.parse_args()
 
-    pyboy = PyBoy(str(args.rom.resolve()), window="null", cgb=True)
+    pyboy = PyBoy(
+        str(args.rom.resolve()), window="null", cgb=True,
+        sound_emulated=False, log_level=5,
+    )
     pyboy.set_emulation_speed(0)
     memory = pyboy.memory
     registers = pyboy.register_file

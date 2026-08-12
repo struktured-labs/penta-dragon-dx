@@ -15,6 +15,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from build_v301_teleport import build_obj_pal_table
+from diagnostics.normalize_mgba_state_pc import normalize
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -153,6 +154,33 @@ def main() -> int:
             except Exception as exc:
                 failures.append(str(exc))
                 continue
+            retried_current_init = False
+            if (
+                int(result.get("mismatches", "-1")) > 0
+                and result.get("initial_DF51") != "A8"
+            ):
+                # A few very old anchors serialize a stale D900 LUT/DAxx helper
+                # and resume after their original initialization path. Retarget
+                # only that proven-stale case and give the candidate one clean
+                # main-loop initialization attempt; naturally valid fixtures
+                # remain byte-for-byte untouched.
+                normalized = output / f"{state.stem}.current.ss0"
+                normalize(
+                    state,
+                    normalized,
+                    0x016C,
+                    [(0xDF51, 0x00)],
+                    rom,
+                    bank=1,
+                )
+                try:
+                    result = run_state(
+                        args.mgba, rom, normalized, output, args.timeout
+                    )
+                    retried_current_init = True
+                except Exception as exc:
+                    failures.append(str(exc))
+                    continue
             checked = int(result.get("checked", "0"))
             mismatches = int(result.get("mismatches", "-1"))
             sampled = int(result.get("sampled_frames", "0"))
@@ -166,7 +194,8 @@ def main() -> int:
                 f"checked={checked:4d} mismatches={mismatches:4d} "
                 f"visible≤{result.get('max_visible', '?'):>2s} "
                 f"slot≤{result.get('max_slot', '?'):>2s} "
-                f"scene={result.get('D880', '??')}"
+                f"scene={result.get('D880', '??')} "
+                f"current_init_retry={int(retried_current_init)}"
             )
             if sampled <= 0 or checked <= 0:
                 print(

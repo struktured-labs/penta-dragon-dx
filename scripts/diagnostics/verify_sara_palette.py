@@ -61,7 +61,10 @@ def main():
     from pyboy import PyBoy
 
     print("Booting...")
-    pb = PyBoy(ROM_PATH, window="null", cgb=True)
+    pb = PyBoy(
+        ROM_PATH, window="null", cgb=True,
+        sound_emulated=False, log_level=5,
+    )
     pb.set_emulation_speed(0)
 
     # Navigate to gameplay

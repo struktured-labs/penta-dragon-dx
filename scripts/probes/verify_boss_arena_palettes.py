@@ -21,6 +21,9 @@ from pathlib import Path
 
 from PIL import Image
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "diagnostics"))
+from boss_geometry_contract import BOSSES, NAMES as BOSS_NAMES  # noqa: E402
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
@@ -31,19 +34,7 @@ ROM_BANK_SIZE = 0x4000
 PALETTE_ROM_BANK = 13
 ARENA_TABLE_BASE = 0x7200
 BG_TABLE_SIZE = 0x100
-BOSS_NAMES = (
-    "shalamar",
-    "riff",
-    "crystal_dragon",
-    "cameo",
-    "ted",
-    "troop",
-    "faze",
-    "angela",
-    "penta_dragon",
-)
-
-
+TUNED_BG7_SOURCE_ADDR = 0x68F8
 def fields(path: Path) -> dict[str, str]:
     return dict(
         field.split("=", 1)
@@ -78,10 +69,31 @@ def audit_state(
     timeout: float,
 ) -> None:
     marker = Path(f"{prefix}.audit.done")
+    # A prior successful receipt must never satisfy a new invocation before
+    # mGBA has executed the current probe/ROM.  This previously let stale
+    # single-frame reports masquerade as fresh verification.
+    for stale in (
+        marker,
+        Path(f"{prefix}.audit.report"),
+        Path(f"{prefix}.audit.trace"),
+    ):
+        stale.unlink(missing_ok=True)
     environment = os.environ.copy()
     environment.update(
         BOSS_RECEIPT_OUT=str(prefix),
-        BOSS_RECEIPT_FRAMES="60",
+        # The current-ROM generator already performs the scene transition.
+        # Rearming it after loading an exact state can restart arena setup and
+        # creates synthetic exits, especially for Shalamar.
+        BOSS_RECEIPT_REARM="0",
+        # Exact candidate states were certified only after phase zero and
+        # already contain the current ROM's CRAM. Restarting the palette pass
+        # inside a live arena is synthetic and can perturb timing-sensitive
+        # animation publication.
+        BOSS_RECEIPT_PALETTE_REARM="0",
+        # Frames 25..120 cover 96 settled frames after the restored inactive
+        # map has received three complete eight-group atomic rows.
+        BOSS_RECEIPT_FRAMES="120",
+        BOSS_RECEIPT_WARMUP="24",
         BOSS_TARGET=str(target),
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
@@ -186,7 +198,7 @@ def run_probe(
         else:
             audit = fields(Path(f"{prefix}.audit.report"))
 
-        expected_scene = f"{0x0C + target:02X}"
+        expected_scene = f"{BOSSES[target].scene:02X}"
         if data.get("status") != "ok":
             failures.append(f"status={data.get('status')}")
         if data.get("d880") != expected_scene:
@@ -195,6 +207,8 @@ def run_probe(
             )
         if data.get("ffc1") != "1":
             failures.append(f"FFC1={data.get('ffc1')}")
+        if data.get("phase", "00") != "00":
+            failures.append(f"generated palette phase={data.get('phase')}")
         if not state.is_file() or state.stat().st_size < 1024:
             failures.append("generated savestate is missing or trivial")
         if audit.get("status") != "ok":
@@ -226,6 +240,72 @@ def run_probe(
         ) + abs(len(active_table) - len(wanted_table))
         if len(active_table) != 256 or any(value > 7 for value in active_table):
             failures.append("active table is missing or contains invalid slots")
+        try:
+            attr_frames = int(audit.get("attr_frames", "0"))
+            attr_samples = int(audit.get("attr_samples", "0"))
+            attr_mismatches = int(audit.get("attr_mismatches", "-1"))
+            max_frame_mismatches = int(
+                audit.get("max_frame_mismatches", "-1")
+            )
+            unsafe_attrs = int(audit.get("unsafe_attrs", "-1"))
+            alternating_tiles = int(audit.get("alternating_tiles", "-1"))
+            hidden_staging_mismatches = int(
+                audit.get("hidden_staging_mismatches", "-1")
+            )
+            max_scene_drift_frames = int(
+                audit.get("max_scene_drift_frames", "-1")
+            )
+        except ValueError:
+            attr_frames = attr_samples = 0
+            attr_mismatches = max_frame_mismatches = -1
+            unsafe_attrs = alternating_tiles = -1
+            hidden_staging_mismatches = max_scene_drift_frames = -1
+        if attr_frames < 85:
+            failures.append(
+                f"animated attribute frames={attr_frames}, expected at least 85"
+            )
+        if attr_samples < 30_000:
+            failures.append(
+                f"animated attribute samples={attr_samples}, expected >=30000"
+            )
+        crystal_cached = target == 2
+        if attr_mismatches != 0 and not crystal_cached:
+            failures.append(
+                f"live tile/LUT attribute mismatches={attr_mismatches} "
+                f"(max {max_frame_mismatches} in one frame; "
+                f"examples={audit.get('mismatch_examples')})"
+            )
+        if unsafe_attrs != 0:
+            failures.append(f"unsafe live BG attributes={unsafe_attrs}")
+        if crystal_cached and max_frame_mismatches > 18:
+            failures.append(
+                "Crystal cached portal exceeded its 18-cell dynamic drift "
+                f"bound: {max_frame_mismatches}"
+            )
+        if alternating_tiles != 0 and not crystal_cached:
+            failures.append(
+                f"tile IDs alternated between palette attributes="
+                f"{alternating_tiles}"
+            )
+        hidden_staging_valid = (
+            hidden_staging_mismatches in {0, 1}
+            if target == 8 else hidden_staging_mismatches == 0
+        )
+        if not hidden_staging_valid:
+            failures.append(
+                "hidden double-buffer staging mismatches="
+                f"{hidden_staging_mismatches}, expected at most one for "
+                "Penta and zero elsewhere"
+            )
+        # Native arena publishers may expose a one-frame $FF handoff sentinel
+        # at different animation phases. The Lua receipt already fails a
+        # sustained mismatch; accept zero or one independently of which boss
+        # happened to cross that phase during this deterministic window.
+        if max_scene_drift_frames not in {0, 1}:
+            failures.append(
+                f"scene publisher sentinel frames={max_scene_drift_frames}, "
+                "expected at most 1"
+            )
 
         try:
             bg_cram = bytes.fromhex(audit.get("bg_cram", ""))
@@ -237,6 +317,20 @@ def run_probe(
             failures.append(f"BG CRAM bytes={len(bg_cram)}, expected 64")
         if not meaningful:
             failures.append("BG CRAM contains no non-black/non-white colors")
+        bg7_offset = (
+            PALETTE_ROM_BANK * ROM_BANK_SIZE
+            + TUNED_BG7_SOURCE_ADDR - ROM_BANK_SIZE
+        )
+        expected_bg7 = rom_bytes[bg7_offset:bg7_offset + 8]
+        # Validate a CRAM row only when this arena's exact material table can
+        # render it. Crystal's portal uses BG0/BG4 exclusively; a stale BG7 in
+        # that synthetic state is inactive and cannot affect any pixel.
+        if 7 in wanted_table and bg_cram[56:64] != expected_bg7:
+            failures.append(
+                "rendered BG7 does not match the candidate's tuned YAML row "
+                f"({bg_cram[56:64].hex().upper()} != "
+                f"{expected_bg7.hex().upper()})"
+            )
 
         rendered_colors: Counter[tuple[int, int, int]] = Counter()
         if not screenshot.is_file() or screenshot.stat().st_size < 1000:
@@ -260,6 +354,7 @@ def run_probe(
             f"arena {target} ({name}): {status} | D880={data.get('d880')} "
             f"recapture_frame={data.get('frame')} "
             f"table_mismatches={table_mismatches} "
+            f"attr_mismatches={attr_mismatches}/{attr_samples} "
             f"meaningful_cram={len(meaningful)} "
             f"rendered_colors={len(rendered_colors)}"
         )
@@ -273,6 +368,17 @@ def run_probe(
                 "scene": data.get("d880"),
                 "recapture_frame": data.get("frame"),
                 "active_table_mismatches": table_mismatches,
+                "animated_attribute_frames": attr_frames,
+                "animated_attribute_samples": attr_samples,
+                "animated_attribute_mismatches": attr_mismatches,
+                "attribute_contract": (
+                    "cached-atomic-camera-wrap" if crystal_cached else "tile-lut"
+                ),
+                "max_frame_attribute_mismatches": max_frame_mismatches,
+                "hidden_staging_mismatches": hidden_staging_mismatches,
+                "max_scene_drift_frames": max_scene_drift_frames,
+                "unsafe_live_attributes": unsafe_attrs,
+                "alternating_tile_ids": alternating_tiles,
                 "meaningful_bg_cram_words": len(meaningful),
                 "rendered_colors": len(rendered_colors),
                 "screenshot": str(screenshot),

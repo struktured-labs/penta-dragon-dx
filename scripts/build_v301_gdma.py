@@ -700,15 +700,17 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         if external_attr_commit_addr is not None:
             assert atomic_group_width == 4
         # The fixed helper reloads the scene after its readiness check and
-        # borrows E for Stage 1's destination-specific cache lookup. D=$DF
-        # selects the proven metadata page and is replaced by the packed source
-        # pointer immediately after the decision.
+        # borrows E for Stage 1's destination-specific cache lookup. D=$FF is
+        # replaced by the packed source pointer immediately after the decision
+        # and is also the discriminator
+        # consumed by the shared RST vector (INC $FF sets Z); D=$C1-$C3 later
+        # identifies an in-copy packed-source group for the arena sanitizer.
         emit([
             # The WRAM helper reloads D880 after checking its sentinel. Keep
             # the established 16T setup cadence without a redundant 3-byte
             # load; 16-bit INC/DEC preserve both BC and flags.
             0x03, 0x0B,
-            0x16, 0xDF,
+            0x16, 0xFF,
             0xCD,
             external_decision_helper_addr & 0xFF,
             external_decision_helper_addr >> 8,
@@ -770,22 +772,22 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         # Precompute the four palette bytes in reverse source order. They then
         # pop forward after the stock tile writer without a destination rewind.
         # B keeps the LUT page for the full row; FFE0 owns its six-group count.
+        if external_attr_stack_helper_rst is not None:
+            # The shared arena helper repairs any stock staging cells in the
+            # packed source before their tile IDs are used for either plane.
+            # In particular, Shalamar's lower/right scratch cells must become
+            # checker tiles before the LUT lookup; clearing only the stacked
+            # attrs still rendered those scratch tiles as gray debris.
+            assert external_attr_stack_helper_rst in (
+                0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF,
+            )
+            emit([external_attr_stack_helper_rst])
         emit([0x13] * atomic_group_width)    # advance to source-group end
         for _ in range(atomic_group_width):
             emit([
                 0x1B, 0x1A,                 # DE--; tile=[DE]
                 0x4F, 0x0A, 0xF5,           # C=tile; PUSH table[tile]
             ])
-        if external_attr_stack_helper_rst is not None:
-            # A fixed/WRAM helper may rewrite the stacked A bytes before the
-            # following HBlank commit. This keeps position-owned CGB bank bits
-            # atomic with their tile IDs without adding any VRAM writes to the
-            # deliberately short three-cell access window.
-            assert external_attr_stack_helper_rst in (
-                0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF,
-            )
-            emit([external_attr_stack_helper_rst])
-
     # One wait per four tiles, matching the pure/stock cadence.  The external
     # atomic setup enters with IME clear, and every later group returns from
     # the explicit register-safe interrupt slot below with IME clear.  Keeping
@@ -1021,7 +1023,10 @@ def create_inline_tile_copy_stage1_buffered_attrs(
     emit([
         0x2E, 0x00,                         # L=0
         0x03, 0x0B,                         # established 16T setup cadence
-        0x16, 0xDF,
+        # Match the shared RST-vector discriminator used by the production
+        # precomputed copier: D=$FF selects the layout decision, while a live
+        # packed-source page ($C1-$C3) selects arena geometry sanitation.
+        0x16, 0xFF,
         0xCD,
         external_decision_helper_addr & 0xFF,
         external_decision_helper_addr >> 8,
@@ -1141,6 +1146,184 @@ def create_inline_tile_copy_stage1_buffered_attrs(
         0xC3,
         (0x42A7 + targets["common_decision"]) & 0xFF,
         (0x42A7 + targets["common_decision"]) >> 8,
+    ])
+    return bytes(code)
+
+
+def create_inline_tile_copy_postcomputed_attrs(
+    external_decision_helper_addr: int,
+    external_atomic_setup_addr: int,
+    external_atomic_wrap_addr: int,
+    external_post_copy_helper_addr: int,
+    external_source_sanitizer_rst: int,
+) -> bytes:
+    """Use the stock tile cadence, then compile and GDMA changed attributes.
+
+    Palette lookups inside the HBlank group make the copier miss subsequent
+    scanlines even when each individual VRAM write is safe. This variant keeps
+    the exact four-tile/single-wait terrain loop. Only after the complete map is
+    in bank 0 does a changed layout compile its packed source into WRAM bank 2
+    and publish the attribute plane with one bounded LCD-aware DMA.
+    """
+
+    code = bytearray()
+    targets: dict[str, int] = {}
+
+    def emit(values):
+        code.extend(values)
+
+    def mark(name):
+        targets[name] = len(code)
+
+    def jr_back(opcode, name):
+        offset = targets[name] - (len(code) + 2)
+        assert -128 <= offset <= 127
+        emit([opcode, offset & 0xFF])
+
+    def jr_fwd(opcode):
+        position = len(code) + 1
+        emit([opcode, 0x00])
+        return position
+
+    def patch_jr(position):
+        offset = len(code) - (position + 1)
+        assert -128 <= offset <= 127
+        code[position] = offset & 0xFF
+
+    def jp_fwd(opcode):
+        position = len(code) + 1
+        emit([opcode, 0x00, 0x00])
+        return position
+
+    def patch_jp(position):
+        address = 0x42A7 + len(code)
+        code[position] = address & 0xFF
+        code[position + 1] = address >> 8
+
+    assert external_source_sanitizer_rst in (
+        0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF,
+    )
+
+    emit([
+        0x2E, 0x00,                         # L=0; H is selected map base
+        0x03, 0x0B,                         # retained phase alignment
+        0x16, 0xFF,                         # shared RST decision discriminator
+        0xCD,
+        external_decision_helper_addr & 0xFF,
+        external_decision_helper_addr >> 8,
+    ])
+    j_pure_setup = jr_fwd(0x28)             # unchanged/neutral -> pure
+    emit([
+        0xCD,
+        external_atomic_setup_addr & 0xFF,
+        external_atomic_setup_addr >> 8,
+        0xCB, 0xF8,                         # SET 7,B: dirty path marker
+    ])
+    j_common_setup = jr_fwd(0x18)
+
+    patch_jr(j_pure_setup)
+    mark("pure_setup")
+
+    patch_jr(j_common_setup)
+    mark("common_setup")
+    emit([0x11, 0xA0, 0xC1, 0x3E, 0x18, 0xF5])
+
+    mark("tile_row")
+    emit([0x0E, 0x06])                      # six four-tile groups
+    mark("tile_group")
+    emit([0xF3])
+    mark("stat3")
+    emit([0xF0, 0x41, 0xE6, 0x03, 0xFE, 0x03])
+    jr_back(0x20, "stat3")
+    mark("stat0")
+    emit([0xF0, 0x41, 0xE6, 0x03])
+    jr_back(0x20, "stat0")
+    for _ in range(4):
+        emit([0x1A, 0x13, 0x22])
+    emit([0xFB, 0x0D])
+    jr_back(0x20, "tile_group")
+    emit([
+        0x7D, 0xC6, 0x08, 0x6F,
+        0x30, 0x01, 0x24,
+        0xF1, 0x3D,
+    ])
+    j_map_done = jr_fwd(0x28)
+    emit([0xF5])
+    jr_back(0x18, "tile_row")
+
+    patch_jr(j_map_done)
+    # Title/prerecorded copies carry B=$05. Keep their successful compare and
+    # taken conditional jump cycle-identical to the production CALL-NZ skip;
+    # this title transition is input-phase sensitive. Other pure routes retain
+    # the selective hazard publisher, while dirty routes use B.7 to compile.
+    emit([0x78, 0xFE, 0x05])
+    j_pure_done = jr_fwd(0x28)
+    emit([0xCB, 0x78])                       # dirty path retained in B.7
+    j_compile = jr_fwd(0x20)
+    emit([
+        0xCD,
+        external_post_copy_helper_addr & 0xFF,
+        external_post_copy_helper_addr >> 8,
+    ])
+    patch_jr(j_pure_done)
+    emit([0xFB, 0xC9])
+
+    patch_jr(j_compile)
+    mark("compile_attrs")
+    emit([
+        0xF3,                               # bounded post-copy compile
+        0x11, 0xA0, 0xC1,                  # packed source
+        0x21, 0x00, 0xD0,                  # bank-3 attribute staging
+        0x3E, 0x03, 0xE0, 0x70,
+        0x06, WRAM_BG_TABLE_HI,
+        0x3E, 0x18, 0xE0, 0xE0,            # 24 rows
+    ])
+    mark("compile_row")
+    emit([
+        0xCD, 0x00, 0xD4,                   # unrolled bank-3 WRAM row helper
+    ])
+    emit([
+        0x7D, 0xC6, 0x08, 0x6F,
+        0x30, 0x01, 0x24,
+        0xF0, 0xE0, 0x3D, 0xE0, 0xE0,
+    ])
+    jr_back(0x20, "compile_row")
+
+    # LCDC.3 names the visible map; publish to its off-screen opposite.
+    emit([
+        0xF0, 0x40, 0x0F, 0xE6, 0x04, 0xEE, 0x9C, 0x67,
+        0xAF, 0xE0, 0x54,
+        0x3E, 0x01, 0xE0, 0x4F,
+        0x3E, 0xD0, 0xE0, 0x51,
+        0xAF, 0xE0, 0x52,
+        0x7C, 0xE0, 0x53,
+        # An LCD-off Stage-1 transition cannot advance HBlank DMA; an immediate
+        # transfer is safe there. While LCDC.7 is set, use bounded HBlank DMA
+        # and wait for all 48 blocks before the native map flip.
+        0xF0, 0x40, 0xCB, 0x7F,
+        0x3E, 0x2F, 0x28, 0x02, 0x3E, 0xAF,
+        0xE0, 0x55,
+        0xF0, 0x55, 0xCB, 0x7F, 0x28, 0xFA,
+        0xAF, 0xE0, 0x4F,
+        0x3C, 0xE0, 0x70,
+        0xC3,
+        external_atomic_wrap_addr & 0xFF,
+        external_atomic_wrap_addr >> 8,
+    ])
+
+    mark("title_pure_entry")
+    emit([
+        0x26, 0x98, 0xAF, 0x6F,
+        0xCD,
+        (external_decision_helper_addr - 3) & 0xFF,
+        (external_decision_helper_addr - 3) >> 8,
+        0x06, 0x05,
+        # Match the taken JR Z in the production title-to-pure path. Gameplay
+        # enters above and pays no diagnostic cadence compensation.
+        0x18, 0x00,
+        0xC3,
+        (0x42A7 + targets["common_setup"]) & 0xFF,
+        (0x42A7 + targets["common_setup"]) >> 8,
     ])
     return bytes(code)
 
@@ -2017,24 +2200,10 @@ def build_v301(
     # skip_cleaner target
     code[cleaner_skip_jr] = (len(code) - cleaner_skip_jr - 1) & 0xFF
 
-    # Gate: run bg_sweep on title banner/showcase (D880=0x1B/0x1C) even if FFC1=0
-    code.extend([0xFA, 0x80, 0xD8])           # LD A, [D880]
-    code.extend([0xFE, 0x1B])                 # CP 0x1B (banner showcase)
-    code.extend([0x28, 0x04])                 # JR Z, do_sweep (D880=0x1B → run)
-    code.extend([0xFE, 0x1C])                 # CP 0x1C
-    do_sweep = len(code) + 1
-    code.extend([0x20, 0x00])                 # JR NZ, check_ffc1 (offset fixed below)
-    # do_sweep target: emit CALL bg_sweep, then JR past ffc1 check + sweep
-    code.extend([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
-    code.extend([0x18, 0x0B])                 # JR past ffc1 check + sweep (to VBK restore)
-    # Now fixup the JR NZ offset — must be done AFTER do_sweep code is emitted
-    code[do_sweep] = (len(code) - do_sweep - 1) & 0xFF
-    # check_ffc1
-    check_ffc1 = len(code)
-    code.extend([0xF0, 0xC1, 0xB7])           # LDH A,[FFC1]; OR A
+    code.extend([0xF0, 0xC1, 0xB7])
     ffc1_skip = len(code) + 1
-    code.extend([0x28, 0x00])                 # JR Z, skip
-    code[ffc1_skip] = 0x28                    # fixup JR Z
+    code.extend([0x28, 0x00])
+    code.extend([0xCD, bg_sweep_addr & 0xFF, (bg_sweep_addr >> 8) & 0xFF])
     code.extend([0xCD, shadow_main_addr & 0xFF, (shadow_main_addr >> 8) & 0xFF])
     code.extend([0xCD, 0x80, 0xFF])           # OAM DMA
     code[ffc1_skip] = (len(code) - ffc1_skip - 1) & 0xFF
@@ -2057,8 +2226,7 @@ def build_v301(
     # Write wrapper to bank 13 ROM (offset in file is 13 * 0x4000 + (wrapper_addr - 0x4000))
     wrapper_off = 13 * 0x4000 + (wrapper_addr - 0x4000)
     wrapper = bytearray([
-        # --- PRESERVE REGISTERS (AF too, for sound engine compat) ---
-        0xF5,                                 # PUSH AF
+        # --- PRESERVE REGISTERS ---
         0xC5,                                 # PUSH BC
         0xD5,                                 # PUSH DE
         0xE5,                                 # PUSH HL
@@ -2094,14 +2262,10 @@ def build_v301(
         # --- CALL actual colorize_handler ---
         0xCD, colorize_addr & 0xFF, (colorize_addr >> 8) & 0xFF,
 
-        # --- SOUND ENGINE VBlank update (replaces CALL 0xFF80 at 0x06D5 which was NOP'd) ---
-        0xCD, 0x80, 0xFF,                     # CALL 0xFF80
-
         # --- RESTORE REGISTERS ---
         0xE1,                                 # POP HL
         0xD1,                                 # POP DE
         0xC1,                                 # POP BC
-        0xF1,                                 # POP AF
 
         0xC9,                                 # RET
     ])
@@ -2123,7 +2287,7 @@ def build_v301(
     assert len(hook) <= 47
     rom[0x0824:0x0824 + 47] = (hook + bytearray(47 - len(hook)))[:47]
 
-    # NOP original CALL 0xFF80 (sound engine VBlank update — replaced by wrapper CALL)
+    # NOP game DMA
     rom[0x06D5:0x06D8] = bytearray([0x00, 0x00, 0x00])
 
     # RST $38 RETI → RET

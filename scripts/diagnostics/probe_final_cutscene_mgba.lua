@@ -113,7 +113,9 @@ local function visible_attr_layout()
     if (
         committed_art == 0
         or emu:read8(0xDF49) ~= expected_key
-        or emu:read8(0xDF4A) < 0x20
+        -- The story publisher writes two ten-cell halves for each of eight
+        -- art rows, so a committed pass finishes at cursor $10.
+        or emu:read8(0xDF4A) < 0x10
     ) then
         emu:write8(0xFF4F, old_vbk)
         return 0, 0, false
@@ -187,6 +189,8 @@ local function finish(status)
     out:write(string.format("dcea=%02X\n", emu:read8(0xDCEA)))
     out:write(string.format("dcf0=%02X\n", emu:read8(0xDCF0)))
     out:write(string.format("dd07=%02X\n", emu:read8(0xDD07)))
+    out:write(string.format("df49=%02X\n", emu:read8(0xDF49)))
+    out:write(string.format("df4a=%02X\n", emu:read8(0xDF4A)))
     out:write("transitions=" .. table.concat(transitions, ",") .. "\n")
     out:close()
     if STATE_OUT then

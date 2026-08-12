@@ -94,33 +94,56 @@ def main() -> int:
     captured: list[dict[str, object]] = []
     failures: list[str] = []
     for target in range(SPOTLIGHT_ROSTER_SIZE):
-        pyboy = PyBoy(str(rom), window="null", cgb=True, sound=False)
+        pyboy = PyBoy(
+            str(rom), window="null", cgb=True,
+            sound_emulated=False, log_level=5,
+        )
         pyboy.set_emulation_speed(0)
         seeded = False
         first_sample = None
         chosen = None
         try:
             for frame in range(1, args.frames_per_identity + 1):
-                pyboy.tick(1, True)
+                # Cold-boot/title frames are used only to reach the seeded
+                # identity. Rendering all ~4,500 frames for each of 38 actors
+                # made this deterministic audit exceed four minutes. Draw
+                # every frame once the requested spotlight scene is active;
+                # state/OAM execution remains frame-exact throughout.
+                render = (
+                    seeded
+                    and int(pyboy.memory[0xD880]) == 0x1B
+                    and int(pyboy.memory[0xFFF2]) == target
+                )
+                pyboy.tick(1, render)
                 scene = int(pyboy.memory[0xD880])
                 if scene == 0x1C and not seeded:
                     pyboy.memory[0xFFF2] = (
                         target - 1
                     ) % SPOTLIGHT_ROSTER_SIZE
                     seeded = True
-                if scene != 0x1B or int(pyboy.memory[0xFFF2]) != target:
+                if (
+                    not render
+                    or scene != 0x1B
+                    or int(pyboy.memory[0xFFF2]) != target
+                ):
                     continue
                 sprites = body(pyboy)
                 if not sprites:
                     continue
-                sample = (
-                    frame,
-                    sprites,
-                    pyboy.screen.image.copy(),
+                image = pyboy.screen.image.copy()
+                # The actor reaches screen center before the game publishes
+                # its English name. Require the later white name glyphs so
+                # gallery receipts identify themselves instead of showing an
+                # unlabeled sprite on black.
+                name_region = image.convert("RGB").crop((50, 80, 150, 104))
+                name_pixels = sum(
+                    min(pixel) >= 160 and max(pixel) - min(pixel) <= 80
+                    for pixel in name_region.getdata()
                 )
+                sample = (frame, sprites, image, name_pixels)
                 if first_sample is None:
                     first_sample = sample
-                if 68 <= sprites[0][1] <= 92:
+                if name_pixels >= 24:
                     chosen = sample
                     break
         finally:
@@ -131,7 +154,7 @@ def main() -> int:
         if chosen is None:
             failures.append(f"identity {target:02d} never reached hardware OAM")
             continue
-        frame, sprites, image = chosen
+        frame, sprites, image, name_pixels = chosen
         expected = palette_slots[target]
         actual = [entry[3] & 7 for entry in sprites]
         path = output / (
@@ -147,6 +170,7 @@ def main() -> int:
                 "expected_palette_slot": expected,
                 "hardware_palette_slots": actual,
                 "hardware_oam": sprites,
+                "name_glyph_pixels": name_pixels,
                 "screenshot": str(path),
             }
         )
@@ -156,7 +180,8 @@ def main() -> int:
             )
         print(
             f"id={target:02d} resource={rom_resources[target]:02X} "
-            f"frame={frame} palette={actual} screenshot={path}"
+            f"frame={frame} palette={actual} name_pixels={name_pixels} "
+            f"screenshot={path}"
         )
 
     contact_sheet = output / "spotlight-roster-contact-sheet.png"

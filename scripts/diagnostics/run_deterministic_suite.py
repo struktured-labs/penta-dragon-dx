@@ -30,13 +30,13 @@ PROCESS_CHECK = ROOT / "scripts/check_emulator_processes.sh"
 OWNER_REGISTRY = Path(
     os.environ.get(
         "PENTA_MGBA_OWNER_REGISTRY",
-        f"/tmp/penta-dragon-dx.mgba-owners-{os.getuid()}",
+        str(ROOT / "tmp" / f"penta-dragon-dx.mgba-owners-{os.getuid()}"),
     )
 )
 MGBA_LOCK = Path(
     os.environ.get(
         "PENTA_MGBA_LOCK",
-        "/tmp/penta-dragon-dx.mgba-singleflight.lock",
+        str(ROOT / "tmp" / "penta-dragon-dx.mgba-singleflight.lock"),
     )
 )
 
@@ -462,7 +462,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path(f"/tmp/penta-deterministic-suite-{stamp}"),
+        default=ROOT / "tmp" / f"penta-deterministic-suite-{stamp}",
     )
     parser.add_argument(
         "--receipt",

@@ -61,6 +61,7 @@ from build_v301_gdma import (
     create_inline_tile_copy_tileonly, create_inline_tile_copy_pure_tileonly,
     create_inline_tile_copy_stage1_precomputed_attrs,
     create_inline_tile_copy_stage1_buffered_attrs,
+    create_inline_tile_copy_postcomputed_attrs,
     create_inline_tile_copy_stage1_double_buffered_attrs,
     create_inline_tile_copy_row_precomputed_attrs,
     create_inline_tile_copy_stage1_cached_atomic,
@@ -133,6 +134,7 @@ CONDITIONAL_PALETTE_ADDR = 0x6C90
 # idle-throttled implementation lives in the unused tail after the title
 # transition service and before the spotlight identity map.
 CONDITIONAL_PALETTE_IMPL_ADDR = 0x6BA4
+CRYSTAL_PALETTE_REARM_ADDR = 0x6BDF
 SPOTLIGHT_PALETTE_HELPER_ADDR = 0x6C93
 PALETTE_PHASE_ADDR = 0xDF4C
 SPOTLIGHT_PALETTE_CACHE_ADDR = 0xDF4D
@@ -163,8 +165,8 @@ STALE_WINDOW_CLEANUP_ADDR = 0x6A40
 # allocation. Split the cutscene scheduler across them so the entire 18-byte
 # pointer-table allocation at $7FE0 remains byte-exact (seven-byte copier plus
 # eleven required zero bytes) for timing-sensitive Stage-1/demo paths.
-CUTSCENE_PALETTE_CONT_ADDR = 0x7B49
-CUTSCENE_PALETTE_CONT_END = 0x7B60
+CUTSCENE_PALETTE_CONT_ADDR = 0x7B85
+CUTSCENE_PALETTE_CONT_END = 0x7B9C
 CUTSCENE_PALETTE_BRIDGE_ADDR = 0x7DF4
 CUTSCENE_PALETTE_BRIDGE_END = 0x7E00
 SPOTLIGHT_PALETTE_MAP_ADDR = 0x6BE8
@@ -191,6 +193,7 @@ ROOM_BG_REPAIR_CLEAR_ADDR = ROOM_BG_REPAIR_ADDR + 29
 SHADOW_MAIN_ADDR = 0x69D8
 TILE_COLORIZER_ADDR = 0x6A10
 BOSS_SLOT_TABLE_ADDR = 0x68C0
+CRYSTAL_DRAGON_SCENE = 0x0E
 # The former $6F35 placement left an unused gap after the uniform-clear helper.
 # Reclaim it for an inline palette scheduler so idle VBlanks avoid a CALL.
 WRAPPER_ADDR = 0x6F1D
@@ -206,6 +209,11 @@ NATIVE_GAMEPLAY_BGP_ROUTINE_ADDR = 0x281C
 # register-staged, stock-width atomic map copier.
 INLINE_ATTR_DECISION_HELPER_ADDR = 0x3482
 SEMANTIC_STAGE1_PROTOTYPE_ADDR = 0x73FC
+# The diagnostic postcomputed publisher generates an unrolled row helper in
+# the census-empty fixed-WRAM page immediately after the native tile buffer.
+STAGE1_ATTR_ROW_INIT_ADDR = 0x5516
+STAGE1_ATTR_ROW_INIT_TAIL_ADDR = 0x5546
+STAGE1_ATTR_ROW_HELPER_WRAM_ADDR = 0xD400
 # A compact bank-13 gate enters the bank-14 loader from a retired colorizer
 # gap. Keeping executable bytes out of $7900-$7AFF is mandatory: those two
 # pages are the Angela and Penta Dragon arena attribute tables. During the
@@ -313,16 +321,18 @@ POSMAP_PTR_TABLE = 0x7FE0
 # The position-sweep RLE blob and pointer table had no production caller.
 # Reclaim that dead region for main-loop semantic OAM and lava helpers.
 OAM_PALETTE_RESOLVER_ADDR = 0x7B00
-OAM_BOSS_LUT_SERVICE_ADDR = 0x7B21
+# Resolver/setup and central-emitter sources are contiguous, just like their
+# DA00 runtime destinations, so cold boot copies both with one memcpy.
+OAM_CENTRAL_EMITTER_ADDR = 0x7B21
+OAM_BOSS_LUT_SERVICE_ADDR = 0x7B5D
 ATTRACT_PICKUP_SWEEP_HELPER_ADDR = 0x6A2D
-OAM_CENTRAL_EMITTER_ADDR = 0x7B60
 OAM_FREE_EMITTER_ADDR = 0x7BE0
 LAVA_ATTR_STAGE5_SIGNATURE_ADDR = 0x7C13
 DEATH_FADE_NORMAL_ADDR = 0x7C2C
 DEATH_FADE_INTERMEDIATE_ADDR = 0x7C34
 DEATH_FADE_WHITE_ADDR = 0x7C3C
 OAM_WRAM_COPY_ADDR = 0x7CBF
-OAM_WRAM_COPY_TAIL_ADDR = 0x55D8
+OAM_WRAM_COPY_TAIL_ADDR = 0x575C
 NATIVE_GLYPH_RESTORE_ADDR = 0x7D80
 OAM_LUT_INIT_ADDR = 0x7DA8
 # The first three bytes of both bank 13 and bank 14's verified-zero $6C80
@@ -379,7 +389,7 @@ ATTRACT_PRELUDE_FLAG_HRAM = 0x91
 # caching the route there can strand Sara in the wrong room state.
 STAGE1_ATOMIC_ROUTE_HRAM = 0xA5
 LAVA_ATTR_STAGE5_9800_META_ADDR = 0xDF53
-LAVA_ATTR_STAGE5_9C00_META_ADDR = 0xDF56
+LAVA_ATTR_STAGE5_9C00_META_ADDR = 0xDF57
 # Stage 1 reuses one signature byte from each Stage-5 metadata record while
 # its own scene is active. Scene detection clears them on every Stage 1 entry;
 # its keys can never publish the A7 validity marker consumed later by Stage 5.
@@ -396,6 +406,25 @@ STAGE1_SOURCE_GENERATION_RST = 0xDF             # RST $18
 STAGE1_ATOMIC_ATTR_STACK_HELPER_ROM_ADDR = 0x61B7
 STAGE1_ATOMIC_ATTR_STACK_HELPER_WRAM_ADDR = 0xDB80
 STAGE1_ATOMIC_ATTR_STACK_COPY_ADDR = 0x61F6
+# The live atomic arena publisher uses the retired Stage-4 material cave as a
+# cold-boot source for an always-mapped WRAM geometry sanitizer. Stage 4's
+# tiny transition-only material writer is split across three explicit gaps in
+# the retired position-map region instead.
+ARENA_ATOMIC_ATTR_STACK_HELPER_ROM_ADDR = 0x563A
+ARENA_ATOMIC_ATTR_STACK_HELPER_WRAM_ADDR = 0xDB80
+# Four otherwise-empty 36-byte records and the 34-byte tail of the following
+# record hold the arena-only semantic attribute decider.  Keeping it in bank
+# 13 avoids displacing the receipt-locked dungeon cache from DA60-DAFF.  The
+# shared bank-0 mapper enters these fragments only at the map-copy boundary.
+ARENA_ATTR_SEMANTIC_DISPATCH_ADDR = 0x566A
+ARENA_ATTR_SEMANTIC_SIG_A_ADDR = 0x569A
+ARENA_ATTR_SEMANTIC_SIG_B_ADDR = 0x56CA
+ARENA_ATTR_SEMANTIC_COMPARE_ADDR = 0x56FA
+ARENA_ATTR_SEMANTIC_CHANGED_ADDR = 0x572C
+ARENA_ATTR_SEMANTIC_FRAGMENT_SIZE = 36
+ARENA_ATTR_SEMANTIC_RUNTIME_ADDR = 0xDBA4
+ARENA_ATTR_SEMANTIC_SENTINEL_ADDR = 0xDBFF
+ARENA_ATTR_SEMANTIC_SENTINEL_VALUE = 0xB6
 # The retired fixed-position stack helper caves now host a three-fragment
 # bank-14 scanner. It follows translated cylinder rows through the north-scroll
 # and miniboss handoff without adding another ROM-bank switch.
@@ -427,32 +456,41 @@ LAVA_ATTR_STAGE7_SAMPLES = (6, 69, 169, 452)
 # attribute layout in the Stage 2-7 streaming corpus while fitting the existing two-byte map
 # signature records. FFBD is the third component, preventing an equal shifted
 # layout in another room from suppressing its first publication.
-LATER_ATTR_SIGNATURE_A = (444, 148, 19, 251)
+# Offset 148 is inside Crystal Dragon's four-phase portal scratch and changed
+# the cached signature every few frames, recreating the always-atomic timing
+# fault. Adjacent 149 is stable across the 720-frame Crystal corpus and keeps
+# the established later-stage layout corpus collision-free.
+LATER_ATTR_SIGNATURE_A = (444, 149, 19, 251)
 LATER_ATTR_SIGNATURE_B = (0, 59, 333)
+# Raw-source cells selected against the paired semantic-plane corpus. The
+# exact three-byte tuple changed on all 28 observed palette transitions and
+# remained stable on all 150 repeated palette layouts across all nine bosses.
+ARENA_ATTR_RAW_KEY_SAMPLES = (124, 152, 177)
+ARENA_TILE_RAW_KEY_SAMPLES = (78, 298, 177, 152, 149)
+PENTA_TILE_RAW_KEY_SAMPLE = 60
 OAM_WRAM_BASE = 0xDA00
 OAM_PALETTE_LUT_WRAM = 0xD900
 OAM_PALETTE_RESOLVER_RUNTIME_ADDR = OAM_WRAM_BASE
 OAM_CENTRAL_EMITTER_RUNTIME_ADDR = OAM_WRAM_BASE + 0x21
 LAVA_ATTR_STAGE7_RUNTIME_ADDR = OAM_WRAM_BASE + 0x60
-# The Stage 7 runtime ends at $DABC. Its verified-unused padding before the
-# two destination metadata records hosts a common Stage 5/7 scene dispatcher.
-LAVA_ATTR_SCENE_DISPATCH_ADDR = OAM_WRAM_BASE + 0xBC
-# The direct-result Stage-7 dispatcher ends at DAD3. Stage 1 uses the remaining
-# gap before the existing Stage-7 metadata for a vertical-safe, per-map cache;
-# the pickup-first atomic setup rides in the verified resolver-copy gap at
-# DA13 instead of competing with it.
-STAGE1_ATTR_RUNTIME_ADDR = OAM_WRAM_BASE + 0xD5
+# The Stage 7 runtime ends at $DABC. Its tail hosts a common Stage 5/7 scene
+# dispatcher followed by the Stage-1 layout cache. Crystal Dragon's body is
+# entirely OBJ, so its fixed portal/background can use the signature-cached
+# path instead of the always-atomic moving-BG-body path used by eight arenas.
+LAVA_ATTR_SCENE_DISPATCH_ADDR = OAM_WRAM_BASE + 0xB9
+# The compact dispatcher ends at DAD7. Stage 1 uses the remaining 41 bytes;
+# the pickup-first atomic setup rides in the resolver-copy gap at DA13.
+STAGE1_ATTR_RUNTIME_ADDR = OAM_WRAM_BASE + 0xD7
 # The pickup-first atomic setup rides in the verified resolver-copy gap at
 # DA13 instead of competing with the scene runtimes.
 STAGE1_ATOMIC_SETUP_ADDR = OAM_WRAM_BASE + 0x13
-# Two raw cells complete the DC0E room-builder key for ordinary Stage-1 map
-# transitions. Offsets 225 and 253 straddle the two observed publication
-# positions of the 3x3 pickup/floor cluster in live play and the prerecorded
-# demo. This pair is collision-free across both complete layout corpora;
-# omitting either boundary left pickup-colored trails behind. Both sit outside
-# the rotating cylinder's animated rows 2-6, so those phases retain the cheap
-# bank-14 publisher below.
-STAGE1_ATTR_TRANSITION_SAMPLES = (225, 253)
+# SCX XOR DC02 XOR this packed cell distinguishes every desired attribute
+# transition in the natural demo, box-scroll, and low-health/miniboss corpora.
+# It requests 560 publications for 306 real changes across 743 traced copies,
+# instead of degenerating into an every-copy/frame counter. Live long-route,
+# pickup, spike, speed, and natural-attract gates remain the authority beyond
+# those bounded corpora.
+STAGE1_ATTR_TRANSITION_SAMPLES = (49,)
 # Each reviewed cylinder room owns one packed tooth sample that cycles through
 # all four phases. DC0E supplies the physical-map bit and the room-aware key
 # prevents an equal phase in room $02/$12 from hitting the other room's cache.
@@ -462,9 +500,9 @@ STAGE1_HAZARD_PHASE_SAMPLE_ROOM02 = 52
 # full atomic path now runs only for room transitions; animated hazard rows use
 # the selective post-expander service in bank 14.
 STAGE1_ATOMIC_GROUP_WIDTH = 3
-LAVA_ATTR_STAGE7_9800_META_ADDR = OAM_WRAM_BASE + 0xFA
-LAVA_ATTR_STAGE7_9C00_META_ADDR = OAM_WRAM_BASE + 0xFD
+OAM_WRAM_END_ADDR = OAM_WRAM_BASE + 0x100
 OAM_WRAM_SENTINEL_ADDR = 0xDF51
+OAM_WRAM_SENTINEL_VALUE = 0xA8
 OAM_BOSS_LUT_CACHE_ADDR = 0xDF52
 # D880=$00/FFC1=$00 describes both the title and save-present level select.
 # The selector publishes an out-of-range palette phase. Stage 1 entry replaces
@@ -482,7 +520,10 @@ LATER_PICKUP_HELPER_AUX_ADDR = 0x5422
 LATER_PICKUP_HELPER_TAIL_ADDR = 0x5484
 LATER_PICKUP_HELPER_CAVE_SIZE = 36
 LATER_PICKUP_SWEEP_ORDER_ADDR = 0x54B4
-STAGE4_MATERIAL_HELPER_ADDR = 0x563A
+STAGE4_MATERIAL_HELPER_ADDR = 0x7C22
+STAGE4_MATERIAL_HELPER_CONT_ADDR = 0x7C44
+# Filled after build_oam_wram_copy() proves its shortened exact length.
+STAGE4_MATERIAL_HELPER_TAIL_ADDR = 0x7CF5
 LATER_PICKUP_RARE_ADDR = LATER_PICKUP_HELPER_AUX_ADDR
 LATER_PICKUP_HEALTH_ADDR = LATER_PICKUP_RARE_ADDR + 20
 LATER_PICKUP_ARROW_ADDR = LATER_PICKUP_HELPER_TAIL_ADDR + 24
@@ -650,10 +691,17 @@ def build_later_stage_pickup_helper() -> tuple[bytes, bytes, bytes, bytes]:
         0x2E, 0xD6, 0x22, 0x77,               # D6,D7
         0xC9,
     ])
+    # This transition-only writer is split across three exact gaps in the
+    # retired position-map region. Keeping the loop intact in its middle
+    # fragment makes the two jumps semantically invisible.
     stage4_material = bytes([
         0x21, 0x01, WRAM_BG_TABLE >> 8,
         0x3E, 0x04, 0x06, 0x08,              # 01-08 diamond floor -> BG4
+        0xC3, STAGE4_MATERIAL_HELPER_CONT_ADDR & 0xFF,
+        STAGE4_MATERIAL_HELPER_CONT_ADDR >> 8,
         0x22, 0x05, 0x20, 0xFC,
+        0xC3, STAGE4_MATERIAL_HELPER_TAIL_ADDR & 0xFF,
+        STAGE4_MATERIAL_HELPER_TAIL_ADDR >> 8,
         0x2E, 0x2D, 0x3E, 0x02,              # 2D/2E bridge -> BG2
         0x22, 0x77,
         0xC9,
@@ -663,7 +711,7 @@ def build_later_stage_pickup_helper() -> tuple[bytes, bytes, bytes, bytes]:
     assert len(front_code) <= LATER_PICKUP_HELPER_CAVE_SIZE
     assert len(aux) <= LATER_PICKUP_HELPER_CAVE_SIZE
     assert len(tail) <= LATER_PICKUP_HELPER_CAVE_SIZE
-    assert len(stage4_material) <= LATER_PICKUP_HELPER_CAVE_SIZE
+    assert len(stage4_material) == 24
     assert LATER_PICKUP_HEALTH_ADDR == LATER_PICKUP_HELPER_AUX_ADDR + len(rare)
     assert LATER_PICKUP_ARROW_ADDR == LATER_PICKUP_HELPER_TAIL_ADDR + len(common)
     return front_code, aux, tail, stage4_material
@@ -1223,7 +1271,7 @@ def build_stage1_resident_pickup_service() -> tuple[
     room_service.db(
         0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xFE, 0xA7,
+        0xFE, OAM_WRAM_SENTINEL_VALUE,
         0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
         0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
         BG_SWEEP_COUNT_ADDR >> 8,
@@ -1433,7 +1481,7 @@ def build_stage1_sync_pickup_service() -> tuple[
     room.db(
         0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xFE, 0xA7,
+        0xFE, OAM_WRAM_SENTINEL_VALUE,
         0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
         0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
         BG_SWEEP_COUNT_ADDR >> 8,
@@ -1537,7 +1585,7 @@ def build_stage1_dualpass_room_service() -> bytes:
     a.db(
         0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xFE, 0xA7,
+        0xFE, OAM_WRAM_SENTINEL_VALUE,
         0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
         0xFA, 0x80, 0xD8,
         0xFE, 0x02,
@@ -1693,7 +1741,7 @@ def build_story_region_classifier(
     writer.db(
         0xE1,                               # restore destination HL
         0x06, 0x4C,                         # BC = selected row-list address
-        0x1E, 0x05,                         # E = five cells in this quarter
+        0x1E, 0x0A,                         # E = ten cells in this half-row
         0xC3,
         STORY_REGION_ROW_WRITER_ADDR & 0xFF,
         STORY_REGION_ROW_WRITER_ADDR >> 8,
@@ -1718,7 +1766,7 @@ def build_story_region_classifier(
 
     # B becomes the number of cells from current D through this run's end;
     # C becomes its palette. The source pointer remains on the stack until
-    # the run or the five-cell quarter finishes.
+    # the run or the ten-cell half-row finishes.
     row_writer.label("selected")
     row_writer.db(
         0x92, 0x3C, 0x47,                  # B = end - column + 1
@@ -1737,7 +1785,7 @@ def build_story_region_classifier(
         0x14,                               # next visible column
         0x1D,
     )
-    row_writer.jr(0x28, "done")             # five-cell quarter is complete
+    row_writer.jr(0x28, "done")             # ten-cell half-row is complete
     row_writer.db(0x05)                      # remaining cells in current run
     row_writer.jr(0x20, "write")
     row_writer.db(0xC1, 0x03)                # advance to the next encoded run
@@ -2360,9 +2408,9 @@ def build_death_late_fix() -> bytes:
 
 
 def build_story_half_row_helper(row_entry_addr: int) -> bytes:
-    """Dispatch art quarters and expose a shared neutral lower-panel tail."""
+    """Dispatch art half-rows and expose a shared neutral lower-panel tail."""
     code = bytes([
-        0xFE, 0x20,                         # one 8-row * 4-quarter art pass
+        0xFE, 0x10,                         # one 8-row * 2-half-row art pass
         0xD2,                               # JP NC,separator helper
         STORY_SEPARATOR_HELPER_ADDR & 0xFF,
         STORY_SEPARATOR_HELPER_ADDR >> 8,
@@ -2379,18 +2427,17 @@ def build_story_half_row_helper(row_entry_addr: int) -> bytes:
 
 
 def build_story_quarter_helper(row_entry_addr: int) -> bytes:
-    """Map the art counter to rows 0..7 and offsets 0/5/10/15."""
+    """Map the art counter to rows 0..7 and offsets 0/10."""
     code = bytes([
-        0xE6, 0x18,                         # quarter bits from counter
-        0x0F,                               # 0/4/8/12
-        0x57,                               # D = 4 * quarter
-        0x0F, 0x0F,                         # A = quarter
-        0x82,                               # A = 5 * quarter
+        0xE6, 0x08,                         # half-row bit from counter
+        0x0F, 0x57,                         # A/D = 0/4
+        0x0F, 0x0F,                         # A = 0/1
+        0x82, 0x87,                         # A = (0/1 + 0/4) * 2 = 0/10
         0x57,                               # D = cell offset
         0x78, 0xE6, 0x07, 0x47,             # B = visible row
         0xC3, row_entry_addr & 0xFF, row_entry_addr >> 8,
     ])
-    assert len(code) == 15
+    assert len(code) == 16
     return code
 
 
@@ -2624,7 +2671,7 @@ def build_attract_obj_colorizer(
     a.db(
         0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xFE, 0xA7,
+        0xFE, OAM_WRAM_SENTINEL_VALUE,
         0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
     )
     a.db(0xC9)
@@ -2633,7 +2680,7 @@ def build_attract_obj_colorizer(
     a.db(
         0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xFE, 0xA7,
+        0xFE, OAM_WRAM_SENTINEL_VALUE,
         0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
     )
     # FFF2 briefly retains a non-actor value while D880 first enters $1B.
@@ -2748,7 +2795,7 @@ def build_room_bg_repair(
         code = bytearray([
             0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
             OAM_WRAM_SENTINEL_ADDR >> 8,
-            0xFE, 0xA7,
+            0xFE, OAM_WRAM_SENTINEL_VALUE,
             0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
         ])
         code.extend([0xFA, 0x80, 0xD8, 0xD6, 0x0A])
@@ -2774,7 +2821,7 @@ def build_room_bg_repair(
     a.db(
         0xFA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xFE, 0xA7,
+        0xFE, OAM_WRAM_SENTINEL_VALUE,
         0xC4, OAM_WRAM_COPY_ADDR & 0xFF, OAM_WRAM_COPY_ADDR >> 8,
     )
     # Stage 1 owns attrs in the atomic/direct publishers, so route only its
@@ -3274,54 +3321,185 @@ def build_lava_attr_decider() -> tuple[bytes, bytes]:
 
 
 def build_stage1_hazard_dispatcher() -> bytes:
-    """Dispatch the shared bank-0 trampoline by live gameplay scene.
+    """Enter the bank-13 dungeon/arena semantic dispatcher.
 
-    The bank-14 same-address entry owns Stage-1 hazards. This bank-13 entry is
-    reached by the later-stage WRAM dispatcher: dungeon scenes $03-$08 request
-    an atomic tile+attribute publication, while every other scene returns a
-    neutral decision. Direct vertical streaming can change pickup-bearing rows
-    without changing the old three-sample Stage-5 signature, so this decision
-    deliberately follows the actual native map-copy boundary. All paths return
-    A=1 so the bank-0 trampoline restores bank 1 before returning.
+    The bank-14 same-address entry still owns Stage-1 hazards. Bank 13 can
+    reach the larger arena decider through native-zero resource padding, so
+    this receipt-locked 22-byte slot only needs a tail jump.
     """
-    a = _Asm()
-    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x03)     # Stage 2 scene is $03
-    a.jr(0x38, "neutral")
-    a.db(0xFE, 0x09)                       # first non-dungeon scene
-    a.jr(0x30, "neutral")
-    a.db(0x3E, 0x01, 0xE0, LAVA_ATTR_DECISION_HRAM, 0xC9)
-    a.label("neutral")
-    a.db(
-        0xAF, 0xE0, LAVA_ATTR_DECISION_HRAM,
-        0x3E, 0x01, 0xC9,
-    )
-    code = a.finish()
+    code = bytes([
+        0xC3,
+        ARENA_ATTR_SEMANTIC_DISPATCH_ADDR & 0xFF,
+        ARENA_ATTR_SEMANTIC_DISPATCH_ADDR >> 8,
+    ])
     capacity = LAVA_ATTR_STAGE7_SOURCE_A_ADDR - LAVA_ATTR_DECIDER_ADDR
     assert len(code) <= capacity
     return code + bytes(capacity - len(code))
 
 
-def build_lava_attr_scene_dispatcher() -> bytes:
-    """Return NZ only when a later dungeon needs an atomic attr-map copy.
+def build_arena_attr_semantic_runtime() -> bytes:
+    """Skip exact repeated arena layouts; atomically publish every change.
 
-    The caller handles Stage 1 locally. Stages 2-7 use the shared two-signature
-    WRAM decider; non-dungeon scenes publish zero. The result returns in FFE0.
+    A five-cell XOR key distinguishes every raw tile-layout transition in the
+    all-boss receipt corpus. An exact repeat can skip both tile and attribute
+    planes. Any key or scene change conservatively returns NZ so the caller
+    publishes tiles and attributes atomically; palette-layout correctness no
+    longer depends on a separate lossy proxy.
     """
     a = _Asm()
-    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x03)
-    a.jr(0x38, "neutral")
-    a.db(0xFE, 0x09)
-    a.jr(0x30, "neutral")
-    a.db(0xCD, LAVA_ATTR_STAGE7_RUNTIME_ADDR & 0xFF,
-         LAVA_ATTR_STAGE7_RUNTIME_ADDR >> 8)
-    a.jr(0x18, "decision")
-    a.label("neutral")
-    a.db(0xAF, 0xE0, LAVA_ATTR_DECISION_HRAM)
-    a.label("decision")
-    a.db(0xF0, LAVA_ATTR_DECISION_HRAM, 0xB7, 0xC9)
+    # Crystal keeps the existing raw-layout cache. Every other arena uses the
+    # collision-audited exact-repeat key below.
+    a.db(
+        0xE5,                               # preserve destination HL
+        0x54,                               # D = destination H
+        0xFA, 0x80, 0xD8, 0x5F,            # E = exact arena scene
+        # Intermediate $44xx calls are sanitizer/source work, not physical
+        # BG-map publications. They must execute through the pure copier, not
+        # be discarded as repeats or routed into the multi-frame attr writer.
+        # Penta's upper-right camera sweep still requires atomic attributes.
+        0x7A, 0xFE, 0x44,
+    )
+    a.jr(0x28, "pure_intermediate")
+    a.db(0x7B, 0xFE, 0x14)
+    a.jr(0x20, "compute_key")
+    a.db(0xF0, 0x43, 0xFE, 0x14)
+    a.jr(0x30, "force_changed")
+    penta_source = 0xC1A0 + PENTA_TILE_RAW_KEY_SAMPLE
+    a.db(0xFA, penta_source & 0xFF, penta_source >> 8, 0x47)
+    a.jr(0x18, "key_ready")
+    a.label("compute_key")
+    tile_sources = [0xC1A0 + offset for offset in ARENA_TILE_RAW_KEY_SAMPLES]
+    a.db(
+        0xFA, tile_sources[0] & 0xFF, tile_sources[0] >> 8, 0x47,
+    )
+    for source in tile_sources[1:]:
+        a.db(0xFA, source & 0xFF, source >> 8, 0xA8, 0x47)
+    a.label("key_ready")
+    a.db(
+        # Destination bit 2 selects $53/$57. Intermediate H=$44 calls safely
+        # share the $9C00 record instead of indexing unrelated DFxx state.
+        0x7A, 0xE6, 0x04, 0xF6, 0x53, 0x6F,
+        0x26, 0xDF,
+        # Same scene + receipt-proven raw-tile key: discard the RST/CALL
+        # frames and skip the complete 24x24 publication.
+        0x23, 0x7E, 0xBB,
+    )
+    a.jr(0x20, "tile_changed_scene")
+    a.db(0x23, 0x7E, 0xB8)
+    a.jr(0x20, "tile_changed")
+    a.db(0xE1, 0xF1, 0xF1, 0xC9)
+    a.label("tile_changed_scene")
+    a.db(0x23)
+    a.label("tile_changed")
+    a.db(
+        0x78, 0x77, 0x2B,                  # cache raw-tile signature
+        0x7B, 0x77, 0x2B,                  # cache exact scene; HL=attr key
+        0x3E, 0x01,                        # retain mismatch NZ flags
+        0xE1, 0xC9,
+    )
+    a.label("force_changed")
+    a.db(0x3C, 0xE1, 0xC9)                # known $44/SCX -> nonzero/NZ
+    a.label("pure_intermediate")
+    a.db(0xAF, 0xE1, 0xC9)                # execute ordinary pure copy (Z)
     code = a.finish()
-    assert len(code) <= 25
-    return code + bytes(25 - len(code))
+    assert len(code) <= ARENA_ATTR_SEMANTIC_SENTINEL_ADDR - ARENA_ATTR_SEMANTIC_RUNTIME_ADDR
+    return code
+
+
+def build_arena_attr_semantic_decider() -> tuple[bytes, bytes, bytes, bytes, bytes]:
+    """Build the bank-13 cold dispatcher, WRAM sources, and installer."""
+    dispatch = _Asm()
+    dispatch.db(
+        0xFA, 0x80, 0xD8, 0xD6, 0x03, 0xFE, 0x06,
+    )
+    dispatch.jr(0x38, "atomic")
+    dispatch.db(0xD6, 0x09, 0xFE, 0x09)
+    dispatch.jr(0x38, "arena")
+    dispatch.label("neutral")
+    dispatch.db(0xAF, 0xE0, LAVA_ATTR_DECISION_HRAM, 0x3C, 0xC9)
+    dispatch.label("atomic")
+    dispatch.db(0x3E, 0x01, 0xE0, LAVA_ATTR_DECISION_HRAM, 0xC9)
+    dispatch.label("arena")
+    dispatch.db(0x7C, 0xE6, 0xF8, 0xFE, 0x98)
+    dispatch.jr(0x20, "neutral")
+    dispatch.db(
+        0xC3,
+        ARENA_ATTR_SEMANTIC_CHANGED_ADDR & 0xFF,
+        ARENA_ATTR_SEMANTIC_CHANGED_ADDR >> 8,
+    )
+    dispatch_code = dispatch.finish()
+
+    runtime = build_arena_attr_semantic_runtime()
+    source_a = runtime[:36]
+    source_b = runtime[36:72]
+    source_c = runtime[72:]
+    installer = build_penta_visible_seam_repair()
+    assert len(source_a) == 36 and 0 < len(source_b) <= 36
+    assert len(source_c) <= 36
+    assert len(dispatch_code) <= ARENA_ATTR_SEMANTIC_FRAGMENT_SIZE
+    return dispatch_code, source_a, source_b, source_c, installer
+
+
+def build_penta_visible_seam_repair() -> bytes:
+    """Repair Penta's one native staging cell after the map publisher."""
+    a = _Asm()
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x14)
+    a.db(0xC2, LAVA_OVERRIDE_ADDR & 0xFF, LAVA_OVERRIDE_ADDR >> 8)
+    a.db(0x21, 0x2F, 0x99, 0x7E, 0x6F, 0x26, 0xC6, 0x7E, 0x47)
+    a.db(0x21, 0x2F, 0x99, 0x3E, 0x01, 0xE0, 0x4F, 0x70)  # LUT attr
+    a.db(0xAF, 0xE0, 0x4F)                  # restore tile bank
+    a.db(0xC3, LAVA_OVERRIDE_ADDR & 0xFF, LAVA_OVERRIDE_ADDR >> 8)
+    code = a.finish()
+    assert len(code) <= 34
+    return code
+
+
+def build_lava_attr_scene_dispatcher() -> bytes:
+    """Return NZ when a dungeon or animated arena needs atomic attributes.
+
+    The caller handles Stage 1 locally. Stages 2-7 use the shared two-signature
+    WRAM decider. Boss arenas $0C..$14 enter the bank-13 semantic cache: raw
+    animation that requests an identical layout skips the redundant map
+    publication, while every real layout change remains atomic. Other scenes
+    return Z.
+
+    The arena and neutral paths communicate directly through flags. The later
+    dungeon core retains its existing FFE0 publication contract.
+    """
+    a = _Asm()
+    a.db(
+        0x06, 0x05,                        # skip Stage-1 post-copy service
+        0xFA, 0x80, 0xD8,                  # A = D880
+        0xD6, 0x03,                        # normalize dungeon $03..$08
+        0xFE, 0x06,
+    )
+    a.jr(0x38, "later_dungeon")
+    a.db(
+        0xD6, 0x09,                        # normalize arena $0C..$14
+        0xFE, 0x09,
+    )
+    a.jr(0x38, "arena")
+    a.label("neutral")
+    a.db(0xAF, 0xC9)                       # A=0/Z; pure tile copy
+    a.label("arena")
+    a.db(
+        0xFE, CRYSTAL_DRAGON_SCENE - 0x0C,
+        0xCA,
+        LAVA_ATTR_STAGE7_RUNTIME_ADDR & 0xFF,
+        LAVA_ATTR_STAGE7_RUNTIME_ADDR >> 8,
+        0xC3,
+        ARENA_ATTR_SEMANTIC_RUNTIME_ADDR & 0xFF,
+        ARENA_ATTR_SEMANTIC_RUNTIME_ADDR >> 8,
+    )
+    a.label("later_dungeon")
+    a.db(
+        0xC3,
+        LAVA_ATTR_STAGE7_RUNTIME_ADDR & 0xFF,
+        LAVA_ATTR_STAGE7_RUNTIME_ADDR >> 8,
+    )
+    code = a.finish()
+    assert len(code) == 30
+    return code
 
 
 def build_stage1_attr_runtime(always_stage1: bool = False) -> bytes:
@@ -3329,11 +3507,11 @@ def build_stage1_attr_runtime(always_stage1: bool = False) -> bytes:
 
     A room ID is too coarse: the native scroller republishes shifted packed
     layouts while FFBD remains unchanged. Caching only FFBD left attributes
-    two columns behind otherwise-correct tile IDs. The source low byte plus
-    two receipt-proven raw cells distinguish the required visible layout
-    transitions without forcing an expensive full-map attribute copy on every
-    four-pixel movement. Rotating spike phases remain handled by the selective
-    bank-14 row service rather than broad palette scans.
+    behind otherwise-correct tile IDs. SCX, the native vertical camera state
+    DC02, and one receipt-proven raw cell identify every transition in the
+    traced live/demo/low-health corpora without using a constantly changing
+    frame counter. Rotating spike phases remain handled by the selective
+    bank-14 row service.
     """
     a = _Asm()
     # Live Gargoyle combat uses D880=$0A while retaining the same Stage-1
@@ -3356,17 +3534,20 @@ def build_stage1_attr_runtime(always_stage1: bool = False) -> bytes:
         assert len(code) == 16
         return code
     a.db(
+        0x16, 0xDF,                         # RST discriminator -> cache page
         0x7C,                               # A = destination H ($98/$9C)
         0xEE, 0xCB,                         # low cache = H XOR $CB
-        0x5F,                               # E = $53/$57; D preset $DF
-        0xFA, 0x0E, 0xDC, 0x4F,            # C = source low-byte key seed
+        0x5F,                               # E = $53/$57
+        0xF0, 0x43, 0x4F,                  # C = native horizontal camera
+        0xFA, 0x02, 0xDC, 0xA9, 0x4F,      # fold vertical camera DC02
     )
     for index, sample in enumerate(STAGE1_ATTR_TRANSITION_SAMPLES):
         source = 0xC1A0 + sample
-        a.db(0xFA, source & 0xFF, source >> 8, 0xA9)
+        a.db(0xFA, source & 0xFF, source >> 8)
+        a.db(0xA9)                          # fold rolling signature C
         if index + 1 < len(STAGE1_ATTR_TRANSITION_SAMPLES):
             a.db(0x4F)                      # C = rolling XOR
-    a.db(0x3C, 0x4F)                        # nonzero current content key
+    a.db(0xE6, 0x7F, 0x3C, 0x4F)           # valid key range $01..$80
     a.db(
         0x1A, 0xB9, 0xC8,                  # same layout -> RET Z
         0x79, 0x12, 0xC9,                  # publish key; retain NZ
@@ -3378,8 +3559,8 @@ def build_stage1_attr_runtime(always_stage1: bool = False) -> bytes:
         LAVA_ATTR_SCENE_DISPATCH_ADDR >> 8,
     )
     code = a.finish()
-    assert len(code) == 37
-    assert STAGE1_ATTR_RUNTIME_ADDR + len(code) <= LAVA_ATTR_STAGE7_9800_META_ADDR
+    assert len(code) == 40
+    assert STAGE1_ATTR_RUNTIME_ADDR + len(code) <= OAM_WRAM_END_ADDR
     return code
 
 
@@ -4098,14 +4279,54 @@ def build_stage1_atomic_wrap() -> bytes:
 
 
 def build_stage1_atomic_attr_stack_vector() -> bytes:
-    """Tail-enter the live decider while preserving the helper return."""
+    """Dispatch the shared RST to layout decision or arena geometry.
+
+    The map-decision caller deliberately presets D=$FF. The atomic stack hook
+    runs later with D=$C1-$C3 as its packed-source page. Eight vector bytes are
+    therefore enough to route both callers without another fixed-bank cave.
+    """
     code = bytes([
-        0xC3,
+        0x7A, 0x3C,                         # A=D; INC A ($FF -> zero)
+        0xCA,
         STAGE1_ATTR_RUNTIME_ADDR & 0xFF,
         STAGE1_ATTR_RUNTIME_ADDR >> 8,
-        0x00, 0x00, 0x00, 0x00, 0x00,
+        0xC3,
+        ARENA_ATOMIC_ATTR_STACK_HELPER_WRAM_ADDR & 0xFF,
+        ARENA_ATOMIC_ATTR_STACK_HELPER_WRAM_ADDR >> 8,
     ])
     assert len(code) == 8
+    return code
+
+
+def build_arena_atomic_attr_stack_helper() -> bytes:
+    """Restore Shalamar's stock checker cells before atomic publication.
+
+    The packed source at C1A0 is also animation scratch. Shalamar's rows 12+
+    and the right edge of rows 8..11 can contain future-frame tile IDs when
+    the copy begins. Stock timing never presents them as terrain, but DX's
+    atomic publisher can otherwise capture them. Replace only those proven
+    non-body groups with the arena's native 0/1 checker pattern *before* the
+    caller looks up attributes, keeping tile and palette planes coherent.
+    """
+    a = _Asm()
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x0C, 0xC0)
+    # H&3 is the eight-row block within either physical tilemap. Block zero
+    # is entirely body/background. Blocks two and three are entirely staging.
+    # In block one, bit 7 selects rows 12..15 and bit 4 selects only the
+    # three-wide groups starting at columns 18/21 in rows 8..11.
+    a.db(0x7C, 0xE6, 0x03, 0xC8, 0x3D)
+    a.jr(0x20, "clear")
+    a.db(0x7D, 0xE6, 0x90, 0xC8)           # row>=12 or right-edge group
+    a.label("clear")
+    # checker = destination row parity XOR destination column parity
+    a.db(
+        0x7D, 0x07, 0x07, 0x07, 0xAD, 0xE6, 0x01,
+        0x12, 0x13, 0xEE, 0x01,
+        0x12, 0x13, 0xEE, 0x01,
+        0x12, 0x1B, 0x1B, 0xC9,
+    )
+    code = a.finish()
+    assert len(code) == 36
     return code
 
 
@@ -4234,26 +4455,21 @@ def build_demo_compact_dispatcher() -> bytes:
 
 
 def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
-    """Build the always-mapped two-signature Stage 2-7 map decider.
+    """Build the always-mapped cached-layout map decider.
 
     Seven corpus-selected source cells form two independent XOR bytes. Together
     with the room identity they distinguish semantic planes in the later-
-    stage streaming trace, so unchanged map copies retain the fast pure path
-    while every changed layout publishes tiles and attributes atomically.
+    stage streaming trace. Crystal Dragon also uses this cache because its
+    body is OBJ and its BG is structurally stable. Unchanged map copies retain
+    the fast pure path while every changed layout publishes both planes.
     """
     a = _Asm()
     a.db(0xC5, 0xD5, 0xE5)                 # preserve caller BC/DE/HL
     a.db(0xAF, 0xE0, LAVA_ATTR_DECISION_HRAM)
 
     def emit_metadata_select(label: str) -> None:
-        a.db(
-            0x11,
-            LAVA_ATTR_STAGE5_9800_META_ADDR & 0xFF,
-            LAVA_ATTR_STAGE5_9800_META_ADDR >> 8,
-            0x7C, 0xFE, 0x9C,
-        )
-        a.jr(0x20, label)
-        a.db(0x1E, LAVA_ATTR_STAGE5_9C00_META_ADDR & 0xFF)
+        # $98 XOR $CB = $53; $9C XOR $CB = $57.
+        a.db(0x7C, 0xEE, 0xCB, 0x5F, 0x16, 0xDF)
         a.label(label)
 
     emit_metadata_select("metadata_selected")
@@ -4304,19 +4520,17 @@ def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
         == STAGE1_ATTR_RUNTIME_ADDR
     )
     stage1_runtime = build_stage1_attr_runtime(always_stage1=always_stage1)
-    padding_before_metadata = bytes(
-        LAVA_ATTR_STAGE7_9800_META_ADDR
-        - (STAGE1_ATTR_RUNTIME_ADDR + len(stage1_runtime))
+    padding_to_end = bytes(
+        OAM_WRAM_END_ADDR - (STAGE1_ATTR_RUNTIME_ADDR + len(stage1_runtime))
     )
     blob = (
         code
         + padding_before_dispatch
         + dispatcher
         + stage1_runtime
-        + padding_before_metadata
-        + bytes(6)
+        + padding_to_end
     )
-    assert LAVA_ATTR_STAGE7_RUNTIME_ADDR + len(blob) == OAM_WRAM_BASE + 0x100
+    assert LAVA_ATTR_STAGE7_RUNTIME_ADDR + len(blob) == OAM_WRAM_END_ADDR
     return blob
 
 
@@ -4374,10 +4588,13 @@ def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     Gameplay calls this readiness trampoline and enters the expanded WRAM
     helper. The title path uses the RET byte at the end of the adjacent GDMA
     helper as an exact fixed-delay target and bypasses this decision entirely.
-    Old combat states can resume before the room-change slow path initializes
-    WRAM, so legacy states return Z without entering an uncopied routine.
+    The WRAM payload is initialized on the title path before gameplay. Arena
+    setup later clears the DF51 bookkeeping sentinel immediately before its
+    first map copy without clearing the payload itself, so that sentinel must
+    not suppress the arena's atomic decision. The five-byte slot is retained
+    as cycle-neutral padding to preserve the proven caller phase.
 
-    The caller presets D=$DF. The readiness path preserves B because neutral
+    The caller presets D=$FF. The readiness path preserves B because neutral
     scenes take the pure copier without reinitializing it; the WRAM helper
     reloads D880 itself. C and E remain scratch on Stage 1 cache decisions.
     """
@@ -4385,12 +4602,7 @@ def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     # The title entry calls three bytes before the gameplay decision. This
     # exact 28T delay preserves A=0/Z and the established title copier phase.
     a.db(0x18, 0x00, 0xC9)
-    a.db(
-        0xFA,
-        OAM_WRAM_SENTINEL_ADDR & 0xFF,
-        OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xB7, 0xC8,                         # zero legacy state: return Z
-    )
+    a.db(0x00, 0x00, 0x00, 0x00, 0x00)
     # Demo takes the fixed cycle-equal trampoline below. Live publishes FFBD
     # in B, calls the C-keyed decider through the now-retired RST $18 vector,
     # then returns with the decider's flags intact.
@@ -4515,7 +4727,7 @@ def build_oam_boss_lut_service() -> bytes:
     a.jr(0x20, "fill_loop")
     a.db(0xC9)
     code = a.finish()
-    assert OAM_BOSS_LUT_SERVICE_ADDR + len(code) <= OAM_CENTRAL_EMITTER_ADDR
+    assert OAM_BOSS_LUT_SERVICE_ADDR + len(code) <= CUTSCENE_PALETTE_CONT_ADDR
     return code
 
 
@@ -4678,7 +4890,12 @@ def build_oam_wram_copy() -> bytes:
     resolver = build_oam_palette_resolver()
     stage1_setup = build_stage1_atomic_setup()
     central = build_oam_central_emitter()
+    assert (
+        OAM_PALETTE_RESOLVER_ADDR + len(resolver) + len(stage1_setup)
+        == OAM_CENTRAL_EMITTER_ADDR
+    )
     stage7 = build_lava_attr_stage7_runtime()
+    arena_geometry = build_arena_atomic_attr_stack_helper()
     first_capacity = OAM_FREE_EMITTER_ADDR - LAVA_ATTR_STAGE7_SOURCE_A_ADDR
     first_length = min(first_capacity, len(stage7))
     second_length = len(stage7) - first_length
@@ -4690,12 +4907,7 @@ def build_oam_wram_copy() -> bytes:
         (
             OAM_PALETTE_RESOLVER_ADDR,
             OAM_PALETTE_RESOLVER_RUNTIME_ADDR,
-            len(resolver) + len(stage1_setup),
-        ),
-        (
-            OAM_CENTRAL_EMITTER_ADDR,
-            OAM_CENTRAL_EMITTER_RUNTIME_ADDR,
-            len(central),
+            len(resolver) + len(stage1_setup) + len(central),
         ),
         (
             LAVA_ATTR_STAGE7_SOURCE_A_ADDR,
@@ -4706,6 +4918,11 @@ def build_oam_wram_copy() -> bytes:
             LAVA_ATTR_STAGE7_SOURCE_B_ADDR,
             LAVA_ATTR_STAGE7_RUNTIME_ADDR + first_length,
             second_length,
+        ),
+        (
+            ARENA_ATOMIC_ATTR_STACK_HELPER_ROM_ADDR,
+            ARENA_ATOMIC_ATTR_STACK_HELPER_WRAM_ADDR,
+            len(arena_geometry),
         ),
     )
     a = _Asm()
@@ -4718,41 +4935,116 @@ def build_oam_wram_copy() -> bytes:
             0x01, length & 0xFF, length >> 8,
             0xCD, 0xB3, 0x09,              # stock BC-byte memcpy
         )
+    # The copied Stage-7 blob already includes six zero metadata bytes at
+    # DAFA-DAFF, so separate cache clears were redundant. Their reclaimed
+    # bytes leave an exact seven-byte data tail for Stage 4's final material
+    # fragment after this unconditional jump.
     a.db(
-        0xAF,
-        0xEA,
-        STAGE1_ATTR_CACHE_9800_ADDR & 0xFF,
-        STAGE1_ATTR_CACHE_9800_ADDR >> 8,
-        0xEA,
-        STAGE1_ATTR_CACHE_9C00_ADDR & 0xFF,
-        STAGE1_ATTR_CACHE_9C00_ADDR >> 8,
         0xC3, OAM_WRAM_COPY_TAIL_ADDR & 0xFF,
         OAM_WRAM_COPY_TAIL_ADDR >> 8,
     )
     code = a.finish()
+    assert len(code) == 54
+    assert OAM_WRAM_COPY_ADDR + len(code) == STAGE4_MATERIAL_HELPER_TAIL_ADDR
     assert OAM_WRAM_COPY_ADDR + len(code) <= TITLE_TRANSITION_SERVICE_ADDR
     return code
 
 
-def build_oam_wram_copy_tail() -> tuple[bytes, bytes]:
+def build_stage1_attr_row_helper() -> bytes:
+    """Compile one 24-cell attribute row without per-cell HRAM counters."""
+    code = bytes([
+        opcode
+        for _ in range(24)
+        for opcode in (0x1A, 0x13, 0x4F, 0x0A, 0x22)
+    ] + [0xC9])
+    assert len(code) == 121
+    return code
+
+
+def build_stage1_attr_row_initializer() -> tuple[bytes, bytes]:
+    """Generate the row helper in private WRAM bank 3, then restore bank 1."""
+    a = _Asm()
+    a.db(
+        0x3E, 0x03, 0xE0, 0x70,
+        0x21,
+        STAGE1_ATTR_ROW_HELPER_WRAM_ADDR & 0xFF,
+        STAGE1_ATTR_ROW_HELPER_WRAM_ADDR >> 8,
+        0x06, 0x18,
+    )
+    a.label("opcode_group")
+    for opcode in (0x1A, 0x13, 0x4F, 0x0A, 0x22):
+        a.db(0x3E, opcode, 0x22)
+    a.db(0x05)
+    a.jr(0x20, "opcode_group")
+    a.db(0x3E, 0xC9, 0x77)
+    a.db(
+        0xC3,
+        STAGE1_ATTR_ROW_INIT_TAIL_ADDR & 0xFF,
+        STAGE1_ATTR_ROW_INIT_TAIL_ADDR >> 8,
+    )
+    front = a.finish()
+    tail = bytes([
+        0x3E, 0xFF,
+        0xEA, STAGE1_ATTR_CACHE_9800_ADDR & 0xFF,
+        STAGE1_ATTR_CACHE_9800_ADDR >> 8,
+        0xEA, STAGE1_ATTR_CACHE_9C00_ADDR & 0xFF,
+        STAGE1_ATTR_CACHE_9C00_ADDR >> 8,
+        0x3E, 0x01, 0xE0, 0x70,
+        0xC3, OAM_LUT_INIT_ADDR & 0xFF, OAM_LUT_INIT_ADDR >> 8,
+    ])
+    assert len(front) <= 36 and len(tail) <= 36
+    return front, tail
+
+
+def build_oam_wram_copy_tail(
+    postcomputed_attrs: bool = False,
+) -> tuple[bytes, bytes]:
     """Finish the one-time WRAM/LUT initialization in bank 13.
 
-    The obsolete fixed-position attr-stack helper is no longer copied to
-    DB80; live cylinders are followed by the bank-14 packed-row scanner. This
-    leaves the bank-14 twin empty and restores the caller directly.
+    The common arena source helper is copied by the main stub. Two full
+    semantic-cache fragments fill the tail's former padding; the first arena
+    call installs only the short final fragment.
     """
-    front = bytes([
-        0xCD, OAM_LUT_INIT_ADDR & 0xFF, OAM_LUT_INIT_ADDR >> 8,
-        0x3E, 0xA7,
+    init_addr = (
+        STAGE1_ATTR_ROW_INIT_ADDR if postcomputed_attrs else OAM_LUT_INIT_ADDR
+    )
+    semantic_runtime_length = len(build_arena_attr_semantic_runtime())
+    semantic_middle_length = min(36, semantic_runtime_length - 36)
+    semantic_tail_length = semantic_runtime_length - 36 - semantic_middle_length
+    assert 0 < semantic_middle_length <= 36 and 0 <= semantic_tail_length <= 36
+    semantic_prefix = bytes([
+        0x11, ARENA_ATTR_SEMANTIC_RUNTIME_ADDR & 0xFF,
+        ARENA_ATTR_SEMANTIC_RUNTIME_ADDR >> 8,
+        0x21, ARENA_ATTR_SEMANTIC_SIG_A_ADDR & 0xFF,
+        ARENA_ATTR_SEMANTIC_SIG_A_ADDR >> 8,
+        0x0E, 36,
+        0xCD, 0xB3, 0x09,
+        0x21, ARENA_ATTR_SEMANTIC_SIG_B_ADDR & 0xFF,
+        ARENA_ATTR_SEMANTIC_SIG_B_ADDR >> 8,
+        0x0E, semantic_middle_length,
+        0xCD, 0xB3, 0x09,
+    ])
+    if semantic_tail_length:
+        semantic_prefix += bytes([
+            0x11, (ARENA_ATTR_SEMANTIC_RUNTIME_ADDR + 72) & 0xFF,
+            (ARENA_ATTR_SEMANTIC_RUNTIME_ADDR + 72) >> 8,
+            0x21, ARENA_ATTR_SEMANTIC_COMPARE_ADDR & 0xFF,
+            ARENA_ATTR_SEMANTIC_COMPARE_ADDR >> 8,
+            0x0E, semantic_tail_length,
+            0xCD, 0xB3, 0x09,
+        ])
+    front = semantic_prefix + bytes([
+        0xCD, init_addr & 0xFF, init_addr >> 8,
+        0x3E, OAM_WRAM_SENTINEL_VALUE,
         0xEA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
         0xE1, 0xD1, 0xC1,                   # restore OAM-copy caller regs
         0xC9,
     ])
-    assert len(front) == 12
-    bank13 = front + bytes(12)
-    bank14 = bytes(24)
-    assert len(bank13) == len(bank14) == 24
+    assert len(front) <= 42
+    bank13 = front
+    bank14 = bytes()
+    assert len(bank13) <= 42
     return bank13, bank14
 
 
@@ -4815,15 +5107,18 @@ def build_title_transition_service() -> bytes:
     a.db(0xF5, 0xC5, 0xD5, 0xE5)            # preserve AF,BC,DE,HL
     a.db(
         0x47,                               # B = new D880
+        0xCD,
+        CRYSTAL_PALETTE_REARM_ADDR & 0xFF,
+        CRYSTAL_PALETTE_REARM_ADDR >> 8,
         0xEE, 0x0A,
         0xE0, ATTRACT_PRELUDE_FLAG_HRAM,    # zero only for Gargoyle $0A
         0x1E, 0x12,                         # default bounded repair count
-        0xFE, 0x0B,                         # $01 XOR $0A
-    )                                      # A is new D880 XOR $0A
+        0x78, 0x3D,                         # A = new scene - 1
+    )
     a.jr(0x28, "title")
-    a.db(0xFE, 0x08)                        # $02 XOR $0A
+    a.db(0x3D)                              # gameplay $02 -> zero
     a.jr(0x28, "gameplay")
-    a.db(0xFE, 0x16)                        # $1C XOR $0A
+    a.db(0xFE, 0x1A)                        # banner $1C - 2
     a.db(0xCC, 0x80, 0xFF)                  # banner transition OAM clear
     a.jr(0x18, "store_count")
 
@@ -4855,12 +5150,13 @@ def build_title_transition_service() -> bytes:
 
     a.label("store_count")
     a.db(
-        0x7B,
-        0xEA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
+        0x2E, BG_SWEEP_COUNT_ADDR & 0xFF,  # H remains the $DF page
+        0x73,                               # LD [HL],E
         # Restore the footer's native digit before any helper below can reuse
-        # B. This keeps the original transition predicate without a D880 load.
-        0x78, 0xFE, 0x02,
-        0xD4, NATIVE_GLYPH_RESTORE_ADDR & 0xFF,
+        # B. Bit 1 includes Stage 1 while excluding both title identities;
+        # later calls are harmless because the helper is signature-guarded.
+        0xCB, 0x48,
+        0xC4, NATIVE_GLYPH_RESTORE_ADDR & 0xFF,
         NATIVE_GLYPH_RESTORE_ADDR >> 8,
         # This service runs only on scene changes, so clearing the tiny story
         # identity cache unconditionally is safe and saves the old FFC1 guard.
@@ -4870,6 +5166,24 @@ def build_title_transition_service() -> bytes:
     )
     code = a.finish()
     assert len(code) == LAVA_ATTR_DECIDER_CONT_ADDR - TITLE_TRANSITION_SERVICE_ADDR
+    return code
+
+
+def build_crystal_palette_rearm() -> bytes:
+    """Arm Crystal's bounded material pass on its exact scene transition.
+
+    The idle FFD4 clock is stopped by the native boss-entry fade, so a scene
+    hash cannot reliably schedule this pass. A is preserved; HL is scratch
+    because the transition service restores its caller's HL afterward.
+    """
+    code = bytes([
+        0xFE, CRYSTAL_DRAGON_SCENE,
+        0xC0,                               # all non-Crystal scenes return
+        0x21, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+        0x36, 0x11,
+        0xC9,
+    ])
+    assert len(code) == SPOTLIGHT_PALETTE_MAP_ADDR - CRYSTAL_PALETTE_REARM_ADDR
     return code
 
 
@@ -5127,7 +5441,9 @@ def build_colorize_prelude() -> bytes:
     c[j_colorize_off] = (finish - j_colorize_off - 1) & 0xFF
     c.extend([
         0x23, 0x2B,                         # receipt-locked flag/cycle state
-        0xC3, LAVA_OVERRIDE_ADDR & 0xFF, LAVA_OVERRIDE_ADDR >> 8,
+        0xC3,
+        ARENA_ATTR_SEMANTIC_CHANGED_ADDR & 0xFF,
+        ARENA_ATTR_SEMANTIC_CHANGED_ADDR >> 8,
     ])
 
     # The live branch is out of line so the rare menu repair can fall straight
@@ -5291,15 +5607,16 @@ def build_conditional_palette_phased() -> bytes:
         0xCD,
         OAM_BOSS_LUT_SERVICE_ADDR & 0xFF,
         OAM_BOSS_LUT_SERVICE_ADDR >> 8,     # transition-only miniboss LUT
-        0xF0, 0xBE, 0x47,                  # B = FFBE
-        0xF0, 0xBF, 0xA8, 0x47,            # B ^= FFBF
+        # FFBE only selects between two already-resident Sara rows; it does
+        # not own CRAM. Start with the miniboss flag instead.
+        0xF0, 0xBF, 0x47,                  # B = FFBF
         0xF0, 0xC0, 0xA8, 0x47,            # B ^= FFC0
         0xF0, 0xD0, 0xA8, 0x47,            # B ^= FFD0
-        0xF0, 0xC1, 0xA8, 0x47,            # B ^= FFC1
-        # Palettes vary by stage, not by room. Hash FFBA at the exact width and
-        # cadence of the former FFBD read so room transitions do not restart a
-        # 17-frame CRAM reload and overwrite the scene-selected BG0 row.
-        0xF0, 0xBD, 0xA8, 0x3C, 0x47,      # B = (B ^ FFBD) + 1
+        # FFBA starts ordinary stage/boss passes early. Crystal's scene-local
+        # material pass is armed synchronously by the scene-change service:
+        # the native boss fade stops this idle probe's FFD4 clock, and D880
+        # also exposes transient $FF map-handoff sentinels in live arenas.
+        0xF0, 0xBA, 0xA8, 0x3C, 0x47,      # B = (B ^ FFBA) + 1
         0xFA, 0x00, 0xDF, 0xB8,            # compare cached DF00
     ])
     j_same = len(c) + 1
@@ -5326,7 +5643,11 @@ def build_conditional_palette_phased() -> bytes:
     return bytes(c)
 
 
-def build_phased_palette_loader() -> tuple[bytes, bytes, bytes, bytes]:
+def build_phased_palette_loader(
+    crystal_obj_slots: tuple[int, ...] = (4, 5, 6, 7),
+    crystal_obj_source_addr: int = 0x6898,
+    crystal_scene: int = CRYSTAL_DRAGON_SCENE,
+) -> tuple[bytes, bytes, bytes, bytes]:
     """Build a one-palette-per-VBlank loader with no mode-3 CRAM writes.
 
     The former monolithic loader attempted 128-136 CRAM bytes in one VBlank.
@@ -5377,11 +5698,11 @@ def build_phased_palette_loader() -> tuple[bytes, bytes, bytes, bytes]:
 
     main.label("entry")
     main.db(0xFE, 0x11)
-    main.absolute(0xCA, "boss_first")       # phase 17
+    main.jr(0x28, "boss_first")             # phase 17
     main.db(0xFE, 0x01)
-    main.absolute(0xDA, "palette_done")     # phase 0/invalid
+    main.jr(0x38, "palette_done")           # phase 0/invalid
     main.db(0xFE, 0x09)
-    main.absolute(0xDA, "obj_phase")        # phases 1..8
+    main.jr(0x38, "obj_phase")              # phases 1..8
     main.db(0xFE, 0x11)
     main.absolute(0xDA, "bg_phase")         # phases 9..16
     main.label("palette_done")
@@ -5405,22 +5726,32 @@ def build_phased_palette_loader() -> tuple[bytes, bytes, bytes, bytes]:
 
     main.label("obj_normal")
     main.db(
-        0x6B, 0x26, 0x00,                  # HL = slot
-        0x29, 0x29, 0x29,                  # * 8
-        0x01, 0x40, 0x68, 0x09,            # + base OBJ table
+        0x7B, 0x07, 0x07, 0x07,            # A = slot * 8
+        0xC6, 0x40, 0x6F, 0x26, 0x68,      # HL = $6840 + slot*8
         0x7B, 0xB7,                        # slot 0?
     )
     main.jr(0x28, "obj0_variant")
     main.db(0xFE, 0x03)
-    main.jr(0x30, "obj_source_ready")       # slots 3..7 use base source
-    main.db(0xF0, 0xD0, 0xFE, 0x01)
+    main.jr(0x38, "obj_low_variant")        # slots 1/2 can use jet rows
+    assert crystal_obj_slots == (4, 5, 6, 7)
+    main.db(0xCB, 0x53)                    # Crystal material slots 4..7?
+    main.jr(0x28, "obj_source_ready")       # slots 3/ordinary use base source
+    # FFB7 is the true scene-context publisher behind D880. Unlike FFBA, it
+    # cannot alias ordinary Stage 3 to Crystal's arena.
+    main.db(0xF0, 0xB7, 0xFE, crystal_scene)
     main.jr(0x20, "obj_source_ready")
-    main.db(0x7B, 0xFE, 0x01)
+    main.db(0x2E, crystal_obj_source_addr & 0xFF)
+    main.jr(0x18, "obj_source_ready")
+
+    main.label("obj_low_variant")
+    main.db(0xF0, 0xD0, 0x3D)
+    main.jr(0x20, "obj_source_ready")
+    main.db(0x7B, 0x3D)
     main.jr(0x20, "obj2_jet")
-    main.db(0x21, 0xD8, 0x68)              # OBJ1 dragon jet
+    main.db(0x2E, 0xD8)                    # OBJ1 dragon jet (H already $68)
     main.jr(0x18, "obj_source_ready")
     main.label("obj2_jet")
-    main.db(0x21, 0xD0, 0x68)              # OBJ2 witch jet
+    main.db(0x2E, 0xD0)                    # OBJ2 witch jet (H already $68)
     main.jr(0x18, "obj_source_ready")
 
     main.label("obj0_variant")
@@ -5428,15 +5759,15 @@ def build_phased_palette_loader() -> tuple[bytes, bytes, bytes, bytes]:
     main.jr(0x28, "obj_source_ready")
     main.db(0xFE, 0x01)
     main.jr(0x20, "obj0_check_shield")
-    main.db(0x21, 0xE0, 0x68)
+    main.db(0x2E, 0xE0)                    # H already $68
     main.jr(0x18, "obj_source_ready")
     main.label("obj0_check_shield")
     main.db(0xFE, 0x02)
     main.jr(0x20, "obj0_turbo")
-    main.db(0x21, 0xE8, 0x68)
+    main.db(0x2E, 0xE8)                    # H already $68
     main.jr(0x18, "obj_source_ready")
     main.label("obj0_turbo")
-    main.db(0x21, 0xF0, 0x68)
+    main.db(0x2E, 0xF0)                    # H already $68
 
     main.label("obj_source_ready")
     main.db(0x7B, 0x87, 0x87, 0x87, 0xF6, 0x80)
@@ -5444,12 +5775,12 @@ def build_phased_palette_loader() -> tuple[bytes, bytes, bytes, bytes]:
 
     main.label("obj_advance")
     main.db(0x7B, 0xC6, 0x02)              # next phase = slot + 2
-    main.absolute(0xC3, "store_phase")
+    main.jr(0x18, "store_phase")
 
     main.label("boss_first")
     main.absolute(0xCD, "load_boss")
     main.db(0x3E, 0x01)
-    main.absolute(0xC3, "store_phase")
+    main.jr(0x18, "store_phase")
 
     main.label("load_boss")
     main.db(0xF0, 0xBF, 0xB7, 0xC8)        # no active boss -> RET Z
@@ -5460,9 +5791,8 @@ def build_phased_palette_loader() -> tuple[bytes, bytes, bytes, bytes]:
         0x09, 0x7E,
         0x87, 0x87, 0x87, 0xF6, 0x80,     # destination OBJ slot
         0xF5,
-        0x6B, 0x26, 0x00,
-        0x29, 0x29, 0x29,
-        0x01, 0x80, 0x68, 0x09,            # boss palette source
+        0x7B, 0x07, 0x07, 0x07,
+        0xC6, 0x80, 0x6F, 0x26, 0x68,      # boss palette source
         0xF1,
     )
     main.absolute(0xCD, "copy_obj")
@@ -5505,20 +5835,21 @@ def build_phased_palette_loader() -> tuple[bytes, bytes, bytes, bytes]:
     ext.jr(0x20, "bg_source_pad")          # other slots: timing pad
     ext.db(
         0x2E, TUNED_BG7_SOURCE_ADDR & 0xFF, # cutscene/default: YAML BG7
-        # Hazard BG7 is selected iff FFC1=1 and FFD0=0. Transform FFC1
-        # 1->0 and 0->FF, then OR it with FFD0; this preserves the prior
-        # Stage-1/demo path at exactly 64 cycles while cutscenes keep YAML
-        # BG7. The prerecorded input stream is cycle-sensitive here.
-        0xF0, 0xC1, 0x4F, 0x0D,
-        0xF0, 0xD0, 0xB1,
+        # Only Stage 1 ($02) and its Gargoyle combat overlay ($0A) own the
+        # rotating-tooth BG7 row. The former FFC1/FFD0 gameplay-family test
+        # also matched every main boss and made Troop inherit neon spike gold.
+        # Normalize bit 3 so both Stage-1 identities select the hazard row;
+        # all other gameplay/title/story scenes retain the tuneable YAML BG7.
+        0xFA, 0x80, 0xD8, 0xE6, 0xF7, 0xFE, 0x02,
     )
     ext.jr(0x20, "bg_source_ready")
     ext.db(
         0x2E, STAGE1_HAZARD_BG7_SOURCE_ADDR & 0xFF,
-        0x00,                               # exact old Stage-1 64T cadence
     )
     ext.label("bg_source_ready")
-    ext.db(0x7B, 0x87, 0x87, 0x87, 0xF6, 0x80)
+    # The normalized scene test is four cycles shorter on both branches than
+    # the old family test. One shared NOP preserves the proven 60T/72T paths.
+    ext.db(0x00, 0x7B, 0x87, 0x87, 0x87, 0xF6, 0x80)
     ext.absolute(0xCD, "copy_bg")
     ext.db(0x7A, 0xFE, 0x07)
     ext.absolute(0xCA, "palette_done")
@@ -5609,6 +5940,31 @@ def load_later_stage_bg0_sources(path: Path) -> tuple[bytes, list[str]]:
         "later-stage BG0 assignments must name an existing bg_palettes row"
     )
     return bytes(slots[name] * 8 for name in selected), selected
+
+
+def load_crystal_obj_palette_override(
+    path: Path,
+) -> tuple[int, tuple[int, ...], int, str]:
+    """Compile Crystal Dragon's scene-local OBJ row reference from YAML."""
+    document = yaml.safe_load(Path(path).read_text())
+    overrides = document.get("arena_obj_palette_overrides", {})
+    entry = overrides.get("CrystalDragonGhost", {})
+    scene = int(entry.get("scene", -1))
+    slots = tuple(int(slot) for slot in entry.get("slots", ()))
+    source_name = str(entry.get("source_boss_palette", ""))
+    boss_names = list(document.get("boss_palettes", {}))
+    assert scene == CRYSTAL_DRAGON_SCENE, (
+        "CrystalDragonGhost scene must remain $0E"
+    )
+    assert slots == (4, 5, 6, 7), (
+        "Crystal Dragon's traced body spans OBJ slots 4..7"
+    )
+    assert source_name in boss_names, (
+        "CrystalDragonGhost must reference an existing boss_palettes row"
+    )
+    source_addr = 0x6880 + boss_names.index(source_name) * 8
+    assert source_addr >> 8 == 0x68
+    return scene, slots, source_addr, source_name
 
 
 def build_later_stage_bg0_arm() -> bytes:
@@ -5903,6 +6259,12 @@ def main(
         load_later_stage_bg0_sources(palette_yaml)
     )
     (
+        crystal_scene,
+        crystal_obj_slots,
+        crystal_obj_source_addr,
+        crystal_obj_source_name,
+    ) = load_crystal_obj_palette_override(palette_yaml)
+    (
         spotlight_map,
         spotlight_palette_slots,
         spotlight_resource_ids,
@@ -5968,7 +6330,11 @@ def main(
         palette_loader_ext,
         palette_copy_cram8,
         later_stage_bg0_selector,
-    ) = build_phased_palette_loader()
+    ) = build_phased_palette_loader(
+        crystal_obj_slots=crystal_obj_slots,
+        crystal_obj_source_addr=crystal_obj_source_addr,
+        crystal_scene=crystal_scene,
+    )
     assert len(palette_copy_cram8) == 7
     assert palette_copy_cram8[:1] == bytes([0xCD])
     assert palette_copy_cram8[3:4] == bytes([0xCD])
@@ -6009,6 +6375,13 @@ def main(
         later_stage_bg0_repair_off:
         later_stage_bg0_repair_off + len(later_stage_bg0_selector)
     ] = later_stage_bg0_selector
+    print(
+        "  Crystal Dragon ghost palette: "
+        f"scene ${crystal_scene:02X} OBJ{crystal_obj_slots[0]}-"
+        f"{crystal_obj_slots[-1]} <- "
+        f"boss_palettes.{crystal_obj_source_name} "
+        f"(${crystal_obj_source_addr:04X})"
+    )
 
     # The stock item-menu entries enable the hardware Window and execute EI
     # before copying the prepared C4E0 HUD into its six visible rows.  Stock's
@@ -6073,6 +6446,7 @@ def main(
     ] = palette_loader_ext
 
     conditional_palette = build_conditional_palette_phased()
+    crystal_palette_rearm = build_crystal_palette_rearm()
     spotlight_palette_loader = build_spotlight_palette_loader()
     conditional_palette_off = (
         BANK13 + (CONDITIONAL_PALETTE_ADDR - 0x4000)
@@ -6201,13 +6575,58 @@ def main(
         (LATER_PICKUP_HELPER_FRONT_ADDR, later_pickup_front),
         (LATER_PICKUP_HELPER_AUX_ADDR, later_pickup_aux),
         (LATER_PICKUP_HELPER_TAIL_ADDR, later_pickup_tail),
-        (STAGE4_MATERIAL_HELPER_ADDR, stage4_material),
     ):
         off = BANK13 + (address - 0x4000)
         assert rom[off:off + LATER_PICKUP_HELPER_CAVE_SIZE] == bytes(
             LATER_PICKUP_HELPER_CAVE_SIZE
         ), f"later pickup helper cave at ${address:04X} is no longer free"
         rom[off:off + len(code)] = code
+    arena_geometry = build_arena_atomic_attr_stack_helper()
+    arena_geometry_off = (
+        BANK13 + ARENA_ATOMIC_ATTR_STACK_HELPER_ROM_ADDR - 0x4000
+    )
+    assert rom[
+        arena_geometry_off:
+        arena_geometry_off + LATER_PICKUP_HELPER_CAVE_SIZE
+    ] == bytes(LATER_PICKUP_HELPER_CAVE_SIZE), (
+        "arena geometry helper source cave is no longer free"
+    )
+    rom[
+        arena_geometry_off:arena_geometry_off + len(arena_geometry)
+    ] = arena_geometry
+    arena_semantic_fragments = build_arena_attr_semantic_decider()
+    for address, capacity, payload in (
+        (
+            ARENA_ATTR_SEMANTIC_DISPATCH_ADDR,
+            ARENA_ATTR_SEMANTIC_FRAGMENT_SIZE,
+            arena_semantic_fragments[0],
+        ),
+        (
+            ARENA_ATTR_SEMANTIC_SIG_A_ADDR,
+            ARENA_ATTR_SEMANTIC_FRAGMENT_SIZE,
+            arena_semantic_fragments[1],
+        ),
+        (
+            ARENA_ATTR_SEMANTIC_SIG_B_ADDR,
+            ARENA_ATTR_SEMANTIC_FRAGMENT_SIZE,
+            arena_semantic_fragments[2],
+        ),
+        (
+            ARENA_ATTR_SEMANTIC_COMPARE_ADDR,
+            ARENA_ATTR_SEMANTIC_FRAGMENT_SIZE,
+            arena_semantic_fragments[3],
+        ),
+        (
+            ARENA_ATTR_SEMANTIC_CHANGED_ADDR,
+            34,
+            arena_semantic_fragments[4],
+        ),
+    ):
+        fragment_off = BANK13 + address - 0x4000
+        assert rom[fragment_off:fragment_off + capacity] == bytes(capacity), (
+            f"arena semantic fragment cave at ${address:04X} is no longer free"
+        )
+        rom[fragment_off:fragment_off + len(payload)] = payload
     print(
         "  later-stage semantic pickups: "
         f"stage-specific tile IDs ({len(later_pickup_front)}+"
@@ -6215,8 +6634,11 @@ def main(
         f"0x{LATER_PICKUP_HELPER_FRONT_ADDR:04X}/"
         f"0x{LATER_PICKUP_HELPER_AUX_ADDR:04X}/"
         f"0x{LATER_PICKUP_HELPER_TAIL_ADDR:04X}; "
-        f"Stage 4 materials={len(stage4_material)} bytes at "
-        f"0x{STAGE4_MATERIAL_HELPER_ADDR:04X})"
+        f"Stage 4 materials={len(stage4_material)} split bytes; "
+        f"arena geometry={len(arena_geometry)} bytes at bank13:"
+        f"0x{ARENA_ATOMIC_ATTR_STACK_HELPER_ROM_ADDR:04X}; "
+        f"arena semantic cache={'/'.join(str(len(part)) for part in arena_semantic_fragments)} "
+        f"bytes from bank13:0x{ARENA_ATTR_SEMANTIC_DISPATCH_ADDR:04X})"
     )
 
     # 6. Arena bg_tables (all 9 bosses)
@@ -6538,7 +6960,9 @@ def main(
     )
     assert (
         CONDITIONAL_PALETTE_IMPL_ADDR + len(conditional_palette)
-        <= SPOTLIGHT_PALETTE_MAP_ADDR
+        == CRYSTAL_PALETTE_REARM_ADDR
+        and CRYSTAL_PALETTE_REARM_ADDR + len(crystal_palette_rearm)
+        == SPOTLIGHT_PALETTE_MAP_ADDR
     )
     assert (
         TITLE_TRANSITION_SERVICE_ADDR + len(title_transition)
@@ -6599,6 +7023,12 @@ def main(
         conditional_impl_off:
         conditional_impl_off + len(conditional_palette)
     ] = conditional_palette
+    crystal_rearm_off = (
+        BANK13 + (CRYSTAL_PALETTE_REARM_ADDR - 0x4000)
+    )
+    rom[
+        crystal_rearm_off:crystal_rearm_off + len(crystal_palette_rearm)
+    ] = crystal_palette_rearm
     map_off = BANK13 + (SPOTLIGHT_PALETTE_MAP_ADDR - 0x4000)
     rom[map_off:map_off + len(spotlight_map)] = spotlight_map
     print(
@@ -6622,6 +7052,11 @@ def main(
         f"{len(conditional_palette)} bytes at "
         f"bank13:0x{CONDITIONAL_PALETTE_IMPL_ADDR:04X} "
         f"(trampoline ${CONDITIONAL_PALETTE_ADDR:04X})"
+    )
+    print(
+        "  Crystal scene-local palette rearm: "
+        f"{len(crystal_palette_rearm)} bytes at bank13:"
+        f"0x{CRYSTAL_PALETTE_REARM_ADDR:04X}"
     )
     print(
         "  spotlight identity map: all 38 FFF2 roster entries -> "
@@ -6689,10 +7124,8 @@ def main(
     ] = palette_copy_cram8
     # Later-stage entry normally happens after the palette scheduler has gone
     # idle. Arm exactly its BG0 phase before clearing the neutral scene LUT;
-    # on the following VBlank the unchanged v111 loader copies BG0 and the
-    # phase-$0C repair helper replaces it with the stage's YAML-selected row.
-    # Keeping this transition-only service after the shared copier leaves the
-    # timing-sensitive title/demo loader and prelude byte-for-byte unchanged.
+    # on the following VBlank the loader copies BG0 and the phase-$0C repair
+    # helper replaces it with the stage's YAML-selected row.
     later_stage_bg0_arm = build_later_stage_bg0_arm()
     assert LATER_STAGE_BG0_ARM_ADDR == PALETTE_COPY_CRAM8_ADDR + len(
         palette_copy_cram8
@@ -6801,7 +7234,24 @@ def main(
         stage1_hazard_row0_repair_tail,
     ) = build_stage1_hazard_row0_transition_repair()
     stage1_hazard_room_dispatcher = build_stage1_hazard_room_dispatcher()
-    oam_wram_copy_tail13, oam_wram_copy_tail14 = build_oam_wram_copy_tail()
+    oam_wram_copy_tail13, oam_wram_copy_tail14 = build_oam_wram_copy_tail(
+        postcomputed_attrs=buffered_stage1_attrs,
+    )
+    if buffered_stage1_attrs:
+        stage1_attr_row_init_front, stage1_attr_row_init_tail = (
+            build_stage1_attr_row_initializer()
+        )
+        for address, payload in (
+            (STAGE1_ATTR_ROW_INIT_ADDR, stage1_attr_row_init_front),
+            (STAGE1_ATTR_ROW_INIT_TAIL_ADDR, stage1_attr_row_init_tail),
+        ):
+            initializer_off = BANK13 + address - 0x4000
+            assert rom[
+                initializer_off:initializer_off + len(payload)
+            ] == bytes(len(payload)), (
+                f"postcomputed row-initializer cave ${address:04X} is not free"
+            )
+            rom[initializer_off:initializer_off + len(payload)] = payload
     (
         demo_pickup_scanner,
         demo_pickup_appender,
@@ -6818,8 +7268,8 @@ def main(
             OAM_PALETTE_RESOLVER_ADDR,
             build_oam_palette_resolver() + build_stage1_atomic_setup(),
         ),
-        (OAM_BOSS_LUT_SERVICE_ADDR, build_oam_boss_lut_service()),
         (OAM_CENTRAL_EMITTER_ADDR, build_oam_central_emitter()),
+        (OAM_BOSS_LUT_SERVICE_ADDR, build_oam_boss_lut_service()),
         (OAM_FREE_EMITTER_ADDR, build_oam_free_emitter()),
         (OAM_WRAM_COPY_ADDR, build_oam_wram_copy()),
         (TITLE_TRANSITION_SERVICE_ADDR, title_transition),
@@ -6886,10 +7336,8 @@ def main(
             "Stage-1 hazard banked-entry cave is no longer free"
         )
         rom[entry_off:entry_off + len(payload)] = payload
-    for bank, payload in (
-        (BANK13, oam_wram_copy_tail13),
-        (BANK14, oam_wram_copy_tail14),
-    ):
+    del oam_wram_copy_tail14
+    for bank, payload in ((BANK13, oam_wram_copy_tail13),):
         tail_off = bank + (OAM_WRAM_COPY_TAIL_ADDR - 0x4000)
         assert rom[tail_off:tail_off + 36] == bytes(36), (
             "cross-bank OAM WRAM-copy tail cave is no longer free"
@@ -6904,7 +7352,8 @@ def main(
     ):
         patch_off = BANK13 + address - 0x4000
         assert rom[patch_off:patch_off + len(payload)] == bytes(len(payload)), (
-            f"Stage-1 entry-patch cave at ${address:04X} is no longer free"
+            f"Stage-1 entry-patch cave at ${address:04X} is no longer free: "
+            f"{rom[patch_off:patch_off + len(payload)].hex()}"
         )
         rom[patch_off:patch_off + len(payload)] = payload
 
@@ -6972,6 +7421,18 @@ def main(
         lava_stage7_source_b_off:
         lava_stage7_source_b_off + len(lava_attr_stage7_source_b)
     ] = lava_attr_stage7_source_b
+    stage4_fragments = (
+        (STAGE4_MATERIAL_HELPER_ADDR, stage4_material[:10]),
+        (STAGE4_MATERIAL_HELPER_CONT_ADDR, stage4_material[10:17]),
+        (STAGE4_MATERIAL_HELPER_TAIL_ADDR, stage4_material[17:]),
+    )
+    assert [len(payload) for _, payload in stage4_fragments] == [10, 7, 7]
+    for address, payload in stage4_fragments:
+        material_off = BANK13 + address - 0x4000
+        assert rom[material_off:material_off + len(payload)] == bytes(
+            len(payload)
+        ), f"Stage-4 material fragment at ${address:04X} is no longer free"
+        rom[material_off:material_off + len(payload)] = payload
     lava_stage5_front_off = (
         BANK13 + (LAVA_ATTR_STAGE5_FRONT_ADDR - 0x4000)
     )
@@ -7275,19 +7736,20 @@ def main(
             "buffered Stage-1 attrs and the tile-copy isolation flags are "
             "mutually exclusive"
         )
-        # RST $30 is title-family drawing only; live room publishers enter the
-        # shared copier at $42A7 after selecting H themselves. Keep the title
-        # vector on its byte-exact tail and use the fixed cave solely for the
-        # tiny DMA register helper.
-        gdma_helper_addr = INLINE_ATTR_DECISION_HELPER_ADDR
-        inline_blob = create_inline_tile_copy_stage1_double_buffered_attrs(
-            0,
-            gdma_helper_addr,
-            always_stage1=True,
+        # Keep the stock single-wait tile writer, stage only the changed
+        # attribute plane in WRAM, and publish it once after the map completes.
+        # Unlike the retired two-plane prototype, this retains the production
+        # scene/cache decision and never GDMA-replaces live tile IDs.
+        inline_blob = create_inline_tile_copy_postcomputed_attrs(
+            INLINE_ATTR_DECISION_HELPER_ADDR + 3,
+            STAGE1_ATOMIC_SETUP_ADDR,
+            STAGE1_ATOMIC_WRAP_ADDR,
+            STAGE1_HAZARD_PURE_MAP_ADDR,
+            STAGE1_SOURCE_GENERATION_RST,
         )
         atomic_row_addr = 0
         print(
-            "  diagnostic isolation: double-buffered Stage-1 tile/attr GDMA"
+            "  diagnostic isolation: stock-width tiles + buffered attribute GDMA"
         )
     else:
         inline_blob = create_inline_tile_copy_stage1_precomputed_attrs(
@@ -7295,13 +7757,14 @@ def main(
             STAGE1_ATOMIC_SETUP_ADDR,
             STAGE1_ATOMIC_WRAP_ADDR,
             external_post_copy_helper_addr=STAGE1_HAZARD_PURE_MAP_ADDR,
+            external_attr_stack_helper_rst=STAGE1_SOURCE_GENERATION_RST,
             atomic_group_width=STAGE1_ATOMIC_GROUP_WIDTH,
         )
         # INC BC / DEC BC is register-neutral but deliberately retained: the
         # 16-cycle phase pair aligns every later HBlank commit. Removing it
         # reproduced transient walls/voids in the 20,000-frame Stage-1 copy
         # receipt even though the packed source itself remained byte-stable.
-        assert inline_blob[:7] == bytes.fromhex("2E 00 03 0B 16 DF CD")
+        assert inline_blob[:7] == bytes.fromhex("2E 00 03 0B 16 FF CD")
         atomic_row_marker = bytes([
             0x06, WRAM_BG_TABLE >> 8,
             0x3E,
@@ -7339,11 +7802,13 @@ def main(
     available = 0x436D - 0x42A7 + 1
     assert len(inline_blob) <= available
     if buffered_stage1_attrs:
-        title_pure_entry = 0x42A7 + len(inline_blob) - 11
-        assert inline_blob[-11:-4] == bytes([
+        title_pure_entry = 0x42A7 + len(inline_blob) - 14
+        assert inline_blob[-14:-3] == bytes([
             0x26, 0x98, 0xAF, 0x6F, 0xCD,
-            (gdma_helper_addr + 13) & 0xFF,
-            (gdma_helper_addr + 13) >> 8,
+            INLINE_ATTR_DECISION_HELPER_ADDR & 0xFF,
+            INLINE_ATTR_DECISION_HELPER_ADDR >> 8,
+            0x06, 0x05,
+            0x18, 0x00,
         ])
     else:
         title_pure_entry = 0x42A7 + len(inline_blob) - 12
@@ -7360,11 +7825,11 @@ def main(
         INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3
     ] == bytes(0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR)
     if buffered_stage1_attrs:
-        title_delay = bytes.fromhex("00 00 00 00 18 00 C9")
         fixed_inline_helpers = (
-            build_stage1_gdma_register_helper() + title_delay
+            inline_attr_decision
+            + stage1_atomic_wrap
         )
-        assert len(fixed_inline_helpers) == 20
+        assert len(fixed_inline_helpers) == 33
         rom[0x0030:0x0033] = bytes([
             0xC3, title_pure_entry & 0xFF, title_pure_entry >> 8,
         ])

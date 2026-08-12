@@ -76,6 +76,10 @@ local last_phase_signature = ""
 local function finish(status, message, gameplay_bg0, gameplay_bg7, gameplay_obj2)
     if finished then return end
     finished = true
+    -- Pair every CRAM receipt with the exact native frame that produced it.
+    -- The Python gate compares this image against the same frame from a fresh
+    -- YAML-tuned rebuild, proving the changed bytes reach visible pixels.
+    emu:screenshot(OUT .. ".png")
     local report = assert(io.open(OUT .. ".report", "w"))
     report:write(string.format("status=%s\n", status))
     report:write(string.format("message=%s\n", message))
