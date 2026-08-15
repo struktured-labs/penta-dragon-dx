@@ -104,6 +104,64 @@ def expected_lut(name: str) -> list[int]:
     return result
 
 
+# Ted's numbered body art has one unambiguous five-tile crown ($02-$06).
+# The packed 24x24 arena source also contains future-frame scratch copies of
+# those same tile IDs.  A tile-ID-only assertion therefore cannot distinguish
+# the boss from the brightly colored debris that prompted this audit.  Keep
+# the measured body silhouette relative to that crown as an independent
+# spatial contract.  The sparse $7B/$7D/$80/$82-$86 animation edge tiles are
+# checked by the LUT but deliberately excluded from this numbered-art mask.
+TED_NUMBERED_BODY_ROWS = {
+    0: range(0, 5),
+    1: range(-2, 6),
+    2: range(-2, 6),
+    3: range(-2, 6),
+    4: range(-2, 6),
+    5: range(-2, 7),
+    6: range(-3, 7),
+    7: range(-4, 7),
+    8: range(-4, 7),
+    9: range(-4, 7),
+    10: range(-3, 7),
+    11: range(-2, 6),
+    12: range(0, 6),
+    13: range(1, 5),
+}
+TED_NUMBERED_BODY_OFFSETS = frozenset(
+    (row, col)
+    for row, columns in TED_NUMBERED_BODY_ROWS.items()
+    for col in columns
+)
+
+
+def ted_crown_by_frame(
+    samples: list[tuple[int, int, int, int, int, int, int, int, int, int]],
+) -> tuple[dict[int, tuple[int, int]], list[dict[str, object]]]:
+    """Locate Ted's unique $02-$06 crown in each sampled physical map."""
+    tiles: dict[int, dict[tuple[int, int], int]] = {}
+    for frame, _base, _scy, _scx, row, col, *_middle, tile, _attr in samples:
+        tiles.setdefault(frame, {})[(row, col)] = tile
+    anchors: dict[int, tuple[int, int]] = {}
+    violations: list[dict[str, object]] = []
+    for frame, layout in tiles.items():
+        matches = [
+            (row, col)
+            for row, col in layout
+            if [layout.get((row, col + offset)) for offset in range(5)]
+            == [0x02, 0x03, 0x04, 0x05, 0x06]
+        ]
+        if len(matches) == 1:
+            anchors[frame] = matches[0]
+        elif len(violations) < 20:
+            violations.append({
+                "kind": "ted-crown-count",
+                "frame": frame,
+                "count": len(matches),
+                "matches": matches,
+            })
+    return anchors, violations
+
+
 def analyze_crystal_cached_layout(
     samples: list[tuple[int, int, int, int, int, int, int, int, int, int]],
     raw_lut_mismatches_by_frame: Counter[int],
@@ -223,6 +281,11 @@ def analyze(name: str,
             f"{name}: expected {frames} sampled frames, got {len(seen_frames)}"
         )
     lut = expected_lut(name)
+    if name == "ted":
+        from arena_tables_data import TED_BODY_TILE_IDS
+        ted_body_tile_ids = TED_BODY_TILE_IDS
+    else:
+        ted_body_tile_ids = frozenset()
     palette_samples = Counter(attr for *_prefix, attr in samples)
     scroll_samples = Counter(
         (scy, scx) for _frame, _base, scy, scx, *_tail in samples
@@ -238,6 +301,15 @@ def analyze(name: str,
     warm_samples = 0
     cameo_top_edge_samples = 0
     cameo_top_edge_uncolored = 0
+    ted_body_samples = 0
+    ted_body_uncolored = 0
+    ted_nonbody_colored = 0
+    ted_numbered_outside_body = 0
+    ted_spatial_examples: list[dict[str, object]] = []
+    if name == "ted":
+        ted_anchors, ted_anchor_violations = ted_crown_by_frame(samples)
+    else:
+        ted_anchors, ted_anchor_violations = {}, []
     raw_lut_mismatches_by_frame: Counter[int] = Counter()
     base_by_frame = {
         frame: base for frame, base, *_tail in samples
@@ -284,6 +356,43 @@ def analyze(name: str,
             cameo_top_edge_samples += 1
             if attr != 1:
                 cameo_top_edge_uncolored += 1
+        if name == "ted":
+            if tile in ted_body_tile_ids:
+                ted_body_samples += 1
+                if attr == 0:
+                    ted_body_uncolored += 1
+            elif attr != 0:
+                ted_nonbody_colored += 1
+            # $02-$76 are Ted's sequential numbered art.  Any colored copy
+            # outside the crown-relative silhouette is arena scratch, even
+            # though a global tile LUT would call it a valid body material.
+            anchor = ted_anchors.get(frame)
+            if anchor is not None and 0x02 <= tile <= 0x76 and attr != 0:
+                relative = ((row - anchor[0]) & 0x1F, (col - anchor[1]) & 0x1F)
+                signed_relative = tuple(
+                    value - 32 if value >= 16 else value for value in relative
+                )
+                if signed_relative not in TED_NUMBERED_BODY_OFFSETS:
+                    ted_numbered_outside_body += 1
+                    if len(ted_spatial_examples) < 20:
+                        ted_spatial_examples.append({
+                            "kind": "ted-colored-scratch",
+                            "frame": frame,
+                            "row": row,
+                            "col": col,
+                            "anchor_row": anchor[0],
+                            "anchor_col": anchor[1],
+                            "relative_row": signed_relative[0],
+                            "relative_col": signed_relative[1],
+                            "tile": tile,
+                            "attr": attr,
+                        })
+
+    if name == "ted":
+        mismatch_count += len(ted_anchor_violations) + ted_numbered_outside_body
+        mismatch_examples.extend(ted_anchor_violations)
+        mismatch_examples.extend(ted_spatial_examples)
+        mismatch_examples = mismatch_examples[:20]
 
     crystal_metrics = (
         analyze_crystal_cached_layout(samples, raw_lut_mismatches_by_frame)
@@ -308,7 +417,10 @@ def analyze(name: str,
         "contract_mismatches": mismatch_count,
         "contract_kind": (
             "cached-atomic-camera-wrap"
-            if name == "crystal_dragon" else "tile-lut"
+            if name == "crystal_dragon" else (
+                "crown-relative-body-ownership"
+                if name == "ted" else "tile-lut"
+            )
         ),
         "mismatch_examples": mismatch_examples,
         "contract_status": "pass" if strict and mismatch_count == 0 else (
@@ -319,6 +431,15 @@ def analyze(name: str,
         "shalamar_warm_band_samples": warm_samples,
         "cameo_top_edge_samples": cameo_top_edge_samples,
         "cameo_top_edge_uncolored_samples": cameo_top_edge_uncolored,
+        "ted_body_samples": ted_body_samples,
+        "ted_body_uncolored_samples": ted_body_uncolored,
+        "ted_nonbody_colored_samples": ted_nonbody_colored,
+        "ted_crown_frames": len(ted_anchors),
+        "ted_crown_violations": len(ted_anchor_violations),
+        "ted_numbered_outside_body_samples": ted_numbered_outside_body,
+        "ted_observed_body_tile_ids": sorted(
+            set(observed_tiles) & ted_body_tile_ids
+        ),
     }
     result.update(crystal_metrics)
     return result
@@ -440,6 +561,26 @@ def main() -> int:
             if cameo["cameo_top_edge_uncolored_samples"]:
                 blockers["cameo:top-edge-uncolored"] = cameo[
                     "cameo_top_edge_uncolored_samples"
+                ]
+        if "ted" in strict_names:
+            ted = receipt["bosses"]["ted"]
+            if ted["ted_body_samples"] == 0:
+                blockers["ted:body-not-observed"] = 1
+            if ted["ted_body_uncolored_samples"]:
+                blockers["ted:body-uncolored"] = ted[
+                    "ted_body_uncolored_samples"
+                ]
+            if ted["ted_nonbody_colored_samples"]:
+                blockers["ted:nonbody-colored"] = ted[
+                    "ted_nonbody_colored_samples"
+                ]
+            if ted["ted_crown_violations"]:
+                blockers["ted:crown-ambiguous"] = ted[
+                    "ted_crown_violations"
+                ]
+            if ted["ted_numbered_outside_body_samples"]:
+                blockers["ted:colored-scratch"] = ted[
+                    "ted_numbered_outside_body_samples"
                 ]
         receipt["strict_pass"] = not blockers
         receipt["strict_blockers"] = blockers

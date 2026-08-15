@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Make Ted's two-plane cache architecture an official 2,800-frame release
+  contract. Receipts are bound to the candidate ROM, state, and source trace;
+  undeclared WRAM readers/writers, stale cache evidence, colliding keys, and
+  collision-free keys that still force more than 50 compiles are rejected.
+- Finish Ted's arena color containment: distinguish genuine row-zero poses
+  from the native publisher's `(0,8)` and `(0,4)` staging wraps, keeping the
+  completed crimson/gold body colored without coloring duplicate terrain.
+- Add a rendered-containment gate that scans every native Ted frame, requires
+  the thin expanding tentacle animation, and rejects the much denser copied
+  shell fragments missed by palette-only verification. Two 1,440-frame
+  replays must also hash identically.
+- Recapture a one-minute OG/DX Ted receipt from a clean 24-second native
+  window, repeated only after the complete native window passes.
+
 This project records source-level changes only. Copyrighted ROM images and
 emulator save/state files are never release artifacts in this repository.
 
@@ -30,6 +46,16 @@ emulator save/state files are never release artifacts in this repository.
 
 ### Changed
 
+- Replace Ted's screenshot-sampling review with a deterministic release gate:
+  two independent replays must produce identical full 32x32 tile/attribute
+  traces for both physical maps, while consecutive frames must contain no
+  colored off-body staging, body-relative palette flicker, ambiguous crown,
+  or ruler-straight horizontal material bands.
+- Preserve the tagged `v3.01-boss-speed-5pct-checkpoint` as a recoverable
+  timing checkpoint, not the final performance gate. Crystal Dragon's
+  phase-sensitive ghost/portal rendering is the sole accepted exception at
+  about 5%; every other boss now targets repeatable <=1% slowdown across
+  independently generated fixtures.
 - Give Crystal Dragon one YAML-selected frost material across its OBJ4-OBJ7
   animation families. This removes the green/orange/blue bands that amplified
   the original game's ghost cadence into a harsh strobe while leaving that

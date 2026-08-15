@@ -40,6 +40,12 @@ DEFAULT_SOURCE_STATES = ROOT / "tmp/palette_session/boss_states"
 BOSS_ENTRY = 0x1A2B
 LANDING_PAD = 0xCF82
 BOSS_SETTLE_FRAMES = 60
+# Deterministic normalized-entry budgets. These are measured from the same
+# synthetic landing after patch_state() explicitly restores IE=$07, so a ROM
+# cannot hide publisher latency behind a lucky serialized interrupt phase.
+# Ted v10's accepted performance baseline settles at frame 77; one frame of
+# tolerance keeps the gate below a 2% regression.
+BOSS_ENTRY_FRAME_LIMITS = {4: 78}
 ROM_BANK_SIZE = 0x4000
 PALETTE_ROM_BANK = 13
 ARENA_TABLE_BASE = 0x7200
@@ -64,11 +70,21 @@ DCBB = WRAM + (0xDCBB - WRAM_START)
 DCFD = WRAM + (0xDCFD - WRAM_START)
 DF53 = WRAM + (0xDF53 - WRAM_START)
 DF54 = WRAM + (0xDF54 - WRAM_START)
+DBFF = WRAM + (0xDBFF - WRAM_START)
 DF0D = WRAM + (0xDF0D - WRAM_START)
+DF00 = WRAM + (0xDF00 - WRAM_START)
+DF4C = WRAM + (0xDF4C - WRAM_START)
+DF51 = WRAM + (0xDF51 - WRAM_START)
+C5FF = WRAM + (0xC5FF - WRAM_START)
 FF99 = HRAM + (0xFF99 - 0xFF80)
 FFBA = HRAM + (0xFFBA - 0xFF80)
 FFBF = HRAM + (0xFFBF - 0xFF80)
+FFC0 = HRAM + (0xFFC0 - 0xFF80)
+FFD0 = HRAM + (0xFFD0 - 0xFF80)
 FF91 = HRAM + (0xFF91 - 0xFF80)
+FFA7 = HRAM + (0xFFA7 - 0xFF80)
+FFA8 = HRAM + (0xFFA8 - 0xFF80)
+FFA9 = HRAM + (0xFFA9 - 0xFF80)
 def md5(path: Path) -> str:
     digest = hashlib.md5()
     with path.open("rb") as handle:
@@ -129,6 +145,8 @@ def generate_safe_stage1(
     rom: Path,
     output: Path,
     timeout: float,
+    *,
+    stock_rom: bool = False,
 ) -> Path:
     prefix = output / "safe_stage1"
     state = prefix.with_suffix(".ss0")
@@ -173,12 +191,11 @@ def generate_safe_stage1(
         "expected_scene=02",
         "D880=02",
         "FFC1=01",
-        "FF91=01",
-        "DF0D=02",
         "FFBA=00",
-        "unsafe_attr=0",
         "state_saved=true",
     )
+    if not stock_rom:
+        required += ("FF91=01", "DF0D=02", "unsafe_attr=0")
     missing = [token for token in required if token not in detail]
     if missing:
         raise RuntimeError(
@@ -215,7 +232,9 @@ def write_png(path: Path, chunks: list[tuple[bytes, bytes]]) -> None:
     path.write_bytes(data)
 
 
-def patch_state(source: Path, destination: Path, target: int) -> None:
+def patch_state(
+    source: Path, destination: Path, target: int, *, stock_rom: bool = False,
+) -> None:
     chunks = png_chunks(source.read_bytes())
     state_indices = [
         index for index, (kind, _payload) in enumerate(chunks) if kind == b"gbAs"
@@ -233,10 +252,22 @@ def patch_state(source: Path, destination: Path, target: int) -> None:
             f"safe state is not at FETCH: {raw[CPU_EXECUTION_STATE]}"
         )
 
+    normalized_hash = (target + 1) & 0xFF  # FFBF/FFC0/FFD0 are normalized 0
+    palette_normalization = (
+        [
+            0xAF,
+            0xEA, 0x4C, 0xDF,              # no inherited palette phase
+            0x3E, normalized_hash,
+            0xEA, 0x00, 0xDF,              # exact constructed-state hash
+        ]
+        if target == 4 and not stock_rom
+        else []
+    )
     landing = bytes([
         0xF3,                               # DI while phase-aligning
         0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, # wait until VBlank
         0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, # wait for next line 0
+        *palette_normalization,
         0xFB, 0x00,                         # EI; activation delay
         0x3E, 0x03,                         # LD A,$03
         0xEA, 0x00, 0x21,                   # map ROM bank 3
@@ -264,15 +295,19 @@ def patch_state(source: Path, destination: Path, target: int) -> None:
     raw[FF99] = 3
     raw[FFBA] = target
     raw[FFBF] = 0
-    # The serialized jump deliberately bypasses the normal scene-change path.
-    # Ask the unmodified candidate to perform that transition on its first
-    # VBlank instead of inheriting Stage 1's cache/table from the source state.
-    raw[FF91] = 1
-    raw[DF0D] = 0xFF
-    # Match the proven main-loop landing-pad route: preserve both IE and IME.
-    # The boss loop HALTs for VBlank and becomes permanently white if IE is
-    # cleared here. Seed boss HP before entry so the synthetic arena cannot
-    # immediately take the post-boss exit path.
+    # The source fixture is already a settled Stage-1 scene. Preserve that
+    # scene identity until the stock boss dispatcher changes D880 to the arena;
+    # forging FF91=1 here falsely replays Stage-1 entry and arms a redundant
+    # 17-row palette job immediately before the boss fade.
+    raw[FF91] = 2 if target == 4 and not stock_rom else 1
+    raw[DF0D] = 0x02 if target == 4 and not stock_rom else 0xFF
+    # The synthetic redirect abandons the serialized caller's stack and PC,
+    # so it must not inherit that caller's temporary atomic-copy IE=$04 mask.
+    # Normalize the native boss-loop VBlank/Timer/Joypad contract explicitly;
+    # otherwise fixture success depends on the exact Stage-1 save phase.
+    raw[IE] = 0x07
+    # Seed boss HP before entry so the synthetic arena cannot immediately take
+    # the post-boss exit path.
     raw[DCBB] = 0x80
     # The injected route represents a live boss fight, not prerecorded title
     # demo playback. Leaving the safe Stage-1 state's zero discriminator here
@@ -281,6 +316,28 @@ def patch_state(source: Path, destination: Path, target: int) -> None:
     raw[DCFD] = 1
     raw[DF53] = 0
     raw[DF54] = 0
+    # Normalize the global palette cursor just like IE. The accepted v10
+    # benchmark began at phase zero; inheriting Stage 1's transient $0B made
+    # newer candidates perform a different workload before boss dispatch.
+    raw[DF4C] = int(os.environ.get("BOSS_NORMALIZED_PALETTE_PHASE", "00"), 16)
+    # The serialized route also changes FFBA behind the palette scheduler's
+    # back. Seed its exact production hash to the state we just constructed;
+    # otherwise the first pre-fade VBlank manufactures an unnecessary full
+    # 17-row palette pass even though the fixture's CRAM is already current.
+    # That synthetic job delayed Ted's receipt by 19 frames and did not occur
+    # on a natural playthrough where the stage pass settled long beforehand.
+    if target == 4 and not stock_rom:
+        raw[DF00] = (
+            raw[FFBF] ^ raw[FFC0] ^ raw[FFD0] ^ raw[FFBA]
+        ) + 1 & 0xFF
+    if not stock_rom:
+        # These are DX runtime sentinels/mailboxes, not stock-game scratch.
+        # Touching them in the OG fixture changes native boss behavior and can
+        # prevent the stock dispatcher from ever reaching a stable receipt.
+        raw[C5FF] = 0
+        raw[DBFF] = 0
+        raw[DF51] = 0
+        raw[FFA7] = raw[FFA8] = raw[FFA9] = 0
 
     chunks[index] = (b"gbAs", zlib.compress(bytes(raw), level=9))
     write_png(destination, chunks)
@@ -294,6 +351,8 @@ def capture_final(
     target: int,
     timeout: float,
     sidecar_dir: Path,
+    *,
+    stock_rom: bool = False,
 ) -> str:
     state = prefix.with_suffix(".ss0")
     done = prefix.with_suffix(".done")
@@ -307,6 +366,7 @@ def capture_final(
         BOSS_ENTRY_TIMEOUT="1200",
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
+        BOSS_STOCK_ROM="1" if stock_rom else "0",
     )
     if target == CRYSTAL_TARGET:
         source_offset = (
@@ -356,6 +416,8 @@ def generate_one(
     target: int,
     expected_table: bytes,
     timeout: float,
+    *,
+    stock_rom: bool = False,
 ) -> tuple[int, str]:
     name = BOSS_NAMES[target]
     expected_scene = BOSSES[target].scene
@@ -364,18 +426,36 @@ def generate_one(
     ) as tmp:
         tmpdir = Path(tmp)
         injected = tmpdir / "injected.ss0"
-        patch_state(safe_state, injected, target)
+        patch_state(safe_state, injected, target, stock_rom=stock_rom)
 
         prefix = tmpdir / f"boss{target}_{name}"
-        detail = capture_final(
-            mgba,
-            rom,
-            injected,
-            prefix,
-            target,
-            timeout,
-            tmpdir,
-        )
+        try:
+            detail = capture_final(
+                mgba,
+                rom,
+                injected,
+                prefix,
+                target,
+                timeout,
+                tmpdir,
+                stock_rom=stock_rom,
+            )
+        except Exception:
+            # Entry timeouts, scene exits, and save failures occur before the
+            # ordinary report-validation branch below. Preserve those receipts
+            # too; otherwise TemporaryDirectory erases the most important
+            # evidence from long-running corrupt candidates.
+            failed_stem = f"boss{target}_{name}.failed"
+            for artifact, suffix in (
+                (prefix.with_suffix(".report"), ".report"),
+                (prefix.with_suffix(".trace"), ".trace"),
+                (prefix.with_suffix(".png"), ".png"),
+                (prefix.with_suffix(".ss0"), ".ss0"),
+                (prefix.with_suffix(".done"), ".done"),
+            ):
+                if artifact.is_file():
+                    shutil.copy2(artifact, output / f"{failed_stem}{suffix}")
+            raise
         required = (
             "status=ok",
             f"target={target}",
@@ -402,9 +482,20 @@ def generate_one(
                 f"at least {BOSS_SETTLE_FRAMES} arena frames "
                 f"(got {stable_frames})"
             )
+        try:
+            entry_frame = int(fields.get("settle_frame", fields.get("frame", "0")))
+        except ValueError:
+            entry_frame = 0
+        if target in BOSS_ENTRY_FRAME_LIMITS:
+            maximum_frame = BOSS_ENTRY_FRAME_LIMITS[target]
+            if entry_frame <= 0 or entry_frame > maximum_frame:
+                missing.append(
+                    f"normalized entry settle by frame {maximum_frame} "
+                    f"(got {entry_frame})"
+                )
         actual_table_hex = fields.get("active_table", "")
         expected_table_hex = expected_table.hex().upper()
-        if actual_table_hex != expected_table_hex:
+        if not stock_rom and actual_table_hex != expected_table_hex:
             try:
                 actual_table = bytes.fromhex(actual_table_hex)
             except ValueError:
@@ -424,15 +515,15 @@ def generate_one(
             bg_cram[index] | (bg_cram[index + 1] << 8)
             for index in range(0, len(bg_cram) - 1, 2)
         }
-        if len(bg_cram) != 64:
+        if not stock_rom and len(bg_cram) != 64:
             missing.append(f"64-byte bg_cram (got {len(bg_cram)})")
-        if not words - {0x0000, 0x7FFF}:
+        if not stock_rom and not words - {0x0000, 0x7FFF}:
             missing.append("nontrivial bg_cram")
         try:
             palette_settled = int(fields.get("palette_settled", "0"))
         except ValueError:
             palette_settled = 0
-        if palette_settled < 1:
+        if not stock_rom and palette_settled < 1:
             missing.append(
                 f"a phase-zero palette frame (got {palette_settled})"
             )
@@ -448,7 +539,8 @@ def generate_one(
         # a visually exact arena because its synthetic entry began in the
         # Stage-1 spike room. Arenas that actually reference BG7 remain exact.
         bg7_is_rendered = 7 in expected_table
-        if bg7_is_rendered and bg_cram[56:64] != expected_bg7:
+        if (not stock_rom and bg7_is_rendered
+                and bg_cram[56:64] != expected_bg7):
             missing.append(
                 "rendered BG7 exact tuned row "
                 f"({bg_cram[56:64].hex().upper()} != "
@@ -458,9 +550,9 @@ def generate_one(
             obj_cram = bytes.fromhex(fields.get("obj_cram", ""))
         except ValueError:
             obj_cram = b""
-        if len(obj_cram) != 64:
+        if not stock_rom and len(obj_cram) != 64:
             missing.append(f"64-byte obj_cram (got {len(obj_cram)})")
-        if target == CRYSTAL_TARGET:
+        if not stock_rom and target == CRYSTAL_TARGET:
             source_offset = (
                 PALETTE_ROM_BANK * ROM_BANK_SIZE
                 + CRYSTAL_OBJ_SOURCE_ADDR
@@ -497,6 +589,17 @@ def generate_one(
         screenshot = prefix.with_suffix(".png")
         trace = prefix.with_suffix(".trace")
         if not screenshot.is_file() or screenshot.stat().st_size < 1000:
+            # Cold-path failures are precisely the cases that need retained
+            # evidence; do not let TemporaryDirectory erase their trace.
+            failed_stem = f"boss{target}_{name}.failed"
+            for artifact, suffix in (
+                (report, ".report"),
+                (trace, ".trace"),
+                (screenshot, ".png"),
+                (state, ".ss0"),
+            ):
+                if artifact.is_file():
+                    shutil.copy2(artifact, output / f"{failed_stem}{suffix}")
             raise RuntimeError(
                 f"{name}: final screenshot is missing or structurally trivial"
             )
@@ -510,7 +613,7 @@ def generate_one(
         # The known bad serialized landing renders a five-color horizontal
         # stripe field. Ted's valid early arena frame can legitimately have
         # six or seven colors before its animation exposes the full set.
-        if rendered_colors < 6:
+        if not stock_rom and rendered_colors < 6:
             raise RuntimeError(
                 f"{name}: rendered frame has only {rendered_colors} colors"
             )
@@ -833,6 +936,7 @@ def main() -> int:
         return 0
 
     rom_bytes = args.rom.read_bytes()
+    stock_rom = args.rom.resolve() == (ROOT / "rom/Penta Dragon (J).gb").resolve()
     # Bosses 0..7 share the ordinary stage-boss dispatcher. Penta Dragon is
     # entered by the native pre-final bridge and a synthetic Stage-1 CALL can
     # legitimately fall through into final-story state before a long palette
@@ -850,6 +954,7 @@ def main() -> int:
                 args.rom,
                 Path(tmp),
                 args.timeout,
+                stock_rom=stock_rom,
             )
             results.extend(
                 generate_one(
@@ -869,6 +974,7 @@ def main() -> int:
                         - ROM_BANK_SIZE
                     ],
                     args.timeout,
+                    stock_rom=stock_rom,
                 )
                 for target in fresh_targets
             )

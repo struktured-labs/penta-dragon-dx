@@ -3,4 +3,4 @@ set -eu
 
 python3 scripts/diagnostics/verify_live_regression.py --check-contract
 python3 scripts/diagnostics/verify_mgba_singleflight_guard.py
-python3 scripts/diagnostics/verify_suite_receipt.py --staged
+python3 scripts/diagnostics/verify_precommit_policy.py

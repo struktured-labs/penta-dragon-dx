@@ -66,6 +66,20 @@ LIVE_GATES = (
     "boss_atomic_attr_contract",
     "boss_arenas",
     "boss_geometry_all9",
+    "ted_contract_controls",
+    "ted_materializer",
+    "ted_classifier",
+    "ted_entry",
+    "ted_og_entry",
+    "ted_cadence",
+    "ted_two_plane_cache_contract",
+    "ted_cache_plane_reservation",
+    "ted_determinism",
+    "ted_source_publication",
+    "ted_publication_sequence",
+    "ted_release_readiness_receipt",
+    "ted_candidate_delta",
+    "ted_release_readiness",
     "boss_semantic_cadence",
     "boss_og_states",
     "boss_publication_cadence",
@@ -116,6 +130,30 @@ def verify_contract() -> list[str]:
         failures.append(
             "release gate(s) omitted from pre-stream profile: "
             + ", ".join(omitted)
+        )
+
+    from boss_geometry_contract import BOSSES
+    from verify_boss_publication_cadence import (
+        CRYSTAL_DRAGON_TARGET,
+        DEFAULT_CRYSTAL_MAX_SLOWDOWN,
+        DEFAULT_MAX_SLOWDOWN,
+        allowed_slowdown,
+    )
+
+    limits = [allowed_slowdown(target) for target in range(len(BOSSES))]
+    exceptions = [
+        target
+        for target, limit in enumerate(limits)
+        if limit != DEFAULT_MAX_SLOWDOWN
+    ]
+    if DEFAULT_MAX_SLOWDOWN != 0.01:
+        failures.append("ordinary boss cadence limit is not 1%")
+    if DEFAULT_CRYSTAL_MAX_SLOWDOWN != 0.05:
+        failures.append("Crystal Dragon cadence limit is not 5%")
+    if exceptions != [CRYSTAL_DRAGON_TARGET]:
+        failures.append(
+            "boss cadence exception is not Crystal Dragon alone: "
+            + ", ".join(map(str, exceptions))
         )
     return failures
 

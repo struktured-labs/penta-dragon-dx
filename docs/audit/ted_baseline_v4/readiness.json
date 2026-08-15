@@ -1,0 +1,68 @@
+{
+  "schema": "penta-ted-release-readiness-v4",
+  "status": "fail",
+  "checks": {
+    "cadence_receipt_identity": true,
+    "cadence_within_one_percent": true,
+    "candidate_rom_identity": true,
+    "checker_palette_materials": false,
+    "checker_tile_lattice": false,
+    "classifier_identity_contract": true,
+    "contract_controls": true,
+    "deterministic_visible_replay": true,
+    "entry_fixture": true,
+    "materializer_triplet_contract": true,
+    "native_publication_caller": true,
+    "numbered_tile_identity": false,
+    "publication_trace_identity": true,
+    "runtime_contract_rom_identity": true,
+    "source_publication_identity": true,
+    "source_publication_receipt": true,
+    "sparse_tentacle_identity": false,
+    "stock_publication_sequence": false,
+    "visible_geometry_and_materials": false
+  },
+  "failing_checks": [
+    "checker_palette_materials",
+    "checker_tile_lattice",
+    "numbered_tile_identity",
+    "sparse_tentacle_identity",
+    "stock_publication_sequence",
+    "visible_geometry_and_materials"
+  ],
+  "input_errors": {},
+  "cadence": {
+    "maximum_speed_deviation_percent": 1.0,
+    "observation_frames": 2800,
+    "slowdown_percent": -0.2429301108757942,
+    "speed_ratio": 1.002429301108758,
+    "status": "pass"
+  },
+  "identity": {
+    "determinism_rom_sha256": "0665980bb158fb835b7f3f44e11ad4e4d52882964273521e7bdb40b20fcba794",
+    "rom_sha256": "0665980bb158fb835b7f3f44e11ad4e4d52882964273521e7bdb40b20fcba794",
+    "state_sha256": "55ff5a2b9c747acdb0c48fa7efe9b1ea6941d9767ffa8a326d6590c5eef249dd",
+    "trace_sha256": [
+      "ff5d890ed2d1ee2b76c4df266d7d7e66f3e43d0a257fb41533093f3c9966ea01",
+      "ff5d890ed2d1ee2b76c4df266d7d7e66f3e43d0a257fb41533093f3c9966ea01"
+    ]
+  },
+  "geometry": {
+    "frames": 2800,
+    "native_pose_matches": 0,
+    "native_pose_mismatches": 2800,
+    "numbered_identity_mismatches": 430365,
+    "sparse_position_mismatches": 6846,
+    "floor_lattice_mismatches": 5762,
+    "floor_palette_mismatches": 565492
+  },
+  "publication_sequence": {
+    "failures": {"partial-map-not-complete-next-frame": 5},
+    "frames": 2800,
+    "map_change_events": 111,
+    "source_exact_events": 69,
+    "partial_events": 42,
+    "partial_foreign_cells": 0,
+    "partial_not_complete_next_frame": 5
+  }
+}

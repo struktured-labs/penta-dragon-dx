@@ -7,8 +7,14 @@ local WARMUP = tonumber(os.getenv("BOSS_CADENCE_WARMUP") or "60")
 local FRAMES = tonumber(os.getenv("BOSS_CADENCE_FRAMES") or "600")
 
 local trace = assert(io.open(OUT .. ".trace", "w"))
+local sources = assert(io.open(OUT .. ".sources.bin", "wb"))
+local state_features = assert(io.open(OUT .. ".state.bin", "wb"))
 local frame, copies, scene_frames, finished = 0, 0, 0, false
 local scene_drift_frames = 0
+-- Native $3111 expands one logical metatile into a 2x2 tile block.  These
+-- diagnostics let the cache contract evaluate cheap per-metatile signatures
+-- without changing the ROM under test.
+local meta_count, meta_sum, meta_xor, meta_roll, meta_weighted = 0, 0, 0, 0, 0
 
 local function register(name)
   local readers = {
@@ -31,6 +37,8 @@ local function finish(status)
     "complete status=%s frames=%d scene_frames=%d copies=%d scene=%02X\n",
     status, frame, scene_frames, copies, emu:read8(0xD880)))
   trace:close()
+  sources:close()
+  state_features:close()
   local marker = assert(io.open(OUT .. ".done", "w"))
   marker:write(string.format("%s copies=%d scene_frames=%d\n",
     status, copies, scene_frames))
@@ -43,11 +51,48 @@ pcall(function()
     if frame <= WARMUP or emu:read8(0xD880) ~= EXPECTED_SCENE then return end
     local destination = register("HL") & 0xFC00
     if destination ~= 0x9800 and destination ~= 0x9C00 then return end
+    local sp = register("SP")
+    local caller = emu:read8(sp) | (emu:read8((sp + 1) & 0xFFFF) << 8)
     copies = copies + 1
-    trace:write(string.format("copy=%d frame=%d destination=%04X\n",
-      copies, frame - WARMUP, destination))
+    local record = {
+      (frame - WARMUP) & 0xFF, ((frame - WARMUP) >> 8) & 0xFF,
+      destination & 0xFF, (destination >> 8) & 0xFF,
+    }
+    for offset = 0, 24 * 24 - 1 do
+      record[#record + 1] = emu:read8(0xC1A0 + offset)
+    end
+    sources:write(string.char(table.unpack(record)))
+    sources:flush()
+    local state_record = {}
+    for address = 0xDC00, 0xDDFF do
+      state_record[#state_record + 1] = emu:read8(address)
+    end
+    state_features:write(string.char(table.unpack(state_record)))
+    trace:write(string.format(
+      "copy=%d frame=%d destination=%04X ly=%02X stat=%02X pc=%04X caller=%04X\n",
+      copies, frame - WARMUP, destination, emu:read8(0xFF44),
+      emu:read8(0xFF41), register("PC"), caller))
+    trace:write(string.format(
+      "key=%02X%02X%02X%02X\n", emu:read8(0xDD81),
+      emu:read8(0xDDC0), emu:read8(0xDD87), emu:read8(0xDDDC)))
+    trace:write(string.format(
+      "meta=count:%d sum:%02X xor:%02X roll:%02X weighted:%02X\n",
+      meta_count, meta_sum, meta_xor, meta_roll, meta_weighted))
+    meta_count, meta_sum, meta_xor, meta_roll, meta_weighted = 0, 0, 0, 0, 0
     trace:flush()
   end, 0x42A7)
+end)
+
+pcall(function()
+  emu:setBreakpoint(function()
+    if frame <= WARMUP or emu:read8(0xD880) ~= EXPECTED_SCENE then return end
+    local value = emu:read8(register("HL"))
+    meta_count = meta_count + 1
+    meta_sum = (meta_sum + value) & 0xFF
+    meta_xor = meta_xor ~ value
+    meta_roll = ((meta_roll * 33) + value) & 0xFF
+    meta_weighted = (meta_weighted + meta_count * value) & 0xFF
+  end, 0x3111)
 end)
 
 callbacks:add("frame", function()

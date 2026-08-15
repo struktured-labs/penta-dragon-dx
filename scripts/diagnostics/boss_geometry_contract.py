@@ -33,7 +33,11 @@ BOSSES = (
     BossContract("riff", "purple", 0x0D),
     BossContract("crystal_dragon", "ice cyan", 0x0E),
     BossContract("cameo", "cherry red/crimson", 0x0F),
-    BossContract("ted", "cherry red/crimson", 0x10),
+    BossContract(
+        "ted",
+        "staggered crimson/gold shell + vertically continuous dark tendrils",
+        0x10,
+    ),
     BossContract("troop", "steel/navy", 0x11),
     BossContract("faze", "purple", 0x12),
     BossContract("angela", "purple", 0x13),

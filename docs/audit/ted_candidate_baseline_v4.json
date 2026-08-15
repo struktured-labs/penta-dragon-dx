@@ -1,0 +1,20 @@
+{
+  "schema": "penta-ted-qualified-baseline-v1",
+  "description": "Corrected native-copy Ted baseline; cadence-qualified but visually rejected.",
+  "determinism_receipt_sha256": "a8e32fef0ff282b2cbece4daeba059d563787140ff6afb205f5cf3dd5041a482",
+  "readiness_receipt_sha256": "e05fbf3627d44facfd4fdaeaba4a1d45bb66885334cfdec2fd53e415fe22e040",
+  "rom_sha256": "0665980bb158fb835b7f3f44e11ad4e4d52882964273521e7bdb40b20fcba794",
+  "state_sha256": "55ff5a2b9c747acdb0c48fa7efe9b1ea6941d9767ffa8a326d6590c5eef249dd",
+  "trace_sha256": [
+    "ff5d890ed2d1ee2b76c4df266d7d7e66f3e43d0a257fb41533093f3c9966ea01",
+    "ff5d890ed2d1ee2b76c4df266d7d7e66f3e43d0a257fb41533093f3c9966ea01"
+  ],
+  "frames": 2800,
+  "metrics": {
+    "native_pose_mismatches": 2800,
+    "numbered_identity_mismatches": 430365,
+    "sparse_position_mismatches": 6846,
+    "floor_lattice_mismatches": 5762,
+    "floor_palette_mismatches": 565492
+  }
+}

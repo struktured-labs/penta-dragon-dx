@@ -20,6 +20,7 @@ QT_WRAPPER = ROOT / "scripts/mgba-qt-singleflight"
 HEADLESS_WRAPPER = ROOT / "scripts/mgba-headless-singleflight"
 HOOK = ROOT / "scripts/hooks/guard_mgba_launch.py"
 GIT_HOOK = ROOT / ".githooks/pre-commit"
+PRECOMMIT_POLICY = ROOT / "scripts/diagnostics/verify_precommit_policy.py"
 SUITE_RUNNER = ROOT / "scripts/diagnostics/run_deterministic_suite.py"
 PROJECT_SETTINGS = ROOT / ".claude/settings.json"
 AGENT_RULES = ROOT / "AGENTS.md"
@@ -65,7 +66,10 @@ def process_exists(pid: int) -> bool:
 def main() -> int:
     failures: list[str] = []
 
-    for path in (GUARD, QT_WRAPPER, HEADLESS_WRAPPER, HOOK, GIT_HOOK):
+    for path in (
+        GUARD, QT_WRAPPER, HEADLESS_WRAPPER, HOOK, GIT_HOOK,
+        PRECOMMIT_POLICY,
+    ):
         if not path.is_file() or not os.access(path, os.X_OK):
             failures.append(f"missing or non-executable guard component: {path}")
 
@@ -73,7 +77,7 @@ def main() -> int:
         git_hook = GIT_HOOK.read_text()
         for command in (
             "verify_mgba_singleflight_guard.py",
-            "verify_suite_receipt.py --staged",
+            "verify_precommit_policy.py",
         ):
             if command not in git_hook:
                 failures.append(
@@ -81,6 +85,19 @@ def main() -> int:
                 )
     except OSError as exc:
         failures.append(f"pre-commit hook unavailable: {exc}")
+
+    try:
+        policy = PRECOMMIT_POLICY.read_text()
+        for required in (
+            "verify_suite_receipt.py", "production", "FORBIDDEN_SUFFIXES",
+            "verify_ted_contract_controls.py", "--check-contract",
+        ):
+            if required not in policy:
+                failures.append(
+                    f"pre-commit policy omits required contract: {required}"
+                )
+    except OSError as exc:
+        failures.append(f"pre-commit policy unavailable: {exc}")
 
     try:
         suite_runner = SUITE_RUNNER.read_text()
@@ -323,7 +340,10 @@ def main() -> int:
     print("PASS: a second guarded emulator launch fails closed with status 75.")
     print("PASS: lock ownership is released on normal/terminated exit.")
     print("PASS: parent-death cleanup prevents verifier-timeout orphans.")
-    print("PASS: pre-commit requires safety plus a staged full-suite receipt.")
+    print(
+        "PASS: pre-commit requires safety plus production full-suite or "
+        "harness negative-control evidence."
+    )
     print(
         "PASS: the deterministic suite preflights and continuously monitors "
         "the host emulator slot."

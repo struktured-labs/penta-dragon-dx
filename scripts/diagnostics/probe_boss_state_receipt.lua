@@ -330,6 +330,12 @@ callbacks:add("frame", function()
         -- serialized hardware state.
         emu:write8(0xDF4C, 0x11)
     end
+    if frame == 1 and TARGET == 4 then
+        -- Ted's geometry classifier is lazily copied into C500. Curated
+        -- savestates can serialize an older candidate's helper and sentinel;
+        -- force the loaded ROM to install its own bytes before recapturing.
+        emu:write8(0xC5FF, 0x00)
+    end
     if KEEP_ALIVE then
         emu:write8(0xDCDC, 0xFF)
         emu:write8(0xDCDD, 0xFF)

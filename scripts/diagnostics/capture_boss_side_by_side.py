@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a frame-aligned OG-versus-DX boss animation for visual review."""
+"""Create an equal-duration OG-versus-DX boss animation for visual review."""
 
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ import subprocess
 import tempfile
 import time
 
-from PIL import Image
+from PIL import Image, ImageDraw
+import yaml
 
 from boss_geometry_contract import BOSSES
 from generate_stream_boss_states import (
@@ -34,10 +35,47 @@ ROOT = Path(__file__).resolve().parents[2]
 ORIGINAL = ROOT / "rom" / "Penta Dragon (J).gb"
 MGBA = ROOT / "scripts" / "mgba-qt-singleflight"
 PROBE = Path(__file__).with_name("probe_boss_animation.lua")
+PALETTE_YAML = ROOT / "palettes" / "penta_palettes_v097.yaml"
+
+# Rows that are expected to be visible in each arena. Keep the names tied to
+# the tuneable YAML rather than duplicating color bytes in this receipt tool.
+BOSS_PALETTE_ROWS = {
+    "shalamar": (("bg_palettes", "Dungeon"), ("bg_palettes", "BG4"), ("bg_palettes", "BG5")),
+    "riff": (("bg_palettes", "BG2"),),
+    "crystal_dragon": (("bg_palettes", "BG4"), ("boss_palettes", "Boss4_Ice")),
+    "cameo": (("bg_palettes", "BG1"),),
+    "ted": tuple(
+        ("bg_palettes", name)
+        for name in ("Dungeon", "BG3", "BG4", "BG5", "BG6")
+    ),
+    "troop": (("bg_palettes", "Dungeon"), ("bg_palettes", "BG7")),
+    "faze": (("bg_palettes", "Dungeon"), ("bg_palettes", "BG1"), ("bg_palettes", "BG2"), ("bg_palettes", "BG6")),
+    "angela": (("bg_palettes", "Dungeon"), ("bg_palettes", "BG1"), ("bg_palettes", "BG2"), ("bg_palettes", "BG7")),
+    "penta_dragon": tuple(("bg_palettes", name) for name in ("Dungeon", "BG1", "BG2", "BG3", "BG4", "BG5")),
+}
 
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def bgr555_to_css(raw: str) -> str:
+    value = int(raw, 16)
+    channels = (value & 31, (value >> 5) & 31, (value >> 10) & 31)
+    return "#" + "".join(f"{round(channel * 255 / 31):02x}" for channel in channels)
+
+
+def expected_palette_rows(boss_name: str) -> list[dict[str, object]]:
+    document = yaml.safe_load(PALETTE_YAML.read_text())
+    rows = []
+    for section, name in BOSS_PALETTE_ROWS[boss_name]:
+        colors = document[section][name]["colors"]
+        rows.append({
+            "source": f"{section}.{name}",
+            "bgr555": colors,
+            "rgb": [bgr555_to_css(color) for color in colors],
+        })
+    return rows
 
 
 def terminate(process: subprocess.Popen[bytes]) -> None:
@@ -114,7 +152,10 @@ def wait_capture(
 
 def make_dx_state(rom: Path, output: Path, target: int, timeout: float) -> Path:
     output.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="penta-boss-dx-entry-") as raw:
+    (ROOT / "tmp").mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-boss-dx-entry-", dir=ROOT / "tmp"
+    ) as raw:
         staging = Path(raw)
         safe = generate_safe_stage1(str(MGBA), rom, staging, timeout)
         data = rom.read_bytes()
@@ -169,13 +210,19 @@ def generate_safe_stage1_og(rom: Path, output: Path, timeout: float) -> Path:
 
 def make_og_state(rom: Path, output: Path, target: int, timeout: float) -> Path:
     output.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="penta-boss-og-entry-") as raw:
+    (ROOT / "tmp").mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-boss-og-entry-", dir=ROOT / "tmp"
+    ) as raw:
         staging = Path(raw)
         safe = generate_safe_stage1_og(rom, staging, timeout)
         injected = staging / "injected.ss0"
-        patch_state(safe, injected, target)
+        patch_state(safe, injected, target, stock_rom=True)
         prefix = output / f"boss{target}_{BOSSES[target].name}"
-        capture_final(str(MGBA), rom, injected, prefix, target, timeout, output)
+        capture_final(
+            str(MGBA), rom, injected, prefix, target, timeout, output,
+            stock_rom=True,
+        )
     return output / f"boss{target}_{BOSSES[target].name}.ss0"
 
 
@@ -211,6 +258,34 @@ def encode_video(output: Path, seconds: int, sample_rate: int) -> Path:
     return video
 
 
+def build_contact_sheet(output: Path, capture_seconds: int, sample_step: int) -> Path:
+    """Build twelve evenly spaced OG/DX pairs from the captured native run."""
+    pair_width, image_height, label_height = 320, 144, 22
+    sheet = Image.new("RGB", (pair_width * 3, (image_height + label_height) * 4))
+    draw = ImageDraw.Draw(sheet)
+    for index in range(12):
+        requested = round((index + 1) * capture_seconds * 60 / 12)
+        frame = max(sample_step, requested - requested % sample_step)
+        row, column = divmod(index, 3)
+        x, y = column * pair_width, row * (image_height + label_height)
+        for side_index, side in enumerate(("og", "dx")):
+            path = output / side / f"frame.f{frame:04d}.png"
+            with Image.open(path) as source:
+                sheet.paste(source.convert("RGB"), (x + side_index * 160, y))
+        draw.rectangle(
+            (x, y + image_height, x + pair_width, y + image_height + label_height),
+            fill="black",
+        )
+        draw.text(
+            (x + 3, y + image_height + 4),
+            f"OG | DX   {frame / 60:.1f}s",
+            fill="white",
+        )
+    destination = output / "contact-sheet.png"
+    sheet.save(destination)
+    return destination
+
+
 def temporal_landmarks(output: Path, side: str) -> dict[str, int | float | None]:
     """Report low-detail arena frames without claiming what caused them.
 
@@ -236,14 +311,84 @@ def temporal_landmarks(output: Path, side: str) -> dict[str, int | float | None]
     }
 
 
+def ted_rendered_containment(frame_dir: Path) -> dict[str, object]:
+    """Require Ted's thin expansion while rejecting duplicate shell debris.
+
+    The legitimate tentacles reach the far-left band, so mere edge occupancy
+    is not corruption. Their thin animation contributes 40--150 warm pixels;
+    the deleted-animation regression stays below 40, while a copied chunk of
+    shell exceeds 150. Scan every native frame and require the expansion to
+    occur at least once.
+    """
+    violations: list[dict[str, object]] = []
+    max_left_band_warm = 0
+    expansion_frames = 0
+    frames = 0
+    for path in sorted(frame_dir.glob("frame.f*.png")):
+        frames += 1
+        with Image.open(path) as source:
+            image = source.convert("RGB")
+            warm = []
+            for y in range(130):
+                for x in range(160):
+                    red, green, blue = image.getpixel((x, y))
+                    if (
+                        (red >= 140 and red > green * 1.35 and red > blue * 1.2)
+                        or (red >= 220 and green >= 180 and blue < 80)
+                    ):
+                        warm.append((x, y))
+        if not warm:
+            violations.append({"frame": path.name, "kind": "missing-body"})
+            continue
+        left_band_warm = sum(x < 25 for x, _y in warm)
+        max_left_band_warm = max(max_left_band_warm, left_band_warm)
+        if left_band_warm >= 40:
+            expansion_frames += 1
+        if left_band_warm > 150:
+            violations.append({
+                "frame": path.name,
+                "kind": "duplicate-shell-left-edge",
+                "left_band_warm_pixels": left_band_warm,
+            })
+    if expansion_frames == 0:
+        violations.append({"kind": "missing-tentacle-expansion"})
+    return {
+        "status": "pass" if not violations else "fail",
+        "frames": frames,
+        "max_left_band_warm_pixels": max_left_band_warm,
+        "tentacle_expansion_frames": expansion_frames,
+        "violations": violations[:24],
+        "violation_count": len(violations),
+    }
+
+
 def write_page(output: Path, target: int, video: Path, receipt: dict) -> Path:
     boss = BOSSES[target]
+    receipt["expected_palette_rows"] = expected_palette_rows(boss.name)
+    palette_rows = []
+    for row in receipt["expected_palette_rows"]:
+        swatches = "".join(
+            f'<span class="swatch" style="background:{color}" '
+            f'title="{html.escape(raw)} / {html.escape(color)}"></span>'
+            for raw, color in zip(row["bgr555"], row["rgb"], strict=True)
+        )
+        palette_rows.append(
+            f'<li><code>{html.escape(row["source"])}</code> {swatches} '
+            f'<span class="values">{html.escape(" · ".join(row["bgr555"]))}</span></li>'
+        )
     cameo_note = ""
     if boss.name == "cameo":
         cameo_note = (
             " Cameo's current table maps its traced animated contour tiles "
             "<code>$0C–$FF</code> to BG1: white, cherry red, deep crimson, "
             "and black."
+        )
+    elif boss.name == "ted":
+        cameo_note = (
+            " Ted is WIP: the bounded body table must keep all scrolling "
+            "terrain neutral while covering the cyan shell rim, blue-gray "
+            "sphere, orange core, and green lower tendrils. The small green "
+            "shots are separate OBJ projectiles."
         )
     og_landmark = receipt["temporal_landmarks"]["og"]
     dx_landmark = receipt["temporal_landmarks"]["dx"]
@@ -254,22 +399,46 @@ def write_page(output: Path, target: int, video: Path, receipt: dict) -> Path:
         f"DX frame {dx_landmark['first_low_detail_frame']} "
         f"({dx_landmark['first_low_detail_seconds']} s)."
     )
+    geometry_note = ""
+    geometry_path = output / "geometry.json"
+    if geometry_path.is_file():
+        geometry = json.loads(geometry_path.read_text())
+        result = geometry.get("bosses", {}).get(boss.name, {})
+        if result:
+            geometry_note = (
+                '<p class="meta"><strong>Strict geometry receipt:</strong> '
+                f'{result.get("frames", 0)} frames, '
+                f'{result.get("samples", 0):,} visible samples, '
+                f'{result.get("contract_mismatches", 0)} contract mismatches. '
+                '<a href="geometry.json">Open JSON</a>.</p>'
+            )
+    contact_link = (
+        '<a href="contact-sheet.png">Open the 12-phase contact sheet</a> · '
+        if (output / "contact-sheet.png").is_file() else ""
+    )
     page = output / "index.html"
     page.write_text(f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{html.escape(boss.name.replace('_', ' ').title())}: OG vs DX</title>
 <style>body{{margin:0;background:#10131a;color:#edf2ff;font:18px system-ui;padding:28px}}
 main{{max-width:1320px;margin:auto}} video{{width:100%;background:#000;border:1px solid #46506a}}
-.meta{{color:#aeb9d3}} code{{color:#ffd37a}}</style></head><body><main>
+.meta{{color:#aeb9d3}} code{{color:#ffd37a}} ul{{padding-left:1.4em}} .swatch{{display:inline-block;
+width:1.25em;height:1.25em;margin:0 .12em;vertical-align:-.28em;border:1px solid #77819a}}
+.values{{font:14px ui-monospace,monospace;color:#aeb9d3}}</style></head><body><main>
 <h1>{html.escape(boss.name.replace('_', ' ').title())} — one-minute OG/DX audit</h1>
 <p class="meta">Expected DX material: <strong>{html.escape(boss.material)}</strong>.
 {cameo_note}</p>
+<p class="meta">Expected tuneable rows from <code>palettes/penta_palettes_v097.yaml</code>:</p>
+<ul>{''.join(palette_rows)}</ul>
 <video controls autoplay loop muted playsinline src="{html.escape(video.name)}"></video>
-<p class="meta">Frame-aligned {receipt['capture_seconds']}-second native window,
-repeated to {receipt['seconds']} seconds for close review. The two games run
-independently, so animation phases can diverge when their cadence differs.
+{geometry_note}
+<p class="meta">Equal-duration {receipt['capture_seconds']}-second native window,
+repeated to {receipt['seconds']} seconds for close review. The two games use
+independently generated states and are <strong>not phase-synchronized</strong>;
+this video cannot by itself prove a timing lead or lag.
 {landmark_note} Both sides keep player and boss alive only; no pose, palette,
 scene, or timing writes are made.</p>
+<p class="meta">{contact_link}<a href="receipt.json">Open capture receipt</a>.</p>
 </main></body></html>""")
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
     return page
@@ -318,7 +487,16 @@ def main() -> int:
         dx, dx_state, output / "dx" / "frame", BOSSES[args.target].scene,
         frames, args.sample_step, args.timeout,
     )
+    rendered_containment = None
+    if args.target == 4:
+        rendered_containment = ted_rendered_containment(output / "dx")
+        if rendered_containment["status"] != "pass":
+            raise RuntimeError(
+                "Ted rendered-containment gate failed: "
+                + json.dumps(rendered_containment, sort_keys=True)
+            )
     video = encode_video(output, args.seconds, args.sample_step)
+    contact_sheet = build_contact_sheet(output, capture_seconds, args.sample_step)
     landmarks = {
         side: temporal_landmarks(output, side)
         for side in ("og", "dx")
@@ -331,13 +509,17 @@ def main() -> int:
         "expected_material": BOSSES[args.target].material,
         "seconds": args.seconds,
         "capture_seconds": capture_seconds,
+        "phase_synchronized": False,
+        "timing_claim": False,
         "sample_step": args.sample_step,
         "og_frames": og_count,
         "dx_frames": dx_count,
         "temporal_landmarks": landmarks,
+        "rendered_containment": rendered_containment,
         "original_sha256": digest(original),
         "dx_sha256": digest(dx),
         "video_sha256": digest(video),
+        "contact_sheet_sha256": digest(contact_sheet),
     }
     page = write_page(output, args.target, video, receipt)
     print(f"PASS: {og_count} OG + {dx_count} DX frames; {video}")

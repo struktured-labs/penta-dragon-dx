@@ -30,6 +30,11 @@ from suite_contract import source_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
+DEFAULT_TED_BASELINE_PIN = ROOT / "docs/audit/ted_candidate_baseline_v4.json"
+DEFAULT_TED_BASELINE_DETERMINISM = (
+    ROOT / "docs/audit/ted_baseline_v4/determinism.json"
+)
+DEFAULT_TED_BASELINE_READINESS = ROOT / "docs/audit/ted_baseline_v4/readiness.json"
 
 
 @dataclass(frozen=True)
@@ -52,7 +57,14 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_gates(rom: Path, output: Path) -> list[Gate]:
+def build_gates(
+    rom: Path,
+    output: Path,
+    baseline_determinism: Path | None = None,
+    baseline_readiness: Path | None = None,
+    require_ted_improvement: bool = False,
+    baseline_pin: Path | None = None,
+) -> list[Gate]:
     py = sys.executable
     r = str(rom)
     artifacts = output / "artifacts"
@@ -62,6 +74,37 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
 
     def script(path: str, *arguments: str) -> tuple[str, ...]:
         return (py, str(ROOT / path), *arguments)
+
+    ted_delta_command = script(
+        "scripts/diagnostics/verify_ted_candidate_delta.py",
+        "--baseline", str(baseline_determinism or ""),
+        "--candidate", str(artifacts / "ted-determinism/report.json"),
+        "--baseline-readiness", str(baseline_readiness or ""),
+        "--candidate-readiness",
+        str(artifacts / "ted-release-readiness/report.json"),
+        "--baseline-pin", str(baseline_pin or ""),
+        "--output", str(artifacts / "ted-candidate-delta/report.json"),
+    )
+    if require_ted_improvement:
+        ted_delta_command += ("--require-improvement",)
+    ted_readiness_command = script(
+        "scripts/diagnostics/verify_ted_release_readiness.py", r,
+        "--controls", str(artifacts / "ted-contract-controls/report.json"),
+        "--entry-report", str(artifacts / "ted-entry/boss4_ted.report"),
+        "--cadence", str(artifacts / "ted-cadence/report.json"),
+        "--determinism", str(artifacts / "ted-determinism/report.json"),
+        "--materializer", str(artifacts / "ted-materializer/report.json"),
+        "--classifier", str(artifacts / "ted-classifier/report.json"),
+        "--source-publication",
+        str(artifacts / "ted-source-publication/report.json"),
+        "--publication-sequence",
+        str(artifacts / "ted-publication-sequence/report.json"),
+        "--cache-contract",
+        str(artifacts / "ted-two-plane-cache-contract/report.json"),
+        "--cache-reservation",
+        str(artifacts / "ted-cache-plane-reservation/report.json"),
+        "--output", str(artifacts / "ted-release-readiness/report.json"),
+    )
 
     return [
         Gate(
@@ -228,7 +271,7 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
                 "--input-mode",
                 "right",
                 "--frames",
-                "600",
+                "2800",
                 "--tolerance",
                 "0.10",
                 "--output",
@@ -514,6 +557,109 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             600,
         ),
         Gate(
+            "ted_contract_controls",
+            script(
+                "scripts/diagnostics/verify_ted_contract_controls.py",
+                r,
+                "--output",
+                str(artifacts / "ted-contract-controls/report.json"),
+            ),
+            30,
+        ),
+        Gate(
+            "ted_materializer",
+            script(
+                "scripts/diagnostics/verify_ted_materializer.py",
+                r,
+                "--output",
+                str(artifacts / "ted-materializer/report.json"),
+            ),
+            30,
+        ),
+        Gate(
+            "ted_classifier",
+            script(
+                "scripts/diagnostics/verify_ted_classifier.py",
+                r,
+                "--output",
+                str(artifacts / "ted-classifier/report.json"),
+            ),
+            30,
+        ),
+        Gate(
+            "ted_entry",
+            script(
+                "scripts/diagnostics/generate_stream_boss_states.py",
+                r,
+                "--output",
+                str(artifacts / "ted-entry"),
+                "--target",
+                "4",
+                "--force",
+            ),
+            120,
+        ),
+        Gate(
+            "ted_og_entry",
+            script(
+                "scripts/diagnostics/generate_stream_boss_states.py",
+                str(ROOT / "rom/Penta Dragon (J).gb"),
+                "--output",
+                str(artifacts / "ted-og-entry"),
+                "--target",
+                "4",
+                "--force",
+            ),
+            120,
+        ),
+        Gate(
+            "ted_cadence",
+            script(
+                "scripts/diagnostics/verify_boss_publication_cadence.py",
+                r,
+                "--dx-states",
+                str(artifacts / "ted-entry"),
+                "--og-states",
+                str(artifacts / "ted-og-entry"),
+                "--target",
+                "4",
+                "--warmup",
+                "60",
+                "--frames",
+                "2800",
+                "--output",
+                str(artifacts / "ted-cadence/report.json"),
+                "--receipt-only",
+            ),
+            180,
+            dependencies=("ted_entry", "ted_og_entry"),
+        ),
+        Gate(
+            "ted_two_plane_cache_contract",
+            script(
+                "scripts/diagnostics/verify_ted_two_plane_cache_contract.py",
+                r,
+                "--cadence", str(artifacts / "ted-cadence/report.json"),
+                "--output",
+                str(artifacts / "ted-two-plane-cache-contract/report.json"),
+            ),
+            30,
+            dependencies=("ted_cadence",),
+        ),
+        Gate(
+            "ted_cache_plane_reservation",
+            script(
+                "scripts/diagnostics/verify_ted_cache_plane_reservation.py",
+                r,
+                "--state", str(artifacts / "ted-entry/boss4_ted.ss0"),
+                "--frames", "2800",
+                "--output",
+                str(artifacts / "ted-cache-plane-reservation/report.json"),
+            ),
+            180,
+            dependencies=("ted_entry",),
+        ),
+        Gate(
             "boss_geometry_all9",
             script(
                 "scripts/diagnostics/verify_boss_geometry.py",
@@ -532,6 +678,78 @@ def build_gates(rom: Path, output: Path) -> list[Gate]:
             ),
             180,
             dependencies=("boss_arenas",),
+        ),
+        Gate(
+            "ted_determinism",
+            script(
+                "scripts/diagnostics/verify_ted_determinism.py",
+                r,
+                "--states",
+                str(artifacts / "ted-entry"),
+                "--frames",
+                "2800",
+                "--output",
+                str(artifacts / "ted-determinism/report.json"),
+                "--receipt-only",
+            ),
+            240,
+            dependencies=(
+                "ted_contract_controls", "ted_materializer",
+                "ted_classifier", "ted_entry",
+            ),
+        ),
+        Gate(
+            "ted_source_publication",
+            script(
+                "scripts/diagnostics/verify_ted_source_publication.py",
+                r,
+                "--state",
+                str(artifacts / "ted-entry/boss4_ted.ss0"),
+                "--frames", "2800",
+                "--receipt-only",
+                "--output",
+                str(artifacts / "ted-source-publication/report.json"),
+            ),
+            240,
+            dependencies=("ted_entry",),
+        ),
+        Gate(
+            "ted_publication_sequence",
+            script(
+                "scripts/diagnostics/verify_ted_publication_sequence.py",
+                str(artifacts / "ted-source-publication/traces/run-a.bin"),
+                "--replay",
+                str(artifacts / "ted-source-publication/traces/run-b.bin"),
+                "--output",
+                str(artifacts / "ted-publication-sequence/report.json"),
+                "--receipt-only",
+            ),
+            30,
+            dependencies=("ted_source_publication",),
+        ),
+        Gate(
+            "ted_release_readiness_receipt",
+            ted_readiness_command + ("--receipt-only",),
+            30,
+            dependencies=(
+                "ted_contract_controls", "ted_materializer", "ted_classifier",
+                "ted_entry", "ted_cadence", "ted_determinism",
+                "ted_source_publication", "ted_publication_sequence",
+                "ted_two_plane_cache_contract",
+                "ted_cache_plane_reservation",
+            ),
+        ),
+        Gate(
+            "ted_candidate_delta",
+            ted_delta_command,
+            30,
+            dependencies=("ted_determinism", "ted_release_readiness_receipt"),
+        ),
+        Gate(
+            "ted_release_readiness",
+            ted_readiness_command,
+            30,
+            dependencies=("ted_candidate_delta",),
         ),
         Gate(
             "boss_semantic_cadence",
@@ -843,6 +1061,24 @@ def main() -> int:
         action="store_true",
         help="resume passed gates from an interrupted --output manifest",
     )
+    parser.add_argument(
+        "--ted-baseline-determinism", type=Path,
+        default=DEFAULT_TED_BASELINE_DETERMINISM,
+        help="qualified 2,800-frame Ted determinism receipt",
+    )
+    parser.add_argument(
+        "--ted-baseline-readiness", type=Path,
+        default=DEFAULT_TED_BASELINE_READINESS,
+        help="matching penta-ted-release-readiness-v4 receipt",
+    )
+    parser.add_argument(
+        "--ted-require-improvement", action="store_true",
+        help="require a monotonic Ted improvement before baseline promotion",
+    )
+    parser.add_argument(
+        "--ted-baseline-pin", type=Path, default=DEFAULT_TED_BASELINE_PIN,
+        help="checked qualified-baseline identity manifest",
+    )
     args = parser.parse_args()
 
     if args.timeout_scale <= 0:
@@ -879,7 +1115,19 @@ def main() -> int:
         print("FAIL: isolated ROM copy does not match the source candidate")
         return 1
 
-    gate_list = build_gates(tested_rom, output)
+    baseline_determinism = (
+        args.ted_baseline_determinism.resolve()
+        if args.ted_baseline_determinism else None
+    )
+    baseline_readiness = (
+        args.ted_baseline_readiness.resolve()
+        if args.ted_baseline_readiness else None
+    )
+    baseline_pin = args.ted_baseline_pin.resolve()
+    gate_list = build_gates(
+        tested_rom, output, baseline_determinism, baseline_readiness,
+        args.ted_require_improvement, baseline_pin,
+    )
     gates = {gate.name: gate for gate in gate_list}
     if args.list:
         for gate in gate_list:
@@ -893,6 +1141,34 @@ def main() -> int:
         dependency_closure(set(args.only), gates)
         if args.only
         else set(gates)
+    )
+    if "ted_candidate_delta" in selected:
+        if baseline_determinism is None or baseline_readiness is None:
+            parser.error(
+                "ted_candidate_delta requires --ted-baseline-determinism "
+                "and --ted-baseline-readiness"
+            )
+        for label, path in (
+            ("Ted baseline determinism", baseline_determinism),
+            ("Ted baseline readiness", baseline_readiness),
+            ("Ted baseline pin", baseline_pin),
+        ):
+            if not path.is_file():
+                parser.error(f"{label} not found: {path}")
+    ted_baselines = (
+        {
+            "determinism": {
+                "path": str(baseline_determinism),
+                "md5": md5(baseline_determinism),
+            },
+            "readiness": {
+                "path": str(baseline_readiness),
+                "md5": md5(baseline_readiness),
+            },
+            "require_improvement": args.ted_require_improvement,
+            "pin": {"path": str(baseline_pin), "md5": md5(baseline_pin)},
+        }
+        if "ted_candidate_delta" in selected else {}
     )
     full_matrix = selected == set(gates)
 
@@ -910,6 +1186,11 @@ def main() -> int:
             parser.error(
                 "resume manifest suite-source fingerprint does not match; "
                 "rerun the selected gates instead of retaining stale results"
+            )
+        if manifest.get("ted_baselines", {}) != ted_baselines:
+            parser.error(
+                "resume Ted baseline paths/hashes do not match; rerun the "
+                "selected gates instead of retaining stale delta evidence"
             )
         prior_results = {
             result.get("name"): result
@@ -950,6 +1231,7 @@ def main() -> int:
             "platform": platform.platform(),
             "mgba_qt": str(ROOT / "scripts/mgba-qt-singleflight"),
             "hardware_gate": "pending-reservation-backed-mister",
+            "ted_baselines": ted_baselines,
             "selected_gates": [
                 gate.name for gate in gate_list if gate.name in selected
             ],

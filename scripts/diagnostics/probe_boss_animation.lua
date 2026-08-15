@@ -56,6 +56,13 @@ callbacks:add("frame", function()
     emu:write8(0xDCBB, 0xF0)
     emu:write8(0xDCDC, 0xFF)
     emu:write8(0xDCDD, 0xFF)
+    -- Synthetic arena fixtures can serialize after the stock exit handshake
+    -- has already been armed. Ted is especially short-lived in that state:
+    -- D888/DD06 can advance D880 to $FF even while DCBB is refreshed. These
+    -- are transition flags, not animation controls; hold them neutral just as
+    -- the long geometry receipt does so both contestants remain reviewable.
+    emu:write8(0xD888, 0x00)
+    emu:write8(0xDD06, 0x00)
 
     if emu:read8(0xD880) ~= EXPECTED_SCENE then
         finish("wrong-scene")
