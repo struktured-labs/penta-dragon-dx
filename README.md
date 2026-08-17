@@ -11,13 +11,20 @@ palette tuning with a live audience.
 
 ## Current status
 
-**v3.01 stream RC9 — playable, palette vote pending.**
+**v3.01 stream RC9 — playable, palette vote pending. Two work streams are
+in flight on top of it.**
 
 - Title footer: `DX V3.01 STRUK LABS`
-- Deterministic verification: **53/53 passed**
-- Candidate MD5: `e8baabaaa6b5d5073dba12985e8cfe00`
+- Last fully-verified candidate: RC9, **53/53 deterministic gates**,
+  MD5 `e8baabaaa6b5d5073dba12985e8cfe00`
 - Stage 1, pickups, rotating hazards, title reel, bosses, and story scenes are
   colorized.
+- In flight: a rework of Ted's arena colorization (flicker containment), and a
+  speed-parity audit — the dungeon currently runs ~6% slower than the
+  original (see `docs/speed_optimization_plan_v3.md`); measured boss arenas
+  are at or faster than original speed
+  (`docs/FINDINGS_2026_08_16_boss_speed_instrumentation.md`). The gate
+  roster has grown past RC9's 53 while this work lands.
 - Audience palette selection and the reservation-backed MiSTer pass are still
   required before release.
 
@@ -118,9 +125,12 @@ runs every emulator gate serially:
 python3 scripts/diagnostics/run_deterministic_suite.py
 ```
 
-The current candidate passes **53/53** gates, including cold game start,
-Stage 1 terrain and pickups, later-stage soak tests, low-health flicker,
-title-demo actors, all bosses, and all story scenes.
+The most recent fully-passing candidate (RC9) cleared **53/53** gates,
+including cold game start, Stage 1 terrain and pickups, later-stage soak
+tests, low-health flicker, title-demo actors, all bosses, and all story
+scenes. The roster has since grown (speed parity, Ted-arena contracts, boss
+geometry for all nine arenas) and gates stay red while the matching work is
+in flight — a red gate here is a to-do list, not a shipped defect.
 
 - [Latest hash-bound receipt](docs/release/verification/latest.json)
 - [Release and packaging rules](docs/release/README.md)

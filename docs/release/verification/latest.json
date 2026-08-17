@@ -1,9 +1,9 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-08-08T22:36:53.673155+00:00",
-  "git_head_at_run": "5d272b398d63dcb214e755173af4252108ca9cca",
-  "source_fingerprint": "bb0b669040aae6a08428c7513f2845826cd9761afdf3ff34a494b5cd7393e62b",
+  "generated_at": "2026-08-09T12:37:12.003979+00:00",
+  "git_head_at_run": "2847a814f0f1da2a2beb1042c2b81445758eec68",
+  "source_fingerprint": "58aa788c2269c5b86a61d0d332ed7c7867246029dc20409c7d6b282ca715ed50",
   "source_inputs": [
     {
       "path": ".claude/settings.json",
@@ -32,8 +32,8 @@
     },
     {
       "path": "CLAUDE.md",
-      "sha256": "0b509b88fd4de476b6f489ab896dcd43774e245e0d9b70baf0e7a379bb9c7a92",
-      "size": 17344
+      "sha256": "8c0e72dc9b715c02da5a61c2d65dde32212987dd8e994b5592e06c1812de60f0",
+      "size": 17689
     },
     {
       "path": "mgba-qt.sh",
@@ -812,8 +812,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_sprite_flicker.py",
-      "sha256": "e0e2d6fb165e235bf6f9df7d9518bb849aafcbdea8893cc56eaa70fe4c5ad131",
-      "size": 4053
+      "sha256": "aef4b2ae03931f29725d0246512bbf7cbe0c52efc0af451b79675f2f5242e43c",
+      "size": 4050
     },
     {
       "path": "scripts/diagnostics/verify_stage1_no_bleed.py",
@@ -1172,325 +1172,325 @@
     "scope": "full",
     "gate_count": 53,
     "failures": 0,
-    "manifest_sha256": "22b3435ac6e1bcd7c058402cb51b045e2d3b573fe658dc3bc768eb8001e5a634",
+    "manifest_sha256": "5960e5bf51e856ffc42c8add243eb7eac5f40d35879923ad7f137f91e7a79eef",
     "results": [
       {
         "name": "emulator_singleflight_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.321
+        "duration_seconds": 0.264
       },
       {
         "name": "title_footer_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.57
+        "duration_seconds": 0.519
       },
       {
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.667
+        "duration_seconds": 1.118
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.72
+        "duration_seconds": 0.668
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 19.652
+        "duration_seconds": 20.203
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.947
+        "duration_seconds": 8.83
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.481
+        "duration_seconds": 2.421
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.666
+        "duration_seconds": 0.516
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.294
+        "duration_seconds": 12.339
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 20.278
+        "duration_seconds": 18.951
       },
       {
         "name": "menu_window_publish_order",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.861
+        "duration_seconds": 5.775
       },
       {
         "name": "stale_gameplay_window",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.505
+        "duration_seconds": 6.626
       },
       {
         "name": "levelselect_screen",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 13.172
+        "duration_seconds": 12.387
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 173.014
+        "duration_seconds": 168.353
       },
       {
         "name": "game_start_after_attract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.41
+        "duration_seconds": 10.984
       },
       {
         "name": "opening_to_stage1_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.366
+        "duration_seconds": 21.462
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 47.248
+        "duration_seconds": 43.148
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.877
+        "duration_seconds": 24.513
       },
       {
         "name": "pickup_class_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.219
+        "duration_seconds": 0.164
       },
       {
         "name": "attract_pickup_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.2
+        "duration_seconds": 12.292
       },
       {
         "name": "stage1_spike_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 38.283
+        "duration_seconds": 35.836
       },
       {
         "name": "stage1_spike_miniboss_transition",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 48.201
+        "duration_seconds": 43.054
       },
       {
         "name": "pickup_live_retry_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.18
+        "duration_seconds": 0.164
       },
       {
         "name": "pickup_live_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 92.281
+        "duration_seconds": 92.042
       },
       {
         "name": "stage1_pickup_art",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.53
+        "duration_seconds": 6.529
       },
       {
         "name": "bonus_stage_live",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.097
+        "duration_seconds": 6.982
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 16.054
+        "duration_seconds": 13.62
       },
       {
         "name": "stage1_tilemap_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 30.729
+        "duration_seconds": 25.397
       },
       {
         "name": "stage1_north_route_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.924
+        "duration_seconds": 14.506
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 49.49
+        "duration_seconds": 53.116
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 36.451
+        "duration_seconds": 29.726
       },
       {
         "name": "low_health_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 29.438
+        "duration_seconds": 21.166
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 13.313
+        "duration_seconds": 12.802
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.095
+        "duration_seconds": 1.897
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 54.645
+        "duration_seconds": 51.796
       },
       {
         "name": "stage2_stream_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.107
+        "duration_seconds": 2.173
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 120.268
+        "duration_seconds": 119.229
       },
       {
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 105.129
+        "duration_seconds": 99.075
       },
       {
         "name": "title_idle_reel",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.698
+        "duration_seconds": 5.075
       },
       {
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 35.887
+        "duration_seconds": 32.333
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.896
+        "duration_seconds": 2.522
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.883
+        "duration_seconds": 20.411
       },
       {
         "name": "pre_final_inventory",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.492
+        "duration_seconds": 1.172
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.813
+        "duration_seconds": 5.082
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.849
+        "duration_seconds": 5.323
       },
       {
         "name": "ending_discriminators",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.117
+        "duration_seconds": 0.065
       },
       {
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 42.319
+        "duration_seconds": 43.84
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 29.087
+        "duration_seconds": 57.669
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 295.921
+        "duration_seconds": 275.04
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 82.958
+        "duration_seconds": 92.285
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.03
+        "duration_seconds": 4.626
       },
       {
         "name": "candidate_ips_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.115
+        "duration_seconds": 0.064
       },
       {
         "name": "mister_reservation_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.265
+        "duration_seconds": 0.215
       }
     ]
   },
