@@ -56,6 +56,24 @@ affect palette review.
   (MEDICAL overlay, red HP/accents), no artifacts. Palette polish remains
   an operator-stream item.
 
+## Boss animation side-by-sides (added same day)
+
+30-second OG/DX animation captures (`capture_boss_side_by_side.py`,
+450+450 frames each, phase-unsynchronized) for shalamar, riff, cameo,
+troop, faze, angela, penta_dragon — sheets and mp4s in `tmp/boss-sxs/`.
+**All seven PASS**: pose/behavior classes track OG (including cameo's
+vanish-reappear phases and penta's screen-edge wing clipping, both present
+in OG), materials per contract, projectiles/debris colored by item palette
+(the "green specks" watch item resolved as native floor debris visible as
+gray dots in OG), no bleed or garbage classes. Ted is covered by its own
+v8 60-second receipt (containment 0/3600). Crystal Dragon rejects the
+animation capture with every available OG state (its portal cycle exits
+the scene on the OG side); coverage stands on its dedicated gates —
+crystal_dragon_ghost, the cached-atomic camera-wrap contract, geometry,
+and the material gallery — the deepest per-boss gate stack in the matrix.
+
+**Boss visual review verdict: 9/9 covered, 0 regressions.**
+
 ## Follow-ups
 
 1. **Current FIXED.gb regression** — blocked on the Ted lane promoting a
