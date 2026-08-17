@@ -40,7 +40,23 @@ native art, such as Ted pose 4's floating orbs, are preserved as-is).
 Anything of this class that remains should be indistinguishable from the
 original's own animation when compared side-by-side in grayscale.
 
-## 5. Title screen footer
+## 5. Ted: stabilized whip/orb sparse plane during native staging phases
+**(PENDING OPERATOR RATIFICATION — stream-day clip review)**
+
+The original game's Ted alternates its sparse whip/orb cells between fully
+drawn and absent every 5–6 frames (~10 Hz) during one native staging phase
+(classifier key 14, measured frames 1045–1231 of the reference window) — a
+DMG pseudo-transparency idiom. The DX candidate holds the last complete
+pose instead, keeping the whip solid; motion is otherwise preserved
+(containment gate: 486 tentacle-expansion frames, 0 violations over 3600).
+Rationale: a colorized ~10 Hz strobe of red cells reads far harsher than
+the DMG ghost. Counter-precedent: Crystal Dragon's translucency flicker was
+deliberately PRESERVED — so this is a taste call, not a technical one, and
+ships only if the operator ratifies the side-by-side clip
+(`tmp/ted-native-delta-v8-side-by-side-60s/og-vs-dx.mp4`). If ratified,
+this entry stays; if not, the publisher reproduces the native alternation.
+
+## 6. Title screen footer
 
 `DX V3.01 STRUK LABS` replaces the original copyright row — intentional
 branding, custom 2bpp digits.
