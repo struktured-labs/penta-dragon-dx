@@ -72,9 +72,18 @@ then dive into the specific subsystem you care about.
 - [`v301_regression_stage_load_stuck.md`](v301_regression_stage_load_stuck.md) —
   **HISTORICAL.** Earlier "every combination breaks" matrix.
 - [`v301_performance.md`](v301_performance.md) — Per-VBlank cycle
-  estimate (~53K T = ~76% of frame budget). Comparison to vanilla and
-  v3.00. Empirical efficiency evidence from probes (scroll tearing
-  0/s vs vanilla 1.50/s, phantom D887 ≤ threshold).
+  estimate (~53K T = ~76% of frame budget — retained for the disabled
+  GDMA design only; see its two correction banners). Comparison to
+  vanilla and v3.00.
+- [`FINDINGS_2026_08_16_boss_speed_instrumentation.md`](FINDINGS_2026_08_16_boss_speed_instrumentation.md)
+  — **CURRENT speed picture.** Dungeon ~6% slow (copier explains ~1%);
+  five of nine boss arenas measured FASTER than OG; state-pair boss
+  percentages are direction-only; arena main loop is bank2:$406F, not
+  $016C. New instruments: `verify_boss_speed_parity.py`,
+  `verify_window_count.py`.
+- [`speed_optimization_plan_v3.md`](speed_optimization_plan_v3.md) —
+  **CURRENT fix plan** for the dungeon gap (window-count results, ranked
+  options, verification bar). Supersedes plans v1/v2.
 - [`inline_hook_analysis_v300.md`](inline_hook_analysis_v300.md) — v3.00's
   inline-hook tile+attr copy design (the predecessor; v3.01 only does
   tile inline, attrs go through VBlank attr_computation + GDMA).

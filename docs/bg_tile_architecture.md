@@ -10,8 +10,11 @@ This document describes how the original DMG Penta Dragon ROM handles background
   in this doc is the baseline.
 - **v2.90**: phantom-sound fix, BG sweep, OBJ colorizer (deployed to MiSTer).
 - **v3.00** (`rom/working/penta_dragon_dx_FIXED.gb`): inline-hook tile+attr
-  copy. Correct colors, but ~2× slow due to dual STAT-wait per group. See
-  `inline_hook_analysis_v300.md`.
+  copy. Correct colors, but slower due to dual STAT-wait per group. See
+  `inline_hook_analysis_v300.md`. *(Historical: later builders fused the
+  copy into one HBlank sync; the shipping ROM has no dual wait, and the
+  measured dungeon cost is ~6% — see
+  `FINDINGS_2026_08_16_boss_speed_instrumentation.md`.)*
 - **v3.01** (`rom/working/penta_dragon_dx_v301.gb`): tile-only inline hook
   (vanilla speed) + VBlank attr_computation building 1024-byte buffer in
   WRAM bank 2 + GDMA copy to VRAM tilemap VBK=1. ~50K T-cycles per frame,

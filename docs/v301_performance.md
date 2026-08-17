@@ -10,9 +10,10 @@
 > What actually ships every VBlank: `cond_pal` (cached, ~200T) + attr-cleaner
 > (only first 32 frames post-boot) + ungated `bg_sweep` (1 row, ~600T) +
 > OBJ colorizer (~300T). Plus, during the game's own tilemap copy, the
-> inline tile+attr hook at bank1:0x42A7 (v3.00-style: tile phase then attr
-> phase, each with its **own** STAT mode-0 wait — a dual STAT-wait per
-> group, 24 rows × 6 groups).
+> inline tile+attr hook at bank1:0x42A7. (This banner originally described
+> it as "tile phase then attr phase, each with its own STAT mode-0 wait —
+> a dual STAT-wait per group"; **that is no longer true of the shipping
+> ROM** — see the second correction below.)
 >
 > **=> The real modded cost is far below the 53K T / 76% figure.** The
 > 53K T analysis is retained below for the (disabled) GDMA design only.

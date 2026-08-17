@@ -1,5 +1,13 @@
 # Penta Dragon DX — Speed Optimization Plan (Merged)
 
+> **⚠️ SUPERSEDED (2026-08-16).** Section 3's "real bottleneck: inline hook
+> dual STAT wait" is FALSE for the shipping ROM — the copier is already
+> fused (one HBlank sync per window; vanilla has 12 poll sites in
+> 0x42A0-0x4380, DX has 4) and measured window accounting shows the copier
+> explains only ~1% of the ~6% dungeon slowdown. Do not implement anything
+> from this file. Current plan: `speed_optimization_plan_v3.md`; measured
+> basis: `FINDINGS_2026_08_16_boss_speed_instrumentation.md`.
+
 > Generated: 2026-07-19
 > Sources: `scripts/build_v301_gdma.py`, `build_v301_teleport.py`, `build_v302_title_fix.py`
 > Baseline ROM: `rom/working/penta_dragon_dx_FIXED.gb` (v3.02)
@@ -117,7 +125,7 @@ and caches its T-cycle cost well.
 ~12T per frame after the first 32 frames. Handles the stale CGB boot-ROM
 0xFF attrs. Already negligible.
 
-## 3. The real bottleneck: inline hook dual STAT wait
+## 3. ~~The real bottleneck: inline hook dual STAT wait~~ (FALSE — see banner at top; the shipping copier is fused, one HBlank sync per window)
 
 **This is NOT a VBlank optimization.** The inline hook at 0x42A7 contains TWO
 STAT wait loops per group — one for the tile phase, one for the attr phase.

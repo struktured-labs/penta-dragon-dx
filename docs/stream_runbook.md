@@ -89,7 +89,9 @@ python3 scripts/diagnostics/run_deterministic_suite.py
 ```
 
 Keep the full-matrix manifest from the suite's `/tmp` output. The committed
-receipt is written only after two byte-identical builds and all 36 gates pass.
+receipt is written only after two byte-identical builds and the full release
+matrix passes (the gate roster grows with the work; 74 gates as of
+2026-08-16).
 Only after that proof, record the audience decision:
 
 ```bash

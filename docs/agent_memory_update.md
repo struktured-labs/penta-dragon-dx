@@ -2,6 +2,10 @@
 
 > Generated 2026-07-27 by specialist agent (codex/o1-pro).
 > Source: penta-dragon-dx-claude repository audit.
+> **Dated snapshot** — gate counts ("30 gates") and speed claims herein
+> reflect 2026-07-27; the roster has since grown past 70 and the speed
+> picture was corrected on 2026-08-16 (see
+> `FINDINGS_2026_08_16_boss_speed_instrumentation.md`).
 
 ---
 

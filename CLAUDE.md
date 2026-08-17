@@ -105,12 +105,12 @@ evidence.
   3. `mgba_run_lua` to run the existing Lua probes in probes/diagnostics/
   
 - **The authoritative emulator gate is
-  `scripts/diagnostics/verify_release_candidate.py`.** It runs 30 checks on an
+  `scripts/diagnostics/verify_release_candidate.py`.** It runs the full gate roster (74 gates as of 2026-08-16, and growing) on an
   isolated ROM copy and proves both hashes remain unchanged. The older five
   probes remain focused development checks, not a release matrix.
 
 - **Any fix that claims "0% orange flicker" must pass the mGBA hardware-OAM
-  gates and the full 30-gate release matrix.** A PyBoy-only memory assertion is
+  gates and the full release matrix.** A PyBoy-only memory assertion is
   not rendering evidence.
 
 - **The old hwoam_recolor floor-through is retired in production.** The release
@@ -168,8 +168,8 @@ evidence.
   The calibrated/minimal tables live inline in the v296/v299 builders.
 
 ### Verification (the trust-me-not-the-user loop)
-- `scripts/diagnostics/verify_release_candidate.py` — authoritative 30-gate
-  isolated emulator matrix; emits a JSON manifest and per-gate evidence.
+- `scripts/diagnostics/verify_release_candidate.py` — authoritative
+  isolated emulator matrix (roster grows with the work; 74 gates as of 2026-08-16); emits a JSON manifest and per-gate evidence.
 - `scripts/diagnostics/verify_release_patch.py` — requires the checked-in IPS
   to rebuild deterministically and reconstruct the exact candidate from the
   supported Japanese base ROM.
@@ -329,7 +329,7 @@ before any RL eval. Highlights:
 ## Workflow rules
 
 1. **Branch on `main`**, commit often, tag every visible milestone.
-2. **All changes verified through the 30-gate release matrix** before
+2. **All changes verified through the full release matrix** before
    promotion.
 3. **Let the production builder create its hash-named prebuild backup** before
    overwriting FIXED.gb.
@@ -355,5 +355,5 @@ before any RL eval. Highlights:
 ## Active Hardware Alert (July 13, 2026)
 * **The MiSTer FPGA may be online but is shared:** acquire its reservation
   before all MiSTerClaw or SSH activity.
-* **Maximize Headless Testing:** Require the full 30-gate isolated matrix
+* **Maximize Headless Testing:** Require the full isolated release matrix
   before physical deployment.

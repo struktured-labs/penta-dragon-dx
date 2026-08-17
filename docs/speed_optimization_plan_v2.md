@@ -1,5 +1,10 @@
 # Speed Optimization Plan v2
 
+> **⚠️ SUPERSEDED by `speed_optimization_plan_v3.md` (2026-08-16).** Parts
+> of this plan shipped (shadow_main gating, cold-boot changes); its cost
+> model predates the current builder and the measured window/ISR accounting.
+> Read v3 first.
+
 > **Status**: Planning phase — synthesized from full source review of v3.01 teleport
 > build chain (build_v301_gdma.py, build_v301_teleport.py, patch_oam_intercept.py).
 

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Correct the project's speed picture (2026-08-16, measured): the dungeon
+  runs ~6% slower than the original (Stage 1 0.943 / Stage 5 0.939 via the
+  input-identical `gameplay_speed_parity` gate; the copier's HBlank-window
+  overhead explains only ~1% of it), while five of nine boss arenas run
+  7-17% FASTER than the original on a new arena-loop-rate instrument. All
+  cross-ROM boss percentages from save-state pairs are direction-only: the
+  paired OG/DX states land at different arena phases and DMG/CGB states
+  cannot be cross-loaded. The earlier "Crystal 4.58% / Penta 4.59% slower,
+  all bosses below 5%" receipts measured publication event-rate on
+  phase-mismatched pairs and are superseded. See
+  `docs/FINDINGS_2026_08_16_boss_speed_instrumentation.md` and
+  `docs/speed_optimization_plan_v3.md`.
 - Make Ted's two-plane cache architecture an official 2,800-frame release
   contract. Receipts are bound to the candidate ROM, state, and source trace;
   undeclared WRAM readers/writers, stale cache evidence, colliding keys, and
@@ -24,9 +36,11 @@ emulator save/state files are never release artifacts in this repository.
 ### Added
 
 - Add hash-bound all-boss publication receipts to the deterministic release
-  matrix. The suite now proves that exact arena-layout repeats hit the cache,
-  real changes miss it, and every boss remains below 5% slowdown versus a
-  matched original-ROM fixture over 600 observed frames.
+  matrix. The suite proves that exact arena-layout repeats hit the cache and
+  real changes miss it. (Its per-boss "slowdown" percentages compared
+  publication event-rates across OG/DX state pairs later shown to be
+  phase-mismatched; treat them as direction-only — superseded by the
+  2026-08-16 correction entry above.)
 - Add a ROM-free OG/DX boss-animation comparison harness with frame hashes,
   tuneable-material metadata, and temporal low-detail landmarks. Receipts call
   the footage frame-aligned rather than phase-synchronized, so a slower DX
