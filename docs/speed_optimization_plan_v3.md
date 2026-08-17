@@ -42,7 +42,53 @@ needs **8 windows instead of 6 (+33%)** whenever the atomic path runs.
 Slowdown should scale with publication frequency — consistent with
 stage 1/5 ≈ 6% and stage 7 (heavy scroll) worst.
 
-## Step 0 results so far (Stage 1 measured 2026-08-16; stages 5/7 pending slot)
+## Step 0 COMPLETE (stages 1/5/7 measured 2026-08-16/17)
+
+Receipts: `tmp/boss-speed-parity/window-count-stage1.json`,
+`…-stage57.json`. The probe's main-loop counter reproduced the parity
+receipts (141/133, 164/153-vs-154, 167/142 exact) — instrument
+cross-validated on all three stages.
+
+| per PLAY FRAME | st1 OG | st1 DX | st5 OG | st5 DX | st7 OG | st7 DX |
+|---|---|---|---|---|---|---|
+| true windows (final-wait exits) | 35.4 | 33.4 | 40.8 | 37.9 | 41.4 | 37.4 |
+| DX atomic-path share | — | 16.3% | — | 8.4% | — | **32.5%** |
+| poll iterations | 330.7 | 347.5 | 384.2 | 388.4 | 392.6 | 412.1 |
+| main-loop ratio | 0.943 | | 0.933 | | **0.850** | |
+
+**Per LOOP ITERATION** (the load-independent view):
+
+| per iteration | st1 | st5 | st7 |
+|---|---|---|---|
+| windows OG → DX | 150.6 → 150.7 | 149.3 → 148.6 | 148.7 → **158.0** |
+| polls OG → DX | 1407 → 1568 (+11%) | 1406 → 1523 (+8%) | 1410 → **1741 (+23%)** |
+
+Three conclusions:
+
+1. **In stages 1/5 the copier does IDENTICAL work per iteration** —
+   window count is a consequence of the loop rate, not a cause. The
+   per-iteration cost driver is **longer waits** (+8–11% polls/iter),
+   consistent with ISR interference making passes miss HBlank windows
+   (miss one → burn a whole extra scanline polling). OG's poll/iter is a
+   flat ~1407 across all stages — a clean baseline constant.
+2. **Stage 7 is the atomic-share stage** (32.5% vs 8–16%): it alone shows
+   more windows per iteration (+6%) and much longer waits (+23%). Option 1
+   (golf the atomic window back to 4 cells) is therefore a *Stage-7 lever*
+   (maybe 3–5% there) but near-noise for stages 1/5 (≤1%).
+3. **Ledger for stages 1/5**: copier extra waits ≈1% of frame + colorize
+   ISR ≈2% ≈ 3% direct tax vs 5.7–6.7% observed loop deficit. The gap is
+   plausibly quantization amplification — the loop runs ~4.2 frames/iter,
+   and a small CPU tax that pushes a pass past its last usable HBlank
+   costs a whole extra line/frame, not a proportional slice. (Testable:
+   instrument per-pass duration distribution; a bimodal shift with the
+   same mean-tax would confirm.)
+
+**Fix ranking after step 0**: the copier is NOT the primary dungeon lever.
+(a) Shrink the colorize ISR (~2%, all stages) — cheapest real win;
+(b) Option 1 golf for Stage 7's atomic share; (c) publication reduction
+only if (a)+(b) fall short. The verification bar section applies to all.
+
+## Step 0 results, first pass (Stage 1 only — superseded by the table above)
 
 Receipt: `tmp/boss-speed-parity/window-count-stage1.json`. The probe's
 main-loop counter reproduced the parity receipt exactly (og=141, dx=133) —
