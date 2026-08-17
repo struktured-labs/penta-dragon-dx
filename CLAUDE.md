@@ -31,14 +31,55 @@ evidence.
 > LD [HL+],A`) single-pass. Dedicated position, story, and ending sweeps also
 > write attributes by screen semantics, so do not treat the inline hook as the
 > only production writer. Do not try to "add" a second fused lookup
-> (PR #1's fused `bg_sweep` was closed for this reason). If
-> GB-speed parity is ever the goal, the real lever is the hook's
-> **second (attr-phase) STAT mode-0 wait per group** (vanilla waits
-> once/group, we wait twice, ×144 groups) — NOT `attr_computation`,
-> which is dead. The 53K T / 76%-frame figure in old perf notes was for
-> that dead path. Full write-up:
-> `docs/FINDINGS_2026_06_07_gdma_is_dead_code.md`;
+> (PR #1's fused `bg_sweep` was closed for this reason). The 53K T /
+> 76%-frame figure in old perf notes was for the dead `attr_computation`
+> path. Full write-up: `docs/FINDINGS_2026_06_07_gdma_is_dead_code.md`;
 > corrected cost picture: `docs/v301_performance.md`.
+>
+> **⚠️ SECOND CORRECTION (verified 2026-08-16, static disassembly of the
+> shipping ROM).** This block used to say the GB-speed-parity lever was
+> "the hook's second (attr-phase) STAT mode-0 wait per group". **That wait
+> does not exist in the shipping ROM.** Counting `LDH A,[FF41]` sites in
+> `0x42A0-0x4380`: vanilla has **12**, the DX candidate has **4**. Both use
+> the same two-poll idiom (wait until mode==3, then wait until mode!=3) for
+> **one** HBlank synchronization; the DX atomic path then writes tiles *and*
+> attributes inside that single window. It is already fused. Do not spend
+> time removing a second STAT wait.
+>
+> The real lever is **cells written per HBlank window**:
+>
+> | path | window body | cells/window |
+> |------|-------------|--------------|
+> | vanilla (`42B1`/`42BA`) | `LD A,[DE]; INC DE; LD [HL+],A` ×4 | **4** (tile only) |
+> | DX stock (`432D`/`4335`) | byte-identical to vanilla | **4** (tile only) |
+> | DX atomic (`42D1`/`42D9`) | 3 tile stores → `LD A,1; LDH [FF4F]` → `LD A,L; SUB 3; LD L,A` → `POP AF; LD [HL+],A` ×3 → `XOR A; LDH [FF4F]` | **3** (tile+attr) |
+>
+> The atomic path spends ~55T of each window on the VBK switch, the HL
+> rewind, and the VBK restore, so it fits 3 cells where vanilla fits 4. A
+> 24×24 map therefore needs ~192 windows instead of ~144 (**+33% HBlank
+> windows**), charged only on frames that take the atomic path. That is why
+> the slowdown tracks map-publish frequency: Stage 1 −5.7%, Stage 5 −6.1%,
+> Stage 7 −15.0% (`gameplay_speed_parity`, main-loop hits at `0x016C`).
+>
+> The untried lever is driving the attribute plane with **HDMA** from the
+> already-computed buffer so the CPU can run vanilla's byte-identical 4-wide
+> tile loop. `speed_optimization_plan_v2.md` lists GDMA as a non-goal, but
+> that rejection was of the 50,000T full-buffer recompute, not of HDMA over a
+> sparse precomputed buffer — a different design worth re-opening.
+>
+> **Boss arenas are a separate story (measured 2026-08-16).** The dungeon
+> main loop at `$016C` never executes in arenas — they iterate a loop at
+> bank2:`$406F` (~5.3 frames/iteration). Measured there, the Aug-12
+> checkpoint runs five of nine arenas 7–17% **faster** than vanilla (a
+> fidelity bug with the opposite sign from the assumed "5% slower");
+> crystal_dragon is the only slower one (~+2.9%). Per-boss magnitudes are
+> direction-only: every cross-ROM boss-speed comparison rides OG/DX save
+> states that land at different arena phases, and cross-model state loading
+> (DMG↔CGB) is impossible, so the confound can't be removed in that
+> paradigm. Do not trust precise boss-speed percentages from state-pair
+> gates (the `4.58%` in `fef1739`'s message was 600-frame noise on
+> mismatched pairs). Full write-up:
+> `docs/FINDINGS_2026_08_16_boss_speed_instrumentation.md`.
 
 ## CRITICAL: Verification Standards (Hard Gate)
 

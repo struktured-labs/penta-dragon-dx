@@ -15,10 +15,45 @@
 > group, 24 rows × 6 groups).
 >
 > **=> The real modded cost is far below the 53K T / 76% figure.** The
-> dominant cost-over-vanilla is the inline hook's *second* (attr-phase)
-> STAT-wait per group, NOT attr_computation. That dual-wait is the main
-> GB-speed-parity lever. The 53K T analysis is retained below for the
-> (disabled) GDMA design only.
+> 53K T analysis is retained below for the (disabled) GDMA design only.
+
+> **⚠️ SECOND CORRECTION (verified 2026-08-16, static disassembly).** The
+> banner above used to name the inline hook's *second (attr-phase) STAT-wait
+> per group* as the dominant cost and the main GB-speed-parity lever. **That
+> wait is not in the shipping ROM.** `LDH A,[FF41]` sites in `0x42A0-0x4380`:
+> vanilla **12**, DX **4**. Both use the same two-poll idiom (wait until
+> mode==3, then wait until mode!=3) for a *single* HBlank sync; the DX atomic
+> path writes tiles and attributes inside that one window. It is already fused.
+>
+> The measured cost driver is **cells per HBlank window**: vanilla and the DX
+> stock path write **4** cells/window (tile only); the DX atomic path writes
+> **3** (tile+attr), because ~55T/window goes to `LDH [FF4F]` (VBK→1), the
+> `LD A,L; SUB 3; LD L,A` rewind, and `LDH [FF4F]` (VBK→0). A 24×24 map needs
+> ~192 windows instead of ~144: **+33% HBlank windows**, charged only on
+> frames taking the atomic path.
+>
+> Measured slowdown (`gameplay_speed_parity`, main-loop hits at `0x016C` per
+> 600 frames) scales with map-publish frequency, as that model predicts:
+>
+> | stage | vanilla | DX | ratio |
+> |-------|---------|-----|-------|
+> | 1 | 141 | 133 | 0.943 |
+> | 5 | 164 | 154 | 0.939 |
+> | 7 | 167 | 142 | **0.850** (gate failure) |
+>
+> **Instrument warning (refined 2026-08-16).** Use `gameplay_speed_parity`
+> for speed claims — it boots both ROMs from power-on through identical
+> scripted input, so it has no pairing confound. `boss_publication_cadence`
+> compares OG and DX from *different* save-state files whose landing phases
+> differ (historically OG frame 77 vs DX frame 120), and is
+> window-dependent (+2.16% @1800 vs +4.43% @3600 on one unchanged ROM,
+> `tmp/boss-2pct/no-de-cadence/`). Its "impossible" speedups (angela −24%,
+> cameo −22%, ted −14.5%) turned out to be *directionally real* — a new
+> arena-loop-rate instrument (`verify_boss_speed_parity.py`, anchored at
+> bank2:$406F) independently measures DX arenas 7–17% faster than OG on
+> fresh pairs — but the magnitudes remain untrustworthy for both
+> instruments. Direction only. See
+> `docs/FINDINGS_2026_08_16_boss_speed_instrumentation.md`.
 
 How efficient is the v3.01 colorization pipeline? Hard cycle counts +
 qualitative observations.
@@ -125,7 +160,13 @@ Possible optimizations (not implemented):
 3. **Pre-computed attrs in ROM**: per-room attr tables loaded once at
    room change. Trades ROM space for runtime work.
 
-None of these are needed for the current production performance.
+**Updated 2026-08-16:** option 2 (HDMA) is no longer optional-nice-to-have —
+it is the leading candidate for closing the remaining gap. Driving the
+attribute plane with HDMA from the already-computed buffer removes the VBK
+switch, the HL rewind, and the `POP AF` chain from the HBlank window, letting
+the CPU run vanilla's byte-identical 4-wide tile loop. `gameplay_speed_parity`
+currently **fails** on Stage 7 (ratio 0.850), so "not needed for current
+production performance" no longer holds.
 
 ## What's NOT yet measured
 

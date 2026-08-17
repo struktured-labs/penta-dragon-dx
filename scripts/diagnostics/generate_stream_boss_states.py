@@ -30,6 +30,8 @@ from normalize_mgba_state_pc import normalize
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# Same supported Japanese base as build_release_bundle.py / verify_release_patch.py.
+SUPPORTED_BASE_MD5 = "df43e0adfdc74b2829c7e95e91c71a28"
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 DEFAULT_OUTPUT = ROOT / "tmp/palette_session/boss_states"
 BOSS_PROBE = Path(__file__).with_name("probe_generate_boss_state.lua")
@@ -936,7 +938,12 @@ def main() -> int:
         return 0
 
     rom_bytes = args.rom.read_bytes()
-    stock_rom = args.rom.resolve() == (ROOT / "rom/Penta Dragon (J).gb").resolve()
+    # Identify the stock base by CONTENT, never by path. The release matrix
+    # runs gates against isolated copies under tmp/, so a path comparison
+    # silently reports "candidate" for a byte-identical vanilla ROM and then
+    # applies the DX-only FF91/DF0D/unsafe_attr assertions to it. That is the
+    # exact failure that blocked boss_publication_cadence behind boss_og_states.
+    stock_rom = hashlib.md5(rom_bytes).hexdigest() == SUPPORTED_BASE_MD5
     # Bosses 0..7 share the ordinary stage-boss dispatcher. Penta Dragon is
     # entered by the native pre-final bridge and a synthetic Stage-1 CALL can
     # legitimately fall through into final-story state before a long palette
