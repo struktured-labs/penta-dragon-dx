@@ -36,6 +36,26 @@ artifacts observed in 280 panels. Late-run positional drift between rows is
 the known ~6% dungeon speed difference, not a route divergence, and does not
 affect palette review.
 
+## Cutscene/menu OG comparison (added same day, PyBoy — no emulator slot)
+
+- **Opening cutscene**: 33 OG panels captured with the same
+  `inventory_opening_cutscene.py` schedule as the matrix's DX artifacts and
+  tile-map-diffed per panel. Every difference is typewriter/scroll
+  capture-phase skew (2-frame offset; mixed directions across panels —
+  panel 14 DX-ahead by 31 cells, panels 13/17 DX-behind by 4–5; panel 11's
+  49/49 bidirectional delta is the scrolling text tail with identical
+  story_state both sides). **No glyph or content regression.** The one
+  deliberate deviation: DX renders the text scroll black-on-white vs the
+  original's white-on-black (region-palette choice; operator-taste item).
+- **Ending sequence**: 86 OG panels via `inventory_final_cutscene.py`
+  direct-entry, surveyed against the matrix's route-B ending inventory
+  (157 panels). DX plays the full sequence colored (dragon art, dialogue,
+  red credits) with no missing content; routes differ so this is
+  survey-level, backed by the passing ending-inventory gates.
+- **Menus**: matrix menu gate receipts + visual montage — colorized
+  (MEDICAL overlay, red HP/accents), no artifacts. Palette polish remains
+  an operator-stream item.
+
 ## Follow-ups
 
 1. **Current FIXED.gb regression** — blocked on the Ted lane promoting a
