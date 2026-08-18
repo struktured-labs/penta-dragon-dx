@@ -273,9 +273,51 @@ def align(og: list[dict[str, object]], dx: list[dict[str, object]]) -> dict[str,
             if start_dx + matched < len(dx) else None
         ),
     }
+    # Slip-aware continuation: a build that banks a small phase lead (e.g.
+    # Ted's shorter holds, Shalamar's single-transition slips at ~72/252)
+    # makes the sequences re-align at a slightly shifted offset after the
+    # first mismatch. A first-mismatch-only span under-reports pairing by
+    # 5x on such runs (v72: 72 reported vs 384 slip-aware). Track the
+    # re-alignments; each slip event records where and by how much.
+    slips: list[dict[str, object]] = []
+    i, j = start_og + matched, start_dx + matched
+    end_og, end_dx = start_og + matched, start_dx + matched
+    while i < len(og) - MIN_MATCHED_TRANSITIONS:
+        found = None
+        for jj in range(max(0, j - 20), min(len(dx) - MIN_MATCHED_TRANSITIONS, j + 40)):
+            if all(
+                og[i + n]["from"] == dx[jj + n]["from"]
+                and og[i + n]["to"] == dx[jj + n]["to"]
+                for n in range(MIN_MATCHED_TRANSITIONS)
+            ):
+                run = 0
+                while (
+                    i + run < len(og) and jj + run < len(dx)
+                    and og[i + run]["from"] == dx[jj + run]["from"]
+                    and og[i + run]["to"] == dx[jj + run]["to"]
+                ):
+                    run += 1
+                found = (jj, run)
+                break
+        if found is None:
+            i += 1
+            continue
+        jj, run = found
+        slips.append({
+            "og_index": i,
+            "offset_delta": (jj - i) - (start_dx - start_og),
+            "run": run,
+        })
+        i += run
+        j = jj + run
+        end_og, end_dx = i, jj + run
+    result["slip_events"] = slips
+    result["slip_aware_matched"] = matched + sum(s["run"] for s in slips)
     span: dict[str, object] = {}
-    for side, events, start in (("og", og, start_og), ("dx", dx, start_dx)):
-        first, last = events[start], events[start + matched - 1]
+    for side, events, start, end in (
+        ("og", og, start_og, end_og), ("dx", dx, start_dx, end_dx),
+    ):
+        first, last = events[start], events[min(end, len(events)) - 1]
         iters = last["iter"] - first["iter"]
         frames = last["frame"] - first["frame"]
         span[side] = {
@@ -346,8 +388,12 @@ def main() -> int:
                     capture(
                         rom,
                         state,
-                        args.output.parent / "boss-trajectory" / name
-                            / f"{side}-{replay}",
+                        # Namespaced by receipt stem: sharing one output parent
+                        # across runs used to overwrite traces that earlier
+                        # receipts still pointed at (v60c's traces were lost
+                        # to a later v72 run this way).
+                        args.output.parent / "boss-trajectory"
+                            / args.output.stem / name / f"{side}-{replay}",
                         target,
                         side_warmup,
                         args.frames,
