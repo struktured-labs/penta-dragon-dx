@@ -57,7 +57,8 @@ COMPLETE = re.compile(
     r"main_loop_hits=(?P<hits>\d+) "
     r"raw_anchor_hits=(?P<raw_hits>\d+) "
     r"max_main_loop_gap=(?P<max_gap>\d+) "
-    r"last_main_loop_frame=(?P<last>-?\d+) scene=(?P<scene>[0-9A-F]{2})"
+    r"last_main_loop_frame=(?P<last>-?\d+) "
+    r"parked_frames=(?P<parked>\d+) scene=(?P<scene>[0-9A-F]{2})"
 )
 
 
@@ -174,6 +175,11 @@ def capture(
             f"raw {raw_hits} vs filtered {hits} -- foreign-bank code executes "
             "at the anchor address, the count cannot be trusted"
         )
+    # Sticky scene accounting (the probe) keeps SVBK-parked mid-scene frames
+    # in the denominator; parked_frames records how many there were. Without
+    # it, the parked share silently deflated scene_frames on banked-writer
+    # candidates and inflated this rate by 1/(1-share) -- the "+22.46%
+    # faster" Ted artifact was exactly that (share ~20.1%).
     return {
         "status": status,
         "scene_frames": scene_frames,
@@ -181,6 +187,8 @@ def capture(
         "raw_anchor_hits": raw_hits,
         "hits_per_scene_frame": hits / scene_frames,
         "max_main_loop_gap": int(match.group("max_gap")),
+        "last_main_loop_frame": int(match.group("last")),
+        "parked_frames": int(match.group("parked")),
         "state_sha256": sha256(state),
         "trace_sha256": sha256(trace),
         "trace": str(trace.resolve()),
@@ -223,15 +231,39 @@ def main() -> int:
                 ("og", original, args.og_states.resolve()),
                 ("dx", dx_rom, args.dx_states.resolve()),
             ):
-                pair[side] = capture(
-                    rom,
-                    state_for(states, target),
-                    args.output.parent / "boss-speed" / name / side,
-                    target,
-                    args.warmup,
-                    args.frames,
-                    args.timeout,
+                state = state_for(states, target)
+                replays = [
+                    capture(
+                        rom,
+                        state,
+                        args.output.parent / "boss-speed" / name
+                            / f"{side}-{replay}",
+                        target,
+                        args.warmup,
+                        args.frames,
+                        args.timeout,
+                    )
+                    for replay in ("a", "b")
+                ]
+                deterministic_keys = (
+                    "status", "scene_frames", "main_loop_hits",
+                    "raw_anchor_hits", "hits_per_scene_frame",
+                    "max_main_loop_gap", "last_main_loop_frame",
+                    "parked_frames", "state_sha256", "trace_sha256",
                 )
+                deterministic = all(
+                    replays[0][key] == replays[1][key]
+                    for key in deterministic_keys
+                )
+                if not deterministic:
+                    raise RuntimeError(
+                        f"non-deterministic {side} replay for {name}"
+                    )
+                pair[side] = dict(replays[0])
+                pair[side]["deterministic_replay"] = True
+                pair[side]["replay_trace_sha256"] = [
+                    replay["trace_sha256"] for replay in replays
+                ]
         except Exception as error:  # noqa: BLE001 - reported per boss
             pair["status"] = "error"
             pair["error"] = str(error)
@@ -242,17 +274,34 @@ def main() -> int:
         og_rate = pair["og"]["hits_per_scene_frame"]
         dx_rate = pair["dx"]["hits_per_scene_frame"]
         ratio = dx_rate / og_rate
-        within = abs(1.0 - ratio) <= args.max_slowdown + 1e-9
+        maximum_continuity_gap = 30
+        continuity = {
+            side: (
+                pair[side]["max_main_loop_gap"] <= maximum_continuity_gap
+                and pair[side]["last_main_loop_frame"]
+                    >= pair[side]["scene_frames"] - maximum_continuity_gap
+            )
+            for side in ("og", "dx")
+        }
+        within = (
+            abs(1.0 - ratio) <= args.max_slowdown + 1e-9
+            and all(continuity.values())
+        )
         pair["speed_ratio"] = ratio
         pair["slowdown_percent"] = (1.0 - ratio) * 100.0
         pair["maximum_slowdown_percent"] = args.max_slowdown * 100.0
+        pair["maximum_continuity_gap"] = maximum_continuity_gap
+        pair["continuity"] = continuity
         pair["status"] = "pass" if within else "fail"
         if not within:
-            failures.append(
-                f"{name}: DX/OG main-loop throughput {ratio:.4f}, "
+            reason = (
+                f"DX/OG main-loop throughput {ratio:.4f}, "
                 f"slowdown {(1 - ratio) * 100:.2f}% "
                 f"(absolute limit {args.max_slowdown * 100:.2f}%)"
             )
+            if not all(continuity.values()):
+                reason += f", continuity={continuity}"
+            failures.append(f"{name}: {reason}")
         rows.append(pair)
         print(
             f"{name:16s} og={og_rate:7.3f} dx={dx_rate:7.3f} "

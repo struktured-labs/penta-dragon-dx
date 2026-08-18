@@ -62,7 +62,8 @@ ITER_LINE = re.compile(
 COMPLETE = re.compile(
     r"complete status=(?P<status>\S+) frames=(?P<frames>\d+) "
     r"scene_frames=(?P<scene_frames>\d+) iters=(?P<iters>\d+) "
-    r"raw_anchor_hits=(?P<raw_hits>\d+) scene=(?P<scene>[0-9A-F]{2})"
+    r"raw_anchor_hits=(?P<raw_hits>\d+) parked_frames=(?P<parked>\d+) "
+    r"scene=(?P<scene>[0-9A-F]{2})"
 )
 
 
@@ -194,12 +195,20 @@ def capture(
     if len(samples) < 2:
         raise RuntimeError(f"too few iterations observed for {prefix.name}")
     scene_frames = int(match.group("scene_frames"))
-    parked = sum(1 for sample in samples if sample["svbk"] not in (0, 1))
+    banked_writer = env["TRAJ_BANKED_WRITER"] == "1"
+    # svbk at the loop head is only meaningful on banked-writer candidates;
+    # DMG reads FF70 as $FF, so counting those would be a false positive.
+    parked = (
+        sum(1 for sample in samples if sample["svbk"] not in (0, 1))
+        if banked_writer else 0
+    )
     return {
         "status": status,
         "scene_frames": scene_frames,
         "iters": len(samples),
         "raw_anchor_hits": int(match.group("raw_hits")),
+        "banked_writer": banked_writer,
+        "parked_frames": int(match.group("parked")),
         "svbk_parked_samples": parked,
         "samples": samples,
         "state_sha256": sha256(state),

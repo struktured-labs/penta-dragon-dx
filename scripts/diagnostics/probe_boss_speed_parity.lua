@@ -42,6 +42,7 @@ local main_loop_hits = 0
 local raw_anchor_hits = 0
 local last_main_loop_frame, max_main_loop_gap = -1, 0
 local in_scene = false
+local parked_frames = 0
 
 local function finish(status)
   if finished then return end
@@ -49,9 +50,11 @@ local function finish(status)
   trace:write(string.format(
     "complete status=%s frames=%d scene_frames=%d main_loop_hits=%d " ..
     "raw_anchor_hits=%d " ..
-    "max_main_loop_gap=%d last_main_loop_frame=%d scene=%02X\n",
+    "max_main_loop_gap=%d last_main_loop_frame=%d parked_frames=%d " ..
+    "scene=%02X\n",
     status, frame, scene_frames, main_loop_hits, raw_anchor_hits,
-    max_main_loop_gap, last_main_loop_frame, emu:read8(0xD880)))
+    max_main_loop_gap, last_main_loop_frame, parked_frames,
+    emu:read8(0xD880)))
   trace:close()
   local marker = assert(io.open(OUT .. ".done", "w"))
   marker:write(string.format(
@@ -94,7 +97,20 @@ callbacks:add("frame", function()
   -- before trusting D880, exactly as the cadence probe does -- but only for
   -- ROMs whose writer actually crosses frames banked.
   local svbk = emu:read8(0xFF70) & 0x07
-  if BANKED_WRITER and svbk ~= 0 and svbk ~= 1 then return end
+  if BANKED_WRITER and svbk ~= 0 and svbk ~= 1 then
+    -- D880 is unreadable this frame (banked WRAM parked on 2/3), but the
+    -- frame still elapsed. Carry the last known scene state so parked
+    -- mid-scene frames stay in the scene_frames denominator: dropping them
+    -- silently deleted ~20% of Ted-arena frames on v63-class candidates
+    -- and inflated hits_per_scene_frame by the parked share (the
+    -- "+22.46% faster" artifact). Keep-alive writes stay skipped -- they
+    -- would land in the wrong WRAM bank.
+    parked_frames = parked_frames + 1
+    if in_scene and frame > WARMUP then
+      scene_frames = scene_frames + 1
+    end
+    return
+  end
   if emu:read8(0xD880) == EXPECTED_SCENE then
     in_scene = true
     scene_drift_frames = 0

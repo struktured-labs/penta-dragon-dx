@@ -44,14 +44,15 @@ local scene_drift_frames = 0
 local iters = 0
 local raw_anchor_hits = 0
 local in_scene = false
+local parked_frames = 0
 
 local function finish(status)
   if finished then return end
   finished = true
   trace:write(string.format(
     "complete status=%s frames=%d scene_frames=%d iters=%d " ..
-    "raw_anchor_hits=%d scene=%02X\n",
-    status, frame, scene_frames, iters, raw_anchor_hits,
+    "raw_anchor_hits=%d parked_frames=%d scene=%02X\n",
+    status, frame, scene_frames, iters, raw_anchor_hits, parked_frames,
     emu:read8(0xD880)))
   trace:close()
   local marker = assert(io.open(OUT .. ".done", "w"))
@@ -96,7 +97,20 @@ callbacks:add("frame", function()
     return
   end
   local svbk = emu:read8(0xFF70) & 0x07
-  if BANKED_WRITER and svbk ~= 0 and svbk ~= 1 then return end
+  if BANKED_WRITER and svbk ~= 0 and svbk ~= 1 then
+    -- D880 is unreadable this frame (banked WRAM parked on 2/3), but the
+    -- frame still elapsed. Carry the last known scene state so parked
+    -- mid-scene frames stay in the denominator: dropping them silently
+    -- deleted ~20% of Ted-arena frames from scene_frames and inflated
+    -- every iterations-per-scene-frame rate on banked candidates by the
+    -- parked share (the "+22.46% faster" artifact). Keep-alive writes stay
+    -- skipped -- they would land in the wrong WRAM bank.
+    parked_frames = parked_frames + 1
+    if in_scene and frame > WARMUP then
+      scene_frames = scene_frames + 1
+    end
+    return
+  end
   if emu:read8(0xD880) == EXPECTED_SCENE then
     in_scene = true
     scene_drift_frames = 0
