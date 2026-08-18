@@ -289,6 +289,11 @@ def main() -> int:
         )
         pair["speed_ratio"] = ratio
         pair["slowdown_percent"] = (1.0 - ratio) * 100.0
+        # Deficit framing (above) is the gate's historical convention; the
+        # trajectory instrument reports frames-per-iteration framing. They
+        # diverge with magnitude (27.68% deficit == 38.3% fpi), so publish
+        # both to keep cross-instrument comparisons in one convention.
+        pair["slowdown_percent_fpi"] = (1.0 / ratio - 1.0) * 100.0
         pair["maximum_slowdown_percent"] = args.max_slowdown * 100.0
         pair["maximum_continuity_gap"] = maximum_continuity_gap
         pair["continuity"] = continuity
