@@ -38,8 +38,15 @@ end
 local function finish(status)
   if finished then return end
   finished = true
-  trace:write(string.format("complete status=%s frames=%d play_frames=%d shots=%d\n",
-    status, frame, play_frames, shots))
+  if status ~= "ok" then
+    -- Failure evidence: what the screen and key state looked like when stuck.
+    emu:screenshot(OUT .. ".stuck.png")
+  end
+  trace:write(string.format(
+    "complete status=%s frames=%d play_frames=%d shots=%d " ..
+    "d880=%02X ffc1=%02X ffba=%02X ffbd=%02X lcdc=%02X\n",
+    status, frame, play_frames, shots, emu:read8(0xD880), emu:read8(0xFFC1),
+    emu:read8(0xFFBA), emu:read8(0xFFBD), emu:read8(0xFF40)))
   trace:close()
   local marker = assert(io.open(OUT .. ".done", "w"))
   marker:write(status .. "\n")
@@ -54,12 +61,24 @@ callbacks:add("frame", function()
   if not seeded and frame >= 100 then seed_sram(); seeded = true end
 
   if phase == "title" then
-    if frame >= 300 and frame < 306 then emu:setKeys(KEY_START)
-    elseif frame >= 360 and frame < 366 then emu:setKeys(KEY_START)
+    -- Adaptive title handling: fixed-frame START presses miss candidates
+    -- whose title timing shifted (v11 title arrives later; the old schedule
+    -- idled into ATTRACT, whose demo runs FFC1=1 and false-confirmed the
+    -- route). Press DOWN then A (the release GAME START menu route) only
+    -- while the title/showcase is actually displayed, retrying every cycle.
+    local scene = emu:read8(0xD880)
+    -- Title-land: plain title/menu (< 0x02) plus the animated banner (0x1B)
+    -- and showcase (0x1C). OG's title sits at D880=0x01.
+    local on_title = scene < 0x02 or scene == 0x1B or scene == 0x1C
+    local cycle = frame % 90
+    if on_title and cycle >= 10 and cycle < 16 then emu:setKeys(0x80)      -- DOWN
+    elseif on_title and cycle >= 28 and cycle < 34 then emu:setKeys(KEY_A) -- confirm
     else emu:setKeys(0) end
-    -- One aligned title screenshot per side.
     if frame == 290 then emu:screenshot(OUT .. ".title.png") end
-    if frame >= 330 then phase = "level_select" end
+    if emu:read8(0xFFC1) == 1 and not on_title then
+      phase = "level_select"
+    end
+    if frame > 3600 then finish("no-title-exit") end
     return
   end
 
