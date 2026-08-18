@@ -41,8 +41,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import time
+import uuid
 
 from boss_geometry_contract import BOSSES
 
@@ -106,6 +108,13 @@ def capture(
     trace = Path(str(prefix) + ".trace")
     marker.unlink(missing_ok=True)
     trace.unlink(missing_ok=True)
+    # A and B must start from the savestate alone. Sharing savegamePath lets
+    # replay A's battery-backed RAM file leak into replay B; the first live
+    # OG/OG null exposed that as an otherwise identical trajectory shifted by
+    # one emulated frame. Give every emulator process a fresh private runtime
+    # directory so deterministic replay is a real process-isolation check.
+    runtime_dir = prefix.parent / f"{prefix.name}-runtime-{uuid.uuid4().hex}"
+    runtime_dir.mkdir(parents=True)
     rom_bytes = rom.read_bytes()
     env = os.environ.copy()
     env.update(
@@ -131,8 +140,8 @@ def capture(
     process = subprocess.Popen(
         [
             str(MGBA), "--fastforward", "-t", str(state),
-            "-C", f"savegamePath={prefix.parent}",
-            "-C", f"savestatePath={prefix.parent}",
+            "-C", f"savegamePath={runtime_dir}",
+            "-C", f"savestatePath={runtime_dir}",
             str(rom), "--script", str(PROBE),
         ],
         cwd=ROOT,
@@ -152,6 +161,10 @@ def capture(
             raise TimeoutError(f"trajectory probe timed out: {prefix.name}")
     finally:
         terminate(process)
+        # The private runtime dir only exists to keep battery RAM from
+        # leaking between replays (the arm-1 live failure); nothing in it
+        # outlives the process.
+        shutil.rmtree(runtime_dir, ignore_errors=True)
 
     samples: list[dict[str, object]] = []
     match = None
@@ -280,6 +293,17 @@ def main() -> int:
     parser.add_argument("--og-states", type=Path, required=True)
     parser.add_argument("--target", action="append", type=int, choices=range(9))
     parser.add_argument("--warmup", type=int, default=60)
+    parser.add_argument(
+        "--dx-warmup", type=int, default=None,
+        help=(
+            "override warmup for the dx side only. The aligner's offset-search "
+            "control: with the SAME ROM and state on both sides and a longer "
+            "dx warmup, the dx sequence is the og sequence minus its first K "
+            "transitions, so the predicted result is paired at offset (K, 0) "
+            "with slowdown 0.00%% exactly. Same-state pairs with equal warmup "
+            "align trivially at (0, 0) and never exercise the search."
+        ),
+    )
     parser.add_argument("--frames", type=int, default=1800)
     parser.add_argument("--timeout", type=float, default=180.0)
     parser.add_argument("--output", type=Path, required=True)
@@ -304,6 +328,11 @@ def main() -> int:
                 ("dx", dx_rom, args.dx_states.resolve()),
             ):
                 state = state_for(states, target)
+                side_warmup = (
+                    args.dx_warmup
+                    if side == "dx" and args.dx_warmup is not None
+                    else args.warmup
+                )
                 replays = [
                     capture(
                         rom,
@@ -311,7 +340,7 @@ def main() -> int:
                         args.output.parent / "boss-trajectory" / name
                             / f"{side}-{replay}",
                         target,
-                        args.warmup,
+                        side_warmup,
                         args.frames,
                         args.timeout,
                     )
@@ -373,6 +402,7 @@ def main() -> int:
             "vector transitions; frames-per-iteration over the matched span"
         ),
         "warmup_frames": args.warmup,
+        "dx_warmup_frames": args.dx_warmup,
         "observation_frames": args.frames,
         "min_matched_transitions": MIN_MATCHED_TRANSITIONS,
         "original_rom_sha256": sha256(original),
