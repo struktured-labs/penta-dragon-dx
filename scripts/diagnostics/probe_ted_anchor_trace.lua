@@ -4,6 +4,24 @@ local FRAMES = tonumber(os.getenv("TED_ANCHOR_FRAMES") or "360")
 local out = assert(io.open(OUT, "w"))
 local frame, done = 0, false
 
+local function crown(base)
+    local old = emu:read8(0xFF4F)
+    emu:write8(0xFF4F, 0)
+    local found = {}
+    for row = 0, 31 do
+        for col = 0, 31 do
+            local ok = true
+            for step = 0, 4 do
+                local address = base + row * 32 + ((col + step) & 31)
+                if emu:read8(address) ~= 2 + step then ok = false; break end
+            end
+            if ok then found[#found + 1] = string.format("%d,%d", row, col) end
+        end
+    end
+    emu:write8(0xFF4F, old)
+    return table.concat(found, ";")
+end
+
 callbacks:add("frame", function()
     if done then return end
     frame = frame + 1
@@ -17,11 +35,12 @@ callbacks:add("frame", function()
     emu:write8(0xD888, 0)
     emu:write8(0xDD06, 0)
     out:write(string.format(
-        "%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\n",
+        "%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%s\t%s\n",
         frame, emu:read8(0xD880), emu:read8(0xFF40),
         emu:read8(0xFF42), emu:read8(0xFF43),
         emu:read8(0xC4FA), emu:read8(0xC4FB),
-        emu:read8(0xFFA9), emu:read8(0xDCE0), emu:read8(0xC5F7)))
+        emu:read8(0xFFA9), emu:read8(0xDCE0), emu:read8(0xC5F7),
+        crown(0x9800), crown(0x9C00)))
     if frame >= FRAMES or emu:read8(0xD880) ~= 0x10 then
         done = true
         out:close()

@@ -9,6 +9,7 @@ import html
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -97,6 +98,8 @@ def wait_capture(
     frames: int,
     step: int,
     timeout: float,
+    *,
+    stock_rom: bool,
 ) -> int:
     prefix.parent.mkdir(parents=True, exist_ok=True)
     for old in prefix.parent.glob(prefix.name + ".f*.png"):
@@ -110,6 +113,7 @@ def wait_capture(
         BOSS_ANIMATION_SCENE=str(scene),
         BOSS_ANIMATION_FRAMES=str(frames),
         BOSS_ANIMATION_STEP=str(step),
+        BOSS_ANIMATION_STOCK_ROM="1" if stock_rom else "0",
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
     )
@@ -341,14 +345,20 @@ def ted_rendered_containment(frame_dir: Path) -> dict[str, object]:
             violations.append({"frame": path.name, "kind": "missing-body"})
             continue
         left_band_warm = sum(x < 25 for x, _y in warm)
+        bridge_band_warm = sum(25 <= x < 40 for x, _y in warm)
         max_left_band_warm = max(max_left_band_warm, left_band_warm)
         if left_band_warm >= 40:
             expansion_frames += 1
-        if left_band_warm > 150:
+        # Ted's whole body legitimately scrolls through the left band, where
+        # it can contribute well over 1,000 warm pixels. Only call it detached
+        # shell debris when that mass lacks a warm bridge back toward the main
+        # body. The former absolute >150 rule rejected clean native poses.
+        if left_band_warm > 150 and bridge_band_warm < 40:
             violations.append({
                 "frame": path.name,
                 "kind": "duplicate-shell-left-edge",
                 "left_band_warm_pixels": left_band_warm,
+                "bridge_band_warm_pixels": bridge_band_warm,
             })
     if expansion_frames == 0:
         violations.append({"kind": "missing-tentacle-expansion"})
@@ -359,6 +369,138 @@ def ted_rendered_containment(frame_dir: Path) -> dict[str, object]:
         "tentacle_expansion_frames": expansion_frames,
         "violations": violations[:24],
         "violation_count": len(violations),
+    }
+
+
+def ted_trace_contract(trace_path: Path) -> dict[str, object]:
+    """Enforce smooth, contained, palette-owned Ted geometry."""
+    frames = []
+    violations = []
+    palette_union = [0] * 8
+    sparse_palette_union = [0] * 8
+    sparse_counts = []
+    for line in trace_path.read_text().splitlines():
+        if not line.startswith("frame="):
+            continue
+        fields = dict(re.findall(r"([a-z0-9_]+)=([^ ]*)", line))
+        crown = fields.get("crown", "-1,-1").split(",")
+        body_palettes = [int(value) for value in fields["body_palettes"].split(",")]
+        sparse_palettes = [int(value) for value in fields["sparse_palettes"].split(",")]
+        for index, value in enumerate(body_palettes):
+            palette_union[index] += value
+        for index, value in enumerate(sparse_palettes):
+            sparse_palette_union[index] += value
+        frame = {
+            "number": int(fields["frame"]),
+            "crown": (int(crown[0]), int(crown[1])),
+            "scx": int(fields["scx"], 16),
+            "scy": int(fields["scy"], 16),
+            "sparse": int(fields["sparse"]),
+            "body_cells": sum(body_palettes),
+            "svbk": int(fields["svbk"]),
+        }
+        sparse_counts.append(frame["sparse"])
+        frames.append(frame)
+        mismatches = int(fields["body_mismatches"])
+        # OG retains 114-117 canonical numbered body cells throughout the
+        # one-minute Ted corpus. A missing crown previously bypassed the
+        # mismatch check entirely, allowing 24-cell partial bodies to pass.
+        if frame["body_cells"] < 114:
+            violations.append({
+                "kind": "incomplete-body",
+                "frame": frame["number"],
+                "cells": frame["body_cells"],
+                "crown": frame["crown"],
+            })
+        if mismatches:
+            violations.append({
+                "kind": "detached-numbered-body",
+                "frame": frame["number"],
+                "cells": mismatches,
+            })
+        for kind in ("bank1", "priority", "flipped"):
+            if int(fields[kind]):
+                violations.append({
+                    "kind": f"unexpected-attr-{kind}",
+                    "frame": frame["number"],
+                    "cells": int(fields[kind]),
+                })
+        if sum(body_palettes) and any(
+            body_palettes[index] for index in (0, 3, 4, 6, 7)
+        ):
+            violations.append({
+                "kind": "body-palette-outside-yaml-materials",
+                "frame": frame["number"],
+                "histogram": body_palettes,
+            })
+        if sum(sparse_palettes) and any(
+            sparse_palettes[index] for index in (0, 3, 4, 6, 7)
+        ):
+            violations.append({
+                "kind": "tendril-palette-outside-yaml-materials",
+                "frame": frame["number"],
+                "histogram": sparse_palettes,
+            })
+
+    max_jump = 0
+    for previous, current in zip(frames, frames[1:]):
+        if current["number"] != previous["number"] + 1:
+            continue
+        # D000-DFFF is banked. During the private publisher's SVBK2 window,
+        # crown/map-selector bytes are cache data rather than game state; a
+        # physical-map handoff then looks like a false 31-33 px teleport.
+        # Palette/geometry checks above intentionally still inspect those
+        # rendered frames, but motion continuity uses stable bank-1 samples.
+        if previous["svbk"] != 1 or current["svbk"] != 1:
+            continue
+        if min(*previous["crown"], *current["crown"]) < 0:
+            continue
+        old_x = (previous["crown"][1] * 8 - previous["scx"]) & 0xFF
+        old_y = (previous["crown"][0] * 8 - previous["scy"]) & 0xFF
+        new_x = (current["crown"][1] * 8 - current["scx"]) & 0xFF
+        new_y = (current["crown"][0] * 8 - current["scy"]) & 0xFF
+        jump = max(
+            abs((new_x - old_x + 128) % 256 - 128),
+            abs((new_y - old_y + 128) % 256 - 128),
+        )
+        max_jump = max(max_jump, jump)
+        if jump > 1:
+            violations.append({
+                "kind": "teleport",
+                "frame": current["number"],
+                "pixels": jump,
+            })
+    sparse_transitions = sum(
+        left != right for left, right in zip(sparse_counts, sparse_counts[1:])
+    )
+    if sparse_transitions < 2:
+        violations.append({
+            "kind": "insufficient-tendril-animation",
+            "transitions": sparse_transitions,
+        })
+    missing_palettes = [
+        palette for palette in (1, 2, 5) if palette_union[palette] == 0
+    ]
+    if missing_palettes:
+        violations.append({
+            "kind": "missing-body-material-palettes",
+            "palettes": missing_palettes,
+        })
+    return {
+        "status": "pass" if not violations else "fail",
+        "frames": len(frames),
+        "max_screen_jump_pixels": max_jump,
+        "minimum_body_cells": min(
+            (frame["body_cells"] for frame in frames), default=0
+        ),
+        "crown_absent_frames": sum(
+            frame["crown"][0] < 0 for frame in frames
+        ),
+        "sparse_transitions": sparse_transitions,
+        "body_palette_histogram": palette_union,
+        "tendril_palette_histogram": sparse_palette_union,
+        "violation_count": len(violations),
+        "violations": violations[:24],
     }
 
 
@@ -481,19 +623,26 @@ def main() -> int:
     frames = capture_seconds * 60
     og_count = wait_capture(
         original, og_state, output / "og" / "frame", BOSSES[args.target].scene,
-        frames, args.sample_step, args.timeout,
+        frames, args.sample_step, args.timeout, stock_rom=True,
     )
     dx_count = wait_capture(
         dx, dx_state, output / "dx" / "frame", BOSSES[args.target].scene,
-        frames, args.sample_step, args.timeout,
+        frames, args.sample_step, args.timeout, stock_rom=False,
     )
     rendered_containment = None
+    trace_contract = None
     if args.target == 4:
         rendered_containment = ted_rendered_containment(output / "dx")
         if rendered_containment["status"] != "pass":
             raise RuntimeError(
                 "Ted rendered-containment gate failed: "
                 + json.dumps(rendered_containment, sort_keys=True)
+            )
+        trace_contract = ted_trace_contract(output / "dx" / "frame.trace")
+        if trace_contract["status"] != "pass":
+            raise RuntimeError(
+                "Ted trace contract failed: "
+                + json.dumps(trace_contract, sort_keys=True)
             )
     video = encode_video(output, args.seconds, args.sample_step)
     contact_sheet = build_contact_sheet(output, capture_seconds, args.sample_step)
@@ -516,6 +665,7 @@ def main() -> int:
         "dx_frames": dx_count,
         "temporal_landmarks": landmarks,
         "rendered_containment": rendered_containment,
+        "ted_trace_contract": trace_contract,
         "original_sha256": digest(original),
         "dx_sha256": digest(dx),
         "video_sha256": digest(video),

@@ -1,5 +1,34 @@
 # Stage playthrough sweep — 2026-08-17
 
+## Qualified-r9c rerun — 2026-08-18
+
+The complete seven-stage sweep was rerun against the current source-built
+candidate, `tmp/source-native-route-relocated-cadence0-r9c.gb` (SHA-256
+`e37e90c5573415ab7295d72ac0a2d230d666ed9d6322d2be1445a316841abf4e`).
+The builder replay at `tmp/source-native-route-relocated-cadence0-r9d-replay.gb`
+is byte-identical, so these receipts describe the reproducible source output
+rather than the older August 12 checkpoint below.
+
+- Paired visual sweep:
+  `tmp/source-native-route-relocated-cadence0-r9c-stage-sweep-r1/manifest.json`.
+  All seven OG/DX pairs completed 1,200 play frames with 20 aligned captures
+  per side: 280 screenshots total. Visual review found no white screen, black
+  void, overlaid wall, pickup trail, or detached terrain class.
+- Long semantic/display soak:
+  `tmp/source-native-route-relocated-cadence0-r9c-later-soak-12000-r2/`.
+  Stages 2–7 each completed 12,000 play frames across rooms 01/03/05/07.
+  Every map selected for display matched its semantic attributes; all stage
+  BG0 identities and required pickup/material/lava slots passed. Totals:
+  72,000 play frames, 807 display-handoff scans, 1,192 pickup samples, 10,371
+  Stage-4 material samples, and zero mismatches.
+- Immutable-WRAM ownership is now checked in the owning CGB WRAM bank. The
+  probe also defers samples while native OAM DMA makes the CPU bus unreadable;
+  the old unbanked audit interpreted bank 2/3 attribute work and `$FF` DMA
+  reads as mutations. With both conditions fixed, all six 12,000-frame runs
+  report zero changes to the bank-1 D900/DA00 runtime pages.
+
+The original sweep record is retained below as historical evidence.
+
 OG-versus-DX visual regression sweep across all seven dungeon stages:
 identical scripted boot route per side (title → level select → stage), 1200
 play frames, screenshot every 60 frames, two-row contact sheets. Tooling:
@@ -33,8 +62,9 @@ FIXED.gb from a known builder state and launch-gate it.
 
 No white screens, no attribute bleed, no missing materials, no detached
 artifacts observed in 280 panels. Late-run positional drift between rows is
-the known ~6% dungeon speed difference, not a route divergence, and does not
-affect palette review.
+the historical Aug-12 ~6% dungeon speed difference, not a route divergence,
+and does not affect this palette review. The current r5 input-identical receipt
+reduces the remaining slow routes to roughly 3%.
 
 ## Cutscene/menu OG comparison (added same day, PyBoy — no emulator slot)
 

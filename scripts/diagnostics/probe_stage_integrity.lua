@@ -14,10 +14,25 @@ local TARGET = tonumber(os.getenv("STAGE_TARGET") or "1")
 local OUT = os.getenv("STAGE_OUT") or "/tmp/penta_stage_integrity"
 local SHOT = os.getenv("STAGE_SHOT") == "1"
 local STATE_OUT = os.getenv("STAGE_STATE_OUT")
-local KEY_A, KEY_START = 0x01, 0x08
+local ROUTE_TRACE = os.getenv("STAGE_ROUTE_TRACE")
+local KEY_A, KEY_START, KEY_DOWN = 0x01, 0x08, 0x80
 local f, phase, seeded, confirmed = 0, "title", false, false
 local stable_frames = 0
+local max_stable_frames = 0
 local expected_scene = TARGET + 2
+
+local function reg(name)
+  for _, reader in ipairs({
+    function() return emu:getRegister(name) end,
+    function() return emu:getRegister(string.lower(name)) end,
+    function() return emu:readRegister(name) end,
+    function() return emu:readRegister(string.lower(name)) end,
+  }) do
+    local ok, value = pcall(reader)
+    if ok and type(value) == "number" then return value & 0xFFFF end
+  end
+  return 0xFFFF
+end
 
 local function append(path, text)
   local fh = io.open(path, "a")
@@ -33,6 +48,22 @@ do
   if fh then
     fh:write(string.format("target=%d expected_scene=%02X\n", TARGET, expected_scene))
     fh:close()
+  end
+end
+
+if ROUTE_TRACE then
+  local route = assert(io.open(ROUTE_TRACE, "w"))
+  local sites = {0x083D, 0x0842, 0x0844, 0x0849, 0x10E2, 0x3482, 0x3497}
+  for _, site in ipairs(sites) do
+    emu:setBreakpoint(function()
+      route:write(string.format(
+        "frame=%d site=%04X scene=%02X bank=%02X a=%02X f=%02X " ..
+        "bc=%04X de=%04X hl=%04X sp=%04X df4e=%02X df4f=%02X\n",
+        f, site, emu:read8(0xD880), emu:read8(0xFF99),
+        reg("a") & 0xFF, reg("f") & 0xFF, reg("bc"), reg("de"),
+        reg("hl"), reg("sp"), emu:read8(0xDF4E), emu:read8(0xDF4F)))
+      route:flush()
+    end, site)
   end
 end
 
@@ -118,18 +149,25 @@ end
 
 callbacks:add("frame", function()
   f = f + 1
-  emu:write8(0xDCFD, 0x01)
   if not seeded and f >= 100 then seed_sram(); seeded = true end
 
   if phase == "title" then
-    if f >= 300 and f < 306 then emu:setKeys(KEY_START)
-    elseif f >= 360 and f < 366 then emu:setKeys(KEY_START)
+    -- OPENING is selected by default. Follow the same receipt-proven cold
+    -- GAME START route as the live start gate: DOWN, then the stock sequence
+    -- of released confirmations through level-select/high-score screens.
+    if f >= 180 and f < 186 then emu:setKeys(KEY_DOWN)
+    elseif f >= 193 and f < 199 then emu:setKeys(KEY_A)
+    elseif f >= 241 and f < 247 then emu:setKeys(KEY_A)
+    elseif f >= 291 and f < 297 then emu:setKeys(KEY_A)
+    elseif f >= 341 and f < 347 then emu:setKeys(KEY_START)
+    elseif f >= 391 and f < 397 then emu:setKeys(KEY_A)
     else emu:setKeys(0) end
-    if f >= 330 then phase = "level_select" end
+    if f >= 450 then phase = "level_select" end
     return
   end
 
   if phase == "level_select" and not confirmed then
+    emu:write8(0xDCFD, 0x01)
     emu:write8(0xFFBA, TARGET)
     seed_sram()
     if f % 60 >= 10 and f % 60 < 16 then emu:setKeys(KEY_A)
@@ -139,7 +177,7 @@ callbacks:add("frame", function()
       phase = "loading"
       log("level selected")
     end
-    if f > 700 then log("failed to enter stage"); emu:stop() end
+    if f > 700 then log("failed to enter stage"); os.exit(2) end
     return
   end
 
@@ -151,10 +189,26 @@ callbacks:add("frame", function()
 
   if emu:read8(0xD880) == expected_scene and emu:read8(0xFFC1) == 1 then
     stable_frames = stable_frames + 1
-  else
-    stable_frames = 0
+    if stable_frames > max_stable_frames then max_stable_frames = stable_frames end
   end
 
+  -- Count qualified callbacks rather than demanding 120 consecutive FFC1=1
+  -- samples. The normal palette service briefly maps its bank between frame
+  -- callbacks; the saved state is still taken only on an exact scene/bank
+  -- match, while the later-stage soak independently validates terrain.
   if stable_frames == 120 then capture() end
-  if f > 2200 then log("timed out before stable room"); emu:stop() end
+  -- The source-built native map route reaches the correct scene near frame
+  -- 2200 on the cold Stage-2 path.  The old cutoff could fire during the
+  -- required 120-frame settling window even though D880/FFC1/FFBA were all
+  -- correct.  Match the soak harness's bounded loading allowance while
+  -- retaining a much smaller stream-state ceiling.
+  if f > 5000 then
+    log(string.format(
+      "timed out before stable room D880=%02X FFC1=%02X FFBA=%02X " ..
+      "DCFD=%02X FF91=%02X PC=%04X max_stable=%d",
+      emu:read8(0xD880), emu:read8(0xFFC1), emu:read8(0xFFBA),
+      emu:read8(0xDCFD), emu:read8(0xFF91), emu:readRegister("PC"),
+      max_stable_frames))
+    os.exit(2)
+  end
 end)

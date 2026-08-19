@@ -11,20 +11,22 @@ palette tuning with a live audience.
 
 ## Current status
 
-**v3.01 stream RC9 — playable, palette vote pending. Two work streams are
-in flight on top of it.**
+**v3.01 stream candidate — emulator-qualified; palette vote and hardware pass
+pending.**
 
 - Title footer: `DX V3.01 STRUK LABS`
-- Last fully-verified candidate: RC9, **53/53 deterministic gates**,
-  MD5 `e8baabaaa6b5d5073dba12985e8cfe00`
+- Current candidate: **78/78 deterministic emulator gates**, SHA-256
+  `c3f7cd1cf0df1136132d147107fdc3ea8ec40d3d20d5603c9124c57830843cbc`
 - Stage 1, pickups, rotating hazards, title reel, bosses, and story scenes are
   colorized.
-- In flight: a rework of Ted's arena colorization (flicker containment), and a
-  speed-parity audit — the dungeon currently runs ~6% slower than the
-  original (see `docs/speed_optimization_plan_v3.md`); measured boss arenas
-  are at or faster than original speed
-  (`docs/FINDINGS_2026_08_16_boss_speed_instrumentation.md`). The gate
-  roster has grown past RC9's 53 while this work lands.
+- Qualified: Ted's arena colorization and flicker containment. Stream-day
+  review will choose between its stabilized whip/orb pose and the original's
+  harsher pseudo-transparency cadence.
+- Speed checks cover all seven stages and nine bosses. Matched-work timing puts
+  Ted 1.94% slower; three stage routes remain about 3% slower, and Crystal
+  Dragon about 3.9% slower. Six other arena loops are faster than the original,
+  while their deterministic semantic-animation checks still pass. Every
+  exception is visible in the top-level release ledger.
 - Audience palette selection and the reservation-backed MiSTer pass are still
   required before release.
 
@@ -43,12 +45,11 @@ The ROM is intentionally not stored in this repository.
 The [full stage gallery](artifacts/stage-collage/index.html) shows all seven
 stages and the Stage 4/6 palette comparisons.
 
-## Shalamar clips
+## Shalamar animation reference
 
-Shalamar is the current boss-palette tuning target. These five live captures
-show the newer cyan/teal palette candidate (`61b4f8c…`), which has not been
-promoted over RC9. The remaining gray fragments and color placement are still
-under review.
+These five captures show Shalamar's major animation poses. The current release
+candidate has since passed the all-boss geometry and material checks; exact
+color choices remain adjustable during the palette stream.
 
 <table>
   <tr>
@@ -122,15 +123,18 @@ The release suite builds the ROM twice, requires byte-identical output, and
 runs every emulator gate serially:
 
 ```bash
-python3 scripts/diagnostics/run_deterministic_suite.py
+python3 scripts/diagnostics/run_deterministic_suite.py \
+  --expanded-ted \
+  --menu-icon-colors
 ```
 
-The most recent fully-passing candidate (RC9) cleared **53/53** gates,
-including cold game start, Stage 1 terrain and pickups, later-stage soak
-tests, low-health flicker, title-demo actors, all bosses, and all story
-scenes. The roster has since grown (speed parity, Ted-arena contracts, boss
-geometry for all nine arenas) and gates stay red while the matching work is
-in flight — a red gate here is a to-do list, not a shipped defect.
+The current candidate cleared **78/78** gates, including cold game start,
+Stage 1 terrain and pickups, later-stage movement soaks, low-health flicker,
+title-demo actors, all nine bosses, all seven stage comparisons, menus, and
+story scenes. The receipt also binds two byte-identical 512 KiB builds to the
+tested source and ROM hash, includes a phase-shifted 0.00% timing null, and
+reports accepted deviations at the top level rather than hiding them inside
+passing gates.
 
 - [Latest hash-bound receipt](docs/release/verification/latest.json)
 - [Release and packaging rules](docs/release/README.md)

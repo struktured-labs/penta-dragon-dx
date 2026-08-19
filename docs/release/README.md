@@ -5,31 +5,35 @@
 Before packaging or committing release-sensitive source, run:
 
 ```bash
-python3 scripts/diagnostics/run_deterministic_suite.py
+python3 scripts/diagnostics/run_deterministic_suite.py \
+  --expanded-ted \
+  --menu-icon-colors
 ```
 
 The command refuses to start while any mGBA process is active, builds twice
-under `/tmp`, requires byte-identical candidates, and runs the current
-51-gate matrix serially. Only a complete pass writes the ROM-free,
+under the suite's repository-local `tmp/` output, requires byte-identical
+candidates, and runs the current 78-gate expanded matrix serially. Only a
+complete pass writes the ROM-free,
 source-fingerprint-bound receipt at
 `docs/release/verification/latest.json`.
 
 Before presenting a build for headed play or a livestream, run the dedicated
-21-gate live profile:
+full live profile:
 
 ```bash
 python3 scripts/diagnostics/verify_live_regression.py \
-  rom/working/penta_dragon_dx_FIXED.gb \
-  --output /tmp/penta-live-regression
+  tmp/menu-icons-candidate-r5/penta-dragon-dx-menu-icons-r5.gb \
+  --output tmp/penta-live-regression
 ```
 
 Its `manifest.json` is the hash-bound receipt for the exact candidate. The
-profile includes separate natural-attract and live-gameplay pickup gates, both
+profile is ROM-aware: the 512 KiB expanded stream candidate requires the same
+78 gates as the release matrix, while the legacy profile currently requires
+86. It includes separate natural-attract and live-gameplay pickup gates, both
 GAME START paths, Stage 1 traversal/copy/bleed, speed, spikes, bonus gameplay,
-ordinary and low-health flicker, the complete spotlight roster, and the
-opening/pre-final/post-final story scenes and the complete credits/END/epilogue
-trajectory. Success is accepted only when the manifest contains exactly 21
-passing results; a subprocess exit code without that exact receipt is rejected.
+ordinary and low-health flicker, all-nine matched-work boss timing and its
+phase-shift null, the complete spotlight roster, and every story/ending route.
+A subprocess exit code without the exact profile-aware manifest is rejected.
 
 During the matrix, a random per-run token identifies only that run's emulator
 descendants across `xvfb` sessions and PID namespaces. A foreign emulator is
@@ -65,7 +69,7 @@ sweep are bound to the same ROM hash, the only permitted output name contains
 
 ```bash
 python3 scripts/build_release_bundle.py \
-  --emulator-manifest /tmp/penta-release-candidate/manifest.json
+  --emulator-manifest tmp/penta-release-candidate/manifest.json
 ```
 
 Final mode is deliberately stricter:
@@ -93,7 +97,9 @@ the approved YAML using temporary outputs:
 python3 scripts/record_palette_approval.py \
   --output /path/to/palette-approval.json \
   --confirm "AUDIENCE APPROVED" \
-  --notes "Final colors selected during the Twitch stream"
+  --notes "Final colors selected during the Twitch stream" \
+  --expanded-ted \
+  --menu-icon-colors
 ```
 
 Romhacking.net stopped accepting new database submissions in August 2024, so

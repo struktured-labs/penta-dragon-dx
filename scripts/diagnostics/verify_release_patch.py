@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from itertools import zip_longest
 import sys
 from pathlib import Path
 
@@ -43,13 +44,23 @@ def main() -> int:
             "requiring or changing the checked-in release patch"
         ),
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "atomically replace --patch with the deterministic patch for "
+            "the selected ROM, then verify the checked-in form"
+        ),
+    )
     args = parser.parse_args()
+    if args.candidate_only and args.update:
+        parser.error("--candidate-only and --update are mutually exclusive")
 
     required = [
         ("base ROM", args.base),
         ("release ROM", args.rom),
     ]
-    if not args.candidate_only:
+    if not args.candidate_only and not args.update:
         required.append(("IPS patch", args.patch))
     for label, path in required:
         if not path.is_file():
@@ -64,10 +75,8 @@ def main() -> int:
         return fail(
             f"unsupported base ROM MD5 {base_hash}; expected {SUPPORTED_BASE_MD5}"
         )
-    if len(base) != len(release):
-        return fail(
-            f"base/release size mismatch: {len(base)} != {len(release)}"
-        )
+    if len(release) < len(base):
+        return fail(f"release ROM shrank: {len(base)} -> {len(release)}")
 
     try:
         rebuilt_patch = build_ips_patch(base, release)
@@ -79,6 +88,15 @@ def main() -> int:
         patch = rebuilt_patch
         patch_hash = md5(patch)
     else:
+        if args.update:
+            args.patch.parent.mkdir(parents=True, exist_ok=True)
+            temporary = args.patch.with_suffix(args.patch.suffix + ".tmp")
+            temporary.write_bytes(rebuilt_patch)
+            temporary.replace(args.patch)
+            print(
+                f"UPDATED: deterministic IPS {args.patch} "
+                f"({len(rebuilt_patch)} bytes/{md5(rebuilt_patch)})"
+            )
         patch = args.patch.read_bytes()
         patch_hash = md5(patch)
         if patch != rebuilt_patch:
@@ -95,7 +113,9 @@ def main() -> int:
     if reconstructed != release:
         mismatches = sum(
             actual != expected
-            for actual, expected in zip(reconstructed, release)
+            for actual, expected in zip_longest(
+                reconstructed, release, fillvalue=None
+            )
         )
         return fail(
             f"IPS output differs from release ROM in {mismatches} byte(s): "
@@ -113,6 +133,7 @@ def main() -> int:
         return fail("IPS changed while verifying itself")
 
     print(f"PASS: supported base ROM MD5 {base_hash}")
+    print(f"PASS: ROM size {len(base)} -> {len(release)} bytes")
     mode = "in-memory candidate IPS" if args.candidate_only else "checked-in IPS"
     print(
         f"PASS: deterministic {mode} {len(patch)} bytes, MD5 {patch_hash}"

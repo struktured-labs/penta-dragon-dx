@@ -48,6 +48,13 @@ PURE_COMPLETION_PATTERNS = (
     # A register route token avoids even a fixed-bank CALL after ordinary
     # room-$03 and prerecorded copies while retaining hazard publication.
     bytes.fromhex("F1 3D 28 03 F5 18 D1 78 FE 05 C4 44 08 FB C9"),
+    # Current three-cell atomic maps gate the Stage-1 post-copy hazard call on
+    # D880 bit 3 before restoring IME. The final RET is still the unique point
+    # at which the complete 24x24 tile plane is visible.
+    bytes.fromhex(
+        "F1 3D 28 03 F5 18 D1 FA 80 D8 E6 F7 FE 02 "
+        "CC E2 10 FB C9"
+    ),
 )
 STOCK_COPY_PREFIX = bytes.fromhex("2E 00 11 A0 C1 0E 08 06 18 F3")
 STOCK_COPY_COMPLETION = 0x436D
@@ -236,7 +243,11 @@ def run_state(
     if state is not None:
         if rom_bytes[
             STAGE1_SETUP_ROM_OFFSET:STAGE1_SETUP_ROM_OFFSET + 4
-        ] in (bytes.fromhex("78 E0 A5 F3"), bytes.fromhex("78 E0 E1 F3")):
+        ] in (
+            bytes.fromhex("78 E0 A5 F3"),
+            bytes.fromhex("78 E0 E1 F3"),
+            bytes.fromhex("7C E0 A5 F3"),
+        ):
             # Current route-caching setup: preserve the caller's B token in
             # verified-free FFA5 before entering the bounded interrupt window.
             setup_length = 14
@@ -264,7 +275,7 @@ def run_state(
             STAGE1_SETUP_ROM_OFFSET:
             STAGE1_SETUP_ROM_OFFSET + setup_length
         ]
-        if len(setup) != setup_length or setup[0] not in (0x11, 0x78, 0xF3):
+        if len(setup) != setup_length or setup[0] not in (0x11, 0x78, 0x7C, 0xF3):
             raise RuntimeError("candidate Stage 1 setup is missing or malformed")
         setup_file = runtime / "stage1_atomic_setup.bin"
         setup_file.write_bytes(setup)

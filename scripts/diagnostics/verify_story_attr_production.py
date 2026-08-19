@@ -38,7 +38,14 @@ SPECS = (
     ("pre_final_sara", "story", 7, 0x19, {"SEQUENCE": 0x04}),
     ("post_final", "story", 5, 0x1A, {"SEQUENCE": 0x05}),
     ("post_final_lisa", "story", 6, 0x1A, {"SEQUENCE": 0x05}),
-    ("post_final_sara", "story", 7, 0x1A, {"SEQUENCE": 0x05}),
+    # This stock post-final page auto-advances 167 frames after the generated
+    # state resumes.  Audit 140 continuous frames: comfortably beyond the
+    # independent 60-frame clean-load contract, but before the intentional
+    # page transition.  All layout/CRAM/safety checks remain unchanged.
+    (
+        "post_final_sara", "story", 7, 0x1A,
+        {"SEQUENCE": 0x05, "WAIT": 140},
+    ),
     (
         "ending_credits", "ending", 1, 0x16,
         {"D889": 0x01, "DCE2": 0x00, "FFF9": 0x00, "WAIT": 140},
@@ -278,6 +285,7 @@ def run_one(
     process = subprocess.Popen(
         [
             mgba,
+            "--fastforward",
             "-t",
             str(state),
             "--script",
@@ -337,9 +345,11 @@ def main() -> int:
     parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--states", type=Path, default=DEFAULT_STATES)
     parser.add_argument("--palette-yaml", type=Path, default=DEFAULT_PALETTES)
-    parser.add_argument("--output", type=Path, default=Path(
-        "/tmp/penta-story-attr-production"
-    ))
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / "tmp/penta-story-attr-production",
+    )
     parser.add_argument(
         "--mgba", default=str(ROOT / "scripts/mgba-qt-singleflight")
     )

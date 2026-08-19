@@ -15,6 +15,7 @@ local STAGE_CONFIRM_OFFSET =
   tonumber(os.getenv("GAME_START_STAGE_CONFIRM_OFFSET") or "-1")
 local AFTER_ATTRACT = os.getenv("GAME_START_AFTER_ATTRACT") == "1"
 local TRACE_EVENTS = os.getenv("GAME_START_TRACE_EVENTS") == "1"
+local TRACE_FRAMES = os.getenv("GAME_START_TRACE_FRAMES") == "1"
 local AFTER_ATTRACT_TITLE_DELAY = tonumber(
   os.getenv("GAME_START_AFTER_ATTRACT_TITLE_DELAY") or "180")
 local WARM_RESET = os.getenv("GAME_START_WARM_RESET") == "1"
@@ -81,7 +82,7 @@ local route_armed = not AFTER_ATTRACT
 local live_trace = nil
 local event_trace = nil
 
-if AFTER_ATTRACT then
+if AFTER_ATTRACT or TRACE_FRAMES then
   live_trace = assert(io.open(OUT .. ".live.tsv", "w"))
   live_trace:write(
     "frame\tpc\tsp\tkeys\td880\tffc1\tdcfd\tffba\tffbd\tlcdc\tbgp\tly" ..
@@ -98,11 +99,16 @@ if AFTER_ATTRACT and TRACE_EVENTS then
   event_trace:flush()
 end
 
-pcall(function()
-  emu:setBreakpoint(function()
-    demo_delay_hits = demo_delay_hits + 1
-  end, 0x10E7)
-end)
+-- This mGBA headless build stops execution after a breakpoint callback. The
+-- attract-only route needs the diagnostic counter; ordinary cold/warm GAME
+-- START routes must remain breakpoint-free or they stall before frame 1.
+if AFTER_ATTRACT then
+  pcall(function()
+    emu:setBreakpoint(function()
+      demo_delay_hits = demo_delay_hits + 1
+    end, 0x10E7)
+  end)
+end
 
 local function register(name)
   local ok, value = pcall(function() return emu:readRegister(name) end)
@@ -221,7 +227,6 @@ end
 
 callbacks:add("frame", function()
   frame = frame + 1
-
   if WARM_RESET and not did_reset and frame == WARM_RESET_FRAME then
     sample("pre_reset")
     did_reset = true

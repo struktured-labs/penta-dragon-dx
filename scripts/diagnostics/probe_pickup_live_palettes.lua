@@ -9,6 +9,7 @@ local SPEC = assert(os.getenv("PICKUP_LIVE_SPEC"), "PICKUP_LIVE_SPEC required")
 local SETTLE = tonumber(os.getenv("PICKUP_LIVE_SETTLE") or "180")
 local DEMO_REARM_ROWS = tonumber(
     os.getenv("PICKUP_LIVE_DEMO_REARM_ROWS") or "18")
+local SUBSTITUTE = os.getenv("PICKUP_LIVE_SUBSTITUTE")
 local function read_register(name)
     for _, spelling in ipairs({string.lower(name), string.upper(name)}) do
         local ok, value = pcall(function() return emu:readRegister(spelling) end)
@@ -41,6 +42,7 @@ local frame = 0
 local main_loop_hits = 0
 local tile_copy_hits = 0
 local sweep_trace = {}
+local substitution_counts = {vram = 0, source = 0}
 pcall(function()
     emu:setBreakpoint(function() main_loop_hits = main_loop_hits + 1 end, 0x016C)
     emu:setBreakpoint(function() tile_copy_hits = tile_copy_hits + 1 end, 0x42A7)
@@ -78,7 +80,75 @@ local function signature_at(base, offset, tiles)
         and vram_read(0, base + offset + 33) == tiles[4]
 end
 
+local function parse_substitution(value)
+    if not value then return nil end
+    local before_text, after_text = value:match("^([^:]+):([^:]+)$")
+    assert(before_text and after_text, "bad pickup substitution")
+    local function parse_half(text)
+        local result = {}
+        for byte in text:gmatch("[^,]+") do
+            result[#result + 1] = assert(tonumber(byte, 16))
+        end
+        assert(#result == 4, "pickup substitution must contain four tiles")
+        return result
+    end
+    return {before = parse_half(before_text), after = parse_half(after_text)}
+end
+
+local substitution = parse_substitution(SUBSTITUTE)
+
+local function install_substitution(clear_attributes)
+    if not substitution then return end
+    for _, base in ipairs({0x9800, 0x9C00}) do
+        for row = 0, 30 do
+            for column = 0, 30 do
+                local offset = row * 32 + column
+                if signature_at(base, offset, substitution.before) then
+                    local addresses = {
+                        base + offset, base + offset + 1,
+                        base + offset + 32, base + offset + 33,
+                    }
+                    emu:write8(0xFF4F, 0)
+                    for index, address in ipairs(addresses) do
+                        emu:write8(address, substitution.after[index])
+                    end
+                    if clear_attributes then
+                        emu:write8(0xFF4F, 1)
+                        for _, address in ipairs(addresses) do
+                            emu:write8(address, 0)
+                        end
+                    end
+                    substitution_counts.vram = substitution_counts.vram + 1
+                end
+            end
+        end
+    end
+    emu:write8(0xFF4F, 0)
+    -- The native room copier consumes 32-column tile planes in C000-C5FF.
+    -- Replace exact 2x2 source signatures only; no attributes are injected.
+    for base = 0xC000, 0xC5C0, 0x20 do
+        for column = 0, 30 do
+            local address = base + column
+            if emu:read8(address) == substitution.before[1]
+                and emu:read8(address + 1) == substitution.before[2]
+                and emu:read8(address + 32) == substitution.before[3]
+                and emu:read8(address + 33) == substitution.before[4] then
+                emu:write8(address, substitution.after[1])
+                emu:write8(address + 1, substitution.after[2])
+                emu:write8(address + 32, substitution.after[3])
+                emu:write8(address + 33, substitution.after[4])
+                substitution_counts.source = substitution_counts.source + 1
+            end
+        end
+    end
+end
+
 local function finish()
+    -- If the room publisher naturally rebuilt the host signature, render the
+    -- same-class target IDs over its live attributes for the final audit. The
+    -- frame-1 pass above cleared both maps first, so the retained attributes
+    -- here are current-ROM publication output, never fixture data.
+    install_substitution(false)
     emu:screenshot(SCREENSHOT)
     local handle = assert(io.open(OUT, "w"))
     local lcdc = emu:read8(0xFF40)
@@ -97,6 +167,8 @@ local function finish()
     handle:write(string.format("tile_copy_hits=%d\n", tile_copy_hits))
     handle:write(string.format("demo_rearm_rows=%d\n", DEMO_REARM_ROWS))
     handle:write(string.format("sweep_hits=%d\n", #sweep_trace))
+    handle:write(string.format("substitution_vram=%d\n", substitution_counts.vram))
+    handle:write(string.format("substitution_source=%d\n", substitution_counts.source))
     for _, event in ipairs(sweep_trace) do
         handle:write("sweep=" .. event .. "\n")
     end
@@ -164,6 +236,7 @@ callbacks:add("frame", function()
         emu:write8(0xDF4E, 0x00)
     end
     if frame == 1 then
+        install_substitution(true)
         -- Force a real current-ROM scene-table dispatch after loading the
         -- historical state image.
         emu:write8(0xDF0D, 0xFF)

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -54,22 +56,25 @@ def run_probe(
     scene: int,
     frames: int,
     timeout: float,
+    reload_material: bool = False,
 ) -> list[tuple[int, bytes, bytes]]:
     env = os.environ.copy()
     env.update({
         "CRYSTAL_FLICKER_OUT": str(output),
         "CRYSTAL_FLICKER_FRAMES": str(frames),
         "CRYSTAL_FLICKER_EXPECTED_SCENE": str(scene),
-        "CRYSTAL_FLICKER_RELOAD_MATERIAL": "1",
+        "CRYSTAL_FLICKER_RELOAD_MATERIAL": "1" if reload_material else "0",
         "QT_QPA_PLATFORM": "offscreen",
         "SDL_AUDIODRIVER": "dummy",
     })
+    runtime_dir = output.parent / f"{output.name}-runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
     marker = output.with_suffix(".done")
     process = subprocess.Popen(
         [
             str(mgba), "--fastforward", "-t", str(state),
-            "-C", f"savegamePath={output.parent}",
-            "-C", f"savestatePath={output.parent}",
+            "-C", f"savegamePath={runtime_dir}",
+            "-C", f"savestatePath={runtime_dir}",
             str(rom), "--script", str(PROBE),
         ],
         cwd=ROOT,
@@ -97,7 +102,14 @@ def run_probe(
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-    assert marker.read_text().strip() == "ok", marker.read_text().strip()
+    marker_status = marker.read_text().strip()
+    if marker_status != "ok":
+        trace_path = output.with_suffix(".trace")
+        tail = trace_path.read_text().splitlines()[-4:] if trace_path.is_file() else []
+        raise RuntimeError(
+            f"crystal probe status={marker_status} scene={scene:02X} "
+            f"state={state} trace_tail={tail}"
+        )
     rows = parse_trace(output.with_suffix(".trace"))
     assert len(rows) == frames, f"expected {frames} trace rows, got {len(rows)}"
     return rows
@@ -116,6 +128,7 @@ def main() -> int:
     parser.add_argument("--mgba", type=Path, default=DEFAULT_MGBA)
     parser.add_argument("--frames", type=int, default=720)
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
     rom = args.rom.resolve().read_bytes()
@@ -181,7 +194,11 @@ def main() -> int:
         and shalamar_state.is_file()
         and args.stage3_state.is_file()
     )
-    with tempfile.TemporaryDirectory(prefix="penta-crystal-ghost-") as temp:
+    scratch_root = ROOT / "tmp"
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-crystal-ghost-", dir=scratch_root
+    ) as temp:
         temp_path = Path(temp)
         crystal_candidate_state = temp_path / "crystal.ss0"
         shalamar_candidate_state = temp_path / "shalamar.ss0"
@@ -214,7 +231,11 @@ def main() -> int:
         )
         crystal_rows = run_probe(
             args.mgba.resolve(), args.rom.resolve(), crystal_candidate_state,
-            temp_path / "crystal", scene, args.frames, args.timeout,
+            temp_path / "crystal-a", scene, args.frames, args.timeout, True,
+        )
+        crystal_replay_rows = run_probe(
+            args.mgba.resolve(), args.rom.resolve(), crystal_candidate_state,
+            temp_path / "crystal-b", scene, args.frames, args.timeout, True,
         )
         shalamar_rows = run_probe(
             args.mgba.resolve(), args.rom.resolve(), shalamar_candidate_state,
@@ -224,6 +245,10 @@ def main() -> int:
             args.mgba.resolve(), args.rom.resolve(), stage3_candidate_state,
             temp_path / "stage3", 0x04, 24, args.timeout,
         )
+
+    assert crystal_rows == crystal_replay_rows, (
+        "Crystal Dragon ghost replay was not deterministic"
+    )
 
     for slot in slots:
         crystal_rows_for_slot = {
@@ -274,6 +299,38 @@ def main() -> int:
         f"{longest_blank_run} consecutive settled frames; OG permits one"
     )
 
+    def row_digest(rows: list[tuple[int, bytes, bytes]]) -> str:
+        payload = b"".join(
+            frame.to_bytes(4, "little") + oam + obj
+            for frame, oam, obj in rows
+        )
+        return hashlib.sha256(payload).hexdigest()
+
+    receipt = {
+        "schema": "penta-crystal-ghost-v1",
+        "status": "pass",
+        "rom_sha256": hashlib.sha256(rom).hexdigest(),
+        "crystal_state_sha256": hashlib.sha256(
+            crystal_state.read_bytes()
+        ).hexdigest(),
+        "frames": args.frames,
+        "deterministic_replay": True,
+        "replay_sha256": [row_digest(crystal_rows), row_digest(crystal_replay_rows)],
+        "scene": f"{scene:02X}",
+        "obj_slots": list(slots),
+        "material_bytes": source_bytes.hex().upper(),
+        "body_sprite_visibility": {
+            "minimum": min(visibility),
+            "maximum": max(visibility),
+            "longest_settled_blank_frames": longest_blank_run,
+        },
+        "shalamar_isolation": "pass",
+        "stage3_isolation": "pass",
+    }
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(receipt, indent=2) + "\n")
+
     print("PASS: Crystal Dragon ghost palette")
     print(
         f"  scene ${scene:02X}: OBJ{slots[0]}-{slots[-1]} <- "
@@ -292,6 +349,8 @@ def main() -> int:
         "  Stage 3 isolation: shared FFBA index retained all four base rows "
         "under scene $04"
     )
+    if args.output is not None:
+        print(f"  receipt: {args.output.resolve()}")
     return 0
 
 

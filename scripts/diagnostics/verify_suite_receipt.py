@@ -19,6 +19,7 @@ from suite_contract import (
 
 sys.path.insert(0, str(ROOT / "scripts/diagnostics"))
 from verify_release_candidate import build_gates
+from suite_release_ledger import validate_release_ledger
 
 
 FORBIDDEN_SUFFIXES = {
@@ -134,20 +135,35 @@ def main() -> int:
 
     build = receipt.get("deterministic_build", {})
     candidate = receipt.get("candidate", {})
+    profile = receipt.get("build_profile", {})
+    expanded = profile.get("expanded_ted") is True
+    menu_icons = profile.get("menu_icon_colors") is True
+    expected_size = 524288 if expanded else 262144
     if (
         build.get("passes") != 2
         or build.get("byte_identical") is not True
         or build.get("build_a_sha256") != candidate.get("sha256")
         or build.get("build_b_sha256") != candidate.get("sha256")
-        or candidate.get("size") != 262144
+        or candidate.get("size") != expected_size
     ):
-        return fail("receipt does not prove two byte-identical 256 KiB builds")
+        return fail(
+            "receipt does not prove two byte-identical builds for its profile"
+        )
+    if menu_icons and not expanded:
+        return fail("receipt enables menu icons without the expanded profile")
+    if expanded and (
+        profile.get("native_sparse") is not True
+        or profile.get("native_pose_table") is not True
+    ):
+        return fail("expanded receipt omits native Ted sparse/pose controls")
 
     expected_names = [
         gate.name
         for gate in build_gates(
             ROOT / "tmp" / "receipt-candidate.gb",
             ROOT / "tmp" / "receipt-artifacts",
+            expanded_candidate_override=expanded,
+            menu_icon_candidate_override=menu_icons,
         )
     ]
     matrix = receipt.get("matrix", {})
@@ -171,6 +187,12 @@ def main() -> int:
     ]
     if failed:
         return fail(f"receipt contains non-passing gates: {failed}")
+
+    ledger_errors = validate_release_ledger(
+        receipt.get("release_ledger"), expanded=expanded
+    )
+    if ledger_errors:
+        return fail("invalid release exception ledger: " + "; ".join(ledger_errors))
 
     if args.staged:
         try:

@@ -24,8 +24,10 @@ from PIL import Image, UnidentifiedImageError
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts/diagnostics"))
 
 from penta_dragon_dx.patch_builder import apply_ips_patch, build_ips_patch
+from verify_release_candidate import build_gates
 
 
 VERSION = "v3.01"
@@ -37,58 +39,20 @@ DEFAULT_PALETTES = ROOT / "palettes/penta_palettes_v097.yaml"
 DEFAULT_OUTPUT = ROOT / "dist"
 README_TEMPLATE = ROOT / "docs/release/README.txt.in"
 SUPPORTED_BASE_MD5 = "df43e0adfdc74b2829c7e95e91c71a28"
-REQUIRED_GATES = {
-    "emulator_singleflight_guard",
-    "title_footer_integration",
-    "title_animation_frames",
-    "flash_attribution",
-    "title_color",
-    "title_showcase",
-    "title_visual_receipts",
-    "title_cursor",
-    "stage_intro_timing",
-    "menu_hud_and_combo",
-    "levelselect_screen",
-    "game_start_routes",
-    "game_start_after_attract",
-    "gameplay_speed_parity",
-    "gameplay_bg_palettes",
-    "pickup_class_palettes",
-    "stage1_spike_palettes",
-    "pickup_live_retry_contract",
-    "pickup_live_palettes",
-    "stage1_pickup_art",
-    "bonus_stage_live",
-    "stage1_no_color_bleed",
-    "stage1_tilemap_integrity",
-    "menu_window_publish_order",
-    "stale_gameplay_window",
-    "stage2_stream_soak",
-    "stage1_north_route_integrity",
-    "gameplay_obj_palettes",
-    "frame_flicker",
-    "low_health_flicker",
-    "miniboss_color",
-    "later_stage_integrity",
-    "later_stage_soak",
-    "boss_arenas",
-    "death_gameover",
-    "title_idle_reel",
-    "spotlight_full_roster",
-    "opening_cutscene",
-    "final_cutscene_mgba",
-    "ending_inventory_a",
-    "ending_inventory_b",
-    "ending_discriminators",
-    "scroll_stability",
-    "phantom_sound",
-    "live_palette_deck",
-    "story_attr_production",
-    "palette_build_roundtrip",
-    "candidate_ips_roundtrip",
-    "mister_reservation_guard",
-}
+REQUIRED_GATE_ORDER = tuple(
+    gate.name
+    for gate in build_gates(
+        ROOT / "tmp/release-roster-candidate.gb",
+        ROOT / "tmp/release-roster-artifacts",
+        expanded_candidate_override=True,
+        menu_icon_candidate_override=True,
+    )
+)
+REQUIRED_GATES = set(REQUIRED_GATE_ORDER)
 EXPECTED_GATE_COUNT = len(REQUIRED_GATES)
+MENU_ICON_SIGNATURE = bytes.fromhex(
+    "F0 99 F5 3E 14 CD 61 00 CD 00 40"
+)
 REQUIRED_HARDWARE_CHECKPOINTS = {
     "gbc_core",
     "deployed_rom_hash",
@@ -190,6 +154,14 @@ def validate_emulator_manifest(path: Path, rom: bytes) -> dict:
         fail("tested ROM hash was not intact after the emulator matrix")
     if manifest.get("rom_hashes_intact") is not True:
         fail("emulator manifest did not prove intact ROM hashes")
+    if manifest.get("source_inputs_intact") is not True:
+        fail("emulator manifest did not prove intact suite inputs")
+    if (
+        not manifest.get("source_fingerprint")
+        or manifest.get("source_fingerprint")
+        != manifest.get("source_fingerprint_after")
+    ):
+        fail("emulator manifest source fingerprint changed during the run")
 
     results = manifest.get("results")
     if not isinstance(results, list) or len(results) != EXPECTED_GATE_COUNT:
@@ -278,6 +250,15 @@ def validate_palette_approval(path: Path, rom: bytes, palette_path: Path) -> dic
     for key, value in expected.items():
         if manifest.get(key) != value:
             fail(f"palette approval {key} does not match {value!r}")
+    expected_profile = {
+        "name": "expanded-ted-menu",
+        "expanded_ted": True,
+        "native_sparse": True,
+        "native_pose_table": True,
+        "menu_icon_colors": True,
+    }
+    if manifest.get("build_profile") != expected_profile:
+        fail("palette approval does not bind the expanded-Ted menu profile")
     return manifest
 
 
@@ -487,8 +468,12 @@ def main() -> int:
             f"unsupported base ROM MD5 {base_hashes['md5']}; "
             f"expected {SUPPORTED_BASE_MD5}"
         )
-    if len(base) != len(rom):
-        fail(f"base/release size mismatch: {len(base)} != {len(rom)}")
+    if len(rom) < len(base):
+        fail(f"release ROM shrank: {len(base)} -> {len(rom)}")
+    if len(rom) != 524288:
+        fail(f"release ROM is not the 512 KiB expanded profile: {len(rom)} bytes")
+    if rom[0x1B48:0x1B48 + len(MENU_ICON_SIGNATURE)] != MENU_ICON_SIGNATURE:
+        fail("release ROM lacks the isolated item-menu publisher")
     if build_ips_patch(base, rom) != patch:
         fail("checked-in IPS is stale or nondeterministic")
     if apply_ips_patch(base, patch) != rom:

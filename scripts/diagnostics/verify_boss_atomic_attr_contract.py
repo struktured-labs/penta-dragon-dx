@@ -23,8 +23,6 @@ from build_v302_title_fix import (  # noqa: E402
     ARENA_ATTR_SEMANTIC_FRAGMENT_SIZE,
     ARENA_ATTR_SEMANTIC_RUNTIME_ADDR,
     ARENA_ATTR_SEMANTIC_SENTINEL_ADDR,
-    ARENA_TILE_RAW_KEY_SAMPLES,
-    PENTA_TILE_RAW_KEY_SAMPLE,
     BANK13,
     LAVA_ATTR_SCENE_DISPATCH_ADDR,
     LAVA_ATTR_STAGE7_RUNTIME_ADDR,
@@ -41,6 +39,12 @@ from build_v302_title_fix import (  # noqa: E402
     build_stage1_atomic_attr_stack_vector,
 )
 from build_v301_teleport import ARENA_ORDER, _table_from_dict  # noqa: E402
+from arena_semantic_key import (  # noqa: E402
+    PENTA_SEMANTIC_SAMPLE,
+    RAW_SUM_SAMPLES,
+    SUM_A_SAMPLES,
+    SUM_B_SAMPLES,
+)
 from boss_geometry_contract import BOSSES  # noqa: E402
 
 
@@ -68,7 +72,11 @@ def main() -> int:
     # must seed D=$FF, not $DF. A wrong discriminator still embeds a perfect
     # dispatcher and LUT set but silently sends every animated boss through
     # the pure tile path, recreating detached/bleeding terrain fragments.
-    assert rom[0x42A7:0x42AE] == bytes.fromhex("2E 00 03 0B 16 FF CD"), (
+    # The current stock-width copier retains a cycle-neutral JR $+0 where the
+    # retired phase gate used to sit.  Assert the semantic ABI at the call
+    # itself instead of pinning unrelated preceding setup bytes.
+    decision_call = bytes.fromhex("16 FF CD 85 34")
+    assert rom[0x42A7:0x42B3].count(decision_call) == 1, (
         "shared map copier does not seed the boss-decision RST with D=$FF"
     )
     vector = build_stage1_atomic_attr_stack_vector()
@@ -128,14 +136,24 @@ def main() -> int:
     assert len(semantic_runtime) <= (
         ARENA_ATTR_SEMANTIC_SENTINEL_ADDR - ARENA_ATTR_SEMANTIC_RUNTIME_ADDR
     )
-    assert len(ARENA_TILE_RAW_KEY_SAMPLES) == 5
-    assert 0 <= PENTA_TILE_RAW_KEY_SAMPLE < 0x240
+    assert all(
+        0 <= sample < 0x240
+        for sample in (
+            *SUM_A_SAMPLES, *SUM_B_SAMPLES, *RAW_SUM_SAMPLES,
+            PENTA_SEMANTIC_SAMPLE,
+        )
+    )
     # POP HL / POP AF / POP AF / RET is the intentional exact-repeat escape:
     # it preserves the caller while discarding only the RST and copier frames.
     assert bytes.fromhex("E1 F1 F1 C9") in semantic_runtime
     assert (
         bytes.fromhex("3E 01 E1 C9") in semantic_runtime
         or bytes.fromhex("3E 01 B7 E1 C9") in semantic_runtime
+        or bytes.fromhex("AF E0 A9 3C E1 C9") in semantic_runtime
+        # Current dual-map-anchor path stores D=$53/$57 to FFA9, then INC A.
+        # The entry comparison leaves A nonzero for every changed layout, so
+        # INC A; POP HL; RET is the compact forced-NZ return.
+        or bytes.fromhex("E0 A9 3C E1 C9") in semantic_runtime
     ), (
         "changed arena layouts are not forced onto the atomic path"
     )
@@ -152,9 +170,19 @@ def main() -> int:
         table = _table_from_dict(name)
         assert len(table) == 0x100 and max(table) <= 7
         table_offset = BANK13 + ARENA_BASE_ADDR - 0x4000 + index * 0x100
-        assert rom[table_offset:table_offset + 0x100] == table, (
-            f"arena {index} ({name}) ROM table differs from compiled data"
-        )
+        embedded = rom[table_offset:table_offset + 0x100]
+        if index == 4:
+            # Ted's measured publication domain ends at tile $86. Its
+            # unreachable $87-$FF suffix is the private runtime source cave;
+            # require every reachable palette byte while leaving executable
+            # payload to the dedicated Ted ownership/determinism gates.
+            assert embedded[:0x87] == table[:0x87], (
+                "Ted reachable LUT $00-$86 differs from compiled data"
+            )
+        else:
+            assert embedded == table, (
+                f"arena {index} ({name}) ROM table differs from compiled data"
+            )
 
     groups = {scene: classify(scene) for scene in range(0x20)}
     assert {
@@ -182,10 +210,11 @@ def main() -> int:
     print(f"  shared geometry helper: {len(geometry)} bytes exact")
     print(
         f"  semantic runtime: {len(semantic_runtime)} bytes, "
-        f"five-cell global key {ARENA_TILE_RAW_KEY_SAMPLES}, "
-        f"Penta key ({PENTA_TILE_RAW_KEY_SAMPLE},)"
+        f"shared key {len(SUM_A_SAMPLES)}+{len(SUM_B_SAMPLES)}+"
+        f"{len(RAW_SUM_SAMPLES)} samples, Penta key "
+        f"({PENTA_SEMANTIC_SAMPLE},)"
     )
-    print("  arena LUT pages: 9/9 exact")
+    print("  arena LUTs: 8/8 complete pages exact; Ted $00-$86 exact")
     return 0
 
 

@@ -5,7 +5,7 @@
 -- real-time path.  The companion Python verifier turns this trace into episode
 -- summaries and can then request only the useful visual frames.
 
-local OUT = os.getenv("ATTRACT_OUT") or "/tmp/penta-attract-inventory.tsv"
+local OUT = os.getenv("ATTRACT_OUT") or "tmp/penta-attract-inventory.tsv"
 local FRAMES = tonumber(os.getenv("ATTRACT_FRAMES") or "14000")
 local SAMPLE_EVERY = tonumber(os.getenv("ATTRACT_SAMPLE_EVERY") or "4")
 
@@ -14,16 +14,37 @@ local previous_scene = -1
 local previous_visible = -1
 local wrote_gargoyle_hram = false
 local gargoyle_rst18_flags = {}
+local stage_main_loop_hits, gargoyle_main_loop_hits = 0, 0
+local stage_tick_changes, gargoyle_tick_changes = 0, 0
+local last_stage_tick, last_gargoyle_tick = nil, nil
 local report = assert(io.open(OUT, "w"))
 report:write("kind\tframe\td880\tffc1\tff91\tdcfd\tdce8\tffba\tffbf\tffbe\tfff2\tdd09\tvisible\thw_oam\tshadow_c000\tshadow_c100\n")
 
 pcall(function()
   emu:setBreakpoint(function()
-    if emu:read8(0xD880) == 0x0A then
+    local old_svbk = emu:read8(0xFF70)
+    emu:write8(0xFF70, 1)
+    local scene = emu:read8(0xD880)
+    emu:write8(0xFF70, old_svbk)
+    if scene == 0x0A then
       local flags = emu:readRegister("f") & 0xF0
       gargoyle_rst18_flags[flags] = (gargoyle_rst18_flags[flags] or 0) + 1
     end
   end, 0x0018)
+end)
+
+pcall(function()
+  emu:setBreakpoint(function()
+    local old_svbk = emu:read8(0xFF70)
+    emu:write8(0xFF70, 1)
+    local scene = emu:read8(0xD880)
+    emu:write8(0xFF70, old_svbk)
+    if scene == 0x02 then
+      stage_main_loop_hits = stage_main_loop_hits + 1
+    elseif scene == 0x0A then
+      gargoyle_main_loop_hits = gargoyle_main_loop_hits + 1
+    end
+  end, 0x016C)
 end)
 
 local function visible_oam(base)
@@ -58,20 +79,39 @@ callbacks:add("frame", function()
   frame = frame + 1
   emu:setKeys(0)
 
+  -- Expanded palette publishers temporarily select SVBK2/3, where every
+  -- Dxxx address aliases cache/runtime memory.  Frame callbacks can land in
+  -- that interval, so pin the owning game-state bank while sampling and then
+  -- restore the interrupted bank before resuming the CPU.
+  local old_svbk = emu:read8(0xFF70)
+  emu:write8(0xFF70, 1)
   local scene = emu:read8(0xD880)
-  local ffc1 = emu:read8(0xFFC1)
-  local ff91 = emu:read8(0xFF91)
   local dcfd = emu:read8(0xDCFD)
   local dce8 = emu:read8(0xDCE8)
+  local dd09 = emu:read8(0xDD09)
+  emu:write8(0xFF70, old_svbk)
+  local ffc1 = emu:read8(0xFFC1)
+  local ff91 = emu:read8(0xFF91)
   local ffba = emu:read8(0xFFBA)
   local ffbf = emu:read8(0xFFBF)
   local ffbe = emu:read8(0xFFBE)
   local fff2 = emu:read8(0xFFF2)
-  local dd09 = emu:read8(0xDD09)
   local hw = visible_oam(0xFE00)
   local c000 = visible_oam(0xC000)
   local c100 = visible_oam(0xC100)
   local visible = #hw
+  local tick = emu:read8(0xFFD4)
+  if scene == 0x02 then
+    if last_stage_tick ~= nil and tick ~= last_stage_tick then
+      stage_tick_changes = stage_tick_changes + 1
+    end
+    last_stage_tick = tick
+  elseif scene == 0x0A then
+    if last_gargoyle_tick ~= nil and tick ~= last_gargoyle_tick then
+      gargoyle_tick_changes = gargoyle_tick_changes + 1
+    end
+    last_gargoyle_tick = tick
+  end
 
   if scene == 0x0A and not wrote_gargoyle_hram then
     local hram = assert(io.open(OUT .. ".gargoyle-hram", "w"))
@@ -108,6 +148,13 @@ callbacks:add("frame", function()
       end
     end
     flags:close()
+    local loops = assert(io.open(OUT .. ".main-loop", "w"))
+    loops:write(string.format(
+      "stage=%d\ngargoyle=%d\nstage_tick_changes=%d\n" ..
+      "gargoyle_tick_changes=%d\n",
+      stage_main_loop_hits, gargoyle_main_loop_hits,
+      stage_tick_changes, gargoyle_tick_changes))
+    loops:close()
     local done = io.open(OUT .. ".done", "w")
     if done then
       done:write("OK\n")

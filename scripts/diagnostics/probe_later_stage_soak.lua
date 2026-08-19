@@ -6,13 +6,19 @@
 --   SOAK_FRAMES  gameplay frames to exercise (default 8000)
 
 local TARGET = tonumber(os.getenv("SOAK_TARGET") or "1")
-local OUT = os.getenv("SOAK_OUT") or "/tmp/penta_later_stage_soak"
+local OUT = os.getenv("SOAK_OUT") or "tmp/penta_later_stage_soak"
 local LIMIT = tonumber(os.getenv("SOAK_FRAMES") or "8000")
+local SAMPLE_INTERVAL = tonumber(os.getenv("SOAK_SAMPLE_INTERVAL") or "5")
 local TRACE_ADDRS = os.getenv("SOAK_TRACE_ADDRS") or ""
+local VRAM_WATCH_ADDRS = os.getenv("SOAK_VRAM_WATCH_ADDRS") or ""
 local PALETTE_TRACE = tonumber(os.getenv("SOAK_PALETTE_TRACE") or "0")
 local TRACE_SEGMENT = tonumber(os.getenv("SOAK_TRACE_SEGMENT") or "")
 local ATTR_TRACE_PATH = os.getenv("SOAK_ATTR_TRACE")
+local LAYOUT_TRACE_PATH = os.getenv("SOAK_LAYOUT_TRACE")
 local STREAM_TRACE_PATH = os.getenv("SOAK_STREAM_TRACE")
+local FLIP_TRACE_PATH = os.getenv("SOAK_FLIP_TRACE")
+local LCDC_TRACE_PATH = os.getenv("SOAK_LCDC_TRACE")
+local SEMANTIC_WRITE_TRACE_PATH = os.getenv("SOAK_SEMANTIC_WRITE_TRACE")
 local AUDIT_WRAM = os.getenv("SOAK_WRAM_AUDIT") == "1"
 local CAPTURE_SCREENSHOTS = os.getenv("SOAK_SCREENSHOTS") == "1"
 local CAPTURE_STABLE = tonumber(os.getenv("SOAK_CAPTURE_STABLE") or "4")
@@ -30,15 +36,47 @@ local last_room, room_stable = -1, 0
 local rooms, scenes, captured_rooms, captured_mismatches = {}, {}, {}, {}
 local done = false
 local attr_trace = ATTR_TRACE_PATH and assert(io.open(ATTR_TRACE_PATH, "w")) or nil
+local layout_trace = LAYOUT_TRACE_PATH and assert(io.open(LAYOUT_TRACE_PATH, "w")) or nil
+local flip_trace = FLIP_TRACE_PATH and assert(io.open(FLIP_TRACE_PATH, "w")) or nil
+local lcdc_trace = LCDC_TRACE_PATH and assert(io.open(LCDC_TRACE_PATH, "w")) or nil
 local tile_copy_hits = 0
 local tile_copy_map = 0
 local wram_baseline, wram_changed = nil, 0
+local wram_change_counts, wram_change_examples = {}, {}
 local stream_writer_counts, stream_writer_events = {}, {}
 local STREAM_EVENT_LIMIT = 256
+local semantic_write_events = {}
+local SEMANTIC_WRITE_EVENT_LIMIT = 512
 -- Audit only DX-owned immutable WRAM. C4xx-CBxx is ordinary game state and
 -- changes more often when a faster build advances farther through a route.
 -- DAFA-DAFF is deliberately excluded because it is live Stage-7 metadata.
 local WRAM_AUDIT_RANGES = {{0xD900, 0xD9FF}, {0xDA00, 0xDAF9}}
+
+if lcdc_trace then
+  -- mGBA does not install range watchpoints on I/O registers. These are the
+  -- decoded LDH [$FF40],A sites that own dungeon map selection. Recording at
+  -- the store gives both the current register and A, the value about to become
+  -- live. The fixed and bank-1 clear sites catch temporary map-bit clears
+  -- outside the two ordinary display-flip sites.
+  local lcdc_post_writes = {
+    {0x12EC, -1},
+  }
+  for _, record in ipairs(lcdc_post_writes) do
+    local site, segment = record[1], record[2]
+    local callback = function()
+      if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE then return end
+      lcdc_trace:write(string.format(
+        "%d\t%02X\t%04X\t%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\n",
+        play_frame, emu:read8(0xFF99), site, segment,
+        emu:read8(0xFF40), emu:readRegister("A") & 0xFF,
+        emu:read8(0xDC0B), emu:read8(0xFFBD),
+        emu:read8(0xFF43), emu:read8(0xFF42), emu:read8(0xDF4E)))
+      lcdc_trace:flush()
+    end
+    if segment < 0 then emu:setBreakpoint(callback, site)
+    else emu:setBreakpoint(callback, site, segment) end
+  end
+end
 
 local LAVA5 = {
   [0x02]=true, [0x03]=true, [0x04]=true, [0x05]=true,
@@ -80,6 +118,40 @@ local function semantic_pickup(tile)
   return nil
 end
 
+if SEMANTIC_WRITE_TRACE_PATH then
+  assert(emu:setRangeWatchpoint(function(info)
+    if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE
+        or #semantic_write_events >= SEMANTIC_WRITE_EVENT_LIMIT then
+      return
+    end
+    local address = info.address & 0xFFFF
+    local old_vbk = emu:read8(0xFF4F)
+    local tile, attr
+    if (old_vbk & 1) == 0 then
+      tile = info.value & 0xFF
+      emu:write8(0xFF4F, 1)
+      attr = emu:read8(address)
+    else
+      attr = info.value & 0xFF
+      emu:write8(0xFF4F, 0)
+      tile = emu:read8(address)
+    end
+    emu:write8(0xFF4F, old_vbk)
+    local expected = semantic_pickup(tile) or stage_material(tile)
+    if expected and attr ~= expected then
+      semantic_write_events[#semantic_write_events + 1] = string.format(
+        "f=%d room=%02X addr=%04X vbk=%d old=%02X new=%02X " ..
+        "tile=%02X attr=%02X expected=%d bank=%02X pc=%04X " ..
+        "scx=%02X scy=%02X count=%02X",
+        play_frame, emu:read8(0xFFBD), address, old_vbk & 1,
+        (info.oldValue or 0) & 0xFF, info.value & 0xFF,
+        tile, attr, expected, emu:read8(0xFF99),
+        emu:readRegister("PC") & 0xFFFF, emu:read8(0xFF43),
+        emu:read8(0xFF42), emu:read8(0xDF4E))
+    end
+  end, 0x9800, 0x9FFF, C.WATCHPOINT_TYPE.WRITE_CHANGE) > 0)
+end
+
 if attr_trace then
   -- The stock caller selects the destination map immediately before the
   -- shared copy entry.  mGBA's Lua register accessor is not reliable in this
@@ -107,7 +179,7 @@ if attr_trace then
     attr_trace:write(string.format(
       "%d\t%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t" ..
       "%02X%02X%02X%02X%02X%02X\t%02X%02X%02X%02X%02X%02X\t" ..
-      "%s\t%s\t%04X\n",
+      "%02X%02X%02X%02X%02X%02X\t%s\t%s\t%04X\n",
       tile_copy_hits, play_frame, emu:read8(0xFFBD),
       emu:read8(0xFF43), emu:read8(0xFF42), emu:read8(0xC1A4),
       emu:read8(0xDF4F), emu:read8(0xFFE0),
@@ -115,6 +187,8 @@ if attr_trace then
       emu:read8(0xDF56), emu:read8(0xDF57), emu:read8(0xDF58),
       emu:read8(0xDAFA), emu:read8(0xDAFB), emu:read8(0xDAFC),
       emu:read8(0xDAFD), emu:read8(0xDAFE), emu:read8(0xDAFF),
+      emu:read8(0xC6AF), emu:read8(0xC6C7), emu:read8(0xC6A1),
+      emu:read8(0xC607), emu:read8(0xC605), emu:read8(0xC62D),
       table.concat(bitset), table.concat(rawset), tile_copy_map))
     attr_trace:flush()
   end, 0x42A7)
@@ -160,6 +234,29 @@ do
   end
 end
 
+if VRAM_WATCH_ADDRS ~= "" then
+  local installed = 0
+  for raw in string.gmatch(VRAM_WATCH_ADDRS, "[^,]+") do
+    local address = tonumber(raw)
+    if address then
+      local id = emu:setRangeWatchpoint(function(info)
+        log(string.format(
+          "vram_write addr=%04X value=%02X old=%02X vbk=%02X bank=%02X " ..
+          "pc=%04X hl=%04X de=%04X bc=%04X scene=%02X room=%02X",
+          info.address & 0xFFFF, info.value & 0xFF,
+          (info.oldValue or 0) & 0xFF, emu:read8(0xFF4F),
+          emu:read8(0xFF99), emu:readRegister("PC") & 0xFFFF,
+          emu:readRegister("HL") & 0xFFFF,
+          emu:readRegister("DE") & 0xFFFF,
+          emu:readRegister("BC") & 0xFFFF,
+          emu:read8(0xD880), emu:read8(0xFFBD)))
+      end, address, address, C.WATCHPOINT_TYPE.WRITE_CHANGE)
+      if id and id > 0 then installed = installed + 1 end
+    end
+  end
+  log(string.format("vram_watchpoints=%d", installed))
+end
+
 if TRACE_ADDRS ~= "" then
   for raw in string.gmatch(TRACE_ADDRS, "[^,]+") do
     local address_text, segment_text = string.match(raw, "^([^@]+)@([^@]+)$")
@@ -200,6 +297,27 @@ end
 
 local function audit_wram()
   if not AUDIT_WRAM then return end
+  -- DF51=$A8 is the production install sentinel and lives in fixed WRAM. It
+  -- reads $FF while native OAM DMA owns the CPU bus, so it is also the
+  -- authoritative accessibility probe for the banked pages below.
+  if emu:read8(0xDF51) ~= 0xA8 then return end
+  -- D900/DA00 are immutable only in their owning CGB WRAM bank 1. The game
+  -- legitimately selects banks 2/3 while compiling background attributes;
+  -- reading the same CPU addresses without pinning SVBK compared unrelated
+  -- cache planes and produced thousands of false ownership failures. mGBA's
+  -- frame callback is instruction-atomic, so select bank 1 for the bounded
+  -- read and restore the interrupted program's exact bank immediately.
+  local old_svbk = emu:read8(0xFF70) & 0x07
+  emu:write8(0xFF70, 0x01)
+  -- During the native OAM DMA window the CPU bus exposes $FF and ignores
+  -- this bank select. Stage 4's cadence can place a frame callback inside
+  -- that window, making every audited byte appear to change to $FF and back
+  -- on the next frame. Fail closed on the bank-select readback and defer the
+  -- sample; a real bank-1 mutation remains visible on the next readable frame.
+  if (emu:read8(0xFF70) & 0x07) ~= 0x01 then
+    emu:write8(0xFF70, old_svbk)
+    return
+  end
   if not wram_baseline then
     wram_baseline = {}
     for _, range in ipairs(WRAM_AUDIT_RANGES) do
@@ -207,16 +325,25 @@ local function audit_wram()
         wram_baseline[address] = emu:read8(address)
       end
     end
+    emu:write8(0xFF70, old_svbk)
     return
   end
   for _, range in ipairs(WRAM_AUDIT_RANGES) do
     for address = range[1], range[2] do
-      if emu:read8(address) ~= wram_baseline[address] then
+      local observed = emu:read8(address)
+      if observed ~= wram_baseline[address] then
         wram_changed = wram_changed + 1
-        wram_baseline[address] = emu:read8(address)
+        wram_change_counts[address] = (wram_change_counts[address] or 0) + 1
+        if #wram_change_examples < 64 then
+          wram_change_examples[#wram_change_examples + 1] = string.format(
+            "%d:%04X:%02X>%02X", play_frame, address,
+            wram_baseline[address], observed)
+        end
+        wram_baseline[address] = observed
       end
     end
   end
+  emu:write8(0xFF70, old_svbk)
 end
 
 local function dump_range(path, first, last)
@@ -274,6 +401,33 @@ local function sample_visible()
   local addresses, attrs = {}, {}
   local old_vbk = emu:read8(0xFF4F)
 
+  if layout_trace then
+    local raw, signature_a, signature_b = {}, 0, 0
+    for offset = 0, 575 do
+      raw[#raw + 1] = string.format("%02X", emu:read8(0xC1A0 + offset))
+    end
+    for _, offset in ipairs({444, 149, 19, 251}) do
+      signature_a = signature_a ~ emu:read8(0xC1A0 + offset)
+    end
+    for _, offset in ipairs({0, 59, 333}) do
+      signature_b = signature_b ~ emu:read8(0xC1A0 + offset)
+    end
+    layout_trace:write(string.format(
+      "%d\t%02X\t%04X\t%02X\t%02X\t%02X%02X%02X\t%02X%02X%02X\t" ..
+      "%02X\t%02X\t%02X%02X%02X%02X\t%02X\t%02X\t" ..
+      "%02X%02X%02X%02X\t%s\n",
+      play_frame, emu:read8(0xFFBD), base, signature_a, signature_b,
+      emu:read8(0xDF53), emu:read8(0xDF54), emu:read8(0xDF55),
+      emu:read8(0xDF56), emu:read8(0xDF57), emu:read8(0xDF58),
+      emu:read8(0xFF43), emu:read8(0xFF42),
+      emu:read8(0xDC00), emu:read8(0xDC01),
+      emu:read8(0xDC02), emu:read8(0xDC03),
+      emu:read8(0xDC0B), emu:read8(0xFFCF),
+      emu:read8(0xFFE8), emu:read8(0xFFE9),
+      emu:read8(0xFFEA), emu:read8(0xFFEB),
+      table.concat(raw)))
+  end
+
   emu:write8(0xFF4F, 1)
   for y = 0, rows - 1 do
     for x = 0, cols - 1 do
@@ -313,8 +467,8 @@ local function sample_visible()
         sample_unexpected = sample_unexpected + 1
         local zero = index - 1
         pickup_mismatch_xy[#pickup_mismatch_xy + 1] = string.format(
-          "%d:%d:%02X:%d>%d", zero % cols, math.floor(zero / cols),
-          tile, attr, expected)
+          "%d:%d:%04X:%02X:%d>%d", zero % cols,
+          math.floor(zero / cols), address, tile, attr, expected)
       end
     elseif attr ~= 0 and not (lava == 5 and attr == 5) then
       sample_unexpected = sample_unexpected + 1
@@ -390,6 +544,101 @@ local function sample_visible()
   expected_samples = expected_samples + 1
 end
 
+if flip_trace then
+  local flip_index = 0
+  -- $12E0 (room publication) and $3089 (scroll publication) read the
+  -- already-toggled DC0B selector and publish the matching LCDC bit
+  -- immediately afterward. Inspect that destination here, while it is still
+  -- inactive, so a readable failure proves the map was wrong before display.
+  -- VRAM returns FF in PPU mode 3; record metadata but deliberately skip the
+  -- scan in that mode instead of emitting hundreds of false mismatches.
+  local function trace_flip(site, explicit_base)
+    if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE
+        or emu:read8(0xFF47) ~= 0xE4 or emu:read8(0xDF4C) ~= 0 then
+      return
+    end
+    flip_index = flip_index + 1
+    local selector = emu:read8(0xDC0B) & 0x01
+    local base = explicit_base or (selector ~= 0 and 0x9C00 or 0x9800)
+    local scx, scy = emu:read8(0xFF43), emu:read8(0xFF42)
+    local stat_mode = emu:read8(0xFF41) & 0x03
+    local first_col, first_row = math.floor(scx / 8), math.floor(scy / 8)
+    local cols = ((scx & 7) == 0) and 20 or 21
+    local rows = ((scy & 7) == 0) and 18 or 19
+    local old_vbk = emu:read8(0xFF4F)
+    local mismatches = {}
+    local tiles = {}
+    if stat_mode ~= 3 then
+      emu:write8(0xFF4F, 0)
+      for y = 0, rows - 1 do
+        for x = 0, cols - 1 do
+          local row, col = (first_row + y) & 31, (first_col + x) & 31
+          local address = base + row * 32 + col
+          tiles[#tiles + 1] = {x=x, y=y, address=address, tile=emu:read8(address)}
+        end
+      end
+      emu:write8(0xFF4F, 1)
+      for _, cell in ipairs(tiles) do
+        local attr = emu:read8(cell.address)
+        local semantic = semantic_pickup(cell.tile)
+        local material = stage_material(cell.tile)
+        local expected = semantic or material
+        local lava = ((TARGET == 4 and LAVA5[cell.tile])
+          or (TARGET == 6 and LAVA7[cell.tile])) and 5 or 0
+        local bad = (attr & 0xF8) ~= 0
+          or (expected and attr ~= expected)
+          or (not expected and attr ~= 0 and not (lava == 5 and attr == 5))
+          or (attr == 5 and lava ~= 5)
+        if bad then
+          mismatches[#mismatches + 1] = string.format(
+            "%d:%d:%04X:%02X:%d>%s", cell.x, cell.y, cell.address,
+            cell.tile, attr, expected and tostring(expected) or "0")
+        end
+      end
+    end
+    emu:write8(0xFF4F, old_vbk)
+    flip_trace:write(string.format(
+      "%d\t%d\t%04X\t%d\t%02X\t%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%d\t%s\n",
+      flip_index, play_frame, site, stat_mode, selector, base,
+      emu:read8(0xFFBD), scx, scy, emu:read8(0xDF04),
+      emu:read8(0xDF4E), #mismatches, table.concat(mismatches, ",")))
+    flip_trace:flush()
+  end
+  emu:setBreakpoint(function() trace_flip(0x12E0) end, 0x12E0)
+  emu:setBreakpoint(function() trace_flip(0x3089) end, 0x3089)
+  -- DC0B is not the sole display authority. Native room/reset paths also
+  -- write LCDC bit 3 directly; audit the map selected by A at every decoded
+  -- executable site. $43D8 is the post-publication continuation inside the
+  -- force-$9800 room-builder loop and therefore validates every repeated
+  -- direct copy, not just the first LCDC write.
+  local function trace_bank1_lcdc(site)
+    emu:setBreakpoint(function()
+      if emu:read8(0xFF99) ~= 0x01 then return end
+      local base = (emu:readRegister("A") & 0x08) ~= 0 and 0x9C00 or 0x9800
+      trace_flip(site, base)
+    end, site)
+  end
+  for _, raw_site in ipairs({
+      0x405A, 0x43C1, 0x4FF3, 0x5560,
+      0x752E, 0x7584, 0x75B0, 0x75DC,
+  }) do
+    local site = raw_site
+    trace_bank1_lcdc(site)
+  end
+  emu:setBreakpoint(function()
+    if emu:read8(0xFF99) ~= 0x01 then return end
+    local base = (emu:read8(0xFF40) & 0x08) ~= 0 and 0x9C00 or 0x9800
+    trace_flip(0x43D8, base)
+  end, 0x43D8)
+  for _, raw_site in ipairs({0x0FDC, 0x3B7E, 0x3D8D}) do
+    local site = raw_site
+    emu:setBreakpoint(function()
+      local base = (emu:readRegister("A") & 0x08) ~= 0 and 0x9C00 or 0x9800
+      trace_flip(site, base)
+    end, site)
+  end
+end
+
 local function write_report()
   local room_list, scene_list = {}, {}
   for room in pairs(rooms) do room_list[#room_list + 1] = room end
@@ -413,6 +662,20 @@ local function write_report()
     material_mismatches, max_material_mismatch, wram_changed))
   fh:write("room_ids=" .. table.concat(room_text, ",") .. "\n")
   fh:write("scene_ids=" .. table.concat(scene_text, ",") .. "\n")
+  local changed_addresses = {}
+  for address in pairs(wram_change_counts) do
+    changed_addresses[#changed_addresses + 1] = address
+  end
+  table.sort(changed_addresses)
+  local changed_address_text = {}
+  for _, address in ipairs(changed_addresses) do
+    changed_address_text[#changed_address_text + 1] = string.format(
+      "%04X:%d", address, wram_change_counts[address])
+  end
+  fh:write("wram_change_addresses=" .. table.concat(
+    changed_address_text, ",") .. "\n")
+  fh:write("wram_change_examples=" .. table.concat(
+    wram_change_examples, ",") .. "\n")
   fh:close()
   if STREAM_TRACE_PATH then
     local trace = assert(io.open(STREAM_TRACE_PATH, "w"))
@@ -427,7 +690,17 @@ local function write_report()
     for _, event in ipairs(stream_writer_events) do trace:write(event .. "\n") end
     trace:close()
   end
+  if SEMANTIC_WRITE_TRACE_PATH then
+    local trace = assert(io.open(SEMANTIC_WRITE_TRACE_PATH, "w"))
+    for _, event in ipairs(semantic_write_events) do
+      trace:write(event .. "\n")
+    end
+    trace:close()
+  end
   if attr_trace then attr_trace:close(); attr_trace = nil end
+  if layout_trace then layout_trace:close(); layout_trace = nil end
+  if flip_trace then flip_trace:close(); flip_trace = nil end
+  if lcdc_trace then lcdc_trace:close(); lcdc_trace = nil end
   done = true
   log("DONE")
   emu:stop()
@@ -516,7 +789,15 @@ callbacks:add("frame", function()
       captured_rooms[room] = true
       capture_room(room)
     end
-    if play_frame % 5 == 0 then sample_visible() end
+    -- Room-entry rows are deliberately repaired beneath the stock DMG fade.
+    -- Apply the same visibility contract as capture_room(): only assert the
+    -- semantic plane once normal BGP is restored and the bounded palette
+    -- scheduler is idle. Sampling hidden transition frames made a correct
+    -- five-row priority repair look like persistent on-screen corruption.
+    if play_frame % SAMPLE_INTERVAL == 0 and emu:read8(0xFF47) == 0xE4
+        and emu:read8(0xDF4C) == 0 then
+      sample_visible()
+    end
   end
 
   emu:setKeys(gameplay_input())

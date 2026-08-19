@@ -40,6 +40,7 @@ local snapshots = {}
 local last_state = ""
 local previous_cfaa = -1
 local raw_vram = assert(emu.memory.vram)
+local trajectory = assert(io.open(OUT .. "/trajectory.bin", "wb"))
 local trace_keys = {}
 local trace_key = 0
 local trace_first_frame = nil
@@ -58,16 +59,10 @@ local opening_title_frame = -1
 local route_down_frame = VIA_OPENING and -1 or 180
 local opening_state_writes = {}
 
-pcall(function()
-  emu:setBreakpoint(function()
-    if first_gameplay >= 0 then atomic_wrap_hits = atomic_wrap_hits + 1 end
-  end, 0x3498)
-  emu:setBreakpoint(function()
-    if first_gameplay >= 0 and emu:read8(0xFF99) == 0x0E then
-      hazard_helper_hits = hazard_helper_hits + 1
-    end
-  end, 0x6BA7)
-end)
+-- Do not install diagnostic breakpoints on the ordinary release route. The
+-- deployed mGBA headless build stops execution after a breakpoint callback,
+-- which turned a successful DX hook traversal into a false Stage-1 freeze.
+-- Dedicated write-trace runs below remain explicitly opt-in.
 
 local function register(name)
   local ok, value = pcall(function() return emu:readRegister(name) end)
@@ -228,6 +223,7 @@ end
 local function finish(status)
   if finished then return end
   finished = true
+  trajectory:close()
   emu:setKeys(0)
   emu:screenshot(OUT .. "/final.png")
   dump_bytes(OUT .. "/c1a0.bin", function(address)
@@ -434,6 +430,29 @@ callbacks:add("frame", function()
       keys = trace_key
     else
       keys = KEY_UP | (FIRE and KEY_A or 0)
+    end
+    -- Record the entire route, not just its final settled room. The previous
+    -- gate missed a Pocket-visible void because the corrupted intermediate
+    -- map was replaced before the endpoint snapshot. Each record is keyed by
+    -- room/camera and contains the complete 21x19 tile viewport (including
+    -- partially visible edge tiles) from the currently displayed BG map.
+    local trajectory_lcdc = emu:read8(0xFF40)
+    local trajectory_scx = emu:read8(0xFF43)
+    local trajectory_scy = emu:read8(0xFF42)
+    local trajectory_camera = emu:read8(0xDC02) | (emu:read8(0xDC03) << 8)
+    local trajectory_base = ((trajectory_lcdc & 0x08) ~= 0) and 0x1C00 or 0x1800
+    trajectory:write(string.char(
+      gameplay_frame & 0xFF, (gameplay_frame >> 8) & 0xFF,
+      room & 0xFF, trajectory_camera & 0xFF,
+      (trajectory_camera >> 8) & 0xFF, trajectory_lcdc,
+      trajectory_scx, trajectory_scy))
+    for trajectory_row = 0, 18 do
+      for trajectory_column = 0, 20 do
+        local map_y = ((trajectory_scy + trajectory_row * 8) >> 3) & 0x1F
+        local map_x = ((trajectory_scx + trajectory_column * 8) >> 3) & 0x1F
+        trajectory:write(string.char(raw_vram:read8(
+          trajectory_base + map_y * 32 + map_x)))
+      end
     end
     if SNAP_INTERVAL > 0 and gameplay_frame % SNAP_INTERVAL == 0 then
       local camera = emu:read8(0xDC02) | (emu:read8(0xDC03) << 8)

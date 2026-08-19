@@ -33,7 +33,7 @@ LUA = Path(__file__).with_name("probe_game_start_route.lua")
 MGBA_LOCK = Path(
     os.environ.get(
         "PENTA_MGBA_LOCK",
-        "/tmp/penta-dragon-dx.mgba-singleflight.lock",
+        str(ROOT / "tmp/penta-dragon-dx.mgba-singleflight.lock"),
     )
 )
 
@@ -158,11 +158,11 @@ def run_route(
     if route.after_attract:
         command.append("--fastforward")
     command += [
-        str(runtime_rom),
         "--script",
         str(LUA),
         "-C",
         f"savegamePath={runtime}",
+        str(runtime_rom),
     ]
     result_path = prefix.with_suffix(".txt")
     wait_for_mgba_slot()
@@ -291,7 +291,13 @@ def main() -> int:
         ),
     )
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--timeout", type=float, default=25.0)
+    parser.add_argument(
+        "--timeout", type=float, default=60.0,
+        help=(
+            "wall-clock allowance per route (default: 60s); warm-reset "
+            "screenshot flushes can exceed 25s even when gameplay is live"
+        ),
+    )
     parser.add_argument(
         "--probe-max-frames",
         type=int,

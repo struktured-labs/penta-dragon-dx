@@ -702,7 +702,11 @@ def main() -> int:
         return 0
 
     selected = set(args.target or STORY_STATES)
-    with tempfile.TemporaryDirectory(prefix="penta-story-") as tmp:
+    scratch = ROOT / "tmp"
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-story-", dir=scratch
+    ) as tmp:
         tmpdir = Path(tmp)
         opening_details = {
             stem: generate_opening(

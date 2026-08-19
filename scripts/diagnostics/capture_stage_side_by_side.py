@@ -54,6 +54,8 @@ def terminate(process: subprocess.Popen[bytes]) -> None:
 def capture(rom: Path, target: int, frames: int, step: int, mode: str,
             prefix: Path, timeout: float) -> list[dict]:
     prefix.parent.mkdir(parents=True, exist_ok=True)
+    for stale in prefix.parent.glob(prefix.name + ".f*.png"):
+        stale.unlink()
     marker = Path(str(prefix) + ".done")
     trace = Path(str(prefix) + ".trace")
     marker.unlink(missing_ok=True)
@@ -103,6 +105,7 @@ def capture(rom: Path, target: int, frames: int, step: int, mode: str,
                     "scx": m.group("scx"),
                     "scy": m.group("scy"),
                     "png": shot_path,
+                    "png_sha256": sha256(shot_path),
                 })
     if not rows:
         raise RuntimeError(f"no screenshots captured for {prefix.name}")
@@ -150,6 +153,7 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     manifest = {
         "schema": "penta-stage-side-by-side-v1",
+        "status": "pass",
         "original_rom_sha256": sha256(args.original.resolve()),
         "dx_rom_sha256": sha256(args.dx_rom.resolve()),
         "frames": args.frames, "step": args.step, "mode": args.mode,
@@ -164,7 +168,10 @@ def main() -> int:
         sheet = args.output / f"stage{target + 1}-side-by-side.png"
         build_sheet(og, dx, sheet, target)
         manifest["stages"][f"stage{target + 1}"] = {
-            "og_shots": len(og), "dx_shots": len(dx), "sheet": str(sheet),
+            "og_shots": len(og), "dx_shots": len(dx),
+            "og_image_sha256": [row["png_sha256"] for row in og],
+            "dx_image_sha256": [row["png_sha256"] for row in dx],
+            "sheet": str(sheet), "sheet_sha256": sha256(sheet),
         }
         print(f"stage {target + 1}: og={len(og)} dx={len(dx)} shots -> {sheet}")
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build twice, run the complete serial emulator matrix, and write a receipt."""
+"""Build twice, run the complete serial emulator matrix, and write a receipt.
+
+The explicit expanded profile reproduces the release-line 512 KiB image with
+native Ted poses/sparse geometry and, optionally, the isolated menu publisher.
+"""
 
 from __future__ import annotations
 
@@ -22,9 +26,11 @@ from suite_contract import (
     sha256_file,
     source_snapshot,
 )
+from suite_release_ledger import collect_release_ledger
 
 
-BUILDER = ROOT / "scripts/build_v302_title_fix.py"
+LEGACY_BUILDER = ROOT / "scripts/build_v302_title_fix.py"
+EXPANDED_BUILDER = ROOT / "scripts/build_ted_expanded_candidate.py"
 MATRIX = ROOT / "scripts/diagnostics/verify_release_candidate.py"
 PROCESS_CHECK = ROOT / "scripts/check_emulator_processes.sh"
 OWNER_REGISTRY = Path(
@@ -58,6 +64,16 @@ def write_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
     temporary.replace(path)
+
+
+def configure_repo_temp(output: Path) -> Path:
+    """Route Python and child-process scratch files away from system /tmp."""
+
+    runtime_tmp = output / "runtime-tmp"
+    runtime_tmp.mkdir(parents=True, exist_ok=True)
+    for name in ("TMPDIR", "TMP", "TEMP"):
+        os.environ[name] = str(runtime_tmp)
+    return runtime_tmp
 
 
 def run_logged(command: list[str], log: Path) -> int:
@@ -475,10 +491,37 @@ def main() -> int:
         action="store_true",
         help="resume passed matrix gates from the selected output directory",
     )
+    parser.add_argument(
+        "--expanded-ted",
+        action="store_true",
+        help=(
+            "build the 512 KiB release profile with native Ted sparse "
+            "geometry and the exact native pose table"
+        ),
+    )
+    parser.add_argument(
+        "--menu-icon-colors",
+        action="store_true",
+        help="include the isolated expanded-bank item-menu publisher",
+    )
     parser.add_argument("--timeout-scale", type=float, default=1.0)
     args = parser.parse_args()
     if args.timeout_scale <= 0:
         parser.error("--timeout-scale must be positive")
+    if args.menu_icon_colors and not args.expanded_ted:
+        parser.error("--menu-icon-colors requires --expanded-ted")
+
+    build_profile = {
+        "name": (
+            "expanded-ted-menu" if args.menu_icon_colors
+            else "expanded-ted" if args.expanded_ted
+            else "legacy-256k"
+        ),
+        "expanded_ted": args.expanded_ted,
+        "native_sparse": args.expanded_ted,
+        "native_pose_table": args.expanded_ted,
+        "menu_icon_colors": args.menu_icon_colors,
+    }
 
     process_check = subprocess.run(
         [str(PROCESS_CHECK), "--require-none"],
@@ -493,6 +536,7 @@ def main() -> int:
 
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    runtime_tmp = configure_repo_temp(output)
     logs = output / "logs"
     logs.mkdir(exist_ok=True)
     build_dir = output / "build"
@@ -513,6 +557,8 @@ def main() -> int:
         "source_inputs": source_inputs,
         "git_head_at_run": git_head(),
         "output": str(output),
+        "runtime_tmp": str(runtime_tmp),
+        "build_profile": build_profile,
     }
     write_json(run_manifest, run)
 
@@ -521,14 +567,28 @@ def main() -> int:
         ("a", candidate_a, base_a),
         ("b", candidate_b, base_b),
     ):
-        command = [
-            sys.executable,
-            str(BUILDER),
-            "--output",
-            str(candidate),
-            "--base-output",
-            str(base),
-        ]
+        if args.expanded_ted:
+            command = [
+                sys.executable,
+                str(EXPANDED_BUILDER),
+                "--output",
+                str(candidate),
+                "--native-sparse",
+                "--native-pose-table",
+                "--work",
+                str(build_dir / f"expanded-work-{label}"),
+            ]
+            if args.menu_icon_colors:
+                command.append("--menu-icon-colors")
+        else:
+            command = [
+                sys.executable,
+                str(LEGACY_BUILDER),
+                "--output",
+                str(candidate),
+                "--base-output",
+                str(base),
+            ]
         returncode = run_logged(command, logs / f"build-{label}.log")
         if returncode != 0:
             run.update(
@@ -677,6 +737,19 @@ def main() -> int:
         }
         for result in matrix_value["results"]
     ]
+    try:
+        release_ledger = collect_release_ledger(
+            matrix_dir, expanded=args.expanded_ted
+        )
+    except RuntimeError as exc:
+        run.update(
+            status="release-ledger-failed",
+            error=str(exc),
+            finished_at=utc_now(),
+        )
+        write_json(run_manifest, run)
+        print(f"FAIL: could not construct release exception ledger: {exc}")
+        return 1
     receipt = {
         "schema": SCHEMA,
         "status": "passed",
@@ -684,6 +757,7 @@ def main() -> int:
         "git_head_at_run": run["git_head_at_run"],
         "source_fingerprint": source_fingerprint,
         "source_inputs": source_inputs,
+        "build_profile": build_profile,
         "candidate": {
             "size": candidate_a.stat().st_size,
             "md5": build_md5_a,
@@ -703,6 +777,7 @@ def main() -> int:
             "manifest_sha256": sha256_file(matrix_manifest),
             "results": results,
         },
+        "release_ledger": release_ledger,
         "rom_committed": False,
         "hardware_status": "pending-reservation-backed-mister",
     }

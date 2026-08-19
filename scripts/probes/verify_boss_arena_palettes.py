@@ -78,6 +78,13 @@ def audit_state(
         Path(f"{prefix}.audit.trace"),
     ):
         stale.unlink(missing_ok=True)
+    rom_bytes = rom.read_bytes()
+    banked_runtime = (
+        rom_bytes[0x4295:0x4298] == bytes.fromhex("C3 80 DB")
+        or rom_bytes[0x028A:0x028D] == bytes.fromhex("CD 80 DB")
+        or rom_bytes[0x028A:0x028D] == bytes.fromhex("CD E4 6F")
+        or rom_bytes[0x3136:0x3139] == bytes.fromhex("C3 38 08")
+    )
     environment = os.environ.copy()
     environment.update(
         BOSS_RECEIPT_OUT=str(prefix),
@@ -90,9 +97,15 @@ def audit_state(
         # inside a live arena is synthetic and can perturb timing-sensitive
         # animation publication.
         BOSS_RECEIPT_PALETTE_REARM="0",
-        # Frames 25..120 cover 96 settled frames after the restored inactive
-        # map has received three complete eight-group atomic rows.
-        BOSS_RECEIPT_FRAMES="120",
+        BOSS_RECEIPT_KEEPALIVE="1",
+        # During the expanded publishers SVBK2/3 temporarily aliases D880 and
+        # the other Dxxx game-state bytes.  Ignore those callbacks exactly as
+        # the recapture path already does instead of reporting a false exit.
+        BOSS_RECEIPT_BANKED_RUNTIME="1" if banked_runtime else "0",
+        # Frames 25..116 cover Shalamar's settled animation before its short
+        # native showcase exits; the other arenas retain the 96-frame window.
+        # Both exceed the hard 85-frame animated-attribute contract.
+        BOSS_RECEIPT_FRAMES="116" if target == 0 else "120",
         BOSS_RECEIPT_WARMUP="24",
         BOSS_TARGET=str(target),
         QT_QPA_PLATFORM="offscreen",
@@ -238,7 +251,12 @@ def run_probe(
             actual != expected
             for actual, expected in zip(active_table, wanted_table)
         ) + abs(len(active_table) - len(wanted_table))
-        if len(active_table) != 256 or any(value > 7 for value in active_table):
+        # Ted's native tile census ends at $86; $87-$FF is the receipt-proven
+        # ROM/runtime code cave already accepted by the generator and static
+        # integration contract.  Validate all 256 bytes for exactness above,
+        # but apply palette-slot bounds only to reachable semantic entries.
+        semantic_table = active_table[:0x87] if target == 4 else active_table
+        if len(active_table) != 256 or any(value > 7 for value in semantic_table):
             failures.append("active table is missing or contains invalid slots")
         try:
             attr_frames = int(audit.get("attr_frames", "0"))

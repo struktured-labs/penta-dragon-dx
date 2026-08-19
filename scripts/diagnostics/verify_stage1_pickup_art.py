@@ -137,7 +137,7 @@ def main() -> int:
     cram = Path(str(prefix) + ".bg-cram.bin").read_bytes()
     state = state_fields(Path(str(prefix) + ".state.txt"))
     screenshot = Path(str(prefix) + ".png")
-    if len(rom) != 0x40000 or len(vram0) != 0x2000 \
+    if len(rom) not in (0x40000, 0x80000) or len(vram0) != 0x2000 \
             or len(vram1) != 0x2000 or len(cram) != 64:
         print("FAIL: incomplete ROM/VRAM/CRAM payload")
         return 1
@@ -161,6 +161,34 @@ def main() -> int:
     map_base = 0x1C00 if lcdc & 0x08 else 0x1800
     tilemap = vram0[map_base:map_base + 0x400]
     attrs = vram1[map_base:map_base + 0x400]
+    scx = int(state["SCX"], 16)
+    scy = int(state["SCY"], 16)
+    # A sub-tile scroll exposes one extra map cell at the right/bottom edge.
+    # Restrict the live contract to cells that actually overlap the 160x144
+    # viewport; the publisher is allowed to leave hidden map columns staged.
+    visible_offsets = {
+        (((scy + screen_y) // 8) & 0x1F) * 32
+        + (((scx + screen_x) // 8) & 0x1F)
+        for screen_y in range(0, 144, 8)
+        for screen_x in range(0, 160, 8)
+    }
+    if scx & 7:
+        visible_offsets.update(
+            (((scy + screen_y) // 8) & 0x1F) * 32
+            + (((scx + 159) // 8) & 0x1F)
+            for screen_y in range(0, 144, 8)
+        )
+    if scy & 7:
+        visible_offsets.update(
+            (((scy + 143) // 8) & 0x1F) * 32
+            + (((scx + screen_x) // 8) & 0x1F)
+            for screen_x in range(0, 160, 8)
+        )
+        if scx & 7:
+            visible_offsets.add(
+                (((scy + 143) // 8) & 0x1F) * 32
+                + (((scx + 159) // 8) & 0x1F)
+            )
     visible_targets: Counter[int] = Counter()
     visible_terrain: Counter[int] = Counter()
     visible_target_cells = 0
@@ -170,6 +198,8 @@ def main() -> int:
     table = rom[BG_TABLE_OFFSET:BG_TABLE_OFFSET + 256]
     vram = vram0 + vram1
     for offset, (tile, attr) in enumerate(zip(tilemap, attrs)):
+        if offset not in visible_offsets:
+            continue
         pixels = decode_tile(
             vram, tile, (attr >> 3) & 1,
             signed_indices=signed_indices,

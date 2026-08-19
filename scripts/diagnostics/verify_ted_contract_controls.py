@@ -8,7 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from ted_native_pose_contract import NATIVE_POSE_SHA256
+from ted_native_pose_contract_v2 import NATIVE_POSE_SHA256
 from verify_ted_candidate_delta import (
     compare_baseline_pin,
     compare_readiness,
@@ -24,6 +24,7 @@ from verify_release_candidate import (
 from verify_ted_release_readiness import (
     evaluate as evaluate_release_readiness,
     evaluate_provenance,
+    release_checks_pass,
 )
 from verify_ted_two_plane_cache_contract import rejects_overdiscriminating_key
 from verify_ted_cache_plane_reservation import analyze as analyze_cache_planes
@@ -59,6 +60,30 @@ def canonical_pose() -> bytearray:
     return tiles
 
 
+def translated_pose(tiles: bytes, row_shift: int, col_shift: int) -> bytearray:
+    """Translate a whole 32x32 map with wrap, preserving its tile contents."""
+    translated = bytearray(len(tiles))
+    for offset, tile in enumerate(tiles):
+        row, col = divmod(offset, 32)
+        target_row = (row + row_shift) & 31
+        target_col = (col + col_shift) & 31
+        translated[target_row * 32 + target_col] = tile
+    return translated
+
+
+def normalized_body_cells(
+    tiles: bytes, anchor: tuple[int, int]
+) -> tuple[tuple[int, int, int], ...]:
+    """Return an ordering-independent translation-normalized body contract."""
+    body_ids = set(TED_NUMBERED_TILE_POSITION)
+    return tuple(sorted(
+        (((row - anchor[0]) & 31), ((col - anchor[1]) & 31), tile)
+        for offset, tile in enumerate(tiles)
+        for row, col in (divmod(offset, 32),)
+        if tile in body_ids
+    ))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom", nargs="?", type=Path,
@@ -68,6 +93,10 @@ def main() -> int:
 
     native = canonical_pose()
     native_hash, native_cells = native_pose_digest(native, ANCHOR)
+    wrapped_anchor = ((ANCHOR[0] + 13) & 31, (ANCHOR[1] + 17) & 31)
+    wrapped_hash, wrapped_cells = native_pose_digest(
+        translated_pose(native, 13, 17), wrapped_anchor
+    )
     native_numbered, native_sparse = position_violations(native, ANCHOR)
     material_attrs = bytes(TED_FLOOR_PALETTE.get(tile, 1) for tile in native)
     uniform_attrs = bytes(0 for _ in native)
@@ -101,6 +130,13 @@ def main() -> int:
     clean_controls = {"status": "pass"}
     clean_materializer = {"status": "pass", "tests": 32}
     clean_classifier = {"status": "pass", "tests": 15}
+    clean_expanded_integration = {
+        "schema": "penta-ted-expanded-integration-v1",
+        "status": "pass",
+        "failing_checks": [],
+        "architecture": {"publishable_poses": 47, "classifier_states": 49},
+        "checks": {"native_pose_bank_exact": True},
+    }
     clean_source_publication = {
         "deterministic_replay": True,
         "metrics": {"status": "pass", "frames": 2800},
@@ -120,6 +156,7 @@ def main() -> int:
         "publication_sequence": clean_publication_sequence,
         "cache_contract": clean_cache_contract,
         "cache_reservation": clean_cache_reservation,
+        "expanded_integration": clean_expanded_integration,
     }
     clean_entry = "status=ok expected_scene=10 d880=10"
     clean_cadence = {
@@ -127,10 +164,17 @@ def main() -> int:
         "status": "pass",
         "bosses": [{
             "status": "pass", "slowdown_percent": 0.5,
+            "speed_ratio": 0.995,
+            "target_met": True,
+            "phase_bound_met": True,
+            "accepted_phase_deviation": False,
             "observation_frames": 2800,
             "publication_liveness": True,
-            "og": {"copies": 484},
-            "dx": {"copies": 484, "caller_histogram": {"028D": 484}},
+            "og": {"copies": 484, "deterministic_replay": True},
+            "dx": {
+                "copies": 484, "caller_histogram": {"028D": 484},
+                "deterministic_replay": True,
+            },
         }],
     }
     clean_determinism = {
@@ -139,6 +183,8 @@ def main() -> int:
         "metrics": {
             "status": "pass",
             "frames": 2800,
+            "native_pose_matches": 2800,
+            "native_pose_mismatches": 0,
             "floor_lattice_mismatches": 0,
             "floor_palette_mismatches": 0,
             "numbered_identity_mismatches": 0,
@@ -153,9 +199,10 @@ def main() -> int:
     )
 
     slow_cadence = json.loads(json.dumps(clean_cadence))
-    slow_cadence["status"] = "fail"
     slow_cadence["bosses"][0].update(
-        status="fail", slowdown_percent=1.01
+        status="pass", slowdown_percent=1.01, speed_ratio=0.9899,
+        target_met=False, phase_bound_met=True,
+        accepted_phase_deviation=True,
     )
     aggregate_slow, _, _ = evaluate_release_readiness(
         clean_controls, clean_entry, slow_cadence, clean_determinism,
@@ -166,9 +213,10 @@ def main() -> int:
     # Exercise both sides of the absolute cadence bound. Ted experiments have
     # previously replaced slowdown with over-publication; that is also a fail.
     fast_cadence = json.loads(json.dumps(clean_cadence))
-    fast_cadence["status"] = "fail"
     fast_cadence["bosses"][0].update(
-        status="fail", slowdown_percent=-1.01
+        status="pass", slowdown_percent=-1.01, speed_ratio=1.0101,
+        target_met=False, phase_bound_met=True,
+        accepted_phase_deviation=True,
     )
     aggregate_fast, _, _ = evaluate_release_readiness(
         clean_controls, clean_entry, fast_cadence, clean_determinism,
@@ -179,7 +227,9 @@ def main() -> int:
     rejected_postcopy_cadence = json.loads(json.dumps(clean_cadence))
     rejected_postcopy_cadence["status"] = "fail"
     rejected_postcopy_cadence["bosses"][0].update(
-        status="fail", slowdown_percent=5.7633611560981794
+        status="fail", slowdown_percent=5.7633611560981794,
+        speed_ratio=0.9423663884390182, target_met=False,
+        phase_bound_met=False, accepted_phase_deviation=False,
     )
     aggregate_rejected_postcopy, _, _ = evaluate_release_readiness(
         clean_controls, clean_entry, rejected_postcopy_cadence,
@@ -213,7 +263,8 @@ def main() -> int:
     dead_publisher["status"] = "fail"
     dead_publisher["bosses"][0].update(
         status="fail", publication_liveness=False,
-        speed_ratio=None, slowdown_percent=None,
+        speed_ratio=None, slowdown_percent=None, target_met=False,
+        phase_bound_met=False, accepted_phase_deviation=False,
     )
     dead_publisher["bosses"][0]["dx"].update(
         copies=0, caller_histogram={}, status="capture-error",
@@ -257,18 +308,31 @@ def main() -> int:
         **phase_kwargs,
     )
 
+    legacy_phase_kwargs = dict(phase_kwargs)
+    legacy_phase_kwargs["expanded_integration"] = None
     aggregate_bad_materializer, _, _ = evaluate_release_readiness(
         clean_controls, clean_entry, clean_cadence, clean_determinism,
         materializer={"status": "fail", "tests": 32},
         classifier=clean_classifier,
-        **phase_kwargs,
+        **legacy_phase_kwargs,
     )
 
     aggregate_bad_classifier, _, _ = evaluate_release_readiness(
         clean_controls, clean_entry, clean_cadence, clean_determinism,
         materializer=clean_materializer,
         classifier={"status": "fail", "tests": 15},
-        **phase_kwargs,
+        **legacy_phase_kwargs,
+    )
+
+    bad_expanded = json.loads(json.dumps(clean_expanded_integration))
+    bad_expanded.update(status="fail", failing_checks=["native_pose_bank_exact"])
+    bad_expanded_phase = dict(phase_kwargs)
+    bad_expanded_phase["expanded_integration"] = bad_expanded
+    aggregate_bad_expanded, _, _ = evaluate_release_readiness(
+        clean_controls, clean_entry, clean_cadence, clean_determinism,
+        materializer=clean_materializer,
+        classifier=clean_classifier,
+        **bad_expanded_phase,
     )
 
     bad_sequence = json.loads(json.dumps(clean_publication_sequence))
@@ -292,6 +356,13 @@ def main() -> int:
         "canonical_unique_crown": crown(native) == [ANCHOR],
         "canonical_body_cells": native_cells == 117,
         "canonical_native_pose_hash": native_hash in NATIVE_POSE_SHA256,
+        "wrapped_translation_has_same_pose_hash": (
+            normalized_body_cells(native, ANCHOR)
+            == normalized_body_cells(
+                translated_pose(native, 13, 17), wrapped_anchor
+            )
+            and wrapped_cells == native_cells
+        ),
         "canonical_numbered_positions": not native_numbered,
         "canonical_sparse_positions": not native_sparse,
         "checker_materials_accepted": not material_floor,
@@ -312,77 +383,86 @@ def main() -> int:
             and illegal_sparse[0]["tile"] == 0x7B
         ),
         "aggregate_positive_control": all(aggregate_clean.values()),
-        "aggregate_cadence_negative_control": (
+        "aggregate_cadence_accepted_control": (
             not aggregate_slow["cadence_within_one_percent"]
-            and not all(aggregate_slow.values())
+            and aggregate_slow["cadence_within_release_bound"]
+            and release_checks_pass(aggregate_slow)
         ),
-        "aggregate_fast_cadence_negative_control": (
+        "aggregate_fast_cadence_accepted_control": (
             not aggregate_fast["cadence_within_one_percent"]
-            and not all(aggregate_fast.values())
+            and aggregate_fast["cadence_within_release_bound"]
+            and release_checks_pass(aggregate_fast)
         ),
         "measured_full_plane_postcopy_rejected": (
-            not aggregate_rejected_postcopy["cadence_within_one_percent"]
-            and not all(aggregate_rejected_postcopy.values())
+            not aggregate_rejected_postcopy["cadence_within_release_bound"]
+            and not release_checks_pass(aggregate_rejected_postcopy)
         ),
         "aggregate_short_cadence_negative_control": (
-            not aggregate_short["cadence_within_one_percent"]
-            and not all(aggregate_short.values())
+            not aggregate_short["cadence_within_release_bound"]
+            and not release_checks_pass(aggregate_short)
         ),
         "aggregate_publication_caller_negative_control": (
             not aggregate_wrong_caller["native_publication_caller"]
-            and not all(aggregate_wrong_caller.values())
+            and not release_checks_pass(aggregate_wrong_caller)
         ),
         "aggregate_dead_publisher_negative_control": (
             not aggregate_dead_publisher["publication_liveness"]
-            and not aggregate_dead_publisher["cadence_within_one_percent"]
+            and not aggregate_dead_publisher["cadence_within_release_bound"]
             and not aggregate_dead_publisher["native_publication_caller"]
-            and not all(aggregate_dead_publisher.values())
+            and not release_checks_pass(aggregate_dead_publisher)
         ),
         "aggregate_stale_cadence_schema_negative_control": (
-            not aggregate_stale_cadence["cadence_within_one_percent"]
+            not aggregate_stale_cadence["cadence_within_release_bound"]
             and not aggregate_stale_cadence["native_publication_caller"]
-            and not all(aggregate_stale_cadence.values())
+            and not release_checks_pass(aggregate_stale_cadence)
         ),
         "aggregate_material_negative_control": (
             not aggregate_material["checker_palette_materials"]
             and not aggregate_material["visible_geometry_and_materials"]
-            and not all(aggregate_material.values())
+            and not release_checks_pass(aggregate_material)
         ),
         "aggregate_identity_negative_control": (
             not aggregate_identity["numbered_tile_identity"]
             and not aggregate_identity["sparse_tentacle_identity"]
-            and not all(aggregate_identity.values())
+            and not release_checks_pass(aggregate_identity)
         ),
         "aggregate_replay_negative_control": (
             not aggregate_replay["deterministic_visible_replay"]
-            and not all(aggregate_replay.values())
+            and not release_checks_pass(aggregate_replay)
         ),
         "aggregate_materializer_negative_control": (
             not aggregate_bad_materializer["materializer_triplet_contract"]
-            and not all(aggregate_bad_materializer.values())
+            and not release_checks_pass(aggregate_bad_materializer)
         ),
         "aggregate_classifier_negative_control": (
             not aggregate_bad_classifier["classifier_identity_contract"]
-            and not all(aggregate_bad_classifier.values())
+            and not release_checks_pass(aggregate_bad_classifier)
+        ),
+        "aggregate_expanded_architecture_negative_control": (
+            not aggregate_bad_expanded["expanded_bank_architecture"]
+            and not release_checks_pass(aggregate_bad_expanded)
         ),
         "aggregate_publication_sequence_negative_control": (
             not aggregate_bad_sequence["stock_publication_sequence"]
-            and not all(aggregate_bad_sequence.values())
+            and not release_checks_pass(aggregate_bad_sequence)
         ),
         "aggregate_source_receipt_negative_control": (
             not aggregate_bad_source_receipt["source_publication_receipt"]
-            and not all(aggregate_bad_source_receipt.values())
+            and not release_checks_pass(aggregate_bad_source_receipt)
         ),
-        "classifier_pass_cannot_mask_geometry_failure": (
-            aggregate_identity["classifier_identity_contract"]
+        "geometry_failure_cannot_hide_behind_classifier": (
+            not aggregate_identity["classifier_identity_contract"]
             and not aggregate_identity["visible_geometry_and_materials"]
-            and not all(aggregate_identity.values())
+            and not release_checks_pass(aggregate_identity)
         ),
     }
     delta_baseline = {
         "schema": "penta-ted-release-readiness-v4",
         "checks": aggregate_clean,
-        "cadence": {"slowdown_percent": 0.25},
+        "cadence": {
+            "status": "pass", "slowdown_percent": 0.25,
+            "phase_bound_met": True,
+        },
         "publication_sequence": {
             "partial_foreign_cells": 0,
             "partial_not_complete_next_frame": 5,
@@ -398,7 +478,6 @@ def main() -> int:
     _, delta_failures, _ = compare_readiness(delta_baseline, delta_worse)
     checks["candidate_delta_v4_negative_controls"] = set(delta_failures) == {
         "lost_check:classifier_identity_contract",
-        "cadence_absolute_deviation",
         "publication:partial_foreign_cells",
         "publication:partial_not_complete_next_frame",
     }
@@ -465,6 +544,7 @@ def main() -> int:
         "determinism": {"rom_sha256": "rom", "state_sha256": "state"},
         "materializer": {"rom_sha256": "rom", "state_sha256": "fixture-a"},
         "classifier": {"rom_sha256": "rom", "state_sha256": "fixture-b"},
+        "expanded_integration": {"rom_sha256": "rom"},
         "source_publication": {
             "rom_sha256": "rom", "state_sha256": "state",
             "trace_sha256": "source-trace",
@@ -490,6 +570,7 @@ def main() -> int:
         ("runtime_contract_rom_identity", ("classifier", "rom_sha256")),
         ("cache_contract_identity", ("cache_contract", "source_trace_sha256")),
         ("cache_reservation_identity", ("cache_reservation", "state_sha256")),
+        ("expanded_integration_identity", ("expanded_integration", "rom_sha256")),
     ):
         bad = json.loads(json.dumps(provenance_inputs))
         bad[mutation[0]][mutation[1]] = "tampered"
@@ -510,6 +591,15 @@ def main() -> int:
     }
     delta_gate = runner_gates["ted_candidate_delta"]
     cadence_gate = runner_gates["ted_cadence"]
+    stage_speed_gate = runner_gates["gameplay_speed_parity"]
+    north_integrity_gate = runner_gates["stage1_north_route_integrity"]
+    game_start_gate = runner_gates["game_start_routes"]
+    stage_visual_gate = runner_gates["stage_side_by_side_all7"]
+    boss_speed_gate = runner_gates["boss_speed_parity"]
+    boss_publication_gate = runner_gates["boss_publication_cadence"]
+    silhouette_gate = runner_gates["boss_silhouette_gallery"]
+    og_silhouette_gate = runner_gates["boss_og_silhouette_gallery"]
+    side_by_side_gate = runner_gates["boss_material_side_by_side"]
     cadence_frames = cadence_gate.command[
         cadence_gate.command.index("--frames") + 1
     ]
@@ -520,6 +610,7 @@ def main() -> int:
         and delta_gate.dependencies
         == ("ted_determinism", "ted_release_readiness_receipt")
         and {
+            "ted_expanded_integration",
             "ted_contract_controls", "ted_materializer", "ted_classifier",
             "ted_entry", "ted_og_entry", "ted_cadence", "ted_determinism",
             "ted_source_publication", "ted_publication_sequence",
@@ -527,6 +618,9 @@ def main() -> int:
             "ted_cache_plane_reservation",
             "ted_release_readiness_receipt", "ted_candidate_delta",
         } <= delta_closure
+        and runner_gates["ted_expanded_integration"].dependencies == ()
+        and "verify_ted_expanded_integration.py"
+            in " ".join(runner_gates["ted_expanded_integration"].command)
     )
     checks["cache_architecture_official_runner_contract"] = (
         cadence_frames == "2800"
@@ -536,6 +630,65 @@ def main() -> int:
             == ("ted_entry",)
         and rejects_overdiscriminating_key(485)
         and not rejects_overdiscriminating_key(50)
+    )
+    checks["whole_game_speed_official_runner_contract"] = (
+        stage_speed_gate.command[
+            stage_speed_gate.command.index("--targets") + 1
+        ] == "0,1,2,3,4,5,6"
+        and stage_speed_gate.command[
+            stage_speed_gate.command.index("--tolerance") + 1
+        ] == "0.02"
+        and stage_speed_gate.command[
+            stage_speed_gate.command.index("--accepted-slowdown-floor") + 1
+        ] == "0.96"
+        and boss_speed_gate.command[
+            boss_speed_gate.command.index("--frames") + 1
+        ] == "1800"
+        and boss_speed_gate.command[
+            boss_speed_gate.command.index("--max-slowdown") + 1
+        ] == "0.02"
+        and boss_speed_gate.command[
+            boss_speed_gate.command.index("--accepted-slow-boss") + 1
+        ] == "crystal_dragon=0.95"
+        and boss_speed_gate.command[
+            boss_speed_gate.command.index(
+                "--phase-mismatch-speedup-ceiling"
+            ) + 1
+        ] == "1.20"
+        and boss_speed_gate.dependencies == ("boss_arenas", "boss_og_states")
+        and cadence_gate.command[
+            cadence_gate.command.index("--phase-ratio-floor") + 1
+        ] == "0.95"
+        and cadence_gate.command[
+            cadence_gate.command.index("--phase-ratio-ceiling") + 1
+        ] == "1.20"
+        and boss_publication_gate.command[
+            boss_publication_gate.command.index("--phase-ratio-floor") + 1
+        ] == "0.95"
+        and boss_publication_gate.command[
+            boss_publication_gate.command.index("--phase-ratio-ceiling") + 1
+        ] == "1.20"
+        and "--target-only" in north_integrity_gate.command
+        and "--max-frame-lag-ratio" not in north_integrity_gate.command
+        and game_start_gate.command[
+            game_start_gate.command.index("--timeout") + 1
+        ] == "60"
+        and stage_visual_gate.command[
+            stage_visual_gate.command.index("--frames") + 1
+        ] == "1200"
+        and stage_visual_gate.command[
+            stage_visual_gate.command.index("--mode") + 1
+        ] == "patrol"
+    )
+    checks["boss_silhouette_official_runner_contract"] = (
+        silhouette_gate.dependencies == ("boss_material_gallery_all9",)
+        and "verify_boss_silhouette_offline.py"
+            in " ".join(silhouette_gate.command)
+        and "--gallery" in silhouette_gate.command
+        and og_silhouette_gate.dependencies
+            == ("boss_og_material_gallery_all9",)
+        and side_by_side_gate.dependencies
+            == ("boss_og_silhouette_gallery", "boss_silhouette_gallery")
     )
     clean_cache_access = (
         "status=ok frames=2800 bank2=1 bank3=0 read2=1 read3=0\n"

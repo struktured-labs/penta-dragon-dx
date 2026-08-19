@@ -303,8 +303,11 @@ def main() -> int:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     rom = rom_path.read_bytes()
-    if len(rom) != 0x40000:
-        raise SystemExit(f"FAIL: ROM is {len(rom)} bytes, expected 262144")
+    if len(rom) < 0x40000 or len(rom) % 0x4000:
+        raise SystemExit(
+            f"FAIL: ROM is {len(rom)} bytes; expected at least 262144 "
+            "and a whole number of 16 KiB banks"
+        )
 
     table = rom[BG_TABLE_OFFSET:BG_TABLE_OFFSET + 256]
     table_histogram = dict(sorted(Counter(table).items()))

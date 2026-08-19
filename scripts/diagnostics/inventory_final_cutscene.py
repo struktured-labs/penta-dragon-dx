@@ -30,7 +30,7 @@ from cutscene_region_palettes import (  # noqa: E402
 
 
 DEFAULT_ROM = PROJECT_ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
-DEFAULT_OUTPUT = Path("/tmp/penta-final-cutscene")
+DEFAULT_OUTPUT = PROJECT_ROOT / "tmp/penta-final-cutscene"
 DEFAULT_PALETTES = PROJECT_ROOT / "palettes/penta_palettes_v097.yaml"
 
 D880 = 0xD880

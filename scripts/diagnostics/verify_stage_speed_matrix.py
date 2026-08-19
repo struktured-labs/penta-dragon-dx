@@ -28,6 +28,70 @@ def md5(path: Path) -> str:
     return digest.hexdigest()
 
 
+def deterministic_payload(result: dict) -> dict:
+    """Strip invocation paths while retaining every measured value."""
+    return {
+        key: value for key, value in result.items()
+        if key not in {"rom", "log"}
+    }
+
+
+def payload_sha256(result: dict) -> str:
+    encoded = json.dumps(
+        deterministic_payload(result), sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def classify_throughput(
+    ratio: float,
+    target_tolerance: float,
+    accepted_slowdown_floor: float | None,
+) -> dict:
+    """Classify measured throughput without hiding an accepted compromise.
+
+    The symmetric target remains aspirational.  An operator-approved floor
+    may accept only a bounded slowdown below that target; it never excuses a
+    speed-up beyond the target envelope.
+    """
+
+    target_met = abs(1.0 - ratio) <= target_tolerance + 1e-9
+    accepted_slowdown = (
+        not target_met
+        and accepted_slowdown_floor is not None
+        and accepted_slowdown_floor - 1e-9 <= ratio < 1.0
+    )
+    return {
+        "target_met": target_met,
+        "accepted_slowdown_deviation": accepted_slowdown,
+        "throughput_accepted": target_met or accepted_slowdown,
+    }
+
+
+def throughput_policy_controls() -> dict[str, bool]:
+    """Deterministic positive/negative controls recorded in every receipt."""
+
+    strict = lambda ratio: classify_throughput(ratio, 0.02, None)
+    accepted = lambda ratio: classify_throughput(ratio, 0.02, 0.96)
+    return {
+        "target_center_passes": strict(1.0)["throughput_accepted"],
+        "target_lower_edge_passes": strict(0.98)["throughput_accepted"],
+        "target_upper_edge_passes": strict(1.02)["throughput_accepted"],
+        "strict_rejects_three_percent_slow": not strict(0.97)[
+            "throughput_accepted"
+        ],
+        "accepted_floor_allows_three_percent_slow": accepted(0.97)[
+            "accepted_slowdown_deviation"
+        ],
+        "accepted_floor_rejects_below_floor": not accepted(0.959)[
+            "throughput_accepted"
+        ],
+        "accepted_floor_never_excuses_speedup": not accepted(1.021)[
+            "throughput_accepted"
+        ],
+    }
+
+
 def stop_owned_process_group(process: subprocess.Popen) -> None:
     """Stop only the xvfb/mGBA session created by this probe."""
 
@@ -57,6 +121,8 @@ def run_one(
     mode: str,
     frames: int,
     atomic_addr: int,
+    trace_addrs: str,
+    stage1_decider_mode: str,
     output: Path,
     timeout: float,
 ) -> dict:
@@ -64,6 +130,10 @@ def run_one(
     run_dir.mkdir(parents=True, exist_ok=True)
     receipt = run_dir / "result.json"
     marker = run_dir / "DONE"
+    receipt.unlink(missing_ok=True)
+    marker.unlink(missing_ok=True)
+    for stale in (run_dir / "attr-events.tsv", run_dir / "lifecycle.tsv"):
+        stale.unlink(missing_ok=True)
     environment = os.environ.copy()
     environment.update(
         {
@@ -77,6 +147,8 @@ def run_one(
             "STAGE_SPEED_MODE": mode,
             "STAGE_SPEED_FRAMES": str(frames),
             "STAGE_SPEED_ATOMIC_ADDR": str(atomic_addr),
+            "STAGE_SPEED_TRACE_ADDRS": trace_addrs,
+            "STAGE_SPEED_STAGE1_DECIDER_MODE": stage1_decider_mode,
         }
     )
     environment.pop("DISPLAY", None)
@@ -121,6 +193,12 @@ def run_one(
     result["rom"] = str(rom)
     result["rom_md5"] = md5(rom)
     result["log"] = str(log)
+    for name in ("attr-events.tsv", "lifecycle.tsv"):
+        trace = run_dir / name
+        result[f"{name.removesuffix('.tsv').replace('-', '_')}_sha256"] = (
+            hashlib.sha256(trace.read_bytes()).hexdigest()
+            if trace.is_file() else None
+        )
     return result
 
 
@@ -141,12 +219,31 @@ def main() -> int:
     parser.add_argument("--targets", type=targets, default=[0, 4, 6])
     parser.add_argument(
         "--input-mode",
-        choices=("right", "stationary", "patrol"),
+        choices=("right", "stationary", "patrol", "vertical-patrol"),
         default="right",
     )
     parser.add_argument("--frames", type=int, default=600)
     parser.add_argument("--atomic-addr", type=lambda value: int(value, 0), default=0)
+    parser.add_argument(
+        "--stage1-decider-mode", choices=("native", "pure", "dirty"),
+        default="native",
+        help="diagnostically force Stage 1's layout decider on DX runs only",
+    )
+    parser.add_argument(
+        "--trace-addrs",
+        default="",
+        help="comma-separated breakpoint addresses counted during play",
+    )
     parser.add_argument("--tolerance", type=float, default=0.05)
+    parser.add_argument(
+        "--accepted-slowdown-floor",
+        type=float,
+        default=None,
+        help=(
+            "explicit operator-approved minimum DX/OG ratio below the "
+            "symmetric target; target misses remain visible in the receipt"
+        ),
+    )
     parser.add_argument("--timeout", type=float, default=45.0)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -154,6 +251,15 @@ def main() -> int:
         parser.error("mgba-qt was not found")
     if args.frames <= 0 or args.timeout <= 0:
         parser.error("frames and timeout must be positive")
+    if args.tolerance < 0 or args.tolerance >= 1:
+        parser.error("tolerance must be in [0, 1)")
+    if args.accepted_slowdown_floor is not None and not (
+        0 < args.accepted_slowdown_floor <= 1.0 - args.tolerance
+    ):
+        parser.error(
+            "accepted slowdown floor must be positive and no greater than "
+            "the target envelope's lower edge"
+        )
 
     dx = args.dx_rom.resolve()
     original = args.original_rom.resolve()
@@ -161,19 +267,57 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     failures: list[str] = []
     rows: list[dict] = []
+    policy_controls = throughput_policy_controls()
+    if not all(policy_controls.values()):
+        failures.append("internal throughput policy controls failed")
 
     for target in args.targets:
-        baseline = run_one(
-            args.mgba, original, "original", target, args.input_mode,
-            args.frames, 0, output, args.timeout,
+        try:
+            baseline_runs = [
+                run_one(
+                    args.mgba, original, f"original-{replay}", target,
+                    args.input_mode, args.frames, 0, args.trace_addrs,
+                    "native",
+                    output, args.timeout,
+                )
+                for replay in ("a", "b")
+            ]
+            candidate_runs = [
+                run_one(
+                    args.mgba, dx, f"dx-{replay}", target, args.input_mode,
+                    args.frames, args.atomic_addr, args.trace_addrs,
+                    args.stage1_decider_mode,
+                    output, args.timeout,
+                )
+                for replay in ("a", "b")
+            ]
+        except (OSError, RuntimeError, TimeoutError) as error:
+            row = {
+                "target": target,
+                "stage": target + 1,
+                "passed": False,
+                "status": "capture-error",
+                "error": str(error),
+            }
+            rows.append(row)
+            failures.append(f"Stage {target + 1}: {error}")
+            print(f"Stage {target + 1}: CAPTURE ERROR: {error}")
+            continue
+        baseline, candidate = baseline_runs[0], candidate_runs[0]
+        baseline_deterministic = (
+            deterministic_payload(baseline_runs[0])
+            == deterministic_payload(baseline_runs[1])
         )
-        candidate = run_one(
-            args.mgba, dx, "dx", target, args.input_mode,
-            args.frames, args.atomic_addr, output, args.timeout,
+        candidate_deterministic = (
+            deterministic_payload(candidate_runs[0])
+            == deterministic_payload(candidate_runs[1])
         )
         baseline_hits = baseline["main_loop_hits"]
         candidate_hits = candidate["main_loop_hits"]
         ratio = candidate_hits / baseline_hits if baseline_hits else 0.0
+        throughput = classify_throughput(
+            ratio, args.tolerance, args.accepted_slowdown_floor
+        )
         candidate_scene_mismatch_frames = (
             args.frames - candidate["expected_scene_frames"]
         )
@@ -216,7 +360,9 @@ def main() -> int:
             >= args.frames - max_continuity_gap
         )
         passed = (
-            baseline["breakpoints_available"]
+            baseline_deterministic
+            and candidate_deterministic
+            and baseline["breakpoints_available"]
             and candidate["breakpoints_available"]
             and baseline["frames"] == args.frames
             and candidate["frames"] == args.frames
@@ -226,12 +372,13 @@ def main() -> int:
             and candidate_scene_ok
             and baseline_continuity_ok
             and candidate_continuity_ok
-            and abs(1.0 - ratio) <= args.tolerance + 1e-9
+            and throughput["throughput_accepted"]
         )
         row = {
             "target": target,
             "stage": target + 1,
             "ratio": round(ratio, 4),
+            **throughput,
             "candidate_scene_ok": candidate_scene_ok,
             "candidate_scene_mismatch_frames": candidate_scene_mismatch_frames,
             "candidate_dma_unreadable_scene_samples": (
@@ -246,6 +393,15 @@ def main() -> int:
             "max_continuity_gap": max_continuity_gap,
             "baseline_continuity_ok": baseline_continuity_ok,
             "candidate_continuity_ok": candidate_continuity_ok,
+            "deterministic_replay": (
+                baseline_deterministic and candidate_deterministic
+            ),
+            "original_replay_receipt_sha256": [
+                payload_sha256(result) for result in baseline_runs
+            ],
+            "dx_replay_receipt_sha256": [
+                payload_sha256(result) for result in candidate_runs
+            ],
             "passed": passed,
             "original": baseline,
             "dx": candidate,
@@ -254,12 +410,18 @@ def main() -> int:
         print(
             f"Stage {target + 1}: original={baseline_hits} dx={candidate_hits} "
             f"ratio={ratio:.3f} scroll={baseline['scroll_changes']}/"
-            f"{candidate['scroll_changes']} {'PASS' if passed else 'FAIL'}"
+            f"{candidate['scroll_changes']} "
+            f"target={'PASS' if throughput['target_met'] else 'MISS'} "
+            f"{'PASS' if passed else 'FAIL'}"
         )
         if not passed:
             reasons = []
-            if abs(1.0 - ratio) > args.tolerance + 1e-9:
+            if not throughput["throughput_accepted"]:
                 reasons.append(f"throughput ratio {ratio:.3f}")
+            if not baseline_deterministic:
+                reasons.append("baseline replay mismatch")
+            if not candidate_deterministic:
+                reasons.append("candidate replay mismatch")
             if not candidate_scene_ok:
                 reasons.append("scene mismatch")
             if not baseline_continuity_ok:
@@ -275,6 +437,8 @@ def main() -> int:
         "mode": args.input_mode,
         "frames": args.frames,
         "tolerance": args.tolerance,
+        "accepted_slowdown_floor": args.accepted_slowdown_floor,
+        "policy_controls": policy_controls,
         "original_rom_md5": md5(original),
         "dx_rom_md5": md5(dx),
         "rows": rows,
@@ -288,7 +452,10 @@ def main() -> int:
             print(f"  - {failure}")
         print(f"Receipt: {manifest_path}")
         return 1
-    print(f"PASS: selected stage-speed matrix is within tolerance.")
+    print(
+        "PASS: selected stage-speed matrix meets the target or the explicit "
+        "accepted slowdown floor."
+    )
     print(f"Receipt: {manifest_path}")
     return 0
 

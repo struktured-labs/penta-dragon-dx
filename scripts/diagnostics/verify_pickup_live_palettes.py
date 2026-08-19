@@ -32,6 +32,16 @@ NORMALIZED_RESUME_STATES = {
     "level1_sara_w_rock_item.ss0",
     "level1_sara_w_teleport.ss0",
 }
+SYNTHETIC_PICKUP_HOSTS = {
+    # This sole fixture was captured mid-HRAM DMA and cannot safely cross the
+    # release ROM's MBC1->MBC5 expansion.  Reuse the healthy P-item room,
+    # replace only its 2x2 source tile IDs, clear their attributes, and require
+    # the current-ROM room publisher to materialize Orb's semantic class.
+    "level1_cat_fish_moth_spike_hazard_orb_item.ss0": (
+        "level1_sara_w_p_item.ss0",
+        ((0xCA, 0xCB, 0xDA, 0xDB), (0xCC, 0xCD, 0xDC, 0xDD)),
+    ),
+}
 
 
 def digest(path: Path, algorithm: str = "sha256") -> str:
@@ -75,8 +85,10 @@ def run_state(
     timeout: float,
     demo_rearm_rows: int,
     launch_attempts: int,
+    artifact_stem: str | None = None,
+    substitute: tuple[tuple[int, ...], tuple[int, ...]] | None = None,
 ) -> dict:
-    stem = state.stem
+    stem = artifact_stem or state.stem
     spec = output / f"{stem}.spec.tsv"
     report = output / f"{stem}.report.tsv"
     screenshot = output / f"{stem}.png"
@@ -95,6 +107,13 @@ def run_state(
         "PICKUP_LIVE_SPEC": str(spec),
         "PICKUP_LIVE_DEMO_REARM_ROWS": str(demo_rearm_rows),
     })
+    if substitute is not None:
+        before, after = substitute
+        environment["PICKUP_LIVE_SUBSTITUTE"] = (
+            ",".join(f"{value:02X}" for value in before)
+            + ":"
+            + ",".join(f"{value:02X}" for value in after)
+        )
     attempts = []
     for attempt in range(1, launch_attempts + 1):
         # A failed Qt process must never leave output that can make its retry
@@ -253,6 +272,11 @@ def main() -> int:
         for state_name, expected_pickups in grouped.items():
             state = states / state_name
             runtime_state = state
+            substitute = None
+            host = SYNTHETIC_PICKUP_HOSTS.get(state_name)
+            if host is not None:
+                host_name, substitute = host
+                runtime_state = states / host_name
             # These fixtures serialize a PC inside code replaced by the
             # current build. Preserve their game/video memory, retarget the
             # ROM CRC, and resume at the shared fixed-bank main loop. The
@@ -278,6 +302,8 @@ def main() -> int:
                     args.mgba.resolve(), rom, runtime_state, expected_pickups,
                     output, args.timeout, args.demo_rearm_rows,
                     args.launch_attempts,
+                    artifact_stem=state.stem,
+                    substitute=substitute,
                 )
             except Exception as error:
                 failures.append(str(error))

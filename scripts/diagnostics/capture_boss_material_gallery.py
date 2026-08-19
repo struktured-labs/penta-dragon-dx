@@ -63,6 +63,7 @@ def capture(
     for fraction in (frames // 4, frames // 2, frames * 3 // 4):
         Path(f"{prefix}.f{fraction:03d}.png").unlink(missing_ok=True)
 
+    rom_bytes = rom.read_bytes()
     env = os.environ.copy()
     env.update({
         "BOSS_RECEIPT_OUT": str(prefix),
@@ -70,6 +71,12 @@ def capture(
         "BOSS_RECEIPT_REARM": "0",
         "BOSS_RECEIPT_PALETTE_REARM": "1" if rearm_palettes else "0",
         "BOSS_RECEIPT_KEEPALIVE": "1",
+        # D000-DFFF aliases cache/staging data while a CGB publisher parks
+        # SVBK on bank 2/3. Never read scene state or inject survival writes
+        # during that interval. The stock DMG ROM has no switchable WRAM.
+        "BOSS_RECEIPT_BANKED_RUNTIME": (
+            "1" if rom_bytes[0x143] & 0x80 else "0"
+        ),
         "BOSS_TARGET": str(target),
         "QT_QPA_PLATFORM": "offscreen",
         "SDL_AUDIODRIVER": "dummy",

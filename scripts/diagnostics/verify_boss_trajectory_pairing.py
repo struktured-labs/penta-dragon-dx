@@ -280,6 +280,7 @@ def align(og: list[dict[str, object]], dx: list[dict[str, object]]) -> dict[str,
     # 5x on such runs (v72: 72 reported vs 384 slip-aware). Track the
     # re-alignments; each slip event records where and by how much.
     slips: list[dict[str, object]] = []
+    segments: list[tuple[int, int, int]] = [(start_og, start_dx, matched)]
     i, j = start_og + matched, start_dx + matched
     end_og, end_dx = start_og + matched, start_dx + matched
     while i < len(og) - MIN_MATCHED_TRANSITIONS:
@@ -308,6 +309,7 @@ def align(og: list[dict[str, object]], dx: list[dict[str, object]]) -> dict[str,
             "offset_delta": (jj - i) - (start_dx - start_og),
             "run": run,
         })
+        segments.append((i, jj, run))
         i += run
         j = jj + run
         end_og, end_dx = i, jj + run
@@ -333,6 +335,39 @@ def align(og: list[dict[str, object]], dx: list[dict[str, object]]) -> dict[str,
         # work than OG: a real slowdown over an identical workload.
         result["dx_over_og_frames_per_iter"] = dx_rate / og_rate
         result["slowdown_percent"] = (dx_rate / og_rate - 1.0) * 100.0
+
+    # Compare elapsed frames across exactly the same matched transition
+    # intervals, excluding unmatched slip gaps. This is the player-facing
+    # phase-cadence complement to arena-loop frames per iteration.
+    transition_intervals = sum(max(0, run - 1) for _, _, run in segments)
+    transition_span: dict[str, object] = {
+        "matched_intervals": transition_intervals,
+    }
+    for side, events, position in (("og", og, 0), ("dx", dx, 1)):
+        elapsed_frames = sum(
+            events[segment[position] + run - 1]["frame"]
+            - events[segment[position]]["frame"]
+            for segment in segments
+            for run in (segment[2],)
+            if run > 1
+        )
+        transition_span[side] = {
+            "frames": elapsed_frames,
+            "frames_per_transition": (
+                elapsed_frames / transition_intervals
+                if transition_intervals > 0 else None
+            ),
+        }
+    og_fpt = transition_span["og"]["frames_per_transition"]
+    dx_fpt = transition_span["dx"]["frames_per_transition"]
+    if og_fpt and dx_fpt:
+        transition_span["dx_over_og_frames_per_transition"] = dx_fpt / og_fpt
+        transition_span["slowdown_percent"] = (dx_fpt / og_fpt - 1.0) * 100.0
+    result["matched_transition_span"] = transition_span
+    depth = result["slip_aware_matched"]
+    result["pairing_confidence"] = (
+        "thin" if depth < 100 else "moderate" if depth < 250 else "deep"
+    )
     return result
 
 
@@ -440,12 +475,17 @@ def main() -> int:
         rows.append(row)
         matched = row.get("alignment", {}).get("matched_transitions", 0)
         slowdown = row.get("alignment", {}).get("slowdown_percent")
+        transition_slowdown = row.get("alignment", {}).get(
+            "matched_transition_span", {}
+        ).get("slowdown_percent")
         print(
             f"{name:16s} {row['status']:13s} "
             f"og_iters={row['og']['iters']:5d} dx_iters={row['dx']['iters']:5d} "
             f"matched={matched:4d} "
-            + (f"matched-span slowdown={slowdown:+6.2f}%"
-               if slowdown is not None else "matched-span slowdown=n/a")
+            + (f"loop={slowdown:+6.2f}%"
+               if slowdown is not None else "loop=n/a")
+            + (f" transition={transition_slowdown:+6.2f}%"
+               if transition_slowdown is not None else " transition=n/a")
         )
 
     receipt = {

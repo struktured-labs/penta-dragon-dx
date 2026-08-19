@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_YAML = ROOT / "palettes/penta_palettes_v097.yaml"
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 BUILDER = ROOT / "scripts/build_v302_title_fix.py"
+EXPANDED_TED_BUILDER = ROOT / "scripts/build_ted_expanded_candidate.py"
 PROBE = Path(__file__).with_name("probe_palette_build_roundtrip.lua")
 BANK13 = 13 * 0x4000
 
@@ -35,7 +36,13 @@ TUNED = {
     ("obj_palettes", "SaraWitchJet"): ["0000", "1123", "2456", "3001"],
     ("obj_palettes", "SaraDragonJet"): ["0000", "0765", "1ABC", "2DEF"],
     ("boss_palettes", "Gargoyle"): ["0000", "1111", "2222", "3333"],
+    ("boss_palettes", "Spider"): ["0000", "0123", "1456", "2789"],
     ("boss_palettes", "Boss3_Crimson"): ["0000", "0D1F", "0918", "0410"],
+    ("boss_palettes", "Boss4_Ice"): ["0000", "7A10", "6210", "4A10"],
+    ("boss_palettes", "Boss5_Void"): ["0000", "7012", "5812", "4012"],
+    ("boss_palettes", "Boss6_Poison"): ["0000", "03D0", "02A0", "0170"],
+    ("boss_palettes", "Boss7_Knight"): ["0000", "2F1E", "1E18", "0D12"],
+    ("boss_palettes", "Angela"): ["0000", "739C", "5294", "318C"],
     ("powerup_palettes", "SpiralProjectile"): [
         "0000", "1023", "2045", "3067"
     ],
@@ -48,6 +55,10 @@ TUNED = {
 
 def md5(path: Path) -> str:
     return hashlib.md5(path.read_bytes()).hexdigest()
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def palette_bytes(colors: list[str]) -> bytes:
@@ -210,6 +221,14 @@ def main() -> int:
     )
     parser.add_argument("--timeout", type=float, default=60)
     parser.add_argument("--keep", type=Path)
+    parser.add_argument(
+        "--expanded-ted", action="store_true",
+        help="build and verify the collision-free expanded-bank Ted candidate",
+    )
+    parser.add_argument(
+        "--menu-icon-colors", action="store_true",
+        help="retain the isolated YAML-driven item-menu palette publisher",
+    )
     args = parser.parse_args()
     if not args.yaml.is_file():
         parser.error(f"palette YAML not found: {args.yaml}")
@@ -217,9 +236,15 @@ def main() -> int:
         parser.error(f"release candidate not found: {args.candidate}")
     if not args.mgba:
         parser.error("mgba-qt was not found")
+    args.yaml = args.yaml.resolve()
+    args.candidate = args.candidate.resolve()
 
-    candidate_hash = md5(args.candidate)
-    temporary = tempfile.TemporaryDirectory(prefix="penta-palette-roundtrip-")
+    candidate_hash = sha256(args.candidate)
+    scratch = ROOT / "tmp"
+    scratch.mkdir(parents=True, exist_ok=True)
+    temporary = tempfile.TemporaryDirectory(
+        prefix="penta-palette-roundtrip-", dir=scratch
+    )
     work = Path(temporary.name)
     if args.keep:
         temporary.cleanup()
@@ -232,17 +257,33 @@ def main() -> int:
         tuned_yaml.write_text(replace_palettes(args.yaml.read_text()))
         output_rom = work / "penta-roundtrip.gb"
         base_rom = work / "penta-roundtrip.base.gb"
+        build_command = [
+            sys.executable,
+            str(EXPANDED_TED_BUILDER if args.expanded_ted else BUILDER),
+            "--palette-yaml", str(tuned_yaml),
+            "--output", str(output_rom),
+        ]
+        if args.expanded_ted:
+            # The release-qualified expanded candidate retains Ted's native
+            # sparse/tentacle publication.  Rebuilding without this flag
+            # silently selects the rejected canonical-limb diagnostic and no
+            # longer exercises the architecture represented by --candidate.
+            build_command += [
+                "--native-sparse",
+                "--work", str(work / "expanded-build"),
+            ]
+            candidate_bytes = args.candidate.read_bytes()
+            native_pose_bank = candidate_bytes[17 * 0x4000:18 * 0x4000]
+            if native_pose_bank and any(byte != 0xFF for byte in native_pose_bank):
+                build_command.append("--native-pose-table")
+            if args.menu_icon_colors:
+                build_command.append("--menu-icon-colors")
+        else:
+            if args.menu_icon_colors:
+                parser.error("--menu-icon-colors requires --expanded-ted")
+            build_command += ["--base-output", str(base_rom)]
         build = subprocess.run(
-            [
-                sys.executable,
-                str(BUILDER),
-                "--palette-yaml",
-                str(tuned_yaml),
-                "--output",
-                str(output_rom),
-                "--base-output",
-                str(base_rom),
-            ],
+            build_command,
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -253,8 +294,12 @@ def main() -> int:
             print(build.stdout[-4000:])
             print(build.stderr[-4000:])
             return 1
-        if not output_rom.is_file() or output_rom.stat().st_size != 262144:
-            print("FAIL: builder did not produce a 256 KiB round-trip ROM")
+        expected_size = 524288 if args.expanded_ted else 262144
+        if not output_rom.is_file() or output_rom.stat().st_size != expected_size:
+            print(
+                "FAIL: builder did not produce the expected "
+                f"{expected_size // 1024} KiB round-trip ROM"
+            )
             return 1
 
         rom = output_rom.read_bytes()
@@ -267,8 +312,14 @@ def main() -> int:
         obj2 = palette_bytes(TUNED[("obj_palettes", "SaraWitch")])
         witch_jet = palette_bytes(TUNED[("obj_palettes", "SaraWitchJet")])
         dragon_jet = palette_bytes(TUNED[("obj_palettes", "SaraDragonJet")])
-        gargoyle = palette_bytes(TUNED[("boss_palettes", "Gargoyle")])
-        boss3 = palette_bytes(TUNED[("boss_palettes", "Boss3_Crimson")])
+        boss_palette_names = (
+            "Gargoyle", "Spider", "Boss3_Crimson", "Boss4_Ice",
+            "Boss5_Void", "Boss6_Poison", "Boss7_Knight", "Angela",
+        )
+        boss_palette_bytes = {
+            name: palette_bytes(TUNED[("boss_palettes", name)])
+            for name in boss_palette_names
+        }
         spiral = palette_bytes(
             TUNED[("powerup_palettes", "SpiralProjectile")]
         )
@@ -299,14 +350,6 @@ def main() -> int:
                 BANK13 + (0x68D8 - 0x4000):
                 BANK13 + (0x68D8 - 0x4000) + 8
             ] == dragon_jet,
-            "Gargoyle source": rom[
-                BANK13 + (0x6880 - 0x4000):
-                BANK13 + (0x6880 - 0x4000) + 8
-            ] == gargoyle,
-            "Boss3 source": rom[
-                BANK13 + (0x6880 - 0x4000) + 16:
-                BANK13 + (0x6880 - 0x4000) + 24
-            ] == boss3,
             "Spiral source": rom[
                 BANK13 + (0x68E0 - 0x4000):
                 BANK13 + (0x68E0 - 0x4000) + 8
@@ -320,7 +363,30 @@ def main() -> int:
                 BANK13 + (0x68F0 - 0x4000) + 8
             ] == turbo,
         }
+        boss_palette_base = BANK13 + (0x6880 - 0x4000)
+        static_checks.update({
+            f"{name} boss source": rom[
+                boss_palette_base + index * 8:
+                boss_palette_base + (index + 1) * 8
+            ] == boss_palette_bytes[name]
+            for index, name in enumerate(boss_palette_names)
+        })
         failed_static = [name for name, passed in static_checks.items() if not passed]
+        if args.menu_icon_colors:
+            canonical_lut = rom[
+                BANK13 + (0x7000 - 0x4000):
+                BANK13 + (0x7100 - 0x4000)
+            ]
+            private_menu_lut = rom[
+                20 * 0x4000 + (0x4100 - 0x4000):
+                20 * 0x4000 + (0x4200 - 0x4000)
+            ]
+            static_checks["menu canonical LUT copy"] = (
+                private_menu_lut == canonical_lut
+            )
+            failed_static = [
+                name for name, passed in static_checks.items() if not passed
+            ]
         if failed_static:
             print("FAIL: tuned YAML bytes missing from ROM: " + ", ".join(failed_static))
             return 1
@@ -404,7 +470,7 @@ def main() -> int:
                 f"runtime ended at D880={report.get('d880')} "
                 f"FFC1={report.get('ffc1')}"
             )
-        if md5(args.candidate) != candidate_hash:
+        if sha256(args.candidate) != candidate_hash:
             failures.append("workspace release candidate changed during test")
         if failures:
             print("FAIL: palette build round-trip")
@@ -414,11 +480,11 @@ def main() -> int:
 
         print(
             "PASS: edited BG0/BG7/Stage-1 hazard BG7/OBJ2, both Jet, "
-            "Gargoyle/Boss3, and all powerup YAML bytes reached the ROM"
+            "all eight boss palettes, and all powerup YAML bytes reached the ROM"
         )
         print(
             "PASS: title kept the BG7 boot mask; Stage 1 selected the tuned "
-            "hazard BG7 row"
+            "scene-local hazard BG7 row"
         )
         print("PASS: tuned BG0 and OBJ2 reached live mGBA CRAM")
         print(
@@ -427,6 +493,7 @@ def main() -> int:
         )
         print("PASS: production rebuild preserves a hash-named rollback ROM")
         print(f"PASS: workspace candidate stayed {candidate_hash}")
+        print(f"PASS: tuned rebuild SHA-256 {sha256(output_rom)}")
         if args.keep:
             print(f"Artifacts: {work}")
         return 0

@@ -64,6 +64,9 @@ def build_gates(
     baseline_readiness: Path | None = None,
     require_ted_improvement: bool = False,
     baseline_pin: Path | None = None,
+    *,
+    expanded_candidate_override: bool | None = None,
+    menu_icon_candidate_override: bool | None = None,
 ) -> list[Gate]:
     py = sys.executable
     r = str(rom)
@@ -71,6 +74,20 @@ def build_gates(
     ending_a = artifacts / "ending-inventory-a"
     ending_b = artifacts / "ending-inventory-b"
     story_states = artifacts / "story-states"
+    expanded_candidate = rom.is_file() and rom.stat().st_size > 0x40000
+    menu_icon_candidate = False
+    if rom.is_file() and rom.stat().st_size > 0x1B53:
+        with rom.open("rb") as handle:
+            handle.seek(0x1B48)
+            menu_icon_candidate = handle.read(11) == bytes.fromhex(
+                "F0 99 F5 3E 14 CD 61 00 CD 00 40"
+            )
+    if expanded_candidate_override is not None:
+        expanded_candidate = expanded_candidate_override
+    if menu_icon_candidate_override is not None:
+        menu_icon_candidate = menu_icon_candidate_override
+    if menu_icon_candidate and not expanded_candidate:
+        raise ValueError("menu-icon publisher requires an expanded candidate")
 
     def script(path: str, *arguments: str) -> tuple[str, ...]:
         return (py, str(ROOT / path), *arguments)
@@ -95,6 +112,8 @@ def build_gates(
         "--determinism", str(artifacts / "ted-determinism/report.json"),
         "--materializer", str(artifacts / "ted-materializer/report.json"),
         "--classifier", str(artifacts / "ted-classifier/report.json"),
+        "--expanded-integration",
+        str(artifacts / "ted-expanded-integration/report.json"),
         "--source-publication",
         str(artifacts / "ted-source-publication/report.json"),
         "--publication-sequence",
@@ -105,14 +124,41 @@ def build_gates(
         str(artifacts / "ted-cache-plane-reservation/report.json"),
         "--output", str(artifacts / "ted-release-readiness/report.json"),
     )
+    ted_determinism_dependencies = (
+        ("ted_expanded_integration", "ted_entry")
+        if expanded_candidate else (
+            "ted_contract_controls", "ted_materializer",
+            "ted_classifier", "ted_entry",
+        )
+    )
+    ted_readiness_dependencies = (
+        (
+            "ted_expanded_integration", "ted_entry", "ted_cadence",
+            "ted_determinism",
+        )
+        if expanded_candidate else (
+            "ted_expanded_integration", "ted_contract_controls",
+            "ted_materializer", "ted_classifier", "ted_entry",
+            "ted_cadence", "ted_determinism", "ted_source_publication",
+            "ted_publication_sequence", "ted_incremental_mask_corpus",
+            "ted_two_plane_cache_contract", "ted_cache_plane_reservation",
+        )
+    )
 
-    return [
+    gates = [
         Gate(
             "emulator_singleflight_guard",
             script(
                 "scripts/diagnostics/verify_mgba_singleflight_guard.py"
             ),
             15,
+        ),
+        Gate(
+            "release_matrix_resume_contract",
+            script(
+                "scripts/diagnostics/verify_release_matrix_resume_contract.py"
+            ),
+            30,
         ),
         Gate(
             "title_footer_integration",
@@ -126,7 +172,12 @@ def build_gates(
         ),
         Gate(
             "flash_attribution",
-            script("scripts/probes/verify_flash_attribution.py", r),
+            script(
+                "scripts/probes/verify_flash_attribution.py",
+                r,
+                "--output",
+                str(artifacts / "flash-attribution"),
+            ),
             240,
         ),
         Gate(
@@ -175,6 +226,18 @@ def build_gates(
             300,
         ),
         Gate(
+            "menu_icon_palettes",
+            script(
+                "scripts/diagnostics/verify_menu_icon_palettes.py",
+                r,
+                "--output",
+                str(artifacts / "menu-icon-palettes"),
+                "--runs",
+                "2",
+            ),
+            180,
+        ),
+        Gate(
             "menu_window_publish_order",
             script(
                 "scripts/diagnostics/verify_menu_window_order.py",
@@ -218,6 +281,8 @@ def build_gates(
                 "--max-gameplay-frame",
                 "650",
                 "--include-warm-reset",
+                "--timeout",
+                "60",
                 "--output",
                 str(artifacts / "game-start-routes"),
             ),
@@ -238,9 +303,9 @@ def build_gates(
                 "207",
                 "--after-attract",
                 "--probe-max-frames",
-                "10000",
+                "10500",
                 "--max-gameplay-frame",
-                "10000",
+                "10500",
                 "--timeout",
                 "30",
                 "--output",
@@ -267,17 +332,19 @@ def build_gates(
                 "--original-rom",
                 str(ROOT / "rom/Penta Dragon (J).gb"),
                 "--targets",
-                "0,4,6",
+                "0,1,2,3,4,5,6",
                 "--input-mode",
                 "right",
                 "--frames",
                 "2800",
                 "--tolerance",
-                "0.10",
+                "0.02",
+                "--accepted-slowdown-floor",
+                "0.96",
                 "--output",
                 str(artifacts / "gameplay-speed"),
             ),
-            180,
+            900,
         ),
         Gate(
             "gameplay_bg_palettes",
@@ -429,14 +496,11 @@ def build_gates(
                 "240",
                 "--dynamic-prefix",
                 "0",
-                # Use the same explicit OG-speed policy as the three-stage
-                # matrix. The route still independently requires every one
-                # of the 576 packed terrain bytes to match stock.
-                "--max-frame-lag-ratio",
-                # Enemy contact can deflect the UP-only route while the
-                # dedicated speed matrix independently enforces <=10% CPU
-                # throughput loss across Stages 1/5/7.
-                "0.15",
+                # Enemy contact can deflect the UP-only DX and OG routes.
+                # Gate the reported black-void coordinate against OG and
+                # require a byte-identical second DX replay. The independent
+                # all-seven matrix owns the strict <=2% throughput policy.
+                "--target-only",
                 "--output",
                 str(artifacts / "stage1-north-route-integrity"),
             ),
@@ -511,6 +575,8 @@ def build_gates(
                 "--screenshots",
                 "--capture-stable",
                 "0",
+                "--sample-interval",
+                "2",
                 "--require-semantic-pickups",
             ),
             360,
@@ -532,6 +598,8 @@ def build_gates(
                 # failing on a deliberately delayed, never-created receipt.
                 "--capture-stable",
                 "0",
+                "--sample-interval",
+                "2",
                 "--require-stage-bg0",
                 "--keep-dir",
                 str(artifacts / "stage2-stream-soak"),
@@ -539,11 +607,39 @@ def build_gates(
             180,
         ),
         Gate(
+            "stage_side_by_side_all7",
+            script(
+                "scripts/diagnostics/capture_stage_side_by_side.py",
+                r,
+                "--frames",
+                "1200",
+                "--step",
+                "60",
+                "--mode",
+                "patrol",
+                "--output",
+                str(artifacts / "stage-side-by-side"),
+            ),
+            1200,
+        ),
+        Gate(
             "boss_atomic_attr_contract",
             script(
                 "scripts/diagnostics/verify_boss_atomic_attr_contract.py",
                 r,
             ),
+            30,
+        ),
+        Gate(
+            "ted_expanded_integration",
+            script(
+                "scripts/diagnostics/verify_ted_expanded_integration.py",
+                r,
+                "--output",
+                str(artifacts / "ted-expanded-integration/report.json"),
+                "--shalamar-native-exact-class",
+                "0",
+            ) + (("--menu-icon-colors",) if menu_icon_candidate else ()),
             30,
         ),
         Gate(
@@ -627,6 +723,10 @@ def build_gates(
                 "60",
                 "--frames",
                 "2800",
+                "--phase-ratio-floor",
+                "0.95",
+                "--phase-ratio-ceiling",
+                "1.20",
                 "--output",
                 str(artifacts / "ted-cadence/report.json"),
                 "--receipt-only",
@@ -693,10 +793,7 @@ def build_gates(
                 "--receipt-only",
             ),
             240,
-            dependencies=(
-                "ted_contract_controls", "ted_materializer",
-                "ted_classifier", "ted_entry",
-            ),
+            dependencies=ted_determinism_dependencies,
         ),
         Gate(
             "ted_source_publication",
@@ -728,16 +825,21 @@ def build_gates(
             dependencies=("ted_source_publication",),
         ),
         Gate(
+            "ted_incremental_mask_corpus",
+            script(
+                "scripts/diagnostics/verify_ted_incremental_mask_corpus.py",
+                str(artifacts / "ted-source-publication/traces/run-a.bin"),
+                "--output",
+                str(artifacts / "ted-incremental-mask-corpus/report.json"),
+            ),
+            30,
+            dependencies=("ted_source_publication",),
+        ),
+        Gate(
             "ted_release_readiness_receipt",
             ted_readiness_command + ("--receipt-only",),
             30,
-            dependencies=(
-                "ted_contract_controls", "ted_materializer", "ted_classifier",
-                "ted_entry", "ted_cadence", "ted_determinism",
-                "ted_source_publication", "ted_publication_sequence",
-                "ted_two_plane_cache_contract",
-                "ted_cache_plane_reservation",
-            ),
+            dependencies=ted_readiness_dependencies,
         ),
         Gate(
             "ted_candidate_delta",
@@ -763,7 +865,7 @@ def build_gates(
                 "--output",
                 str(artifacts / "boss-semantic-cadence.json"),
             ),
-            180,
+            360,
             dependencies=("boss_arenas",),
         ),
         Gate(
@@ -778,6 +880,108 @@ def build_gates(
             600,
         ),
         Gate(
+            "boss_og_material_gallery_all9",
+            script(
+                "scripts/diagnostics/capture_boss_material_gallery.py",
+                str(ROOT / "rom/Penta Dragon (J).gb"),
+                "--states",
+                str(artifacts / "boss-og-states"),
+                "--output",
+                str(artifacts / "boss-og-material-gallery"),
+                "--frames",
+                "120",
+            ),
+            300,
+            dependencies=("boss_og_states",),
+        ),
+        Gate(
+            "boss_og_silhouette_gallery",
+            script(
+                "scripts/diagnostics/verify_boss_silhouette_offline.py",
+                "--gallery",
+                str(artifacts / "boss-og-material-gallery"),
+                "--frames",
+                "120",
+                "--output",
+                str(artifacts / "boss-og-silhouette-gallery.json"),
+            ),
+            30,
+            dependencies=("boss_og_material_gallery_all9",),
+        ),
+        Gate(
+            "boss_speed_parity",
+            script(
+                "scripts/diagnostics/verify_boss_speed_parity.py",
+                r,
+                "--dx-states",
+                str(artifacts / "boss-arenas"),
+                "--og-states",
+                str(artifacts / "boss-og-states"),
+                "--warmup",
+                "60",
+                "--frames",
+                "1800",
+                "--max-slowdown",
+                "0.02",
+                "--accepted-slow-boss",
+                "crystal_dragon=0.95",
+                "--bounded-speedup-ceiling",
+                "1.20",
+                "--output",
+                str(artifacts / "boss-speed-parity.json"),
+            ),
+            1800,
+            dependencies=("boss_arenas", "boss_og_states"),
+        ),
+        Gate(
+            "boss_trajectory_pairing_null",
+            script(
+                "scripts/diagnostics/verify_boss_trajectory_pairing.py",
+                str(ROOT / "rom/Penta Dragon (J).gb"),
+                "--original",
+                str(ROOT / "rom/Penta Dragon (J).gb"),
+                "--dx-states",
+                str(artifacts / "boss-og-states"),
+                "--og-states",
+                str(artifacts / "boss-og-states"),
+                "--target",
+                "3",
+                "--warmup",
+                "60",
+                "--dx-warmup",
+                "180",
+                "--frames",
+                "1200",
+                "--output",
+                str(artifacts / "boss-trajectory-pairing-null.json"),
+            ),
+            300,
+            dependencies=("boss_og_states",),
+        ),
+        Gate(
+            "boss_trajectory_pairing",
+            script(
+                "scripts/diagnostics/verify_boss_trajectory_pairing.py",
+                r,
+                "--dx-states",
+                str(artifacts / "boss-arenas"),
+                "--og-states",
+                str(artifacts / "boss-og-states"),
+                "--warmup",
+                "60",
+                "--frames",
+                "2400",
+                "--output",
+                str(artifacts / "boss-trajectory-pairing.json"),
+            ),
+            1200,
+            dependencies=(
+                "boss_arenas",
+                "boss_og_states",
+                "boss_trajectory_pairing_null",
+            ),
+        ),
+        Gate(
             "boss_publication_cadence",
             script(
                 "scripts/diagnostics/verify_boss_publication_cadence.py",
@@ -790,6 +994,10 @@ def build_gates(
                 "60",
                 "--frames",
                 "600",
+                "--phase-ratio-floor",
+                "0.95",
+                "--phase-ratio-ceiling",
+                "1.20",
                 "--output",
                 str(artifacts / "boss-publication-cadence.json"),
             ),
@@ -824,6 +1032,38 @@ def build_gates(
             ),
             240,
             dependencies=("boss_geometry_all9", "crystal_dragon_ghost"),
+        ),
+        Gate(
+            "boss_silhouette_gallery",
+            script(
+                "scripts/diagnostics/verify_boss_silhouette_offline.py",
+                "--gallery",
+                str(artifacts / "boss-material-gallery"),
+                "--frames",
+                "120",
+                "--output",
+                str(artifacts / "boss-silhouette-gallery.json"),
+            ),
+            30,
+            dependencies=("boss_material_gallery_all9",),
+        ),
+        Gate(
+            "boss_material_side_by_side",
+            script(
+                "scripts/diagnostics/compose_boss_material_comparison.py",
+                "--og",
+                str(artifacts / "boss-og-material-gallery"),
+                "--dx",
+                str(artifacts / "boss-material-gallery"),
+                "--frames",
+                "120",
+                "--output",
+                str(artifacts / "boss-material-side-by-side"),
+            ),
+            30,
+            dependencies=(
+                "boss_og_silhouette_gallery", "boss_silhouette_gallery",
+            ),
         ),
         Gate(
             "death_gameover",
@@ -900,7 +1140,7 @@ def build_gates(
         Gate(
             "ending_inventory_a",
             script(
-                "scripts/diagnostics/inventory_final_cutscene.py",
+                "scripts/diagnostics/inventory_final_cutscene_mgba.py",
                 r,
                 "--entry",
                 "post-final",
@@ -915,7 +1155,7 @@ def build_gates(
         Gate(
             "ending_inventory_b",
             script(
-                "scripts/diagnostics/inventory_final_cutscene.py",
+                "scripts/diagnostics/inventory_final_cutscene_mgba.py",
                 r,
                 "--entry",
                 "post-final",
@@ -984,7 +1224,9 @@ def build_gates(
                 r,
                 "--timeout",
                 "60",
-            ),
+            )
+            + (("--expanded-ted",) if expanded_candidate else ())
+            + (("--menu-icon-colors",) if menu_icon_candidate else ()),
             180,
         ),
         Gate(
@@ -992,7 +1234,6 @@ def build_gates(
             script(
                 "scripts/diagnostics/verify_release_patch.py",
                 r,
-                "--candidate-only",
             ),
             30,
         ),
@@ -1002,6 +1243,15 @@ def build_gates(
             30,
         ),
     ]
+    if expanded_candidate:
+        legacy_ted_gates = {
+            "ted_contract_controls", "ted_materializer", "ted_classifier",
+            "ted_two_plane_cache_contract", "ted_cache_plane_reservation",
+            "ted_source_publication", "ted_publication_sequence",
+            "ted_incremental_mask_corpus",
+        }
+        gates = [gate for gate in gates if gate.name not in legacy_ted_gates]
+    return gates
 
 
 def tail(path: Path, lines: int = 24) -> str:
@@ -1018,6 +1268,16 @@ def write_manifest(path: Path, manifest: dict) -> None:
     temporary.replace(path)
 
 
+def configure_repo_temp(output: Path) -> Path:
+    """Route every gate's inherited scratch files to this matrix directory."""
+
+    runtime_tmp = output / "runtime-tmp"
+    runtime_tmp.mkdir(parents=True, exist_ok=True)
+    for name in ("TMPDIR", "TMP", "TEMP"):
+        os.environ[name] = str(runtime_tmp)
+    return runtime_tmp
+
+
 def dependency_closure(
     selected: set[str], gates: dict[str, Gate]
 ) -> set[str]:
@@ -1030,6 +1290,50 @@ def dependency_closure(
                 result.add(dependency)
                 pending.append(dependency)
     return result
+
+
+def complete_resume_is_immutable(
+    manifest: dict,
+    gate_list: list[Gate],
+    selected: set[str],
+    *,
+    full_matrix: bool,
+    source_hash: str,
+    tested_hash: str,
+    source_fingerprint: str,
+    source_input_count: int,
+) -> bool:
+    """Return whether resume can succeed without rewriting a final manifest.
+
+    A completed matrix may feed more than one receipt. Rewriting it merely to
+    add ``resumed_at`` invalidates every earlier receipt hash even though no
+    gate evidence changed, so an intact completed manifest is immutable.
+    """
+
+    expected_names = [
+        gate.name for gate in gate_list if gate.name in selected
+    ]
+    results = manifest.get("results", [])
+    return (
+        manifest.get("status")
+        == ("emulator-pass" if full_matrix else "selected-pass")
+        and manifest.get("scope") == ("full" if full_matrix else "selected")
+        and manifest.get("selected_gates") == expected_names
+        and manifest.get("failures") == 0
+        and manifest.get("rom_md5") == source_hash
+        and manifest.get("source_rom_md5_after") == source_hash
+        and manifest.get("tested_rom_md5_after") == tested_hash
+        and manifest.get("rom_hashes_intact") is True
+        and manifest.get("source_fingerprint") == source_fingerprint
+        and manifest.get("source_fingerprint_after") == source_fingerprint
+        and manifest.get("source_input_count") == source_input_count
+        and manifest.get("source_inputs_intact") is True
+        and [item.get("name") for item in results] == expected_names
+        and all(
+            item.get("status") == "passed" and item.get("returncode") == 0
+            for item in results
+        )
+    )
 
 
 def main() -> int:
@@ -1096,6 +1400,7 @@ def main() -> int:
         else ROOT / "tmp" / f"penta-release-candidate-{stamp}"
     )
     output.mkdir(parents=True, exist_ok=True)
+    runtime_tmp = configure_repo_temp(output)
     (output / "logs").mkdir(exist_ok=True)
     (output / "artifacts").mkdir(exist_ok=True)
     tested_dir = output / "tested-rom"
@@ -1192,6 +1497,21 @@ def main() -> int:
                 "resume Ted baseline paths/hashes do not match; rerun the "
                 "selected gates instead of retaining stale delta evidence"
             )
+        if complete_resume_is_immutable(
+            manifest,
+            gate_list,
+            selected,
+            full_matrix=full_matrix,
+            source_hash=source_hash,
+            tested_hash=tested_hash,
+            source_fingerprint=suite_source_fingerprint,
+            source_input_count=len(suite_source_inputs),
+        ):
+            print(
+                "PASS: completed resume is an immutable no-op; "
+                f"manifest unchanged: {manifest_path}"
+            )
+            return 0
         prior_results = {
             result.get("name"): result
             for result in manifest.get("results", [])
@@ -1231,6 +1551,7 @@ def main() -> int:
             "platform": platform.platform(),
             "mgba_qt": str(ROOT / "scripts/mgba-qt-singleflight"),
             "hardware_gate": "pending-reservation-backed-mister",
+            "runtime_tmp": str(runtime_tmp),
             "ted_baselines": ted_baselines,
             "selected_gates": [
                 gate.name for gate in gate_list if gate.name in selected

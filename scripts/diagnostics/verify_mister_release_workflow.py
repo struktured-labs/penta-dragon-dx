@@ -33,6 +33,8 @@ def expect_runtime_error(callable_value, message: str) -> None:
 
 def main() -> int:
     mister = load_mister_module()
+    local_tmp = ROOT / "tmp"
+    local_tmp.mkdir(exist_ok=True)
 
     # A core mismatch must abort. The older workflow only printed a warning.
     mister.ssh = lambda *_args, **_kwargs: SimpleNamespace(
@@ -61,7 +63,9 @@ def main() -> int:
         raise AssertionError("release ROM/IPS missing for local workflow test")
     local_md5 = mister.md5_file(mister.LOCAL_ROM)
 
-    with tempfile.TemporaryDirectory(prefix="penta-mister-release-") as temp:
+    with tempfile.TemporaryDirectory(
+        prefix="penta-mister-release-", dir=local_tmp
+    ) as temp:
         temp_path = Path(temp)
         emulator_path = temp_path / "emulator-manifest.json"
         emulator_path.write_text('{"test":"hash binding only"}\n')

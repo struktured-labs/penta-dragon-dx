@@ -120,13 +120,17 @@ def normalize(
     if retarget_only or preserve_machine:
         if rom is None:
             raise ValueError("machine-preserving modes require a ROM")
-        if writes or bank is not None:
+        if retarget_only and writes:
+            raise ValueError("retarget-only mode cannot use --write")
+        if bank is not None:
             raise ValueError(
-                "machine-preserving modes cannot use --write or --bank"
+                "machine-preserving modes cannot use --bank"
             )
         raw[0x0004:0x0008] = (
             zlib.crc32(rom.read_bytes()) & 0xFFFFFFFF
         ).to_bytes(4, "little")
+        for address, value in writes:
+            raw[state_offset(address)] = value
         if arena_table is not None:
             rom_bytes = rom.read_bytes()
             source = (
@@ -134,7 +138,13 @@ def normalize(
                 + (0x7200 + arena_table * 0x100 - 0x4000)
             )
             table = rom_bytes[source:source + 0x100]
-            if len(table) != 0x100 or any(value > 7 for value in table):
+            # Ted's live arena IDs end at $86; the candidate deliberately
+            # reclaims the otherwise-unused $87-$FF LUT tail for banked sparse
+            # publisher code. Validate every reachable semantic entry without
+            # misclassifying executable tail bytes as palette indices.
+            semantic_limit = 0x87 if arena_table == 4 else 0x100
+            if (len(table) != 0x100
+                    or any(value > 7 for value in table[:semantic_limit])):
                 raise ValueError("candidate arena table is missing or invalid")
             table_destination = state_offset(0xC600)
             raw[table_destination:table_destination + 0x100] = table

@@ -11,6 +11,8 @@ local tracked_ids = {}
 local transient_mismatch_frames = {}
 local transient_mismatch_trace = {}
 local first_transient_mismatch = ""
+local inactive_preparation_mismatch_frames = {}
+local inactive_preparation_mismatch_trace = {}
 local raw49_trace = {}
 local last_raw49 = -1
 local main_loop_hits, tile_copy_hits, pure_tail_hits, atomic_wrap_hits = 0, 0, 0, 0
@@ -45,6 +47,7 @@ local expected_load_count = tonumber(
   os.getenv("STAGE1_SPIKE_EXPECTED_LOAD_COUNT") or "16")
 local refresh_runtime_code = os.getenv("STAGE1_SPIKE_REFRESH_CODE") ~= "0"
 local trace_writers = os.getenv("STAGE1_SPIKE_TRACE_WRITERS") == "1"
+local trace_routes = os.getenv("STAGE1_SPIKE_TRACE_ROUTES") ~= "0"
 local writer_trace = {}
 local last_writer_pc, last_writer_bank = -1, -1
 local watched_snapshot = ""
@@ -63,6 +66,10 @@ local expected_bg5 = os.getenv("STAGE1_SPIKE_EXPECTED_BG5")
 local expected_bg7 = os.getenv("STAGE1_SPIKE_EXPECTED_BG7")
   or "7FFF,7E94,03FF,0000"
 local expected_bank1_art = assert(os.getenv("STAGE1_SPIKE_EXPECTED_BANK1_ART"))
+local bank1_art_trace = {}
+local last_bank1_art_state = ""
+local stage1_code_bank = tonumber(
+  os.getenv("STAGE1_SPIKE_CODE_BANK") or "14")
 local floor_mismatch_frames = {}
 local floor_mismatch_trace = {}
 local first_floor_mismatch = ""
@@ -215,13 +222,13 @@ local function expected_palette(tile)
   return tooth and 7 or (fire and 5 or 6)
 end
 
-pcall(function()
-  emu:setBreakpoint(function()
-    if emu:read8(0xD880) == 0x0A then
-      local flags = emu:readRegister("f") & 0xF0
-      miniboss_rst18_flags[flags] = (miniboss_rst18_flags[flags] or 0) + 1
-    end
-  end, 0x0018)
+if trace_routes then pcall(function()
+  -- Do not breakpoint the shared RST $18 vector here. The scene-$0A hazard
+  -- publisher legitimately reaches it many times per copied map; observing
+  -- every invocation made the diagnostic frontend spend minutes inside the
+  -- callback even though a breakpoint-free liveness probe advanced normally.
+  -- The route and output contracts below are stronger than the retired flag
+  -- histogram, which was never consumed by the Python verifier.
   emu:setBreakpoint(function()
     if frame >= 80 then main_loop_hits = main_loop_hits + 1 end
   end, 0x016C)
@@ -288,7 +295,7 @@ pcall(function()
     end
   end, 0x7B9C)
   emu:setBreakpoint(function()
-    if frame >= 80 then
+    if frame >= 80 and emu:read8(0xFF99) == stage1_code_bank then
       hazard_helper_hits = hazard_helper_hits + 1
       if emu:read8(0xD880) == 0x0A and emu:read8(0xFFBF) ~= 0 then
         post_miniboss_hazard_helper_hits =
@@ -303,7 +310,7 @@ pcall(function()
     end
   end, 0x6BA7)
   emu:setBreakpoint(function()
-    if emu:read8(0xFF99) == 0x0E then
+    if emu:read8(0xFF99) == stage1_code_bank then
       hazard_row_hits = hazard_row_hits + 1
       local hl = emu:readRegister("hl") & 0xFFFF
       local count = emu:readRegister("c") & 0xFF
@@ -321,7 +328,7 @@ pcall(function()
       end
     end
   end, 0x6C8F)
-end)
+end) end
 
 local function cram_word(palette, color)
   local index = palette * 8 + color * 2
@@ -563,6 +570,7 @@ local function finish()
   handle:write(string.format(
     "bank1_art_mismatches=%d\n", bank1_mismatches))
   handle:write("bank1_art_mismatch_trace=" .. bank1_mismatch_trace .. "\n")
+  handle:write("bank1_art_trace=" .. table.concat(bank1_art_trace, ";") .. "\n")
   handle:write("bank1_art=" .. bank1_art .. "\n")
   handle:write(string.format(
     "bg5=%04X,%04X,%04X,%04X\n",
@@ -583,6 +591,12 @@ local function finish()
   handle:write(
     "transient_mismatch_trace=" .. table.concat(transient_mismatch_trace, ";") .. "\n")
   handle:write("first_transient_mismatch=" .. first_transient_mismatch .. "\n")
+  handle:write(string.format(
+    "inactive_preparation_mismatch_frames=%d\n",
+    #inactive_preparation_mismatch_frames))
+  handle:write(
+    "inactive_preparation_mismatch_trace=" ..
+    table.concat(inactive_preparation_mismatch_trace, ";") .. "\n")
   handle:write("raw49_trace=" .. table.concat(raw49_trace, ";") .. "\n")
   handle:write(string.format("miniboss_first_frame=%d\n", miniboss_first_frame))
   handle:write("miniboss_trace=" .. table.concat(miniboss_trace, ";") .. "\n")
@@ -689,6 +703,14 @@ callbacks:add("frame", function()
     last_floor_lut = floor_lut
   end
   if frame >= 80 then
+    local art_mismatch_count, art_mismatch_tiles = bank1_art_mismatches()
+    local art_state = string.format("%d/%s", art_mismatch_count,
+      art_mismatch_tiles == "" and "ok" or art_mismatch_tiles)
+    if art_state ~= last_bank1_art_state then
+      bank1_art_trace[#bank1_art_trace + 1] = string.format(
+        "f%d:%s", frame, art_state)
+      last_bank1_art_state = art_state
+    end
     if floor_lut ~= "ok" then
       floor_lut_mismatch_frames[#floor_lut_mismatch_frames + 1] = frame
     end
@@ -708,8 +730,9 @@ callbacks:add("frame", function()
     end
   end
 
+  local miniboss_scene = sampled_scene()
   local miniboss_state = string.format(
-    "%02X/%02X/%02X", emu:read8(0xD880), emu:read8(0xFFBF),
+    "%02X/%02X/%02X", miniboss_scene, emu:read8(0xFFBF),
     emu:read8(0xDCB8))
   if miniboss_state ~= last_miniboss_state and #miniboss_trace < 128 then
     miniboss_trace[#miniboss_trace + 1] = string.format(
@@ -848,23 +871,45 @@ callbacks:add("frame", function()
         tracked_ids[offset][candidate] = true
       end
     end
+    -- The stock engine builds the hidden physical map, stamps its hazard
+    -- rows, and only then flips LCDC. A tile/attribute difference on that
+    -- hidden work plane is expected during preparation; it is a visible
+    -- atomicity defect only if it survives until that map becomes active.
+    -- Sample both planes so the receipt records the preparation interval but
+    -- fails on the exact plane the PPU can render this frame.
+    local active_base =
+      (emu:read8(0xFF40) & 0x08) ~= 0 and 0x9C00 or 0x9800
+    local inactive_base = active_base == 0x9C00 and 0x9800 or 0x9C00
     local live_tiles = {}
+    local inactive_tiles = {}
     for _, offset in ipairs(tracked_offsets) do
-      live_tiles[offset] = emu:read8(0x9C00 + offset)
+      live_tiles[offset] = emu:read8(active_base + offset)
+      inactive_tiles[offset] = emu:read8(inactive_base + offset)
     end
     local tile = emu:read8(0x9C88)
     emu:write8(0xFF4F, 1)
     local attr = emu:read8(0x9C88) & 0x07
     if frame >= transient_check_start then
       local frame_mismatches = {}
+      local inactive_frame_mismatches = {}
       for _, offset in ipairs(tracked_offsets) do
         local candidate = live_tiles[offset]
         if candidate >= 0x60 and candidate <= 0x7F then
-          local actual = emu:read8(0x9C00 + offset) & 0x07
+          local actual = emu:read8(active_base + offset) & 0x07
           local expected = expected_palette(candidate)
           if actual ~= expected then
             table.insert(frame_mismatches, string.format(
               "%03X:%02X/%d/%d", offset, candidate, actual, expected))
+          end
+        end
+        local inactive_candidate = inactive_tiles[offset]
+        if inactive_candidate >= 0x60 and inactive_candidate <= 0x7F then
+          local inactive_actual = emu:read8(inactive_base + offset) & 0x07
+          local inactive_expected = expected_palette(inactive_candidate)
+          if inactive_actual ~= inactive_expected then
+            inactive_frame_mismatches[#inactive_frame_mismatches + 1] =
+              string.format("%03X:%02X/%d/%d", offset, inactive_candidate,
+                inactive_actual, inactive_expected)
           end
         end
       end
@@ -872,8 +917,9 @@ callbacks:add("frame", function()
         table.insert(transient_mismatch_frames, frame)
         if #transient_mismatch_trace < 64 then
           transient_mismatch_trace[#transient_mismatch_trace + 1] = string.format(
-            "f%d:s%02X:b%02X:d%02X:%s", frame, emu:read8(0xD880),
+            "f%d:s%02X:b%02X:d%02X:a%02X:%s", frame, emu:read8(0xD880),
             emu:read8(0xFFBF), emu:read8(0xDC0B),
+            active_base >> 8,
             table.concat(frame_mismatches, ","))
         end
         if first_transient_mismatch == "" then
@@ -883,6 +929,16 @@ callbacks:add("frame", function()
             emu:read8(0xC1BF), emu:read8(0xC1D1), emu:read8(0xC1E9),
             emu:read8(0xDF57))
           emu:screenshot(OUT .. "-first-transient-mismatch.png")
+        end
+      end
+      if #inactive_frame_mismatches > 0 then
+        inactive_preparation_mismatch_frames[
+          #inactive_preparation_mismatch_frames + 1] = frame
+        if #inactive_preparation_mismatch_trace < 64 then
+          inactive_preparation_mismatch_trace[
+            #inactive_preparation_mismatch_trace + 1] = string.format(
+              "f%d:i%02X:%s", frame, inactive_base >> 8,
+              table.concat(inactive_frame_mismatches, ","))
         end
       end
     end

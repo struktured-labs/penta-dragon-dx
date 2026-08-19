@@ -14,10 +14,16 @@ import time
 import uuid
 
 from verify_boss_geometry import TED_NUMBERED_BODY_OFFSETS
-from ted_native_pose_contract import (
+from arena_tables_data import TED_BODY_TILE_PAL
+from ted_native_pose_contract_v2 import (
+    BODY_TILES,
     MAX_BODY_CELLS,
     MIN_BODY_CELLS,
     NATIVE_POSE_SHA256,
+    NUMBERED_TILE_POSITION as TED_NUMBERED_TILE_POSITION,
+    SPARSE_TILE_POSITIONS as TED_SPARSE_TILE_POSITIONS,
+    SPARSE_TILES as TED_TENTACLE_TILES,
+    cells_digest,
 )
 
 
@@ -27,15 +33,11 @@ PROBE = Path(__file__).with_name("probe_ted_determinism.lua")
 TRACE_HEADER_SIZE = 7
 FRAME_SIZE = TRACE_HEADER_SIZE + 2 * 2 * 0x400
 SCHEMA = "penta-ted-full-plane-v3"
-BODY_TILES = frozenset(range(0x02, 0x77)) | {
-    0x7B, 0x7D, 0x80, 0x82, 0x83, 0x84, 0x85, 0x86,
-}
 TED_FLOOR_TILES = frozenset((0x77, 0x78, 0x79, 0x7A))
 # Ted's checker owns two editable stone materials instead of inheriting one
 # uniform BG0 ramp. Diagonal cells use BG6 blue-gray; off-diagonals use BG7
 # steel/navy. This makes background variation explicit and YAML-tuneable.
 TED_FLOOR_PALETTE = {0x77: 6, 0x78: 7, 0x79: 7, 0x7A: 6}
-TED_TENTACLE_TILES = frozenset((0x7B, 0x7D, 0x80, 0x82, 0x83, 0x84, 0x85, 0x86))
 TED_SPARSE_LIMB_OFFSETS = frozenset(
     (row, col)
     for row in range(-1, 6)
@@ -46,52 +48,6 @@ TED_WRAP_FRINGE_OFFSETS = frozenset(((-1, 7), (-1, 8)))
 # silhouette: every ID has exactly one crown-relative coordinate across all
 # 2,800 stock frames.  This identity contract explains failures more usefully
 # than a pose hash alone while storing no ROM graphics.
-TED_NUMBERED_ROW_SPANS = (
-    (0, 5), (-2, 6), (-2, 6), (-2, 6), (-2, 6), (-2, 7),
-    (-3, 7), (-4, 7), (-4, 7), (-4, 7), (-3, 7), (-2, 6),
-    (0, 6), (1, 5),
-)
-TED_NUMBERED_TILE_POSITION: dict[int, tuple[int, int]] = {}
-_tile = 0x02
-for _row, (_left, _right) in enumerate(TED_NUMBERED_ROW_SPANS):
-    for _column in range(_left, _right):
-        TED_NUMBERED_TILE_POSITION[_tile] = (_row, _column)
-        _tile += 1
-assert _tile == 0x77 and len(TED_NUMBERED_TILE_POSITION) == 117
-
-# Sparse animation/limb IDs legitimately move, but only among these positions
-# measured from the same stock trace.  Rejecting any other relative position
-# catches the scattered boss copies at map edges without deleting intended
-# expanding tentacles.
-TED_SPARSE_TILE_POSITIONS = {
-    0x7B: frozenset(((-5, 8), (-3, 7), (-1, 6), (1, 9), (2, -8),
-                     (2, 7), (2, 11), (3, 9), (4, 7))),
-    0x7D: frozenset(((-5, 9), (1, -6), (2, -4), (3, -6), (4, -4),
-                     (11, -2), (11, 7), (13, -1), (13, 8), (15, 0),
-                     (15, 9))),
-    0x80: frozenset(((1, -8), (2, -6), (3, -8), (3, -4), (4, -6),
-                     (5, -4), (11, -3), (11, 6), (13, -2), (13, 7),
-                     (15, -1), (15, 8))),
-    0x82: frozenset(((-5, 9), (-3, 8), (-1, 7), (1, 11), (2, 9),
-                     (3, 7), (3, 11), (4, 9), (5, 7))),
-    0x83: frozenset(((-16, 0), (-16, 9), (-4, 9), (0, 6), (10, -3),
-                     (10, 6), (11, -3), (11, 6), (12, -2), (12, 7),
-                     (13, -2), (13, 7), (14, -1), (14, 8), (15, -1),
-                     (15, 8))),
-    0x84: frozenset(((1, -8), (1, -7), (2, -6), (2, -5), (3, -8),
-                     (3, -7), (3, -4), (3, -3), (3, 6), (4, -6),
-                     (4, -5), (5, -4), (5, -3), (5, 6))),
-    0x85: frozenset(((-6, 9), (-5, 8), (-4, 8), (-3, 7), (-2, 7),
-                     (-1, -8), (-1, 6), (-1, 11), (0, -8), (0, 6),
-                     (0, 11), (1, -8), (1, -6), (1, 9), (1, 11),
-                     (2, -8), (2, -4), (2, 7), (2, 11), (3, -6),
-                     (3, 9), (4, -4), (4, 7), (10, -3), (10, 6))),
-    0x86: frozenset(((-5, 9), (-3, 8), (-1, 7), (1, 10), (1, 11),
-                     (2, -7), (2, 8), (2, 9), (2, 12), (3, -3),
-                     (3, 6), (3, 7), (3, 10), (3, 11), (4, 8),
-                     (4, 9), (5, -3), (5, 6), (5, 7), (11, -2),
-                     (11, 7), (13, -1), (13, 8), (15, 0), (15, 9))),
-}
 # The widest native sparse-limb pose legitimately occupies seven more cells
 # than the numbered-body-only fixture. 393 is the measured intact floor.
 MIN_FLOOR_CELLS_PER_VISIBLE_FRAME = 393
@@ -102,7 +58,7 @@ def digest(path: Path) -> str:
 
 
 def run(rom: Path, state: Path, prefix: Path, frames: int, timeout: float,
-        reinstall_runtime: bool) -> None:
+        reinstall_runtime: bool, debug_trace: bool = False) -> None:
     prefix.parent.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.update(
@@ -111,6 +67,7 @@ def run(rom: Path, state: Path, prefix: Path, frames: int, timeout: float,
         TED_DETERMINISM_OUT=str(prefix),
         TED_DETERMINISM_FRAMES=str(frames),
         TED_DETERMINISM_REINSTALL="1" if reinstall_runtime else "0",
+        TED_DETERMINISM_DEBUG="1" if debug_trace else "0",
     )
     process = subprocess.Popen(
         [str(MGBA), "-t", str(state), "--script", str(PROBE), str(rom)],
@@ -197,19 +154,14 @@ def resolve_anchor(tiles: bytes, attrs: bytes) -> tuple[int, int] | None:
 def native_pose_digest(tiles: bytes, anchor: tuple[int, int]) -> tuple[str, int]:
     """Hash translation-normalized Ted art without embedding stock graphics."""
     anchor_row, anchor_col = anchor
-    packed = bytearray()
-    cells = 0
+    cells = []
     for offset, tile in enumerate(tiles):
         if tile not in BODY_TILES:
             continue
         row, col = divmod(offset, 32)
-        packed.extend((
-            (signed(row-anchor_row) + 32) & 0xFF,
-            (signed(col-anchor_col) + 32) & 0xFF,
-            tile,
-        ))
-        cells += 1
-    return hashlib.sha256(packed).hexdigest(), cells
+        cells.append((signed(row-anchor_row), signed(col-anchor_col), tile))
+    normalized = tuple(sorted(cells))
+    return cells_digest(normalized), len(normalized)
 
 
 def position_violations(
@@ -249,6 +201,27 @@ def floor_palette_violations(tiles: bytes, attrs: bytes) -> list[dict[str, int]]
     return violations
 
 
+def body_palette_violations(tiles: bytes, attrs: bytes) -> list[dict[str, int]]:
+    """Return Ted art cells that disagree with the YAML-derived arena LUT.
+
+    Merely requiring a nonzero attribute misses stale-but-colored fragments
+    and material swaps.  The writer mirror is only correct when every native
+    body/tentacle tile carries the exact palette selected by the editable Ted
+    table, on every rendered frame.
+    """
+    violations = []
+    for offset, (tile, attr) in enumerate(zip(tiles, attrs)):
+        expected = TED_BODY_TILE_PAL.get(tile)
+        if expected is None or attr == expected:
+            continue
+        row, col = divmod(offset, 32)
+        violations.append({
+            "row": row, "col": col, "tile": tile,
+            "actual": attr, "expected": expected,
+        })
+    return violations
+
+
 def analyze(data: bytes, frames: int) -> dict[str, object]:
     if len(data) != frames * FRAME_SIZE:
         raise ValueError(f"trace size {len(data)} != {frames} * {FRAME_SIZE}")
@@ -267,6 +240,7 @@ def analyze(data: bytes, frames: int) -> dict[str, object]:
     runtime_anchor_samples = runtime_anchor_matches = 0
     runtime_anchor_deltas: Counter[str] = Counter()
     floor_samples = floor_lattice_mismatches = floor_palette_mismatches = 0
+    body_palette_samples = body_palette_mismatches = 0
     sparse_floor_frames = 0
     tentacle_samples = 0
     native_pose_matches = native_pose_mismatches = 0
@@ -313,6 +287,7 @@ def analyze(data: bytes, frames: int) -> dict[str, object]:
                 tiles, (anchor_row, anchor_col)
             )
             floor_palette_bad = floor_palette_violations(tiles, attrs)
+            body_palette_bad = body_palette_violations(tiles, attrs)
             numbered_identity_mismatches += len(numbered_bad)
             sparse_position_mismatches += len(sparse_bad)
             if numbered_bad:
@@ -332,6 +307,8 @@ def analyze(data: bytes, frames: int) -> dict[str, object]:
                 physical_col = (anchor_col + relative[1]) & 0x1F
                 numbered_mismatch_group_slots[str(physical_col % 3)] += 1
             floor_palette_mismatches += len(floor_palette_bad)
+            body_palette_mismatches += len(body_palette_bad)
+            body_palette_samples += sum(tile in TED_BODY_TILE_PAL for tile in tiles)
             for violation in numbered_bad:
                 if len(examples) < 24:
                     examples.append({
@@ -350,6 +327,13 @@ def analyze(data: bytes, frames: int) -> dict[str, object]:
                 if len(examples) < 24:
                     examples.append({
                         "kind": "floor-palette-mismatch",
+                        "frame": frame, "base": f"{base:04X}",
+                        **violation,
+                    })
+            for violation in body_palette_bad:
+                if len(examples) < 24:
+                    examples.append({
+                        "kind": "body-palette-mismatch",
                         "frame": frame, "base": f"{base:04X}",
                         **violation,
                     })
@@ -447,6 +431,7 @@ def analyze(data: bytes, frames: int) -> dict[str, object]:
         ("crown-count", crown_errors),
         ("floor-lattice-mismatch", floor_lattice_mismatches),
         ("floor-palette-mismatch", floor_palette_mismatches),
+        ("body-palette-mismatch", body_palette_mismatches),
         ("sparse-native-floor", sparse_floor_frames),
         ("numbered-tile-position", numbered_identity_mismatches),
         ("sparse-tile-position", sparse_position_mismatches),
@@ -464,6 +449,8 @@ def analyze(data: bytes, frames: int) -> dict[str, object]:
         "floor_samples": floor_samples,
         "floor_lattice_mismatches": floor_lattice_mismatches,
         "floor_palette_mismatches": floor_palette_mismatches,
+        "body_palette_samples": body_palette_samples,
+        "body_palette_mismatches": body_palette_mismatches,
         "minimum_floor_cells_per_visible_frame": MIN_FLOOR_CELLS_PER_VISIBLE_FRAME,
         "sparse_floor_frames": sparse_floor_frames,
         "tentacle_samples": tentacle_samples,
@@ -514,6 +501,10 @@ def main() -> int:
         "--reinstall-runtime", action="store_true",
         help="discard a serialized older Ted C500 helper before replay",
     )
+    parser.add_argument(
+        "--debug-trace", action="store_true",
+        help="retain per-frame Ted pose/token diagnostics beside each trace",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--receipt-only", action="store_true",
@@ -535,7 +526,7 @@ def main() -> int:
     for prefix in prefixes:
         run(
             args.rom.resolve(), state.resolve(), prefix, args.frames,
-            args.timeout, args.reinstall_runtime,
+            args.timeout, args.reinstall_runtime, args.debug_trace,
         )
     traces = [Path(str(prefix) + ".bin") for prefix in prefixes]
     hashes = [digest(path) for path in traces]

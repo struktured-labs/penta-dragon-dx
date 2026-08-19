@@ -10,7 +10,9 @@ local AUDIT_WARMUP = tonumber(os.getenv("BOSS_RECEIPT_WARMUP") or "24")
 local REARM_CURRENT_ROM = os.getenv("BOSS_RECEIPT_REARM") ~= "0"
 local REARM_PALETTES = os.getenv("BOSS_RECEIPT_PALETTE_REARM") ~= "0"
 local KEEP_ALIVE = os.getenv("BOSS_RECEIPT_KEEPALIVE") ~= "0"
-local frame, done, state_saved = 0, false, false
+local BANKED_RUNTIME = os.getenv("BOSS_RECEIPT_BANKED_RUNTIME") == "1"
+local BREAKPOINT_COUNTS = os.getenv("BOSS_RECEIPT_BREAKPOINTS") ~= "0"
+local frame, raw_frame, done, state_saved = 0, 0, false, false
 local palette_settled = 0
 local scene_drift_frames = 0
 local max_scene_drift_frames = 0
@@ -45,7 +47,7 @@ end
 -- Define the register accessor before breakpoint closures capture it. Lua's
 -- local scope begins at the declaration, so registering these callbacks above
 -- the helper silently resolved `register` as an unset global when they fired.
-pcall(function()
+if BREAKPOINT_COUNTS then pcall(function()
     emu:setBreakpoint(function() copy_entries = copy_entries + 1 end, 0x42A7)
     emu:setBreakpoint(function()
         if (register("F") & 0x80) ~= 0 then
@@ -64,7 +66,7 @@ pcall(function()
                 register("HL"), register("DE"))
         end
     end, 0xDB80)
-end)
+end) end
 if TARGET == 8 then
     pcall(function()
         emu:addMemoryCallback(function(address, value)
@@ -304,18 +306,31 @@ local function finish(status, message)
     marker:close()
 end
 
+trace:write("initialized\n")
+trace:flush()
 callbacks:add("frame", function()
     if done then return end
+    raw_frame = raw_frame + 1
+    -- DX arena publishers can span a frame with SVBK2/3 selected. In that
+    -- interval every Dxxx game-state address below aliases cache/runtime data;
+    -- fixture writes would corrupt the candidate and scene reads would report
+    -- a false exit. Count only frames where bank-1 game state is visible.
+    local svbk = emu:read8(0xFF70) & 0x07
+    if raw_frame <= 4 then
+        trace:write(string.format(
+            "raw_frame=%d svbk=%02X pc=%04X bank=%02X\n",
+            raw_frame, svbk, register("PC"), emu:read8(0xFF99)))
+        trace:flush()
+    end
+    if BANKED_RUNTIME and svbk ~= 0 and svbk ~= 1 then return end
     frame = frame + 1
     emu:setKeys(0)
     if KEEP_ALIVE then
         emu:write8(0xDCBB, 0xF0)
-        -- Some serialized boss poses already have the arena-exit handshake
-        -- armed (Troop uses D888/DD06; Penta reaches the same handoff later).
-        -- Hold those transition flags neutral while preserving animation,
-        -- OAM, tile publication, and damage state for the visual audit.
-        emu:write8(0xD888, 0x00)
-        emu:write8(0xDD06, 0x00)
+        -- D888/DD06 are native boss animation/publication state, not generic
+        -- exit latches. Writing them made the receipt alter the motion it
+        -- claimed to audit and can drive a restored arena out of its scene.
+        -- Survival is fully covered by DCBB and the contestant HP counters.
     end
     if frame == 1 and REARM_CURRENT_ROM then
         -- Fixture states may carry an older ROM's scene-cache identity and

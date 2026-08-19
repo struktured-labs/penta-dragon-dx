@@ -109,7 +109,11 @@ def main() -> int:
         "local-only cheat listing did not run",
     )
 
-    with tempfile.TemporaryDirectory(prefix="penta-mister-reservation-") as temp_dir:
+    local_tmp = ROOT / "tmp"
+    local_tmp.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-mister-reservation-", dir=local_tmp
+    ) as temp_dir:
         checker = Path(temp_dir) / "checker.sh"
         checker.write_text(
             "#!/bin/sh\n"

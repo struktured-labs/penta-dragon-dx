@@ -71,7 +71,13 @@ def harness_code() -> tuple[bytes, list[tuple[int, ...]]]:
         else:
             source[slot] = tile
         expected = source.copy()
-        if kind == "duplicate":
+        if kind == "partial-initial-crown":
+            # A leading $02,$03 pair without the complete $02-$06 crown is
+            # staging debris, not publishable body geometry. The sanitizer
+            # must materialize the checker for both partial cells instead of
+            # preserving a detached colored crown fragment.
+            expected = [floor_tile(row, group_col + i) for i in range(3)]
+        elif kind == "duplicate":
             expected[slot] = floor_tile(row, col)
         expected_rows.append(tuple(expected))
         for offset, value in enumerate(source):
@@ -85,6 +91,9 @@ def harness_code() -> tuple[bytes, list[tuple[int, ...]]]:
                 code.extend((0x3E, value, 0xE0, address & 0xFF))
             else:
                 code.extend((0x3E, value, 0xEA, address & 0xFF, address >> 8))
+        # The atomic copier enters with HL at the three-cell group start. The
+        # sanitizer advances its BC destination cursor once per cell, then
+        # backs it up three cells before tail-calling the materializer.
         destination = 0x9800 + row * 32 + group_col
         output = RESULTS + index * 3
         code.extend((
@@ -101,7 +110,9 @@ def harness_code() -> tuple[bytes, list[tuple[int, ...]]]:
     return bytes(code), expected_rows
 
 
-def patched_state(source: Path, destination: Path, rom: Path) -> list[tuple[int, ...]]:
+def patched_state(
+    source: Path, destination: Path, rom: Path, *, installed_runtime: bool,
+) -> list[tuple[int, ...]]:
     chunks = png_chunks(source.read_bytes())
     indices = [i for i, (kind, _payload) in enumerate(chunks) if kind == b"gbAs"]
     if len(indices) != 1:
@@ -121,9 +132,10 @@ def patched_state(source: Path, destination: Path, rom: Path) -> list[tuple[int,
     raw[MEMORY_FLAGS:MEMORY_FLAGS + 2] = (flags | 0x0008).to_bytes(2, "little")
     raw[state_offset(0xFF99)] = 13
     raw[state_offset(0xFFFF)] = 0
-    runtime = build_ted_group_sanitizer_wram()
-    raw[state_offset(TED_SANITIZER_RUNTIME_ADDR):
-        state_offset(TED_SANITIZER_RUNTIME_ADDR) + len(runtime)] = runtime
+    if not installed_runtime:
+        runtime = build_ted_group_sanitizer_wram()
+        raw[state_offset(TED_SANITIZER_RUNTIME_ADDR):
+            state_offset(TED_SANITIZER_RUNTIME_ADDR) + len(runtime)] = runtime
     program, expected = harness_code()
     raw[state_offset(HARNESS):state_offset(HARNESS) + len(program)] = program
     raw[state_offset(RESULTS):state_offset(RESULTS) + 15 * 3] = bytes(15 * 3)
@@ -137,11 +149,16 @@ def patched_state(source: Path, destination: Path, rom: Path) -> list[tuple[int,
     return expected
 
 
-def run(rom: Path, state: Path, output: Path, timeout: float) -> tuple[list[str], list[tuple[int, ...]]]:
+def run(
+    rom: Path, state: Path, output: Path, timeout: float, *,
+    installed_runtime: bool,
+) -> tuple[list[str], list[tuple[int, ...]]]:
     trace_dir = output.parent / "classifier" / uuid.uuid4().hex
     trace_dir.mkdir(parents=True, exist_ok=True)
     prefix, fixture = trace_dir / "trace", trace_dir / "classifier.ss0"
-    expected = patched_state(state, fixture, rom)
+    expected = patched_state(
+        state, fixture, rom, installed_runtime=installed_runtime,
+    )
     env = os.environ.copy()
     env.update(QT_QPA_PLATFORM="offscreen", SDL_AUDIODRIVER="dummy",
                TED_CLASSIFIER_OUT=str(prefix))
@@ -179,9 +196,19 @@ def main() -> int:
                         default=ROOT / "save_states_for_claude/level1_sara_d_alone.ss0")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument(
+        "--installed-runtime", action="store_true",
+        help=(
+            "exercise the candidate runtime already present in --state; use "
+            "for release receipts so source-tree drift cannot replace it"
+        ),
+    )
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    lines, expected = run(args.rom, args.state, args.output, args.timeout)
+    lines, expected = run(
+        args.rom, args.state, args.output, args.timeout,
+        installed_runtime=args.installed_runtime,
+    )
     failures = []
     seen = set()
     for line in lines:

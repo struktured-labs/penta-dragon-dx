@@ -19,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[2]
 PROBE = Path(__file__).with_name("probe_stage1_north_integrity.lua")
 MGBA = ROOT / "scripts/mgba-qt-singleflight"
 DEFAULT_BASELINE = ROOT / "rom/Penta Dragon (J).gb"
+TRAJECTORY_HEADER_SIZE = 8
+TRAJECTORY_VIEW_SIZE = 21 * 19
+TRAJECTORY_RECORD_SIZE = TRAJECTORY_HEADER_SIZE + TRAJECTORY_VIEW_SIZE
 
 
 def stop_owned_process_group(process: subprocess.Popen[str]) -> None:
@@ -150,6 +153,86 @@ def byte_diff(left: bytes, right: bytes) -> tuple[int, int]:
         if a != b
     ]
     return len(offsets), offsets[0] if offsets else -1
+
+
+def read_trajectory(path: Path) -> list[dict[str, object]]:
+    data = path.read_bytes()
+    if len(data) % TRAJECTORY_RECORD_SIZE:
+        raise ValueError(
+            f"trajectory size {len(data)} is not divisible by "
+            f"{TRAJECTORY_RECORD_SIZE}"
+        )
+    records = []
+    for start in range(0, len(data), TRAJECTORY_RECORD_SIZE):
+        row = data[start:start + TRAJECTORY_RECORD_SIZE]
+        records.append({
+            "gameplay_frame": row[0] | row[1] << 8,
+            "room": row[2],
+            "camera": row[3] | row[4] << 8,
+            "lcdc": row[5],
+            "scx": row[6],
+            "scy": row[7],
+            "tiles": row[TRAJECTORY_HEADER_SIZE:],
+        })
+    return records
+
+
+def compare_trajectories(candidate_path: Path, baseline_path: Path) -> dict[str, object]:
+    """Compare every candidate viewport with stock at the same world point."""
+    candidate = read_trajectory(candidate_path)
+    baseline = read_trajectory(baseline_path)
+    # DC03:DC02=$FFFF is the game's map-transition sentinel, not a world
+    # coordinate. Pairing those records by (room, camera) compares unrelated
+    # half-built maps whenever two ROMs reach the transition on different
+    # frames. The completed-map and target-coordinate checks below remain
+    # strict; omit only this explicitly invalid coordinate from alignment.
+    candidate_world = [row for row in candidate if int(row["camera"]) != 0xFFFF]
+    baseline_world = [row for row in baseline if int(row["camera"]) != 0xFFFF]
+    stock: dict[tuple[int, int], list[bytes]] = {}
+    for row in baseline_world:
+        stock.setdefault((int(row["room"]), int(row["camera"])), []).append(
+            row["tiles"]
+        )
+    matched = []
+    unmatched = 0
+    for row in candidate_world:
+        choices = stock.get((int(row["room"]), int(row["camera"])))
+        if not choices:
+            unmatched += 1
+            continue
+        tiles = row["tiles"]
+        difference = min(
+            sum(left != right for left, right in zip(tiles, choice, strict=True))
+            for choice in choices
+        )
+        matched.append((difference, row))
+    worst = sorted(matched, key=lambda item: item[0], reverse=True)[:12]
+    return {
+        "candidate_records": len(candidate),
+        "baseline_records": len(baseline),
+        "candidate_world_records": len(candidate_world),
+        "baseline_world_records": len(baseline_world),
+        "candidate_transition_sentinels": len(candidate) - len(candidate_world),
+        "baseline_transition_sentinels": len(baseline) - len(baseline_world),
+        "matched_records": len(matched),
+        "unmatched_records": unmatched,
+        "differing_records": sum(difference > 0 for difference, _ in matched),
+        "maximum_viewport_tile_differences": max(
+            (difference for difference, _ in matched), default=-1
+        ),
+        "worst_examples": [
+            {
+                "differences": difference,
+                "gameplay_frame": row["gameplay_frame"],
+                "room": row["room"],
+                "camera": row["camera"],
+                "lcdc": row["lcdc"],
+                "scx": row["scx"],
+                "scy": row["scy"],
+            }
+            for difference, row in worst
+        ],
+    }
 
 
 def compare_visible_terrain(
@@ -309,6 +392,15 @@ def main() -> int:
         help="record C1A0-C1CF writes near the first failing north boundary",
     )
     parser.add_argument(
+        "--target-only",
+        action="store_true",
+        help=(
+            "require exact OG terrain at the reported north-room coordinate "
+            "and an exact candidate replay; report but do not gate on route "
+            "phase/timing, which the separate speed matrix owns"
+        ),
+    )
+    parser.add_argument(
         "--dynamic-prefix",
         type=int,
         default=0,
@@ -322,9 +414,10 @@ def main() -> int:
     parser.add_argument(
         "--max-frame-lag-ratio",
         type=float,
+        default=0.15,
         help=(
             "maximum lag as a fraction of the untouched ROM's gameplay "
-            "frames at the target coordinate"
+            "frames at the target coordinate (default: 0.15)"
         ),
     )
     args = parser.parse_args()
@@ -380,6 +473,42 @@ def main() -> int:
         args.trace_writes,
         False,
     )
+    candidate_replay_report = None
+    replay_artifacts: dict[str, dict[str, object]] = {}
+    replay_exact = True
+    if args.target_only:
+        candidate_replay_report = run_route(
+            args.rom,
+            output / "candidate-replay",
+            args.frames,
+            args.play_frames,
+            args.timeout,
+            args.target_camera,
+            args.target_room,
+            args.target_settle,
+            args.snap_interval,
+            args.fire,
+            args.trace,
+            args.trace_writes,
+            False,
+        )
+        for name in (
+            "c1a0.bin", "trajectory.bin", "visible-tiles.bin",
+            "visible-attrs.bin", "vram9800.bin", "vram9800-attrs.bin",
+            "vram9c00.bin", "vram9c00-attrs.bin", "shadow-oam.bin",
+            "hardware-oam.bin", "bg-cram.bin", "obj-cram.bin",
+        ):
+            first = output / "candidate" / name
+            replay = output / "candidate-replay" / name
+            present = first.is_file() and replay.is_file()
+            exact_replay = present and first.read_bytes() == replay.read_bytes()
+            replay_artifacts[name] = {
+                "present": present,
+                "exact": exact_replay,
+                "candidate_sha256": digest(first) if first.is_file() else None,
+                "replay_sha256": digest(replay) if replay.is_file() else None,
+            }
+            replay_exact &= exact_replay
 
     baseline_room = (output / "baseline/c1a0.bin").read_bytes()
     candidate_room = (output / "candidate/c1a0.bin").read_bytes()
@@ -390,6 +519,14 @@ def main() -> int:
     gameplay_frame_lag = (
         int(candidate_report["gameplay_frames"])
         - int(baseline_report["gameplay_frames"])
+    )
+    trajectory = compare_trajectories(
+        output / "candidate/trajectory.bin",
+        output / "baseline/trajectory.bin",
+    )
+    trajectory_ok = (
+        int(trajectory["matched_records"]) > 0
+        and int(trajectory["maximum_viewport_tile_differences"]) == 0
     )
     max_frame_lag = args.max_frame_lag
     if args.max_frame_lag_ratio is not None:
@@ -407,8 +544,11 @@ def main() -> int:
         and bool(terrain["edge_signatures_nonblank"])
         and bool(terrain["padding_stable_and_equal"])
     )
+    route_policy_ok = args.target_only or (lag_ok and trajectory_ok)
     receipt = {
-        "status": "pass" if terrain_ok and lag_ok else "fail",
+        "status": (
+            "pass" if terrain_ok and route_policy_ok and replay_exact else "fail"
+        ),
         "candidate_rom": str(args.rom.resolve()),
         "candidate_sha256": digest(args.rom),
         "baseline_rom": str(args.baseline.resolve()),
@@ -428,6 +568,10 @@ def main() -> int:
         "target_room": args.target_room,
         "target_settle_frames": args.target_settle,
         "candidate": candidate_report,
+        "candidate_replay": candidate_replay_report,
+        "candidate_replay_exact": replay_exact,
+        "candidate_replay_artifacts": replay_artifacts,
+        "target_only_policy": args.target_only,
         "baseline": baseline_report,
         "packed_room_bytes": len(candidate_room),
         "packed_room_differences": differences,
@@ -436,6 +580,7 @@ def main() -> int:
         "terrain_differences": terrain_differences,
         "first_terrain_difference": first_terrain_difference,
         "visible_terrain_overlap": terrain,
+        "full_route_viewport_integrity": trajectory,
         "gameplay_frame_lag": gameplay_frame_lag,
         "max_frame_lag": max_frame_lag,
         "max_frame_lag_ratio": args.max_frame_lag_ratio,
@@ -450,7 +595,18 @@ def main() -> int:
             f"0x{first_terrain_difference:03X}"
         )
         return 1
-    if not lag_ok:
+    if not replay_exact:
+        print("FAIL: repeated candidate north route was not byte-identical")
+        return 1
+    if not args.target_only and not trajectory_ok:
+        print(
+            "FAIL: intermediate north-route viewport diverged from stock; "
+            f"maximum tile difference "
+            f"{trajectory['maximum_viewport_tile_differences']} across "
+            f"{trajectory['matched_records']} matched world positions"
+        )
+        return 1
+    if not args.target_only and not lag_ok:
         print(
             "FAIL: candidate reached the target "
             f"{gameplay_frame_lag:+d} gameplay frames from stock; allowed "
@@ -458,10 +614,11 @@ def main() -> int:
         )
         return 1
     print(
-        "PASS: recorded north route reached stock-matching terrain "
+        "PASS: repeated north route reached stock-matching terrain "
         f"({terrain['compared_bytes']} exact bytes at ring phase "
         f"{terrain['phase_columns']:+d}) with "
-        f"{gameplay_frame_lag:+d}-frame timing delta."
+        f"{gameplay_frame_lag:+d}-frame reported timing delta"
+        f"{' (owned by speed matrix)' if args.target_only else ''}."
     )
     return 0
 

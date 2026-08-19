@@ -155,14 +155,12 @@ def main() -> int:
                 failures.append(str(exc))
                 continue
             retried_current_init = False
-            if (
-                int(result.get("mismatches", "-1")) > 0
-                and result.get("initial_DF51") != "A8"
-            ):
-                # A few very old anchors serialize a stale D900 LUT/DAxx helper
-                # and resume after their original initialization path. Retarget
-                # only that proven-stale case and give the candidate one clean
-                # main-loop initialization attempt; naturally valid fixtures
+            if int(result.get("mismatches", "-1")) > 0:
+                # Old anchors serialize both the D900 LUT/DAxx helper and live
+                # hardware-OAM attributes.  A sentinel can therefore look
+                # current while the saved sprite attributes still predate the
+                # candidate.  Retarget a failing anchor once and force one
+                # clean candidate initialization; naturally valid fixtures
                 # remain byte-for-byte untouched.
                 normalized = output / f"{state.stem}.current.ss0"
                 normalize(

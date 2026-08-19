@@ -52,6 +52,8 @@ local captures = {}
 local capture_specs = {}
 local pickup_frame_trace = {}
 local capture_budget = 0
+local late_capture_thresholds = {600, 1200, 1800}
+local late_capture_index = 1
 local finished = false
 local trace_layouts =
   tonumber(os.getenv("ATTRACT_PICKUP_TRACE_LAYOUTS") or "0") ~= 0
@@ -267,8 +269,13 @@ local function inspect_visible()
     add_capture("pickup", cells)
     capture_budget = capture_budget - 1
   end
-  if target_frames == 600 or target_frames == 1200 or target_frames == 1800 then
+  -- A native room transition can consume the exact threshold frame while the
+  -- scene byte is transient.  Capture on the first inspectable frame at or
+  -- after each threshold instead of silently losing that receipt.
+  if late_capture_index <= #late_capture_thresholds
+      and target_frames >= late_capture_thresholds[late_capture_index] then
     add_capture("late-clean", cells)
+    late_capture_index = late_capture_index + 1
   end
 end
 

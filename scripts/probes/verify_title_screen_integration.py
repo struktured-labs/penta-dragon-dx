@@ -24,6 +24,10 @@ import sys
 import argparse
 from pathlib import Path
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_TMP = PROJECT_ROOT / "tmp"
+
 # Minimum PIL presence check
 try:
     from PIL import Image
@@ -187,7 +191,8 @@ def capture_with_pyboy(rom_path: str, frames: int = 600, verbose: bool = False) 
     for i in range(frames):
         boy.tick()
     img = boy.screen.image
-    out_path = f"/tmp/title_screen_integration_{os.getpid()}.png"
+    PROJECT_TMP.mkdir(exist_ok=True)
+    out_path = str(PROJECT_TMP / f"title_screen_integration_{os.getpid()}.png")
     img.save(out_path)
     boy.stop()
     if verbose:

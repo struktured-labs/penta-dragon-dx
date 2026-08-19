@@ -49,6 +49,11 @@ _script_dir = Path(__file__).parent.parent
 _os.chdir(str(_script_dir))
 
 import yaml
+from arena_semantic_key import (
+    build_arena_postcopy_dispatcher,
+    HELPER_BANK as ARENA_ATTR_KEY_HELPER_BANK,
+    HELPER_ENTRY as ARENA_ATTR_KEY_HELPER_ADDR,
+)
 from arena_position import (
     parse_footprint_posmaps, rle_encode_posmap, create_rle_expander,
     _Asm,
@@ -100,6 +105,7 @@ SPOTLIGHT_MAP_YAML = Path("palettes/spotlight_palette_map.yaml")
 BANK13 = 13 * 0x4000
 BANK14 = 14 * 0x4000
 BANK7 = 7 * 0x4000
+BANK2 = 2 * 0x4000
 STAGE1_LOW_TILE_GFX_OFFSET = 0x1D000
 STAGE1_HIGH_TILE_GFX_OFFSET = 0x1F000
 STAGE1_PICKUP_GOLD = 0x03FF
@@ -212,7 +218,7 @@ SEMANTIC_STAGE1_PROTOTYPE_ADDR = 0x73FC
 # The diagnostic postcomputed publisher generates an unrolled row helper in
 # the census-empty fixed-WRAM page immediately after the native tile buffer.
 STAGE1_ATTR_ROW_INIT_ADDR = 0x5516
-STAGE1_ATTR_ROW_INIT_TAIL_ADDR = 0x5546
+STAGE1_ATTR_ROW_INIT_TAIL_ADDR = 0x55A8
 STAGE1_ATTR_ROW_HELPER_WRAM_ADDR = 0xD400
 # A compact bank-13 gate enters the bank-14 loader from a retired colorizer
 # gap. Keeping executable bytes out of $7900-$7AFF is mandatory: those two
@@ -283,9 +289,15 @@ STAGE1_PICKUP_RESIDENT_TAIL1_ADDR = 0x7B49
 STAGE1_PICKUP_RESIDENT_TAIL2_ADDR = 0x6E6F
 STAGE1_SCROLL_EDGE_SERVICE_ADDR = 0x69F8
 STAGE1_SCROLL_TILE_Y_CACHE_ADDR = 0xDF7D
-# Three title-delay bytes plus the 19-byte readiness/demo dispatcher occupy
-# $3482-$3497. The adjacent eleven-byte wrapper ends at the fixed boundary.
-STAGE1_ATOMIC_WRAP_ADDR = INLINE_ATTR_DECISION_HELPER_ADDR + 22
+# Three title-delay bytes plus the 18-byte readiness/demo dispatcher occupy
+# $3482-$3496. The adjacent twelve-byte wrapper ends at the fixed boundary.
+STAGE1_ATOMIC_WRAP_ADDR = INLINE_ATTR_DECISION_HELPER_ADDR + 21
+# The production inline copier ends at $4364, leaving an exact nine-byte
+# bank-1 tail. Move the atomic wrapper's IE/RETI epilogue there so the fixed
+# entry can reload D880 before its completion mapper. The layered v65 lineage
+# reached $0842 with A=$01 and silently RET C'd before all arena post-copy
+# services.
+STAGE1_ATOMIC_WRAP_TAIL_ADDR = 0x4365
 NATIVE_DMG_FADE_DISPATCH_ADDR = 0x10D5
 STAGE1_DEMO_ATTR_TRAMPOLINE_ADDR = NATIVE_DMG_FADE_DISPATCH_ADDR + 18
 # The retired attract-delay service remains in the fixed cave for historical
@@ -325,6 +337,16 @@ OAM_PALETTE_RESOLVER_ADDR = 0x7B00
 # DA00 runtime destinations, so cold boot copies both with one memcpy.
 OAM_CENTRAL_EMITTER_ADDR = 0x7B21
 OAM_BOSS_LUT_SERVICE_ADDR = 0x7B5D
+OAM_BOSS_LUT_FADE_GATE_ADDR = 0x6500
+TED_ENVELOPE_COMPARE_ROM_ADDR = OAM_BOSS_LUT_FADE_GATE_ADDR
+# The all-boss geometry corpus observes Angela tiles $01-$BA and background
+# tile $FF; $BB-$FE is explicitly unused.  Keep Ted's compact 28-byte envelope
+# table in the first part of that receipt-bounded neutral LUT tail ($BB-$D6).
+# Do not use Ted's own apparently-zero $D6-$FF tail: the direct-plane build
+# copies the whole $7687-$76FF span into WRAM as executable runtime padding.
+# Never use $70E0 either: $7000-$70FF is copied verbatim into C600 as Stage 1's
+# live tile-palette LUT, including its pickup classes.
+TED_ENVELOPE_ROW_TABLE_ROM_ADDR = 0x79BB
 ATTRACT_PICKUP_SWEEP_HELPER_ADDR = 0x6A2D
 OAM_FREE_EMITTER_ADDR = 0x7BE0
 LAVA_ATTR_STAGE5_SIGNATURE_ADDR = 0x7C13
@@ -332,6 +354,7 @@ DEATH_FADE_NORMAL_ADDR = 0x7C2C
 DEATH_FADE_INTERMEDIATE_ADDR = 0x7C34
 DEATH_FADE_WHITE_ADDR = 0x7C3C
 OAM_WRAM_COPY_ADDR = 0x7CBF
+OAM_WRAM_COPY_TED_HELPER_CONT_ADDR = 0x5546
 OAM_WRAM_COPY_TAIL_ADDR = 0x575C
 NATIVE_GLYPH_RESTORE_ADDR = 0x7D80
 OAM_LUT_INIT_ADDR = 0x7DA8
@@ -339,9 +362,14 @@ OAM_LUT_INIT_ADDR = 0x7DA8
 # slots form a same-address selector for the existing fixed-bank mapper. Bank
 # 13 enters the lava/Stage-1 dispatcher; bank 14 enters the hazard publisher.
 STAGE1_HAZARD_BANKED_ENTRY_ADDR = 0x6C80
+_TED_CACHED_FULL_PLANE_ENV = (
+    _os.environ.get("PENTA_TED_CACHED_FULL_PLANE", "0") == "1"
+)
 STAGE1_HAZARD_BANK0_MAP_ADDR = 0x0842
-STAGE1_HAZARD_PURE_MAP_ADDR = 0x0844
-LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR = 0x0849
+STAGE1_HAZARD_PURE_MAP_ADDR = 0x10E2
+LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR = (
+    0x0847
+)
 # Bank 14's native-zero caves host a demo-only metatile scanner.  It runs once
 # at the stock Stage-1 room-expander return and stamps only actual pickups into
 # both maps; no per-frame tilemap scan or full attribute sweep remains.
@@ -387,7 +415,11 @@ ATTRACT_PRELUDE_FLAG_HRAM = 0x91
 # FFA5 is verified unused by the original game's all-bank LDH census. FFE1 is
 # not scratch: banked sprite code writes it as an input/animation flag, and
 # caching the route there can strand Sara in the wrong room state.
-STAGE1_ATOMIC_ROUTE_HRAM = 0xA5
+# The dirty postcomputed path changes H while compiling its WRAM attribute
+# plane. Preserve the native copier's exact $98/$9C destination here so the
+# final DMA cannot accidentally target merely "the currently off-screen map."
+ATOMIC_DEST_H_HRAM = 0xA5
+STAGE1_ATOMIC_ROUTE_HRAM = ATOMIC_DEST_H_HRAM  # compatibility alias
 LAVA_ATTR_STAGE5_9800_META_ADDR = 0xDF53
 LAVA_ATTR_STAGE5_9C00_META_ADDR = 0xDF57
 # Stage 1 reuses one signature byte from each Stage-5 metadata record while
@@ -412,6 +444,280 @@ STAGE1_ATOMIC_ATTR_STACK_COPY_ADDR = 0x61F6
 # the retired position-map region instead.
 ARENA_ATOMIC_ATTR_STACK_HELPER_ROM_ADDR = 0x563A
 ARENA_ATOMIC_ATTR_STACK_HELPER_WRAM_ADDR = 0xDB80
+# Bank-13 native-zero resource records used by the once-per-publication arena
+# source sanitizers. Each fragment is independently asserted before use.
+TED_SANITIZER_MAIN_ADDR = 0x578C
+TED_SANITIZER_CLASSIFY_ADDR = 0x57BC
+TED_SANITIZER_CROWN_ADDR = 0x58E0
+TED_SANITIZER_ACTIVE_ADDR = 0x5910
+TED_SANITIZER_SPECIAL_ADDR = 0x5940
+TED_SANITIZER_CLEAR_ADDR = 0x5970
+TED_SANITIZER_INSTALL_ADDR = TED_SANITIZER_SPECIAL_ADDR
+TED_SANITIZER_INSTALL_MIDDLE_ADDR = TED_SANITIZER_CLEAR_ADDR
+TED_SANITIZER_ROW_TABLE_ADDR = 0x5DCC
+TED_SANITIZER_ANCHOR_ADDR = 0x5DFC
+TED_SANITIZER_INSTALL_TAIL_ADDR = TED_SANITIZER_ANCHOR_ADDR
+TED_SANITIZER_GEOMETRY_CONT_ADDR = 0x5E2C
+TED_SANITIZER_COMPARE_ADDR = 0x5E5C
+TED_SANITIZER_INSTALL_FINAL_ADDR = TED_SANITIZER_COMPARE_ADDR
+TED_SANITIZER_RUNTIME_TAIL_SOURCE_ADDR = 0x5516
+TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR = 0x54F2
+# $5552-$5554 is the live OAM boot continuation, so it is not a ROM cave.
+# The cached/sanitizer tail lives in the exact 31-byte zero gap at $56FF.
+TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR = 0x56FF
+TED_SANITIZER_ANCHOR_PACK_ADDR = 0x5CDA
+SHALAMAR_SANITIZER_MAIN_ADDR = 0x5D0A
+SHALAMAR_SANITIZER_CELL_ADDR = 0x5D3A
+ARENA_SANITIZER_DISPATCH_ADDR = 0x5D6A
+ARENA_SANITIZER_FRAGMENT_SIZE = 36
+TED_SANITIZER_EXPECTED_HRAM = 0xA9
+TED_SANITIZER_COUNTER_HRAM = 0xA8
+TED_SANITIZER_TILE_MASK_HRAM = 0xA7
+TED_SANITIZER_RUNTIME_ADDR = 0xC4FC
+TED_SANITIZER_ANCHOR_INIT_RUNTIME_ADDR = 0xC5CB
+TED_MAP_ANCHOR_ACTIVATE_TAIL_ROM_ADDR = 0x7687
+TED_MAP_ANCHOR_ACTIVATE_ROM_ADDR = 0x7687
+TED_ANCHOR_STATE_HELPER_ROM_ADDR = 0x76AE
+TED_SCAN_CROWN_HELPER_ROM_ADDR = 0x76C1
+TED_CACHED_RUNTIME_ADDR = 0xC4F5
+TED_TILE_COMMIT_RUNTIME_ADDR = 0x61B0
+TED_SANITIZER_RUNTIME_SENTINEL_ADDR = 0xC5FF
+TED_SANITIZER_RUNTIME_SENTINEL_VALUE = 0xC9
+# FFA5/FFA6 are live global palette-scheduler state. A 2,800-frame write
+# canary proves C4FA/C4FB are untouched immediately before the lazily installed
+# C4FC runtime, so the anchor cannot be mutated between three-cell groups.
+TED_SANITIZER_ANCHOR_9800_ROW_ADDR = 0xC4F3
+TED_SANITIZER_ANCHOR_9800_COL_ADDR = 0xC4F4
+TED_SANITIZER_ANCHOR_9C00_ROW_ADDR = 0xC4F5
+TED_SANITIZER_ANCHOR_9C00_COL_ADDR = 0xC4F6
+TED_SANITIZER_ANCHOR_ROW_ADDR = 0xC4FA       # $9C00 physical map
+TED_SANITIZER_ANCHOR_COL_ADDR = 0xC4FB       # $9C00 physical map
+TED_INCREMENTAL_SIGNATURE_SUM_ADDR = TED_SANITIZER_ANCHOR_ROW_ADDR
+TED_INCREMENTAL_SIGNATURE_ODD_ADDR = TED_SANITIZER_ANCHOR_COL_ADDR
+TED_INCREMENTAL_WRITER_RUNTIME_ADDR = 0xC500
+TED_INCREMENTAL_WRITER_SOURCE_ADDR = TED_SANITIZER_ROW_TABLE_ADDR
+TED_INCREMENTAL_INSTALL_CONT_ADDR = TED_SANITIZER_CROWN_ADDR
+# Writer-mirror mode exclusively owns the canary-proven C500 page. Ted's
+# activation clear explicitly zeros C400, while the 2,800-frame receipt shows
+# C500 survives. Its two
+# compact 12x12 metatile dirty maps are always-addressable, so the native
+# writer never switches SVBK on its hot path. The legacy sanitizer constants
+# below overlap its tail, but those architectures are mutually exclusive.
+TED_WRITER_RUNTIME_ADDR = 0xC500
+TED_WRITER_CLEAR_RUNTIME_ADDR = 0xC594
+TED_WRITER_MASK_TABLE_ADDR = 0xC5AD
+TED_WRITER_DIRTY_9800_ADDR = 0xC5B5
+TED_WRITER_DIRTY_9C00_ADDR = 0xC5D9
+TED_WRITER_START_D_ADDR = 0xC5FD
+TED_WRITER_START_E_ADDR = 0xC5FE
+TED_WRITER_RUNTIME_SENTINEL_ADDR = 0xC5FF
+TED_WRITER_RUNTIME_SENTINEL_VALUE = 0x01
+TED_WRITER_RUNTIME_LIMIT_ADDR = TED_WRITER_CLEAR_RUNTIME_ADDR
+TED_WRITER_BITMAP_SIZE = 36
+TED_WRITER_CLEAR_GATE_ADDR = 0x6FE4
+TED_WRITER_FIXED_STUB_ADDR = 0x0838
+TED_CACHED_FIXED_CONT_ADDR = 0x0838
+TED_WRITER_ROM_RUNTIME_ADDR = 0x7687
+TED_WRITER_BANKED_DIRTY_ADDR = 0xD300
+TED_WRITER_BANKED_SCRATCH_ADDR = 0xD324
+TED_WRITER_INVALIDATE_MAP_ADDR = 0x578C
+TED_WRITER_POINTER_ADVANCE_ADDR = 0x539E
+TED_SANITIZER_RUNTIME_EXTRA_SOURCE_ADDR = 0x55D8
+TED_CHECKER_ATTR_HELPER_ADDR = TED_SANITIZER_RUNTIME_EXTRA_SOURCE_ADDR
+TED_REGISTER_MATERIALIZER_FRONT_ADDR = TED_SANITIZER_ANCHOR_PACK_ADDR
+TED_REGISTER_MATERIALIZER_TAIL_ADDR = 0x539E
+TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR = 0x5460
+TED_DIRTY_POSTCOPY_MAIN_ADDR = TED_SANITIZER_GEOMETRY_CONT_ADDR + 1
+TED_DIRTY_POSTCOPY_SCAN_ADDR = 0x6D4E
+TED_DIRTY_POSTCOPY_SCAN_TAIL_ADDR = 0x6150
+TED_DIRTY_POSTCOPY_SETUP_ADDR = 0x5890
+TED_DIRTY_POSTCOPY_BYTE_ADDR = TED_SANITIZER_ANCHOR_PACK_ADDR
+TED_DIRTY_POSTCOPY_BIT_ADDR = 0x5D4C
+TED_DIRTY_POSTCOPY_BIT_CONT_ADDR = 0x5D7F
+TED_DIRTY_POSTCOPY_BIT_TAIL_ADDR = 0x6250
+TED_DIRTY_POSTCOPY_ADVANCE_ADDR = 0x5830
+TED_DIRTY_POSTCOPY_ADVANCE_CONT_ADDR = 0x5860
+TED_DIRTY_POSTCOPY_COMPILE_ADDR = 0x5340
+TED_DIRTY_POSTCOPY_COMPILE_TAIL_ADDR = 0x623C
+TED_DIRTY_POSTCOPY_COMPILE_BOTTOM_ADDR = 0x6180
+TED_DIRTY_POSTCOPY_COMPILE_FINAL_ADDR = 0x6268
+TED_DIRTY_POSTCOPY_FINAL_FRONT_ADDR = 0x56FF
+TED_DIRTY_POSTCOPY_FINAL_ADDR = TED_SANITIZER_RUNTIME_EXTRA_SOURCE_ADDR
+# Two lazy-installer fragments each leave a verified nine-byte tail. The crown
+# pair validator is split across them so the active WRAM helper does not grow.
+TED_CROWN_PAIR_HELPER_ADDR = TED_SANITIZER_INSTALL_MIDDLE_ADDR + 27
+TED_CROWN_PAIR_HELPER_CONT_ADDR = TED_SANITIZER_INSTALL_TAIL_ADDR + 27
+TED_POSTCOPY_ATTR_COMPILER_ADDR = TED_SANITIZER_MAIN_ADDR
+TED_POSTCOPY_DISPATCH_ADDR = TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR
+TED_POSTCOPY_KEY_SAMPLES = (
+    350, 182, 86, 403, 173, 437, 101, 186, 370, 303, 431, 82,
+    399, 221, 240, 390, 198, 227, 163, 209, 419, 94, 196, 204,
+    244, 564, 464, 144, 443, 374, 150, 14,
+)
+# Ted exclusively reuses the Stage-1/5 fixed-WRAM cache records while scene
+# $10 is active.  Switchable banks 2 and 3 each own D000-D305: the exact
+# 24x32 attribute plane plus a compact key and generation commit.
+TED_POSTCOPY_PHYSICAL_9800_ADDR = 0xDF53
+TED_POSTCOPY_GENERATION_ADDR = 0xDF56
+TED_POSTCOPY_PHYSICAL_9C00_ADDR = 0xDF57
+TED_POSTCOPY_FIFO_ADDR = 0xDF5A
+TED_POSTCOPY_PLANE_KEY_ADDR = 0xD300
+TED_POSTCOPY_PLANE_ROLL_ADDR = 0xD301
+TED_POSTCOPY_PLANE_GENERATION_ADDR = 0xD302
+TED_POSTCOPY_SCENE_DISPATCH_ADDR = TED_SANITIZER_RUNTIME_EXTRA_SOURCE_ADDR
+TED_POSTCOPY_SCENE_INIT_ADDR = 0x5340
+TED_POSTCOPY_CRYSTAL_REARM_ADDR = 0x539E
+# Ted-only incremental-key prototype.  The shared fixed-bank writer remains
+# byte-for-byte stock; only the complete map-builder body is cloned into
+# volatile SVBK4 and its private tail enters this tracker.
+TED_INCREMENTAL_TRACKER_ADDR = 0xD300
+TED_INCREMENTAL_TRACKER_EXIT_ADDR = 0xD357
+TED_INCREMENTAL_TRACKER_CONT_ADDR = TED_INCREMENTAL_TRACKER_EXIT_ADDR
+TED_INCREMENTAL_INIT_ADDR = 0xD360
+TED_INCREMENTAL_CLONE_ADDR = 0xD400
+TED_INCREMENTAL_MIRROR_ADDR = 0xD000
+TED_INCREMENTAL_KEY_ADDR = 0xD240
+TED_INCREMENTAL_VALID_ADDR = 0xD244
+TED_DIRECT_PLANE_POINTER_TABLE_ADDR = 0xD600
+TED_DIRECT_TILE_PLANE_ADDR = 0xD900
+TED_INWINDOW_SANITIZER_ADDR = 0xD500
+TED_INWINDOW_CLASSIFIER_ADDR = TED_INWINDOW_SANITIZER_ADDR + 10
+TED_INWINDOW_MASK_CLASSIFIER_ADDR = TED_INWINDOW_SANITIZER_ADDR + 3
+TED_INWINDOW_ROW_TABLE_ADDR = 0xD840
+TED_INWINDOW_CURRENT_VALID_ADDR = 0xD85C
+TED_INWINDOW_DIRTY_ADDR = 0xD85D
+TED_INWINDOW_CURRENT_ROW_ADDR = 0xD85E
+TED_INWINDOW_CURRENT_COL_ADDR = 0xD85F
+TED_INWINDOW_OLD_VALID_ADDR = 0xD860
+TED_INWINDOW_OLD_ROW_ADDR = 0xD861
+TED_INWINDOW_OLD_COL_ADDR = 0xD862
+TED_INWINDOW_BODY_MASK_ADDR = 0xD863
+TED_INWINDOW_BODY_MASK_SIZE = 72
+TED_INWINDOW_NEXT_MASK_ADDR = 0xD579
+TED_INWINDOW_CANDIDATE_COUNT_ADDR = 0xD840
+TED_INWINDOW_CANDIDATE_SOURCE_ADDR = 0xD841
+TED_INWINDOW_CANDIDATE_ROW_ADDR = 0xD843
+TED_INWINDOW_CANDIDATE_COL_ADDR = 0xD844
+TED_INWINDOW_RAW_TILE_PLANE_ADDR = 0xDC00
+# Ted's editable body materials end at tile $86.  The remaining $87-$FF LUT
+# tail is deliberately neutral and is never a publishable colored material;
+# use that otherwise-dead span as the cold source for the private sanitizer.
+TED_INWINDOW_SANITIZER_SOURCE_ADDR = 0x7687
+TED_INWINDOW_SANITIZER_SOURCE_SIZE = 0x79
+TED_INWINDOW_ENVELOPE_FRONT_ADDR = 0x54F2
+TED_INWINDOW_ENVELOPE_TAIL_ADDR = 0x5890
+TED_INWINDOW_ENVELOPE_FINAL_ADDR = 0x53A5
+TED_INWINDOW_ANCHOR_FRONT_ADDR = 0x5D4C
+TED_INWINDOW_ANCHOR_TAIL_ADDR = 0x5D7F
+TED_INWINDOW_PLANE_SETUP_ADDR = 0x7027
+TED_INWINDOW_SANITIZER_FINISH_ADDR = 0x61B0
+TED_INWINDOW_EPILOGUE_ADDR = 0x5899
+TED_INCREMENTAL_FIXED_COPY_LEAF_ADDR = 0x65D4
+TED_INWINDOW_TARGET_H_ADDR = 0xC4FC
+TED_INCREMENTAL_READY_ADDR = 0xC5FF
+TED_INCREMENTAL_READY_VALUE = 0xFF
+# Direct-plane HDMA uses the adjacent architecture-exclusive byte as a
+# one-shot selector replay after its cold publication. Writer-mirror mode's
+# C5FE record is mutually exclusive with this branch.
+TED_HDMA_COLD_REPLAY_ADDR = 0xC5FE
+TED_INWINDOW_BANK_HRAM = TED_SANITIZER_TILE_MASK_HRAM
+TED_INWINDOW_BLOCKS_HRAM = TED_SANITIZER_COUNTER_HRAM
+TED_INWINDOW_DMA_ADDR = 0x578C
+TED_INWINDOW_ENTRY_ADDR = 0x5830
+TED_INWINDOW_SELECT_ADDR = 0x5860
+TED_INWINDOW_SETUP_ADDR = 0x58C0
+TED_INWINDOW_INIT_ADDR = 0x6530
+TED_INWINDOW_WAIT_ADDR = 0x5E5C
+TED_INWINDOW_ROW_ADDR = 0x623C
+TED_INWINDOW_FINISH_ADDR = 0x6268
+TED_INCREMENTAL_FIXED_RUNTIME_ADDR = 0xC500
+TED_INCREMENTAL_FIXED_RUNTIME_SOURCE_ADDR = 0x5552
+TED_INCREMENTAL_UNUSED_THUNK_ADDR = 0x064A
+TED_INCREMENTAL_UNUSED_WRAPPER_ADDR = 0x02F2
+# The incremental architecture retires the old sampled-key classifier records
+# and uses their asserted-zero, scene-exclusive caves as cold installer data.
+# Keep every byte out of $7200-$7AFF: all nine pages there are live boss LUTs.
+TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS = (
+    (TED_SANITIZER_CLASSIFY_ADDR, 36),
+    (TED_SANITIZER_CROWN_ADDR, 36),
+    (TED_SANITIZER_ACTIVE_ADDR, 36),
+    (TED_SANITIZER_ROW_TABLE_ADDR, 36),
+    (TED_DIRTY_POSTCOPY_SCAN_TAIL_ADDR, 11),
+)
+TED_INCREMENTAL_PHYSICAL_9800_ADDR = 0xDF53
+TED_INCREMENTAL_PHYSICAL_9C00_ADDR = 0xDF58
+TED_INCREMENTAL_GENERATION_ADDR = 0xDF5D
+TED_INCREMENTAL_INSTALL_FINAL_ADDR = 0x6FFF
+TED_INCREMENTAL_LAZY_GATE_ADDR = 0x6290
+TED_INCREMENTAL_SCENE_CLEAR_ADDR = TED_DIRTY_POSTCOPY_COMPILE_BOTTOM_ADDR
+TED_INCREMENTAL_BANK2_CALL_ADDR = 0x40EF
+TED_INCREMENTAL_BANK2_ENTRY_ADDR = 0x7A8C
+TED_INCREMENTAL_BANK2_FALLBACK_ADDR = 0x7AAD
+TED_INCREMENTAL_BANK2_READY_ADDR = 0x7ABB
+TED_DIRECT_SINGLE_WRITER_A_PATCH_ADDR = 0x61DF
+TED_DIRECT_SINGLE_WRITER_B_PATCH_ADDR = 0x6219
+TED_DIRECT_FIXED_HELPER_ADDR = TED_INCREMENTAL_FIXED_RUNTIME_ADDR + 23
+TED_INWINDOW_PRIVATE_CROWN_HELPER_ADDR = 0xD579
+TED_INWINDOW_PRIVATE_GEOMETRY_HELPER_ADDR = 0xD863
+# Default-off architecture flag. This mode is deliberately fail-closed until
+# the D863-D8AA mask has a receipt-qualified SVBK4/5 ownership record and the
+# publication repair is assembled; static builders and the model gate may
+# still audit the hot fragment without producing a candidate ROM.
+TED_INCREMENTAL_CELL_ENV = "PENTA_TED_INCREMENTAL_CELL"
+TED_BLOCK_MAJOR_ENV = "PENTA_TED_BLOCK_MAJOR"
+TED_INCREMENTAL_CELL_PROTECTED_ROM_RANGES = (
+    (0x6D50, 0x6D70, "title footer glyphs"),
+    (0x7200, 0x7B00, "arena palette LUTs"),
+)
+TED_DIRECT_FIXED_HELPER_SOURCE_CHUNKS = (
+    # These sanitizer-only records are retired by the direct-plane branch.
+    (TED_SANITIZER_ANCHOR_ADDR, 36),
+    (TED_SANITIZER_GEOMETRY_CONT_ADDR, 36),
+)
+# The cache-entry stub is 11 bytes.  The publisher begins immediately after
+# it; retaining the former +14 entered three bytes late and skipped XOR A /
+# VBK0, turning stale A into shifted GDMA source/destination low bytes.
+TED_CACHED_PUBLISH_FRONT_ADDR = TED_REGISTER_MATERIALIZER_FRONT_ADDR + 11
+TED_CACHED_PUBLISH_TAIL_ADDR = TED_CHECKER_ATTR_HELPER_ADDR
+TED_CACHED_PUBLISH_TAIL_CONT_ADDR = TED_CROWN_PAIR_HELPER_ADDR
+TED_CACHED_PUBLISH_TAIL_FINAL_ADDR = TED_CROWN_PAIR_HELPER_CONT_ADDR
+TED_CACHED_GDMA_WAIT_ADDR = 0x5E79
+TED_CACHED_COLUMN_WRAP_ADDR = 0x5830
+TED_CACHED_SPARSE_ENTRY_ADDR = 0x539E
+TED_CACHED_SPARSE_RESTORE_ADDR = 0x5460
+TED_CACHED_SPARSE_SETUP_ADDR = 0x6530
+TED_CACHED_SPARSE_SCAN_ADDR = 0x623C
+TED_CACHED_SPARSE_SCAN_TAIL_ADDR = 0x6D4E
+TED_CACHED_SPARSE_FILTER_ADDR = 0x7687
+TED_CACHED_ATTR_CLEAR_ADDR = 0x76AB
+TED_CACHED_CADENCE_DELAY_ADDR = 0x76CA
+# The sparse filter ends at $76EA.  Its 22-byte asserted-zero tail reaches
+# exactly to (but never into) Troop's $7700 palette table.
+TED_CACHED_READY_LATCH_ADDR = 0x76EA
+TED_CACHED_SPARSE_OVERLAY_A_ADDR = 0x5890
+TED_CACHED_SPARSE_OVERLAY_B_ADDR = 0x58C0
+TED_CACHED_SPARSE_OVERLAY_C_ADDR = 0x5D4C
+TED_CACHED_SPARSE_OVERLAY_D_ADDR = 0x5D7F
+TED_CACHED_SPARSE_OVERLAY_E_ADDR = 0x5860
+TED_CACHED_SPARSE_OVERLAY_F_ADDR = 0x5340
+TED_CACHED_SPARSE_OVERLAY_G_ADDR = 0x6150
+TED_CACHED_SPARSE_OVERLAY_H_ADDR = 0x6250
+TED_CACHED_ANCHOR_ROW_ADDR = 0xD706
+TED_CACHED_ANCHOR_COL_ADDR = 0xD707
+TED_CACHED_LIMB_PHASE_ADDR = 0xD708
+TED_CACHED_SPARSE_TILE_ADDR = 0xD70A
+TED_CACHED_SPARSE_COUNT_9C_ADDR = 0xD77F
+TED_CACHED_SPARSE_COUNT_ADDR = 0xD71F
+TED_CACHED_SPARSE_RECORDS_ADDR = 0xD720
+TED_CACHED_SPARSE_RECORDS_9C_ADDR = 0xD780
+TED_CACHED_ABI_FRONT_ADDR = 0x6E60
+TED_CACHED_ABI_TAIL_ADDR = 0x7027
+TED_CACHED_BANK1_TAIL_ADDR = 0x7C91
+TED_CACHED_BANK1_MAP_ADDR = 0x7CAE
+TED_CACHED_RUNTIME_EXTRA_SOURCE_ADDR = TED_TILE_COMMIT_RUNTIME_ADDR
+TED_CACHED_INSTALL_EXTRA_ADDR = 0x6FFF
+TED_CACHED_GDMA_COMMIT_ADDR = TED_CACHED_INSTALL_EXTRA_ADDR + 12
+TED_CACHED_PALETTE_GATE_ADDR = TED_CACHED_ABI_TAIL_ADDR
 # Four otherwise-empty 36-byte records and the 34-byte tail of the following
 # record hold the arena-only semantic attribute decider.  Keeping it in bank
 # 13 avoids displacing the receipt-locked dungeon cache from DA60-DAFF.  The
@@ -460,13 +766,16 @@ LAVA_ATTR_STAGE7_SAMPLES = (6, 69, 169, 452)
 # the cached signature every few frames, recreating the always-atomic timing
 # fault. Adjacent 149 is stable across the 720-frame Crystal corpus and keeps
 # the established later-stage layout corpus collision-free.
-LATER_ATTR_SIGNATURE_A = (444, 149, 19, 251)
-LATER_ATTR_SIGNATURE_B = (0, 59, 333)
-# Raw-source cells selected against the paired semantic-plane corpus. The
-# exact three-byte tuple changed on all 28 observed palette transitions and
-# remained stable on all 150 repeated palette layouts across all nine bosses.
-ARENA_ATTR_RAW_KEY_SAMPLES = (124, 152, 177)
-ARENA_TILE_RAW_KEY_SAMPLES = (78, 298, 177, 152, 149)
+# Two independent raw-layout XORs chosen from the deterministic Stage 2-7
+# multi-room corpus plus horizontal/vertical Stage 6 movement.  This six-cell
+# key changes for every observed semantic attribute-plane transition while
+# avoiding the old key's near-every-copy Stage 6 false positives.  Keep the
+# groups separate: the receipt corpus proves this 3+3 partition has no XOR
+# cancellation across any required transition.
+LATER_ATTR_SIGNATURE_A = (15, 83, 230)
+LATER_ATTR_SIGNATURE_B = (250, 337, 433)
+# The shared arena cache key is computed by the expansion-bank helper from
+# ``arena_semantic_key.py``. Crystal and Ted keep their specialized paths.
 PENTA_TILE_RAW_KEY_SAMPLE = 60
 OAM_WRAM_BASE = 0xDA00
 OAM_PALETTE_LUT_WRAM = 0xD900
@@ -496,9 +805,12 @@ STAGE1_ATTR_TRANSITION_SAMPLES = (49,)
 # prevents an equal phase in room $02/$12 from hitting the other room's cache.
 STAGE1_HAZARD_PHASE_SAMPLE_ROOM12 = 49
 STAGE1_HAZARD_PHASE_SAMPLE_ROOM02 = 52
-# Three cells fit the shortest vertically-scrolled VRAM-safe interval. The
-# full atomic path now runs only for room transitions; animated hazard rows use
-# the selective post-expander service in bank 14.
+# Two cells retain enough margin in the shortest vertically-scrolled HBlank.
+# The three-cell publisher was nearly safe but reproducibly dropped one
+# attribute byte from otherwise-correct groups in Stages 2, 4, and 7. The full
+# atomic path runs only on changed layouts; unchanged maps keep the stock-width
+# four-cell tile-only cadence, and animated hazard rows use the selective
+# post-expander service in bank 14.
 STAGE1_ATOMIC_GROUP_WIDTH = 3
 OAM_WRAM_END_ADDR = OAM_WRAM_BASE + 0x100
 OAM_WRAM_SENTINEL_ADDR = 0xDF51
@@ -551,22 +863,26 @@ STORY_ATTR_MAP_DONE_ADDR = 0xDF4B
 TITLE_GLYPH_DATA_ADDR = 0x6D50  # 16-byte-aligned period + digit-9 tiles
 VRAM_GLYPH_COPY_ADDR = 0x6DA7   # gap: end of RLE expander -> COLORIZE_ADDR
 STORY_INACTIVE_HELPER_ADDR = 0x6D9E
-# The story writer is mapped in bank 13. A five-byte bridge in a verified-zero
-# bank-13 asset gap maps bank 6, whose matching return address lands in a
-# stock-zero 216-byte cave. The bank-6 helper selects one YAML region palette
-# per art cell, remaps bank 13, and returns to the bounded VBlank writer.
+# The story writer is mapped in bank 13. The unused fixed serial vector maps
+# bank 6 and jumps directly into its stock-zero 216-byte cave. Keeping this
+# bridge in fixed ROM avoids treating zero-valued live bank-13 list records as
+# free space. The bank-6 helper selects one YAML region palette per art cell,
+# remaps bank 13, and returns to the bounded VBlank writer.
 STORY_REGION_BANK = 6
 STORY_REGION_CAVE_START_ADDR = 0x4C54
 STORY_REGION_CAVE_END_ADDR = 0x4D2C
-# Use the tail of the exact stock-zero $4CE4-$4CF1 bank-13 gap.  Its return
-# address leaves the bank-6 row writer enough room for the explicit neutral
-# dialogue path before the matching bank-6 landing JP.
-STORY_REGION_BRIDGE_ADDR = 0x4CED
-# The first six bytes of the same proven stock-zero asset gap hold one $6800
-# source low byte per later dungeon (Stages 2-7). The rows remain ordinary
-# YAML BG palettes, so livestream tuning stays entirely data-driven.
-LATER_STAGE_BG0_SOURCE_TABLE_ADDR = 0x4CE4
-STORY_REGION_BANK6_RETURN_ADDR = STORY_REGION_BRIDGE_ADDR + 5
+# Serial IRQ is disabled in every qualified gameplay receipt (IE=$07). Its
+# eight-byte vector is therefore a fixed-bank call bridge, not a live handler.
+STORY_REGION_FIXED_BRIDGE_ADDR = 0x0058
+# Retain the old same-address bank-6 guard solely for historical states saved
+# inside the interrupted wrapper. No bank-13 bytes are installed here.
+STORY_REGION_BANK6_GUARD_ADDR = 0x4CED
+STORY_REGION_BANK6_RETURN_ADDR = STORY_REGION_BANK6_GUARD_ADDR + 5
+# Generated-code padding immediately before the DA60 runtime source holds one
+# $6800 source low byte per later dungeon. Unlike the old $4CE4 zero records,
+# this range is created and owned by this builder rather than referenced by a
+# stock pointer table.
+LATER_STAGE_BG0_SOURCE_TABLE_ADDR = 0x7BAC
 STORY_REGION_WRITER_ADDR = 0x4CC3
 STORY_REGION_LANDING_SIZE = 9
 STORY_REGION_ROW_WRITER_ADDR = (
@@ -1824,8 +2140,8 @@ def build_story_region_classifier(
     landing = bytes([
         0xF0, 0xC1, 0xB7,
         0xC2,
-        STORY_REGION_BRIDGE_ADDR & 0xFF,
-        STORY_REGION_BRIDGE_ADDR >> 8,      # FFC1 != 0 -> restore bank 13
+        STORY_REGION_BANK6_GUARD_ADDR & 0xFF,
+        STORY_REGION_BANK6_GUARD_ADDR >> 8, # FFC1 != 0 -> restore bank 13
         0xC3,
         STORY_REGION_WRITER_ADDR & 0xFF,
         STORY_REGION_WRITER_ADDR >> 8,
@@ -1835,7 +2151,7 @@ def build_story_region_classifier(
     # This bank-6 shadow is skipped by production story entry, which resumes
     # at bridge+5. It restores bank 13 for the guarded stale-gameplay landing.
     wrong_bank_guard_offset = (
-        STORY_REGION_BRIDGE_ADDR - STORY_REGION_CAVE_START_ADDR
+        STORY_REGION_BANK6_GUARD_ADDR - STORY_REGION_CAVE_START_ADDR
     )
     wrong_bank_restore = bytes([0x3E, 0x0D, 0xC3, 0x61, 0x00])
     assert bank6[
@@ -1850,6 +2166,9 @@ def build_story_region_classifier(
     bridge = bytes([
         0x3E, STORY_REGION_BANK,
         0xCD, 0x61, 0x00,
+        0xC3,
+        STORY_REGION_WRITER_ADDR & 0xFF,
+        STORY_REGION_WRITER_ADDR >> 8,
     ])
     return bridge, bytes(bank6), {
         "art_ids": len(panels),
@@ -1864,7 +2183,7 @@ def build_story_region_classifier(
         "writer_bytes": len(writer_code),
         "row_writer_bytes": len(row_writer_code),
         "landing_bytes": len(landing),
-        "wrong_bank_guard": STORY_REGION_BRIDGE_ADDR,
+        "wrong_bank_guard": STORY_REGION_BANK6_GUARD_ADDR,
     }
 
 
@@ -2055,8 +2374,8 @@ def build_story_attr_sweep() -> tuple[bytes, int, int, int]:
     a.db(0xCB, 0x79)                        # BIT 7,C (story key)
     a.db(
         0xC4,
-        STORY_REGION_BRIDGE_ADDR & 0xFF,
-        STORY_REGION_BRIDGE_ADDR >> 8,
+        STORY_REGION_FIXED_BRIDGE_ADDR & 0xFF,
+        STORY_REGION_FIXED_BRIDGE_ADDR >> 8,
     )                                      # CALL NZ: writes story five-cell run
     a.jr(0x20, "after_write")              # helper deliberately returns NZ
     a.db(0x79, 0xE6, 0x07, 0x06, 0x04)      # ending palette; four five-cell runs
@@ -2831,15 +3150,24 @@ def build_room_bg_repair(
     # while later rooms streamed new tiles through it. D880=$0A is shared by
     # prerecorded Gargoyle and historical live Shield states; the adjacent
     # dispatcher uses DCFD to clear the former and run the two-map row helper
-    # for the latter. All other scenes retain the ordinary bounded repair.
+    # for the latter. Every other scene owns a complete post-copy publisher.
     a.db(0xFA, 0x80, 0xD8, 0xFE, 0x02)
     a.db(
         0xCA,
         ATTRACT_PICKUP_SWEEP_STUB_ADDR & 0xFF,
         ATTRACT_PICKUP_SWEEP_STUB_ADDR >> 8,
     )                                      # JP Z: initial Stage-1 sweep gate
-    a.db(0xFE, 0x0A)
-    a.jr(0x28, "clear")                    # scene $0A never broad-sweeps teeth
+    # Every non-Stage-1 scene now owns a complete post-copy attribute
+    # publisher.  Retaining the legacy C600 row sweep for later dungeons raced
+    # that publisher with stale source data (most visibly in Stage 4).  Keep
+    # the dead standard-repair body at its receipt-locked address for binary
+    # layout stability, but route every non-Stage-1 scene directly to clear.
+    a.db(
+        0xC3,
+        ROOM_BG_REPAIR_CLEAR_ADDR & 0xFF,
+        ROOM_BG_REPAIR_CLEAR_ADDR >> 8,
+        0x00,
+    )
     a.label("pending")
     assert (
         ROOM_BG_REPAIR_ADDR + len(a.code)
@@ -3148,8 +3476,9 @@ def build_room_bg_rearm_bank0(rows: int = BG_SWEEP_REARM_ROWS) -> bytes:
 
     Each native FFBD store is replaced by the two-byte ``RST $00; NOP``.
     The eight-byte vector performs the stock store, saves AF, loads ``rows``,
-    and jumps here. Keeping that prefix in the otherwise-unused vector frees
-    five fixed-bank bytes without changing the hook's instruction cadence.
+    and jumps here. DF4F's pending marker is part of later-stage load
+    synchronization: the per-frame lava override promotes it only after the
+    scene table is ready, preventing a premature attribute-plane commit.
     """
     return bytes([
         0xEA, BG_SWEEP_COUNT_ADDR & 0xFF, BG_SWEEP_COUNT_ADDR >> 8,
@@ -3327,83 +3656,5001 @@ def build_stage1_hazard_dispatcher() -> bytes:
     reach the larger arena decider through native-zero resource padding, so
     this receipt-locked 22-byte slot only needs a tail jump.
     """
-    code = bytes([
-        0xC3,
-        ARENA_ATTR_SEMANTIC_DISPATCH_ADDR & 0xFF,
-        ARENA_ATTR_SEMANTIC_DISPATCH_ADDR >> 8,
-    ])
-    capacity = LAVA_ATTR_STAGE7_SOURCE_A_ADDR - LAVA_ATTR_DECIDER_ADDR
+    code = build_arena_postcopy_dispatcher()
+    # The generated padding immediately before the Stage-7 source now owns
+    # the later-stage BG0 selector table.  Stop at that explicit allocation;
+    # zero-valued bytes elsewhere are not evidence of free space.
+    capacity = LATER_STAGE_BG0_SOURCE_TABLE_ADDR - LAVA_ATTR_DECIDER_ADDR
     assert len(code) <= capacity
     return code + bytes(capacity - len(code))
 
 
 def build_arena_attr_semantic_runtime() -> bytes:
-    """Skip exact repeated arena layouts; atomically publish every change.
+    """Skip only receipt-proven exact arena publications.
 
-    A five-cell XOR key distinguishes every raw tile-layout transition in the
-    all-boss receipt corpus. An exact repeat can skip both tile and attribute
-    planes. Any key or scene change conservatively returns NZ so the caller
-    publishes tiles and attributes atomically; palette-layout correctness no
-    longer depends on a separate lossy proxy.
+    Crystal Dragon retains its ghost/translucency cache and Ted's private
+    post-copy compiler owns its attributes. Every other arena maps the
+    expansion-bank decider. Two semantic sums guard the attribute plane; a
+    third raw-layout sum permits the old whole-publication
+    speed path only when the tile plane is also identical.
     """
     a = _Asm()
-    # Crystal keeps the existing raw-layout cache. Every other arena uses the
-    # collision-audited exact-repeat key below.
     a.db(
         0xE5,                               # preserve destination HL
         0x54,                               # D = destination H
         0xFA, 0x80, 0xD8, 0x5F,            # E = exact arena scene
-        # Intermediate $44xx calls are sanitizer/source work, not physical
-        # BG-map publications. They must execute through the pure copier, not
-        # be discarded as repeats or routed into the multi-frame attr writer.
-        # Penta's upper-right camera sweep still requires atomic attributes.
-        0x7A, 0xFE, 0x44,
     )
+    # Intermediate $44xx calls are sanitizer/source work, not physical BG-map
+    # publications. Ted's private post-copy compiler owns scene $10.
+    a.db(0x7A, 0xFE, 0x44)
     a.jr(0x28, "pure_intermediate")
-    a.db(0x7B, 0xFE, 0x14)
-    a.jr(0x20, "compute_key")
-    a.db(0xF0, 0x43, 0xFE, 0x14)
-    a.jr(0x30, "force_changed")
-    penta_source = 0xC1A0 + PENTA_TILE_RAW_KEY_SAMPLE
-    a.db(0xFA, penta_source & 0xFF, penta_source >> 8, 0x47)
-    a.jr(0x18, "key_ready")
-    a.label("compute_key")
-    tile_sources = [0xC1A0 + offset for offset in ARENA_TILE_RAW_KEY_SAMPLES]
+    a.db(0x7B, 0xFE, 0x10)
+    a.jr(0x28, "pure_intermediate")
+
+    # WRAM execution survives ROM-bank changes. Stock $0061 updates FF99 and
+    # the MBC5 register without clobbering BC/DE/HL or flags. The fused
+    # Shalamar path also maps WRAM bank 3 while it prepares the attribute
+    # plane, so keep interrupts out of this bounded critical section: the
+    # native ISR assumes bank 1 and would otherwise write live game state into
+    # the staging plane.
     a.db(
-        0xFA, tile_sources[0] & 0xFF, tile_sources[0] >> 8, 0x47,
+        0xF3,
+        0xF0, 0x99, 0xF5,
+        0x3E, ARENA_ATTR_KEY_HELPER_BANK,
+        0xCD, 0x61, 0x00,
+        0xCD, ARENA_ATTR_KEY_HELPER_ADDR & 0xFF,
+        ARENA_ATTR_KEY_HELPER_ADDR >> 8,
+        0x67,                               # H = helper decision 0/1/2/3
+        0xF1, 0xCD, 0x61, 0x00,
+        0xFB,
+        0x7C, 0xE0, 0xE0, 0xB7,             # publish decision for inline path
     )
-    for source in tile_sources[1:]:
-        a.db(0xFA, source & 0xFF, source >> 8, 0xA8, 0x47)
-    a.label("key_ready")
-    a.db(
-        # Destination bit 2 selects $53/$57. Intermediate H=$44 calls safely
-        # share the $9C00 record instead of indexing unrelated DFxx state.
-        0x7A, 0xE6, 0x04, 0xF6, 0x53, 0x6F,
-        0x26, 0xDF,
-        # Same scene + receipt-proven raw-tile key: discard the RST/CALL
-        # frames and skip the complete 24x24 publication.
-        0x23, 0x7E, 0xBB,
-    )
-    a.jr(0x20, "tile_changed_scene")
-    a.db(0x23, 0x7E, 0xB8)
-    a.jr(0x20, "tile_changed")
+    a.jr(0x28, "exact_hit")
+    a.db(0xFE, 0x02)
+    a.jr(0x28, "raw_only")
+    # A=1 rebuilds and publishes the prepared attribute plane. A=3 means the
+    # Shalamar helper also prepared a plane while sanitizing its source, but
+    # the generic compiler remains the safe publication contract.  In
+    # particular, B is live native-copy state here; the rejected fused-path
+    # latch in B.6 corrupted Riff, Troop, Faze, Angela, and Penta geometry.
+    # Treat both nonzero/non-raw decisions alike, matching the receipt-proven
+    # v78 path. Explicitly establish NZ for the caller's atomic attr branch.
+    a.db(0x3E, 0x01, 0xB7, 0xE1, 0xC9)
+    a.label("raw_only")
+    a.db(0xAF, 0xE1, 0xC9)
+    a.label("exact_hit")
     a.db(0xE1, 0xF1, 0xF1, 0xC9)
-    a.label("tile_changed_scene")
-    a.db(0x23)
-    a.label("tile_changed")
-    a.db(
-        0x78, 0x77, 0x2B,                  # cache raw-tile signature
-        0x7B, 0x77, 0x2B,                  # cache exact scene; HL=attr key
-        0x3E, 0x01,                        # retain mismatch NZ flags
-        0xE1, 0xC9,
-    )
-    a.label("force_changed")
-    a.db(0x3C, 0xE1, 0xC9)                # known $44/SCX -> nonzero/NZ
     a.label("pure_intermediate")
     a.db(0xAF, 0xE1, 0xC9)                # execute ordinary pure copy (Z)
     code = a.finish()
-    assert len(code) <= ARENA_ATTR_SEMANTIC_SENTINEL_ADDR - ARENA_ATTR_SEMANTIC_RUNTIME_ADDR
+    # Keep the receipt-proven 77-byte installed image.  The zero tail is
+    # intentional: state-based testing can carry a longer experimental helper
+    # in WRAM, and copying only the shortened executable would leave stale
+    # fused-path opcodes reachable after an interrupted return.  The v78
+    # installer always overwrites this complete bounded slot.
+    installed_length = 77
+    assert len(code) <= installed_length
+    code += bytes(installed_length - len(code))
+    assert len(code) <= (
+        ARENA_ATTR_SEMANTIC_SENTINEL_ADDR
+        - ARENA_ATTR_SEMANTIC_RUNTIME_ADDR
+    )
     return code
+
+
+def build_ted_incremental_signature_writer() -> bytes:
+    """Replace the writer ending at $3127 with incremental raw checksums.
+
+    The native triplet is ``LD A,(HL+); LD (DE),A; INC DE``; its following
+    ``POP BC`` remains in fixed ROM. This helper preserves that ABI and updates
+    two order-independent deltas: all
+    writes, and odd-address writes.  An arbitrary pre-entry offset cancels in
+    equality comparisons, so no full-plane initialization pass is required.
+    """
+    a = _Asm()
+    a.db(
+        0x2A, 0xE5, 0x67, 0x1A, 0x6F, 0x7C, 0x12,
+                                                # native read/write; H=new,L=old
+        0x95, 0x47,                          # B=new-old
+        0xFA, TED_INCREMENTAL_SIGNATURE_SUM_ADDR & 0xFF,
+        TED_INCREMENTAL_SIGNATURE_SUM_ADDR >> 8,
+        0x80,
+        0xEA, TED_INCREMENTAL_SIGNATURE_SUM_ADDR & 0xFF,
+        TED_INCREMENTAL_SIGNATURE_SUM_ADDR >> 8,
+        0xCB, 0x43,                          # odd destination address?
+    )
+    a.jr(0x28, "done")
+    a.db(
+        0xFA, TED_INCREMENTAL_SIGNATURE_ODD_ADDR & 0xFF,
+        TED_INCREMENTAL_SIGNATURE_ODD_ADDR >> 8,
+        0x80,
+        0xEA, TED_INCREMENTAL_SIGNATURE_ODD_ADDR & 0xFF,
+        TED_INCREMENTAL_SIGNATURE_ODD_ADDR >> 8,
+    )
+    a.label("done")
+    a.db(0x7C, 0xE1, 0x13, 0xC9)
+    code = a.finish()
+    assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    return code
+
+
+def build_ted_incremental_signature_installer() -> bytes:
+    """Scene-change dispatcher for Crystal rearm and Ted helper install."""
+    helper = build_ted_incremental_signature_writer()
+    a = _Asm()
+    a.db(0xFE, CRYSTAL_DRAGON_SCENE)
+    a.jr(0x28, "crystal")
+    a.db(0xFE, 0x10, 0xC0)                 # preserve A outside Ted
+    a.db(
+        0x21, TED_INCREMENTAL_WRITER_SOURCE_ADDR & 0xFF,
+        TED_INCREMENTAL_WRITER_SOURCE_ADDR >> 8,
+        0x11, TED_INCREMENTAL_WRITER_RUNTIME_ADDR & 0xFF,
+        TED_INCREMENTAL_WRITER_RUNTIME_ADDR >> 8,
+        0x01, len(helper), 0x00,
+        0xCD, 0xB3, 0x09,
+        0x3E, 0x10, 0xC9,
+    )
+    a.label("crystal")
+    a.db(0x21, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+         0x36, 0x11, 0x3E, CRYSTAL_DRAGON_SCENE, 0xC9)
+    code = a.finish()
+    assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    return code
+
+
+def build_ted_full_source_tracker() -> tuple[bytes, bytes, bytes]:
+    """Delta-update Ted's exact four-class source key in volatile SVBK4.
+
+    The private cloned writer enters once after each completed 2x2 write with
+    DE restored to its top-left source cell.  D000-D23F is an exact prior
+    source mirror and D240-D244 owns four additive class sums plus validity.
+    ``class=(index^(index>>5))&3`` is collision-free across the archived Ted
+    corpus and needs no multiplication.  The fixed-bank writer is untouched.
+    """
+    if _os.environ.get("PENTA_TED_DIRECT_PLANE", "0") == "1":
+        return build_ted_direct_plane_writer()
+
+    a = _Asm()
+    a.db(0xF3, 0xF5, 0xD5, 0xE5)           # DI; preserve native AF/DE/HL
+    a.db(0xFA, TED_INCREMENTAL_VALID_ADDR & 0xFF,
+         TED_INCREMENTAL_VALID_ADDR >> 8, 0xB7)
+    a.jr(0x28, "finish")
+    a.db(0x62, 0x6B, 0x01, 0x60, 0x0E, 0x09)  # HL=DE+$0E60 mirror
+    cell_calls: list[int] = []
+    for index in range(4):
+        cell_calls.append(len(a.code))
+        a.db(0xCD, 0x00, 0x00)
+        if index != 3:
+            a.db(0x13, 0x23)
+        if index == 1:
+            # Both pointers are now top-left+2; advance to next row (+22).
+            a.db(0x01, 0x16, 0x00, 0x09,
+                 0x7B, 0xC6, 0x16, 0x5F)
+            a.jr(0x30, "de_row_ready")
+            a.db(0x14)
+            a.label("de_row_ready")
+    a.label("finish")
+    a.db(0xE1, 0xD1, 0xF1,
+         0xC3, TED_INCREMENTAL_TRACKER_EXIT_ADDR & 0xFF,
+         TED_INCREMENTAL_TRACKER_EXIT_ADDR >> 8)
+    a.label("cell")
+    cell_addr = TED_INCREMENTAL_TRACKER_ADDR + len(a.code)
+    a.db(
+        0x1A, 0x47, 0x7E, 0xB8, 0xC8,     # new B; old A; RET Z
+        0x4F, 0x70, 0x78, 0x91, 0x47,     # mirror=new; B=delta
+        0xE5, 0x7D, 0x4F, 0xCB, 0x37, 0x0F,
+        0xA9, 0xE6, 0x03, 0xC6,
+        TED_INCREMENTAL_KEY_ADDR & 0xFF,
+        0x6F, 0x26, TED_INCREMENTAL_KEY_ADDR >> 8,
+        0x7E, 0x80, 0x77, 0xE1, 0xC9,
+    )
+    tracker = bytearray(a.finish())
+    for offset in cell_calls:
+        tracker[offset + 1:offset + 3] = bytes(
+            [cell_addr & 0xFF, cell_addr >> 8]
+        )
+    assert (
+        TED_INCREMENTAL_TRACKER_ADDR + len(tracker)
+        <= TED_INCREMENTAL_TRACKER_EXIT_ADDR
+    ), len(tracker)
+    # The unbanked C500 caller restores SVBK1 before enabling interrupts.
+    # The hook replaces stock $3136 after $3134/$3135 have already popped
+    # HL/DE.  Reproduce only the displaced POP BC / INC DE / INC DE / RST /
+    # RET tail; extra pops here cross the caller's banked stack.
+    continuation = bytes.fromhex("C1 13 13 EF C9 00 00 00 00")
+    return bytes(tracker), b"", continuation
+
+
+def build_ted_direct_plane_writer() -> tuple[bytes, bytes, bytes]:
+    """Maintain Ted's padded tile and attribute planes at the private tail.
+
+    A cold-built pointer table converts the native packed C1A0 top-left DE
+    directly to its padded D000 destination.  This avoids an old-value mirror,
+    checksum deltas, and the post-copy 24x24 compiler: each completed native
+    2x2 write performs exactly four C600 lookups and four plane stores.
+    """
+    a = _Asm()
+    a.db(0xF3, 0xF5, 0xD5, 0xE5)          # DI; exact AF/DE/HL
+    a.db(
+        0x62, 0x6B,                        # HL = packed top-left DE
+        0x01,
+        (TED_DIRECT_PLANE_POINTER_TABLE_ADDR - 0xC1A0) & 0xFF,
+        (TED_DIRECT_PLANE_POINTER_TABLE_ADDR - 0xC1A0) >> 8,
+        # The table has one 16-bit pointer per even-column 2x2 top-left.
+        # Its byte offset therefore equals the packed source offset here.
+        0x09,                              # HL = D600 + (DE-C1A0)
+        0x4E, 0x23, 0x46,                 # BC = padded destination
+        0x60, 0x69, 0x7C, 0xC6, 0x09, 0x67,
+                                            # HL = matching D900 tile cell
+    )
+
+    def cell(*, advance: bool) -> None:
+        a.db(0x1A)
+        if advance:
+            a.db(0x13)
+        a.db(
+            0x22, 0xE5,
+            0x6F, 0x26, WRAM_BG_TABLE >> 8, 0x7E,
+            0x02, 0xE1,
+        )
+        if advance:
+            a.db(0x03)
+
+    cell(advance=True)
+    cell(advance=True)
+    # DE has advanced two packed cells; BC two padded cells. Move each to the
+    # next row while preserving carries at C1FF/D0FF boundaries.
+    a.db(0x7B, 0xC6, 0x16, 0x5F)
+    a.jr(0x30, "source_row")
+    a.db(0x14)
+    a.label("source_row")
+    a.db(0x79, 0xC6, 0x1E, 0x4F)
+    a.jr(0x30, "plane_row")
+    a.db(0x04)
+    a.label("plane_row")
+    a.db(0xC5, 0x01, 0x1E, 0x00, 0x09, 0xC1)
+    cell(advance=True)
+    cell(advance=False)
+    a.db(
+        0xE1, 0xD1, 0xF1,
+        0xC3, TED_INCREMENTAL_TRACKER_EXIT_ADDR & 0xFF,
+        TED_INCREMENTAL_TRACKER_EXIT_ADDR >> 8,
+    )
+    tracker = a.finish()
+    assert len(tracker) <= (
+        TED_INCREMENTAL_TRACKER_EXIT_ADDR - TED_INCREMENTAL_TRACKER_ADDR
+    ), len(tracker)
+    tracker += bytes(
+        TED_INCREMENTAL_TRACKER_EXIT_ADDR
+        - TED_INCREMENTAL_TRACKER_ADDR - len(tracker)
+    )
+    continuation = bytes.fromhex("C1 13 13 EF C9 00 00 00 00")
+    return tracker, b"", continuation
+
+
+def build_ted_full_source_initializer() -> bytes:
+    """Create the exact SVBK4 mirror/key at the first Ted publication."""
+    if _os.environ.get("PENTA_TED_DIRECT_PLANE", "0") == "1":
+        a = _Asm()
+        # Clear both padded planes, including all eight row-padding columns,
+        # before the direct writer starts filling visible cells.
+        a.db(
+            0x21, 0x00, 0xD0, 0x01, 0x00, 0x03, 0xAF,
+            0xCD, 0xA8, 0x09,
+            # Memset returns HL=D300, BC=0, A=0. Reuse L/A and only replace
+            # H/BC for the discontiguous D900 tile plane; this keeps the live
+            # initializer out of the installer's historical padding chunk.
+            0x26, TED_DIRECT_TILE_PLANE_ADDR >> 8,
+            0x01, 0x00, 0x03, 0xCD, 0xA8, 0x09,
+            0x21, TED_DIRECT_PLANE_POINTER_TABLE_ADDR & 0xFF,
+            TED_DIRECT_PLANE_POINTER_TABLE_ADDR >> 8,
+            0x11, 0x00, 0xD0,
+            0x06, 0x18,
+        )
+        a.label("row")
+        a.db(0x0E, 0x0C)
+        a.label("cell")
+        a.db(0x7B, 0x22, 0x7A, 0x22, 0x13, 0x13, 0x0D)
+        a.jr(0x20, "cell")
+        a.db(0x7B, 0xC6, 0x08, 0x5F)
+        a.jr(0x30, "row_ready")
+        a.db(0x14)
+        a.label("row_ready")
+        a.db(0x05)
+        a.jr(0x20, "row")
+        if _os.environ.get("PENTA_TED_INWINDOW_GDMA", "0") == "1":
+            # The original runtime source allocation ends with eleven zero
+            # bytes. Replacing RET with this single fixed-size copy installs
+            # the geometry sanitizer in each selected private bank without
+            # growing or perturbing the fragmented scene installer.
+            a.db(
+                0x21, TED_INWINDOW_SANITIZER_SOURCE_ADDR & 0xFF,
+                TED_INWINDOW_SANITIZER_SOURCE_ADDR >> 8,
+                0x11, TED_INWINDOW_SANITIZER_ADDR & 0xFF,
+                TED_INWINDOW_SANITIZER_ADDR >> 8,
+                # The pointer-table loop exits with B=C=0; only C changes.
+                0x0E, TED_INWINDOW_SANITIZER_SOURCE_SIZE,
+                0xCD, 0xB3, 0x09,
+            )
+        a.db(0xC9)
+        return a.finish()
+
+    a = _Asm()
+    a.db(0xFA, TED_INCREMENTAL_VALID_ADDR & 0xFF,
+         TED_INCREMENTAL_VALID_ADDR >> 8, 0xB7, 0xC0)
+    a.db(0x21, TED_INCREMENTAL_KEY_ADDR & 0xFF,
+         TED_INCREMENTAL_KEY_ADDR >> 8, 0xAF,
+         0x22, 0x22, 0x22, 0x22)
+    a.db(0x11, 0xA0, 0xC1,
+         0x21, TED_INCREMENTAL_MIRROR_ADDR & 0xFF,
+         TED_INCREMENTAL_MIRROR_ADDR >> 8,
+         0x01, 0x40, 0x02)
+    a.label("cell")
+    a.db(
+        0xC5, 0x1A, 0x47, 0x22,           # save count; B=value; mirror
+        0x7B, 0xD6, 0xA0, 0x4F, 0xCB, 0x37, 0x0F,
+        0xA9, 0xE6, 0x03, 0xC6,
+        TED_INCREMENTAL_KEY_ADDR & 0xFF,
+        # The key lookup temporarily borrows HL.  Preserve the incremented
+        # D000-D23F mirror cursor or the second cell onward overwrites key
+        # metadata instead of constructing the exact source mirror.
+        0xE5, 0x6F, 0x26, TED_INCREMENTAL_KEY_ADDR >> 8,
+        0x7E, 0x80, 0x77, 0xE1,
+        0x13, 0xC1, 0x0B, 0x78, 0xB1,
+    )
+    a.jr(0x20, "cell")
+    a.db(0x3E, 0x01,
+         0xEA, TED_INCREMENTAL_VALID_ADDR & 0xFF,
+         TED_INCREMENTAL_VALID_ADDR >> 8, 0xC9)
+    return a.finish()
+
+
+def build_ted_incremental_runtime_blob() -> tuple[bytes, bytes]:
+    if _os.environ.get(TED_BLOCK_MAJOR_ENV, "0") == "1":
+        fragments = build_ted_block_major_exact_fit_draft()
+        runtime = fragments[TED_INCREMENTAL_TRACKER_ADDR]
+        assert len(runtime) == sum(
+            length for _address, length in TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS
+        )
+        return runtime, b""
+    tracker, exit_code, continuation = build_ted_full_source_tracker()
+    assert len(tracker) == TED_INCREMENTAL_TRACKER_EXIT_ADDR - TED_INCREMENTAL_TRACKER_ADDR
+    assert not exit_code and len(continuation) == 9
+    blob = tracker + continuation
+    blob += bytes(
+        TED_INCREMENTAL_INIT_ADDR - TED_INCREMENTAL_TRACKER_ADDR - len(blob)
+    )
+    blob += build_ted_full_source_initializer()
+    source_capacity = sum(
+        length for _address, length in TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS
+    )
+    assert (
+        TED_INCREMENTAL_TRACKER_ADDR + len(blob) <= 0xD400
+        and len(blob) <= source_capacity
+    ), len(blob)
+    blob += bytes(source_capacity - len(blob))
+    return blob, b""
+
+
+def build_ted_incremental_runtime_sources() -> dict[int, bytes]:
+    """Split the volatile tracker across Ted-architecture-only ROM caves."""
+    blob, continuation = build_ted_incremental_runtime_blob()
+    sources: dict[int, bytes] = {}
+    cursor = 0
+    for address, length in TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS:
+        sources[address] = blob[cursor:cursor + length]
+        cursor += length
+    assert cursor == len(blob), (cursor, len(blob))
+    assert not continuation
+    sources[TED_INCREMENTAL_FIXED_RUNTIME_SOURCE_ADDR] = (
+        build_ted_incremental_fixed_runtime()
+    )
+    if _os.environ.get("PENTA_TED_DIRECT_PLANE", "0") == "1":
+        helper = build_ted_direct_single_writer_helpers()
+        cursor = 0
+        for address, capacity in TED_DIRECT_FIXED_HELPER_SOURCE_CHUNKS:
+            payload = helper[cursor:cursor + capacity]
+            sources[address] = payload
+            cursor += len(payload)
+        assert cursor == len(helper), (cursor, len(helper))
+    if _os.environ.get("PENTA_TED_INWINDOW_GDMA", "0") == "1":
+        block_major = _os.environ.get(TED_BLOCK_MAJOR_ENV, "0") == "1"
+        if block_major:
+            assert _os.environ.get(TED_INCREMENTAL_CELL_ENV, "0") == "1"
+            exact = build_ted_block_major_exact_fit_draft()
+            for address, payload in exact.items():
+                if address < 0x8000:
+                    assert address not in sources, hex(address)
+                    sources[address] = payload
+            return sources
+        assert (
+            TED_INWINDOW_SANITIZER_SOURCE_ADDR == TED_TABLE_ADDR + 0x87
+            and TED_INWINDOW_SANITIZER_SOURCE_ADDR
+            + TED_INWINDOW_SANITIZER_SOURCE_SIZE == TED_TABLE_ADDR + 0x100
+        ), "private sanitizer source must stay inside Ted's neutral LUT tail"
+        assert all(
+            ARENA_TILE_PAL["ted"].get(tile, 0) == 0
+            for tile in range(0x87, 0x100)
+        ), "Ted sanitizer source overlaps an editable/publishable material"
+        incremental_cell = _os.environ.get(
+            TED_INCREMENTAL_CELL_ENV, "0"
+        ) == "1"
+        if incremental_cell:
+            assert tuple(
+                ARENA_TILE_PAL["ted"].get(tile, 0)
+                for tile in range(0x77, 0x87)
+            ) == (6, 7, 7, 6, 5, 0, 1, 0, 0, 2, 0, 5, 1, 2, 5, 1), (
+                "Ted $77-$86 sparse/floor LUT contract changed"
+            )
+            sanitizer, helper_fragments = (
+                build_ted_incremental_cell_classifier_draft()
+            )
+            validate_ted_incremental_cell_layout(
+                sanitizer, helper_fragments
+            )
+            assert False, (
+                "PENTA_TED_INCREMENTAL_CELL is wired but blocked: the "
+                "D863-D8AA body mask has no receipt-qualified SVBK4/5 "
+                "ownership record"
+            )
+        else:
+            sanitizer, helper_fragments = build_ted_inwindow_plane_sanitizer()
+        sources[TED_INWINDOW_SANITIZER_SOURCE_ADDR] = sanitizer
+        sources.update(helper_fragments)
+    return sources
+
+
+def build_ted_incremental_fixed_runtime() -> bytes:
+    """Run the SVBK4 clone atomically from unbanked WRAM, then restore."""
+    if _os.environ.get("PENTA_TED_DIRECT_PLANE", "0") == "1":
+        # The physical selector is normalized by its preceding publication.
+        # Mask defensively, then map pre-toggle odd->$9800/SVBK4 and
+        # even->$9C00/SVBK5. Balanced AF saves keep this dual-bank dispatcher
+        # inside the source cave's 24 contiguous bytes.
+        code = bytes([
+            0xF3, 0xF5,
+            0xFA, 0x0B, 0xDC, 0xE6, 0x01, 0xEE, 0x05, 0xE0, 0x70,
+            0xF1,
+            0xCD, TED_INCREMENTAL_CLONE_ADDR & 0xFF,
+            TED_INCREMENTAL_CLONE_ADDR >> 8,
+            0xF5, 0x3E, 0x01, 0xE0, 0x70, 0xF1, 0xFB, 0xC9,
+        ])
+        assert len(code) == 23
+        return code
+    code = bytearray([
+        0xF3,
+        # FFA9 is retired by this incremental compiler. LD/LDH preserve F,
+        # so this carries exact AF across SVBK without crossing banked stacks.
+        0xE0, TED_SANITIZER_EXPECTED_HRAM,
+    ])
+    code.extend([0x3E, 0x04, 0xE0, 0x70])
+    code.extend([
+        0xF0, TED_SANITIZER_EXPECTED_HRAM,
+        0xCD, TED_INCREMENTAL_CLONE_ADDR & 0xFF,
+        TED_INCREMENTAL_CLONE_ADDR >> 8,
+        0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0x3E, 0x01, 0xE0, 0x70,
+        0xF0, TED_SANITIZER_EXPECTED_HRAM,
+        0xFB, 0xC9,
+    ])
+    assert len(code) == 22
+    return bytes(code)
+
+
+def build_ted_direct_single_writer_helpers() -> bytes:
+    """Mirror Ted's two late single-cell writers into the direct plane.
+
+    Both bank-2 hooks replace their complete displaced tails with JP, so no
+    synthetic return address is introduced.  The shared leaf preserves every
+    live register and AF, restores SVBK1, and maps all 576 native source cells
+    through the cold-built 16-bit pointer table.
+    """
+    helper_a_addr = TED_DIRECT_FIXED_HELPER_ADDR
+    helper_b_addr = helper_a_addr + 10
+    common_addr = helper_b_addr + 7
+
+    helper_a = bytes([
+        0xF3,
+        0xCD, common_addr & 0xFF, common_addr >> 8,
+        0xE1, 0xC1,                       # displaced POP HL / POP BC
+        0xFB,
+        0xC3, 0xE2, 0x61,                 # resume at DEC B
+    ])
+    helper_b = bytes([
+        0xF1,                              # displaced POP AF
+        0xF3,
+        0xCD, common_addr & 0xFF, common_addr >> 8,
+        0xFB, 0xC9,
+    ])
+    # The writers occur both inside IE=$00 map phases and in IE=$07 steady
+    # gameplay. Keep the selected private-bank interval atomic; EI takes
+    # effect only after the following JP/RET returns to the displaced native
+    # continuation.  DC0B is still the pre-publication selector here, exactly
+    # matching the C500 clone dispatcher (odd -> SVBK4, even -> SVBK5).
+    common = bytes([
+        0x77,                              # displaced LD [HL],A
+        0xF5, 0xC5, 0xD5, 0xE5,
+        0x57,                              # D = raw tile
+        # The table has one pointer per even-column 2x2 top-left. Retain the
+        # arbitrary single writer's column parity and align its table index;
+        # an odd source cell advances the decoded destination once.
+        0x7D, 0xE6, 0x01, 0x5F, 0xCB, 0x85,
+        0xFA, 0x0B, 0xDC,
+        # The in-window entry stores ``(DC0B + 1) & 1`` before any selected
+        # plane writer can run. Block-major can spend that proven normalized
+        # bit directly and reclaim the two-byte defensive mask for its
+        # private-LUT lookup below.
+        *([] if _os.environ.get(TED_BLOCK_MAJOR_ENV, "0") == "1"
+          else [0xE6, 0x01]),
+        0xEE, 0x05, 0xE0, 0x70,
+        0x01, 0x60, 0x14, 0x09,           # aligned top-left table entry
+        0x4E, 0x23, 0x46,                 # BC = padded plane pointer
+        0x7B, 0xB7, 0x28, 0x01, 0x03,     # odd source -> next plane cell
+        *(
+            # Block-major owns the former $7600 Ted LUT page, so scene
+            # detection can no longer seed C600 with a valid 256-byte table.
+            # Its cold installer already expands tile $00 at D5FF through
+            # tile $86 at D579; use that private reverse LUT for the two late
+            # single-cell/tentacle writers as well as the 2x2 writer.
+            [0x7A, 0x2F, 0x6F, 0x26, 0xD5, 0x7E]
+            if _os.environ.get(TED_BLOCK_MAJOR_ENV, "0") == "1"
+            else [0x6A, 0x26, WRAM_BG_TABLE >> 8, 0x7E]
+        ),
+        0x02,                              # selected plane write
+        0x3E, 0x01, 0xE0, 0x70,
+        0xE1, 0xD1, 0xC1, 0xF1, 0xC9,
+    ])
+    assert len(helper_a) == 10 and len(helper_b) == 7
+    code = helper_a + helper_b + common
+    if _os.environ.get(TED_BLOCK_MAJOR_ENV, "0") == "1":
+        # $5E48 begins the adjacent installer. Growing this helper even one
+        # byte drops its POP AF/RET tail and corrupts the native writer stack.
+        assert len(code) == 64, len(code)
+    assert len(code) <= sum(
+        capacity for _address, capacity
+        in TED_DIRECT_FIXED_HELPER_SOURCE_CHUNKS
+    ), len(code)
+    if _os.environ.get(TED_BLOCK_MAJOR_ENV, "0") == "1":
+        # Block-major's installer begins at $5E48.  The second helper source
+        # fragment begins at $5E2C, leaving only 28 bytes there (64 total),
+        # even though the historical cave has a 36-byte nominal capacity.
+        # Crossing this boundary overwrites the helper's POP AF / RET and
+        # converts every late single-cell write into stack corruption.
+        assert len(code) <= 64, (
+            "block-major single-writer helper overlaps installer $5E48",
+            len(code),
+        )
+    assert TED_DIRECT_FIXED_HELPER_ADDR + len(code) < TED_INCREMENTAL_READY_ADDR
+    return code
+
+
+def build_ted_incremental_bank2_gate() -> dict[int, bytes]:
+    """Select stock $064D or the private $309B clone at Ted's bank-2 call."""
+    entry = bytes([
+        0xFA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+        TED_INCREMENTAL_READY_ADDR >> 8, 0x3C,
+        0xC2, TED_INCREMENTAL_BANK2_FALLBACK_ADDR & 0xFF,
+        TED_INCREMENTAL_BANK2_FALLBACK_ADDR >> 8,
+        0xC3, TED_INCREMENTAL_BANK2_READY_ADDR & 0xFF,
+        TED_INCREMENTAL_BANK2_READY_ADDR >> 8,
+    ])
+    fallback = bytes([0xCD, 0x4D, 0x06, 0xC9])
+    ready = bytes([
+        0xCD, TED_INCREMENTAL_UNUSED_THUNK_ADDR & 0xFF,
+        TED_INCREMENTAL_UNUSED_THUNK_ADDR >> 8, 0xC9,
+    ])
+    fragments = {
+        TED_INCREMENTAL_BANK2_ENTRY_ADDR: entry,
+        TED_INCREMENTAL_BANK2_FALLBACK_ADDR: fallback,
+        TED_INCREMENTAL_BANK2_READY_ADDR: ready,
+    }
+    capacities = {
+        TED_INCREMENTAL_BANK2_ENTRY_ADDR: 12,
+        TED_INCREMENTAL_BANK2_FALLBACK_ADDR: 11,
+        TED_INCREMENTAL_BANK2_READY_ADDR: 13,
+    }
+    for address, payload in fragments.items():
+        assert len(payload) <= capacities[address]
+    return fragments
+
+
+def build_ted_incremental_clone_patch_records() -> tuple[tuple[int, bytes], ...]:
+    """Runtime patches applied after copying stock $30AF-$313A to SVBK4."""
+    clone_source = 0x309B
+    delta = TED_INCREMENTAL_CLONE_ADDR - clone_source
+    records = (
+        (TED_INCREMENTAL_CLONE_ADDR + (0x30B9 - clone_source),
+         bytes([0xCD, (0x30D8 + delta) & 0xFF, (0x30D8 + delta) >> 8])),
+        (TED_INCREMENTAL_CLONE_ADDR + (0x30EB - clone_source),
+         bytes([0xCD, (0x3111 + delta) & 0xFF, (0x3111 + delta) >> 8])),
+        (TED_INCREMENTAL_CLONE_ADDR + (0x3103 - clone_source),
+         bytes([0xCD, (0x3111 + delta) & 0xFF, (0x3111 + delta) >> 8])),
+        (TED_INCREMENTAL_CLONE_ADDR + (0x3136 - clone_source),
+         bytes([0xC3, TED_INCREMENTAL_TRACKER_ADDR & 0xFF,
+                TED_INCREMENTAL_TRACKER_ADDR >> 8])),
+    )
+    stock = Path("rom/Penta Dragon (J).gb").read_bytes()
+    for call_addr in (0x30B9, 0x30EB, 0x3103):
+        assert stock[call_addr] == 0xCD, hex(call_addr)
+    assert stock[0x3136:0x3139] == bytes.fromhex("C1 13 13")
+    return records
+
+
+def build_ted_postcopy_attr_compiler() -> dict[int, bytes]:
+    """Compile changed Ted attrs after native copy; reuse two exact planes."""
+    cache_mode = _os.environ.get("PENTA_TED_POSTCOPY_CACHE", "1")
+    cache_enabled = cache_mode != "0"
+    cache_reuse = cache_mode == "1"
+    front = _Asm()
+    front.db(0xF3, 0xC5, 0xD5, 0xE5)       # DI; preserve caller
+    # HL ended three physical pages beyond the target map ($9B/$9F). Recover
+    # its $98/$9C base for HDMA after compiling the packed 24x24 source.
+    front.db(0x7C, 0xE6, 0xFC)
+    if cache_enabled:
+        front.db(0xE0, TED_SANITIZER_TILE_MASK_HRAM)
+    else:
+        # Do not borrow a live HRAM gameplay byte merely to retain $98/$9C.
+        # The cache-free path has no early-hit exit, so carry the target map
+        # on its private stack frame until the single final publication.
+        front.db(0xF5)
+    # The native engine republishes exact layouts. Keep those publications for
+    # stock cadence, but avoid recompiling the same 576 attributes. The
+    # signature helper selects WRAM bank 2/3 and returns Z on a cache hit.
+    if cache_enabled:
+        front.db(0xCD, TED_POSTCOPY_DISPATCH_ADDR & 0xFF,
+                 TED_POSTCOPY_DISPATCH_ADDR >> 8)
+        front.db(0xCA, TED_SANITIZER_ROW_TABLE_ADDR & 0xFF,
+                 TED_SANITIZER_ROW_TABLE_ADDR >> 8)
+        # The dispatcher restores SVBK1 before RET so its return address is
+        # read from the real stack, then returns the selected cache bank in A.
+        front.db(0xE0, 0x70)
+        front.db(0xDA, TED_SANITIZER_ACTIVE_ADDR & 0xFF,
+                 TED_SANITIZER_ACTIVE_ADDR >> 8)
+    else:
+        # The shared row helper and its output plane live in WRAM bank 2.
+        # Cache lookup normally selects bank 2/3 before this point; the
+        # cache-disabled diagnostic path must establish that invariant itself
+        # or CALL $D400 executes unrelated bank-1 data and locks at $D473.
+        front.db(0x3E, 0x02, 0xE0, 0x70)
+    front.db(0x11, 0xA0, 0xC1, 0x21, 0x00, 0xD0,
+             0x06, WRAM_BG_TABLE >> 8)
+    front.db(0x3E, 0x18, 0xE0, LAVA_ATTR_DECISION_HRAM)
+    front.db(0xC3, TED_SANITIZER_CLASSIFY_ADDR & 0xFF,
+             TED_SANITIZER_CLASSIFY_ADDR >> 8)
+
+    row = _Asm()
+    row.label("row")
+    row.db(0xCD, STAGE1_ATTR_ROW_HELPER_WRAM_ADDR & 0xFF,
+           STAGE1_ATTR_ROW_HELPER_WRAM_ADDR >> 8)
+    # D400 writes 24 attributes; explicitly neutralize the eight padding
+    # columns so an old staging buffer can never color the map edge.
+    row.db(0xAF)
+    for _ in range(8):
+        row.db(0x22)
+    row.db(0xF0, LAVA_ATTR_DECISION_HRAM, 0x3D,
+           0xE0, LAVA_ATTR_DECISION_HRAM)
+    row.jr(0x20, "row")
+    row.db(0xC3, TED_SANITIZER_ACTIVE_ADDR & 0xFF,
+           TED_SANITIZER_ACTIVE_ADDR >> 8)
+
+    final = _Asm()
+    # Publish all $300 bytes to the just-completed off-screen map in VBK1.
+    final.db(0x3E, 0x01, 0xE0, 0x4F)
+    final.db(0x3E, 0xD0, 0xE0, 0x51, 0xAF, 0xE0, 0x52)
+    if cache_enabled:
+        final.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM)
+    else:
+        final.db(0xF1)
+    final.db(0xE0, 0x53)
+    # One immediate 48-block GDMA is cheaper than keeping the CPU interlocked
+    # across 48 HBlanks, and the native publisher already runs with IRQs off.
+    final.db(0x3E, 0x2F, 0xE0, 0x55)
+    final.label("hdma_wait")
+    final.db(0xF0, 0x55, 0xCB, 0x7F)
+    final.jr(0x28, "hdma_wait")
+    final.db(0xAF, 0xE0, 0x4F, 0x3C, 0xE0, 0x70)
+    final.db(0xE1, 0xD1, 0xC1, 0xFB, 0xC9)
+    signature = bytes([
+        0xFA, 0x81, 0xDD, 0x4F,
+        0xFA, 0xC0, 0xDD, 0x47,
+        0xFA, 0x87, 0xDD, 0x57,
+        0xFA, 0xDC, 0xDD, 0x5F,
+        0xC3, TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR & 0xFF,
+        TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR >> 8,
+    ])
+
+    def cache_lookup_front(bank: int, miss_address: int,
+                           tail_address: int) -> bytes:
+        lookup = _Asm()
+        lookup.db(0x3E, bank, 0xE0, 0x70, 0x21, 0x05, 0xD3)
+        for expected in (0x10, 0xA7):
+            lookup.db(0x7E, 0x2B)
+            lookup.db(0xFE, expected)
+            lookup.jr(0x20, "miss")
+        lookup.db(0xC3, tail_address & 0xFF, tail_address >> 8)
+        lookup.label("miss")
+        lookup.db(0xC3, miss_address & 0xFF, miss_address >> 8)
+        code = lookup.finish()
+        assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE, len(code)
+        return code
+
+    def cache_lookup_tail(bank: int, miss_address: int) -> bytes:
+        lookup = _Asm()
+        for register_compare in (0xBB, 0xBA, 0xB8, 0xB9):
+            lookup.db(0x7E, 0x2B, register_compare)
+            lookup.jr(0x20, "miss")
+        lookup.db(0x3E, bank, 0xC3,
+                  TED_SANITIZER_RUNTIME_EXTRA_SOURCE_ADDR & 0xFF,
+                  TED_SANITIZER_RUNTIME_EXTRA_SOURCE_ADDR >> 8)
+        lookup.label("miss")
+        lookup.db(0xC3, miss_address & 0xFF, miss_address >> 8)
+        return lookup.finish()
+
+    restore_hit = bytes([
+        0x47,                   # B=selected bank
+        0x3E, 0x01, 0xE0, 0x70, # restore stack's SVBK1
+        0x78, 0xB7, 0x37, 0xC9, # A=selected bank; NZ+C; RET
+    ])
+
+    physical_select = _Asm()
+    physical_select.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xFE, 0x9C)
+    physical_select.jr(0x28, "map9c")
+    physical_select.db(0x21, 0xFC, 0xC4)
+    physical_select.jr(0x18, "check")
+    physical_select.label("map9c")
+    physical_select.db(0x21, 0x00, 0xC5)
+    physical_select.label("check")
+    physical_select.db(0xF0, TED_SANITIZER_EXPECTED_HRAM, 0xB7)
+    physical_select.db(
+        0xCA, TED_INCREMENTAL_INSTALL_CONT_ADDR & 0xFF,
+        TED_INCREMENTAL_INSTALL_CONT_ADDR >> 8,
+    )
+    physical_select.db(
+        0xC3, (TED_SANITIZER_ROW_TABLE_ADDR + 5) & 0xFF,
+        (TED_SANITIZER_ROW_TABLE_ADDR + 5) >> 8,
+    )
+
+    physical_check = _Asm()
+    physical_check.db(0xE5)
+    for register_compare in (0xB9, 0xB8, 0xBA, 0xBB):
+        physical_check.db(0x2A, register_compare)
+        physical_check.jr(0x20, "changed")
+    physical_check.db(0xE1, 0x3E, 0x01, 0xBF, 0xC9)  # physical hit: Z
+    physical_check.label("changed")
+    physical_check.db(0xE1, 0xC3, TED_INCREMENTAL_INSTALL_CONT_ADDR & 0xFF,
+                      TED_INCREMENTAL_INSTALL_CONT_ADDR >> 8)
+    physical_changed = bytes([
+        0x79, 0x22, 0x78, 0x22, 0x7A, 0x22, 0x7B, 0x22,
+        0xC3, TED_SANITIZER_SPECIAL_ADDR & 0xFF,
+        TED_SANITIZER_SPECIAL_ADDR >> 8,
+    ])
+    physical_fragment = bytes([0xE1, 0xD1, 0xC1, 0xFB, 0xC9]) + (
+        physical_check.finish()
+    )
+    assert len(physical_fragment) <= ARENA_SANITIZER_FRAGMENT_SIZE
+
+    select_miss = _Asm()
+    select_miss.db(0xF0, TED_SANITIZER_EXPECTED_HRAM, 0xFE, 0x02,
+                   0x3E, 0x02)
+    select_miss.jr(0x20, "selected")
+    select_miss.db(0x3E, 0x03)
+    select_miss.label("selected")
+    select_miss.db(0xE0, TED_SANITIZER_EXPECTED_HRAM, 0xE0, 0x70,
+                   0x21, 0x00, 0xD3,
+                   0xC3, TED_SANITIZER_GEOMETRY_CONT_ADDR & 0xFF,
+                   TED_SANITIZER_GEOMETRY_CONT_ADDR >> 8)
+    select_store = bytes([
+                   0x79, 0x22, 0x78, 0x22, 0x7A, 0x22, 0x7B, 0x22,
+                   0x3E, 0xA7, 0x22, 0x3E, 0x10, 0x77,
+                   0x3E, 0x01, 0xE0, 0x70,
+                   0xF0, TED_SANITIZER_EXPECTED_HRAM, 0xB7, 0xC9])
+
+    fragments = {
+        TED_POSTCOPY_ATTR_COMPILER_ADDR: front.finish(),
+        TED_SANITIZER_CLASSIFY_ADDR: row.finish(),
+        TED_SANITIZER_ACTIVE_ADDR: final.finish(),
+        TED_SANITIZER_SPECIAL_ADDR: cache_lookup_front(
+            2, TED_SANITIZER_CLEAR_ADDR, TED_SANITIZER_ANCHOR_ADDR
+        ),
+        TED_SANITIZER_ANCHOR_ADDR: cache_lookup_tail(
+            2, TED_SANITIZER_CLEAR_ADDR
+        ),
+        TED_SANITIZER_CLEAR_ADDR: cache_lookup_front(
+            3, TED_SANITIZER_COMPARE_ADDR, TED_SANITIZER_ANCHOR_PACK_ADDR
+        ),
+        TED_SANITIZER_ANCHOR_PACK_ADDR: cache_lookup_tail(
+            3, TED_SANITIZER_COMPARE_ADDR
+        ),
+        TED_SANITIZER_COMPARE_ADDR: select_miss.finish(),
+        TED_SANITIZER_GEOMETRY_CONT_ADDR: select_store,
+        TED_SANITIZER_RUNTIME_EXTRA_SOURCE_ADDR: restore_hit,
+        TED_SANITIZER_ROW_TABLE_ADDR: physical_fragment,
+        TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR: physical_select.finish(),
+        TED_INCREMENTAL_INSTALL_CONT_ADDR: physical_changed,
+        TED_POSTCOPY_DISPATCH_ADDR: signature,
+    }
+    for code in fragments.values():
+        assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    return fragments
+
+
+def build_ted_compact_postcopy_attr_compiler() -> dict[int, bytes]:
+    """Cache Ted's exact post-stock-copy attributes with a compact key.
+
+    The stock $4295 call remains the tile publisher and therefore retains its
+    alternating-map geometry and cadence.  Most calls return after a two-byte
+    physical-map tag check.  A changed map reuses one of two exact WRAM
+    attribute planes, compiling the 24x24 C1A0 source only on a FIFO miss.
+    """
+    assert _os.environ.get("PENTA_TED_POSTCOPY_CACHE", "1") == "1"
+    sources = tuple(0xC1A0 + sample for sample in TED_POSTCOPY_KEY_SAMPLES)
+
+    def jp(address: int, opcode: int = 0xC3) -> tuple[int, int, int]:
+        return opcode, address & 0xFF, address >> 8
+
+    key_loop_addr = TED_SANITIZER_CLASSIFY_ADDR
+    key_table_a_addr = TED_SANITIZER_CROWN_ADDR
+    key_table_b_addr = TED_SANITIZER_ACTIVE_ADDR
+    key_finish_addr = TED_SANITIZER_SPECIAL_ADDR
+    physical_addr = TED_SANITIZER_CLEAR_ADDR
+    lookup2_addr = TED_SANITIZER_ROW_TABLE_ADDR
+    lookup3_addr = TED_SANITIZER_ANCHOR_ADDR
+    miss_addr = TED_SANITIZER_GEOMETRY_CONT_ADDR
+    compile_row_addr = TED_SANITIZER_COMPARE_ADDR
+    commit_addr = TED_SANITIZER_ANCHOR_PACK_ADDR
+
+    # Two 16-address ROM tables feed one compact loop. B is the wrapping sum
+    # and C is y=(y*3+value)&$FF. This 32-cell pair is collision-free across
+    # the qualified and fresh generated-state corpora.
+    key_a = _Asm()
+    key_a.db(0xF3, 0xC5, 0xD5, 0xE5)       # DI; preserve BC,DE,HL
+    key_a.db(0x7C, 0xE6, 0xFC, 0xE0, TED_SANITIZER_TILE_MASK_HRAM)
+    key_a.db(
+        0xAF, 0x47, 0x4F,                  # sum B=0, roll C=0
+        0x21, key_table_a_addr & 0xFF, key_table_a_addr >> 8,
+        0x3E, 0x10, 0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0xCD, key_loop_addr & 0xFF, key_loop_addr >> 8,
+        0x21, key_table_b_addr & 0xFF, key_table_b_addr >> 8,
+        0x3E, 0x10, 0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0xCD, key_loop_addr & 0xFF, key_loop_addr >> 8,
+        *jp(key_finish_addr),
+    )
+
+    key_loop = _Asm()
+    key_loop.label("sample")
+    key_loop.db(
+        0x5E, 0x23, 0x56, 0x23, 0x1A, 0x5F,
+        0x78, 0x83, 0x47,                  # B = sum + value
+        0x79, 0x81, 0x81, 0x83, 0x4F,     # C = C*3 + value
+        0xF0, TED_SANITIZER_EXPECTED_HRAM,
+        0x3D, 0xE0, TED_SANITIZER_EXPECTED_HRAM,
+    )
+    key_loop.jr(0x20, "sample")
+    key_loop.db(0xC9)
+
+    def address_table(items: tuple[int, ...]) -> bytes:
+        return bytes(byte for address in items for byte in (
+            address & 0xFF, address >> 8
+        ))
+
+    key_table_a = address_table(sources[:16])
+    key_table_b = address_table(sources[16:])
+    key_finish = bytes([
+        0x78, 0xE0, TED_SANITIZER_COUNTER_HRAM,
+        0x79, 0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        *jp(physical_addr),
+    ])
+
+    # Check the selected physical map before switching WRAM. On the qualified
+    # trace this fast path handles 402/485 publications.
+    physical = _Asm()
+    physical.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xFE, 0x9C)
+    physical.db(
+        0x21, TED_POSTCOPY_PHYSICAL_9800_ADDR & 0xFF,
+        TED_POSTCOPY_PHYSICAL_9800_ADDR >> 8,
+    )
+    physical.jr(0x20, "selected")
+    physical.db(
+        0x21, TED_POSTCOPY_PHYSICAL_9C00_ADDR & 0xFF,
+        TED_POSTCOPY_PHYSICAL_9C00_ADDR >> 8,
+    )
+    physical.label("selected")
+    physical.db(0xF0, TED_SANITIZER_COUNTER_HRAM, 0xBE)
+    physical.db(*jp(lookup2_addr, 0xC2))                   # JP NZ,lookup2
+    physical.db(0x23, 0xF0, TED_SANITIZER_EXPECTED_HRAM, 0xBE)
+    physical.db(*jp(lookup2_addr, 0xC2))
+    physical.db(
+        0x23,
+        0xFA, TED_POSTCOPY_GENERATION_ADDR & 0xFF,
+        TED_POSTCOPY_GENERATION_ADDR >> 8,
+        0xBE,
+    )
+    tag_cont_addr = commit_addr + 19
+    finish_addr = tag_cont_addr + 7
+    physical.db(*jp(lookup2_addr, 0xC2))
+    physical.db(*jp(finish_addr))
+
+    publish_addr = TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR
+    def cache_probe(bank: int, miss: int) -> bytes:
+        a = _Asm()
+        if bank == 2:
+            # Capture fixed-bank generation before SVBK hides DFxx.
+            a.db(
+                0xFA, TED_POSTCOPY_GENERATION_ADDR & 0xFF,
+                TED_POSTCOPY_GENERATION_ADDR >> 8,
+                0x57,
+            )
+        a.db(0x3E, bank, 0xE0, 0x70)
+        a.db(
+            0x21, TED_POSTCOPY_PLANE_GENERATION_ADDR & 0xFF,
+            TED_POSTCOPY_PLANE_GENERATION_ADDR >> 8,
+            0x7A, 0xBE,
+        )
+        a.db(*jp(miss, 0xC2))
+        a.db(0x2B, 0xF0, TED_SANITIZER_EXPECTED_HRAM, 0xBE)
+        a.db(*jp(miss, 0xC2))
+        a.db(0x2B, 0xF0, TED_SANITIZER_COUNTER_HRAM, 0xBE)
+        a.db(*jp(miss, 0xC2))
+        a.db(*jp(publish_addr))
+        return a.finish()
+
+    lookup2 = cache_probe(2, lookup3_addr)
+    lookup3 = cache_probe(3, miss_addr)
+
+    select_miss = _Asm()
+    select_miss.db(
+        0x3E, 0x01, 0xE0, 0x70,            # fixed DFxx metadata is bank 1
+        0xFA, TED_POSTCOPY_FIFO_ADDR & 0xFF,
+        TED_POSTCOPY_FIFO_ADDR >> 8,
+        0x47,                               # B = selected bank
+        0xEE, 0x01,
+        0xEA, TED_POSTCOPY_FIFO_ADDR & 0xFF,
+        TED_POSTCOPY_FIFO_ADDR >> 8,
+        0x78, 0xE0, 0x70,
+        0x21, (TED_POSTCOPY_PLANE_GENERATION_ADDR + 1) & 0xFF,
+        (TED_POSTCOPY_PLANE_GENERATION_ADDR + 1) >> 8,
+        0x72,                               # bank-local generation scratch
+        0x11, 0xA0, 0xC1,
+        0x21, 0x00, 0xD0,
+        0x06, WRAM_BG_TABLE >> 8,
+        0x3E, 0x18, 0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        *jp(compile_row_addr),
+    )
+
+    compile_row = _Asm()
+    compile_row.db(
+        0xCD, STAGE1_ATTR_ROW_HELPER_WRAM_ADDR & 0xFF,
+        STAGE1_ATTR_ROW_HELPER_WRAM_ADDR >> 8,
+        0xAF,
+    )
+    compile_row.db(*([0x22] * 8))           # deterministic row padding
+    compile_row.db(
+        0xF0, TED_SANITIZER_EXPECTED_HRAM,
+        0x3D,
+        0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        *jp(compile_row_addr, 0xC2),
+        *jp(commit_addr),
+    )
+
+    commit = _Asm()
+    commit.db(
+        0x21, TED_POSTCOPY_PLANE_KEY_ADDR & 0xFF,
+        TED_POSTCOPY_PLANE_KEY_ADDR >> 8,
+        0xF0, TED_SANITIZER_COUNTER_HRAM, 0x22,
+        0xFA, 0x7D, 0xC2,
+        0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0x22,
+        0x23, 0x7E, 0x2B,
+        0x77,                               # generation is the commit byte
+        *jp(publish_addr),
+    )
+    assert len(commit.code) == tag_cont_addr - commit_addr
+    # GDMA completion enters here with HL at the physical discriminator.
+    commit.db(
+        0xF0, TED_SANITIZER_EXPECTED_HRAM, 0x22,
+        0xFA, TED_POSTCOPY_GENERATION_ADDR & 0xFF,
+        TED_POSTCOPY_GENERATION_ADDR >> 8,
+        0x77,                               # physical tag commits last
+        0xE1, 0xD1, 0xC1, 0xFB, 0xC9,
+    )
+
+    publish = _Asm()
+    publish.db(
+        0x3E, 0x01, 0xE0, 0x4F,
+        0x3E, 0xD0, 0xE0, 0x51,
+        0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xE0, 0x53,
+        0xAF, 0xE0, 0x52, 0xE0, 0x54,
+        0x3E, 0x2F, 0xE0, 0x55,
+        *jp(TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR),
+    )
+
+    wait_and_tag = _Asm()
+    wait_and_tag.label("wait")
+    wait_and_tag.db(0xF0, 0x55, 0xCB, 0x7F)
+    wait_and_tag.jr(0x28, "wait")
+    wait_and_tag.db(0xAF, 0xE0, 0x4F, 0x3C, 0xE0, 0x70)
+    wait_and_tag.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xFE, 0x9C)
+    wait_and_tag.db(
+        0x21, TED_POSTCOPY_PHYSICAL_9800_ADDR & 0xFF,
+        TED_POSTCOPY_PHYSICAL_9800_ADDR >> 8,
+    )
+    wait_and_tag.jr(0x20, "selected")
+    wait_and_tag.db(
+        0x21, TED_POSTCOPY_PHYSICAL_9C00_ADDR & 0xFF,
+        TED_POSTCOPY_PHYSICAL_9C00_ADDR >> 8,
+    )
+    wait_and_tag.label("selected")
+    wait_and_tag.db(
+        0xF0, TED_SANITIZER_COUNTER_HRAM, 0x22,
+        *jp(tag_cont_addr),
+    )
+
+    fragments = {
+        TED_SANITIZER_MAIN_ADDR: key_a.finish(),
+        key_loop_addr: key_loop.finish(),
+        key_table_a_addr: key_table_a,
+        key_table_b_addr: key_table_b,
+        key_finish_addr: key_finish,
+        physical_addr: physical.finish(),
+        lookup2_addr: lookup2,
+        lookup3_addr: lookup3,
+        miss_addr: select_miss.finish(),
+        compile_row_addr: compile_row.finish(),
+        commit_addr: commit.finish(),
+        TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR: publish.finish(),
+        TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR: wait_and_tag.finish(),
+    }
+    capacities = {
+        TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR: 36,
+        TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR: 31,
+    }
+    for address, code in fragments.items():
+        assert len(code) <= capacities.get(address, ARENA_SANITIZER_FRAGMENT_SIZE), (
+            hex(address), len(code)
+        )
+    return fragments
+
+
+def build_ted_incremental_postcopy_attr_compiler() -> dict[int, bytes]:
+    """Publish exact Ted attrs using the SVBK4 incremental full-source key."""
+    if _os.environ.get("PENTA_TED_DIRECT_PLANE", "0") == "1":
+        return build_ted_direct_plane_postcopy()
+
+    entry_addr = TED_SANITIZER_MAIN_ADDR
+    select_addr = TED_DIRTY_POSTCOPY_ADVANCE_ADDR
+    select_cont_addr = TED_DIRTY_POSTCOPY_ADVANCE_CONT_ADDR
+    compare_addr = TED_DIRTY_POSTCOPY_SETUP_ADDR
+    compare_cont_addr = TED_DIRTY_POSTCOPY_BIT_ADDR
+    miss_addr = TED_DIRTY_POSTCOPY_BIT_CONT_ADDR
+    miss_cont_addr = TED_DIRTY_POSTCOPY_COMPILE_TAIL_ADDR
+    setup_addr = TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR
+    compile_addr = TED_SANITIZER_ANCHOR_ADDR
+    publish_addr = TED_SANITIZER_GEOMETRY_CONT_ADDR
+    wait_addr = TED_SANITIZER_COMPARE_ADDR
+    finish_addr = TED_DIRTY_POSTCOPY_BIT_TAIL_ADDR
+
+    def jp(address: int, opcode: int = 0xC3) -> tuple[int, int, int]:
+        return opcode, address & 0xFF, address >> 8
+
+    lazy_gate = bytes([
+        0xFA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+        TED_INCREMENTAL_READY_ADDR >> 8, 0x3C,
+        *jp(TED_POSTCOPY_SCENE_INIT_ADDR, 0xC2),
+        *jp(entry_addr),
+    ])
+
+    entry = _Asm()
+    entry.db(0xF3, 0xC5, 0xD5, 0xE5,
+             0x7C, 0xE6, 0xFC, 0xE0, TED_SANITIZER_TILE_MASK_HRAM,
+             0x3E, 0x04, 0xE0, 0x70,
+             0xCD, TED_INCREMENTAL_INIT_ADDR & 0xFF,
+             TED_INCREMENTAL_INIT_ADDR >> 8,
+             0x21, TED_INCREMENTAL_KEY_ADDR & 0xFF,
+             TED_INCREMENTAL_KEY_ADDR >> 8,
+             0x46, 0x23, 0x4E, 0x23, 0x56, 0x23, 0x5E,
+             0x3E, 0x01, 0xE0, 0x70,
+             *jp(select_addr))
+
+    select = _Asm()
+    select.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xFE, 0x9C,
+              0x21, TED_INCREMENTAL_PHYSICAL_9800_ADDR & 0xFF,
+              TED_INCREMENTAL_PHYSICAL_9800_ADDR >> 8)
+    select.jr(0x20, "selected")
+    select.db(0x21, TED_INCREMENTAL_PHYSICAL_9C00_ADDR & 0xFF,
+              TED_INCREMENTAL_PHYSICAL_9C00_ADDR >> 8)
+    select.label("selected")
+    select.db(*jp(select_cont_addr))
+
+    select_cont = _Asm()
+    select_cont.db(
+              0x78, 0xBE, *jp(miss_addr, 0xC2),
+              0x23, 0x79, 0xBE, *jp(miss_addr, 0xC2),
+              0x23, *jp(compare_addr))
+
+    compare = _Asm()
+    compare.db(0x7A, 0xBE, *jp(miss_addr, 0xC2),
+               0x23, 0x7B, 0xBE, *jp(miss_addr, 0xC2),
+               0x23, *jp(compare_cont_addr))
+
+    compare_cont = _Asm()
+    compare_cont.db(
+               0xFA, TED_INCREMENTAL_GENERATION_ADDR & 0xFF,
+               TED_INCREMENTAL_GENERATION_ADDR >> 8,
+               0xBE, *jp(miss_addr, 0xC2), *jp(finish_addr))
+
+    miss = _Asm()
+    miss.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xFE, 0x9C,
+            0x21, TED_INCREMENTAL_PHYSICAL_9800_ADDR & 0xFF,
+            TED_INCREMENTAL_PHYSICAL_9800_ADDR >> 8)
+    miss.jr(0x20, "tag_selected")
+    miss.db(0x21, TED_INCREMENTAL_PHYSICAL_9C00_ADDR & 0xFF,
+            TED_INCREMENTAL_PHYSICAL_9C00_ADDR >> 8)
+    miss.label("tag_selected")
+    miss.db(*jp(miss_cont_addr))
+
+    miss_cont = _Asm()
+    miss_cont.db(0x70, 0x23, 0x71, 0x23, 0x72, 0x23, 0x73, 0x23, 0xE5,
+            0x3E, 0x18, 0xE0, TED_SANITIZER_COUNTER_HRAM,
+            *jp(setup_addr))
+
+    setup = _Asm()
+    setup.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xFE, 0x9C,
+             0x3E, 0x02)
+    setup.jr(0x20, "bank_selected")
+    setup.db(0x3C)
+    setup.label("bank_selected")
+    setup.db(0xE0, 0x70, 0x11, 0xA0, 0xC1, 0x21, 0x00, 0xD0,
+            0x06, WRAM_BG_TABLE >> 8,
+            *jp(compile_addr))
+
+    compile_row = _Asm()
+    compile_row.db(0xCD, STAGE1_ATTR_ROW_HELPER_WRAM_ADDR & 0xFF,
+                   STAGE1_ATTR_ROW_HELPER_WRAM_ADDR >> 8,
+                   0xAF, *([0x22] * 8),
+                   0xF0, TED_SANITIZER_COUNTER_HRAM, 0x3D,
+                   0xE0, TED_SANITIZER_COUNTER_HRAM,
+                   *jp(compile_addr, 0xC2), *jp(publish_addr))
+
+    publish = bytes([
+        0x3E, 0x01, 0xE0, 0x4F,
+        0x3E, 0xD0, 0xE0, 0x51,
+        0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xE0, 0x53,
+        0xAF, 0xE0, 0x52, 0xE0, 0x54,
+        0x3E, 0x2F, 0xE0, 0x55,
+        *jp(wait_addr),
+    ])
+
+    wait = _Asm()
+    wait.label("busy")
+    wait.db(0xF0, 0x55, 0xCB, 0x7F)
+    wait.jr(0x28, "busy")
+    wait.db(0xAF, 0xE0, 0x4F, 0x3C, 0xE0, 0x70,
+            0xE1,
+            0xFA, TED_INCREMENTAL_GENERATION_ADDR & 0xFF,
+            TED_INCREMENTAL_GENERATION_ADDR >> 8, 0x77,
+            *jp(finish_addr))
+
+    finish = bytes([0xE1, 0xD1, 0xC1, 0xFB, 0xC9])
+    fragments = {
+        TED_INCREMENTAL_LAZY_GATE_ADDR: lazy_gate,
+        entry_addr: entry.finish(),
+        select_addr: select.finish(),
+        select_cont_addr: select_cont.finish(),
+        compare_addr: compare.finish(),
+        compare_cont_addr: compare_cont.finish(),
+        miss_addr: miss.finish(),
+        miss_cont_addr: miss_cont.finish(),
+        setup_addr: setup.finish(),
+        compile_addr: compile_row.finish(),
+        publish_addr: publish,
+        wait_addr: wait.finish(),
+        finish_addr: finish,
+    }
+    capacities = {
+        select_addr: 18,
+        select_cont_addr: 18,
+        compare_addr: 18,
+        compare_cont_addr: 18,
+        miss_addr: 15,
+        miss_cont_addr: 17,
+        setup_addr: 24,
+        finish_addr: 8,
+        TED_INCREMENTAL_LAZY_GATE_ADDR: 11,
+    }
+    for address, code in fragments.items():
+        assert len(code) <= capacities.get(
+            address, ARENA_SANITIZER_FRAGMENT_SIZE
+        ), (hex(address), len(code))
+    return fragments
+
+
+def build_ted_direct_plane_postcopy() -> dict[int, bytes]:
+    """Publish the already-maintained SVBK4 D000 attribute plane."""
+    entry_addr = TED_SANITIZER_MAIN_ADDR
+    setup_addr = TED_DIRTY_POSTCOPY_SETUP_ADDR
+    wait_addr = TED_SANITIZER_COMPARE_ADDR
+
+    # The native postcopy wrapper enters through this cold/ready gate.  The
+    # incremental compiler normally emits it, but the direct-plane branch
+    # returns from build_ted_incremental_postcopy_attr_compiler() before that
+    # common fragment is constructed.  Keep the same sentinel convention:
+    # $00 installs the private clone/plane and $FF enters the hot publisher.
+    lazy_gate = bytes([
+        0xFA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+        TED_INCREMENTAL_READY_ADDR >> 8, 0x3C,
+        0xC2, TED_POSTCOPY_SCENE_INIT_ADDR & 0xFF,
+        TED_POSTCOPY_SCENE_INIT_ADDR >> 8,
+        0xC3, entry_addr & 0xFF, entry_addr >> 8,
+    ])
+
+    if _os.environ.get("PENTA_TED_INWINDOW_GDMA", "0") == "1":
+        # $578C is the in-window one-block DMA service in this experiment,
+        # not a standalone postcopy publisher.  DB91 calls this gate only to
+        # install the two private planes on the cold stock-copy path; a ready
+        # call is therefore a bounded cleanup/return, never a DMA entry.
+        inwindow_lazy_gate = bytes([
+            0xFA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+            TED_INCREMENTAL_READY_ADDR >> 8, 0x3C,
+            0xC2, TED_POSTCOPY_SCENE_INIT_ADDR & 0xFF,
+            TED_POSTCOPY_SCENE_INIT_ADDR >> 8,
+            0xFB, 0xC9,
+        ])
+        return {TED_INCREMENTAL_LAZY_GATE_ADDR: inwindow_lazy_gate}
+
+    if (
+        _os.environ.get("PENTA_TED_DIRECT_PUBLISHER_NOOP", "0") == "1"
+    ):
+        # Controlled diagnostic bisection: retain cold installation and the
+        # stock tile publisher, but do not publish the maintained attr plane.
+        return {
+            TED_INCREMENTAL_LAZY_GATE_ADDR: lazy_gate,
+            entry_addr: bytes([0xFB, 0xC9]),
+        }
+
+    if _os.environ.get("PENTA_TED_HDMA_PIGGYBACK", "0") == "1":
+        # The paired publisher runs only after DB87 returns.  On the cold path
+        # the two-bank installer also tail-jumps here, so make this a bounded
+        # cleanup/return instead of launching the legacy SVBK4-only GDMA.
+        # The gate's caller then publishes from the correctly selected bank.
+        return {
+            TED_INCREMENTAL_LAZY_GATE_ADDR: lazy_gate,
+            entry_addr: bytes([0xFB, 0xC9]),
+        }
+
+    entry = bytes([
+        0xF3, 0xC5, 0xD5, 0xE5,
+        0x7C, 0xE6, 0xFC, 0xE0, TED_SANITIZER_TILE_MASK_HRAM,
+        0x3E, 0x04, 0xE0, 0x70,            # select maintained plane
+        0x3E, 0x01, 0xE0, 0x4F,            # attribute VRAM bank
+        0x3E, 0xD0, 0xE0, 0x51,
+        0xAF, 0xE0, 0x52,
+        0xC3, setup_addr & 0xFF, setup_addr >> 8,
+    ])
+    setup = bytes([
+        0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xE0, 0x53,
+        0xAF, 0xE0, 0x54,
+        0x3E, 0x2F, 0xE0, 0x55,
+        0xC3, wait_addr & 0xFF, wait_addr >> 8,
+    ])
+    wait = _Asm()
+    wait.label("busy")
+    wait.db(0xF0, 0x55, 0xCB, 0x7F)
+    wait.jr(0x28, "busy")
+    wait.db(
+        0xAF, 0xE0, 0x4F,
+        0x3C, 0xE0, 0x70,
+        0xE1, 0xD1, 0xC1, 0xFB, 0xC9,
+    )
+    fragments = {
+        TED_INCREMENTAL_LAZY_GATE_ADDR: lazy_gate,
+        entry_addr: entry,
+        setup_addr: setup,
+        wait_addr: wait.finish(),
+    }
+    for address, payload in fragments.items():
+        assert len(payload) <= ARENA_SANITIZER_FRAGMENT_SIZE, (
+            hex(address), len(payload)
+        )
+    return fragments
+
+
+def build_ted_postcopy_scene_rearm_fragments() -> dict[int, bytes]:
+    """Share the nine-byte Crystal gate with Ted's transition-only epoch."""
+    dispatch = bytes([
+        0xFE, CRYSTAL_DRAGON_SCENE,
+        0xCA, TED_POSTCOPY_CRYSTAL_REARM_ADDR & 0xFF,
+        TED_POSTCOPY_CRYSTAL_REARM_ADDR >> 8,
+        0xFE, 0x10, 0xC0,
+        0xC3, TED_POSTCOPY_SCENE_INIT_ADDR & 0xFF,
+        TED_POSTCOPY_SCENE_INIT_ADDR >> 8,
+    ])
+    init = _Asm()
+    init.db(
+        0x21, TED_POSTCOPY_GENERATION_ADDR & 0xFF,
+        TED_POSTCOPY_GENERATION_ADDR >> 8,
+        0x34,
+    )
+    init.jr(0x20, "generation_ready")       # generation zero is invalid
+    init.db(0x34)
+    init.label("generation_ready")
+    init.db(
+        0xAF, 0x2B, 0x77,                  # DF55: invalidate $9800
+        0x2E, (TED_POSTCOPY_PHYSICAL_9C00_ADDR + 2) & 0xFF,
+        0x77,                               # DF59: invalidate $9C00
+        0x3E, 0x02,
+        0x23, 0x77,                         # DF5A: FIFO begins at bank 2
+        0x78, 0xC9,                         # return the new scene in A
+    )
+    crystal = bytes([
+        0x21, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+        0x36, 0x11, 0x78, 0xC9,
+    ])
+    fragments = {
+        TED_POSTCOPY_SCENE_DISPATCH_ADDR: dispatch,
+        TED_POSTCOPY_SCENE_INIT_ADDR: init.finish(),
+        TED_POSTCOPY_CRYSTAL_REARM_ADDR: crystal,
+    }
+    assert len(dispatch) == 11
+    assert len(fragments[TED_POSTCOPY_SCENE_INIT_ADDR]) == 19
+    assert len(crystal) == 7
+    return fragments
+
+
+def build_ted_incremental_scene_rearm_fragments() -> dict[int, bytes]:
+    """Invalidate lazy Ted activation on entry; retain Crystal's rearm."""
+    dispatch = bytes([
+        0xFE, CRYSTAL_DRAGON_SCENE,
+        0xCA, TED_POSTCOPY_CRYSTAL_REARM_ADDR & 0xFF,
+        TED_POSTCOPY_CRYSTAL_REARM_ADDR >> 8,
+        0xFE, 0x10, 0xC0,
+        0xC3, TED_INCREMENTAL_SCENE_CLEAR_ADDR & 0xFF,
+        TED_INCREMENTAL_SCENE_CLEAR_ADDR >> 8,
+    ])
+    clear = bytes([
+        0xAF,
+        0xEA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+        TED_INCREMENTAL_READY_ADDR >> 8,
+        0x3E, 0x10, 0xC9,
+    ])
+    crystal = bytes([
+        0x21, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+        0x36, 0x11, 0x78, 0xC9,
+    ])
+    assert len(dispatch) == 11 and len(clear) <= 9 and len(crystal) == 7
+    fragments = {
+        TED_POSTCOPY_SCENE_DISPATCH_ADDR: dispatch,
+        TED_INCREMENTAL_SCENE_CLEAR_ADDR: clear,
+        TED_POSTCOPY_CRYSTAL_REARM_ADDR: crystal,
+    }
+    return fragments
+
+
+def build_ted_incremental_scene_installer() -> dict[int, bytes]:
+    """Install the private SVBK4 clone/runtime and invalidate its epoch."""
+    blob, continuation = build_ted_incremental_runtime_blob()
+    assert not continuation
+    records = build_ted_incremental_clone_patch_records()
+    assert len(records) == 4
+
+    def memcpy(source: int, destination: int, length: int) -> list[int]:
+        return [
+            0x21, source & 0xFF, source >> 8,
+            0x11, destination & 0xFF, destination >> 8,
+            0x01, length & 0xFF, length >> 8,
+            0xCD, 0xB3, 0x09,
+        ]
+
+    def patch_record(address: int, payload: bytes) -> list[int]:
+        out = [0x21, address & 0xFF, address >> 8]
+        for index, value in enumerate(payload):
+            out.extend([0x36, value])
+            if index + 1 < len(payload):
+                out.append(0x23)
+        return out
+
+    def patch_call(address: int, payload: bytes) -> list[int]:
+        assert payload[0] == 0xCD and len(payload) == 3
+        # CALL opcode is already present in the copied stock body.
+        return [
+            0x21, (address + 1) & 0xFF, (address + 1) >> 8,
+            0x36, payload[1], 0x23, 0x36, payload[2],
+        ]
+
+    entry = _Asm()
+    entry.db(0xF3, 0xC5, 0xD5, 0xE5)
+    direct_plane = _os.environ.get("PENTA_TED_DIRECT_PLANE", "0") == "1"
+    direct_reentry_addr = TED_POSTCOPY_SCENE_INIT_ADDR + len(entry.code)
+    if direct_plane:
+        # Install and initialize the identical clone/tracker/table in both
+        # private banks.  C5FF is already the fail-closed cold sentinel: zero
+        # selects the first SVBK5 pass, one selects the SVBK4 pass, and the
+        # common finish turns the second pass's zero into ready value $FF.
+        entry.db(
+            0xFA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+            TED_INCREMENTAL_READY_ADDR >> 8,
+            0xEE, 0x01,
+            0xEA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+            TED_INCREMENTAL_READY_ADDR >> 8,
+            0xF6, 0x04, 0xE0, 0x70,
+            0xC3,
+            TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR & 0xFF,
+            TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR >> 8,
+        )
+    else:
+        entry.db(
+            0x3E, 0x04, 0xE0, 0x70,
+            0xAF, 0xEA, TED_INCREMENTAL_VALID_ADDR & 0xFF,
+            TED_INCREMENTAL_VALID_ADDR >> 8,
+            0xC3,
+            TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR & 0xFF,
+            TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR >> 8,
+        )
+    first = _Asm()
+    first.db(*memcpy(0x309B,
+                     TED_INCREMENTAL_CLONE_ADDR, 0x313B - 0x309B))
+    first.db(*patch_call(*records[0]), *patch_call(*records[1]))
+    first.db(0xC3, TED_SANITIZER_SPECIAL_ADDR & 0xFF,
+             TED_SANITIZER_SPECIAL_ADDR >> 8)
+
+    second = _Asm()
+    runtime_cursor = 0
+    source, length = TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS[0]
+    second.db(*memcpy(source, TED_INCREMENTAL_TRACKER_ADDR, length))
+    runtime_cursor += length
+    source, length = TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS[1]
+    # The first memcpy leaves DE at the next contiguous runtime destination.
+    second.db(0x21, source & 0xFF, source >> 8,
+              0x01, length & 0xFF, length >> 8,
+              0xCD, 0xB3, 0x09)
+    runtime_cursor += length
+    direct_helper = None
+    if _os.environ.get("PENTA_TED_DIRECT_PLANE", "0") == "1":
+        direct_helper = build_ted_direct_single_writer_helpers()
+        helper_source, helper_capacity = (
+            TED_DIRECT_FIXED_HELPER_SOURCE_CHUNKS[0]
+        )
+        helper_first_length = min(helper_capacity, len(direct_helper))
+        second.db(*memcpy(helper_source, TED_DIRECT_FIXED_HELPER_ADDR,
+                          helper_first_length))
+    second.db(0xC3, TED_SANITIZER_CLEAR_ADDR & 0xFF,
+              TED_SANITIZER_CLEAR_ADDR >> 8)
+
+    third = _Asm()
+    source, length = TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS[2]
+    third.db(*memcpy(source,
+                     TED_INCREMENTAL_TRACKER_ADDR + runtime_cursor, length))
+    runtime_cursor += length
+    source, length = TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS[3]
+    third.db(0x21, source & 0xFF, source >> 8,
+             0x01, length & 0xFF, length >> 8,
+             0xCD, 0xB3, 0x09)
+    runtime_cursor += length
+    if direct_helper is not None:
+        helper_source, _helper_capacity = (
+            TED_DIRECT_FIXED_HELPER_SOURCE_CHUNKS[1]
+        )
+        helper_tail_length = len(direct_helper) - helper_first_length
+        third.db(*memcpy(
+            helper_source,
+            TED_DIRECT_FIXED_HELPER_ADDR + helper_first_length,
+            helper_tail_length,
+        ))
+    third.db(0xC3, TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR & 0xFF,
+             TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR >> 8)
+
+    fourth = _Asm()
+    for source, length in TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS[4:]:
+        # Direct-plane helper installation changes DE after the D300 runtime
+        # chunks.  Materialize D390 explicitly: the old implicit carry worked
+        # only while these final eleven bytes happened to be zero padding.
+        fourth.db(*memcpy(
+            source, TED_INCREMENTAL_TRACKER_ADDR + runtime_cursor, length
+        ))
+        runtime_cursor += length
+    assert runtime_cursor == len(blob)
+    fourth.db(
+        0xCD, TED_INCREMENTAL_FIXED_COPY_LEAF_ADDR & 0xFF,
+        TED_INCREMENTAL_FIXED_COPY_LEAF_ADDR >> 8,
+    )
+    fourth.db(0xC3, TED_SANITIZER_ANCHOR_PACK_ADDR & 0xFF,
+              TED_SANITIZER_ANCHOR_PACK_ADDR >> 8)
+
+    patch_tail = _Asm()
+    patch_tail.db(*patch_call(*records[2]),
+                  *patch_record(*records[3]),
+                  0xCD, TED_INCREMENTAL_INIT_ADDR & 0xFF,
+                  TED_INCREMENTAL_INIT_ADDR >> 8)
+    if direct_plane:
+        patch_tail.db(
+            0xFA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+            TED_INCREMENTAL_READY_ADDR >> 8, 0xB7,
+            0xC2, direct_reentry_addr & 0xFF, direct_reentry_addr >> 8,
+        )
+    else:
+        patch_tail.db(
+            0x3E, TED_INCREMENTAL_READY_VALUE,
+            0xEA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+            TED_INCREMENTAL_READY_ADDR >> 8,
+            0x3E, 0x01, 0xE0, 0x70,
+        )
+    patch_tail.db(
+        0xC3, TED_INCREMENTAL_INSTALL_FINAL_ADDR & 0xFF,
+        TED_INCREMENTAL_INSTALL_FINAL_ADDR >> 8,
+    )
+
+    finish = _Asm()
+    direct_hdma = direct_plane and (
+        _os.environ.get("PENTA_TED_HDMA_PIGGYBACK", "0") == "1"
+    )
+    direct_inwindow = direct_plane and (
+        _os.environ.get("PENTA_TED_INWINDOW_GDMA", "0") == "1"
+    )
+    if direct_hdma:
+        # Explicit cold-first -> cold-replay state. Both maintained planes are
+        # complete here. Arm replay first, then write ready C5FF last so no
+        # caller can observe a ready sentinel with incomplete cold state.
+        finish.db(
+            0x21, TED_HDMA_COLD_REPLAY_ADDR & 0xFF,
+            TED_HDMA_COLD_REPLAY_ADDR >> 8,
+            0x36, 0x01, 0x23, 0x35,
+            0x3E, 0x01, 0xE0, 0x70,
+        )
+    elif direct_plane:
+        finish.db(
+            0x21, TED_INCREMENTAL_READY_ADDR & 0xFF,
+            TED_INCREMENTAL_READY_ADDR >> 8, 0x35,
+            0x3E, 0x01, 0xE0, 0x70,
+        )
+    if not direct_hdma and not direct_inwindow:
+        finish.db(
+            0x21, TED_INCREMENTAL_GENERATION_ADDR & 0xFF,
+            TED_INCREMENTAL_GENERATION_ADDR >> 8, 0x34,
+        )
+        finish.jr(0x20, "generation_ready")
+        finish.db(0x34)
+        finish.label("generation_ready")
+    finish.db(0xE1, 0xD1, 0xC1)
+    if direct_inwindow:
+        # Cold installation was entered by CALL $6290 from DB91.  The hot
+        # in-window DMA service owns $578C, so finish locally with the same
+        # interrupt state its former cleanup entry provided.
+        finish.db(0xFB, 0xC9)
+    else:
+        finish.db(
+            0xC3, TED_POSTCOPY_ATTR_COMPILER_ADDR & 0xFF,
+            TED_POSTCOPY_ATTR_COMPILER_ADDR >> 8,
+        )
+    fragments = {
+        TED_POSTCOPY_SCENE_INIT_ADDR: entry.finish(),
+        TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR: first.finish(),
+        TED_SANITIZER_SPECIAL_ADDR: second.finish(),
+        TED_SANITIZER_CLEAR_ADDR: third.finish(),
+        TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR: fourth.finish(),
+        TED_SANITIZER_ANCHOR_PACK_ADDR: patch_tail.finish(),
+        TED_INCREMENTAL_INSTALL_FINAL_ADDR: finish.finish(),
+        TED_INCREMENTAL_FIXED_COPY_LEAF_ADDR: bytes([
+            0x21, TED_INCREMENTAL_FIXED_RUNTIME_SOURCE_ADDR & 0xFF,
+            TED_INCREMENTAL_FIXED_RUNTIME_SOURCE_ADDR >> 8,
+            0x11, TED_INCREMENTAL_FIXED_RUNTIME_ADDR & 0xFF,
+            TED_INCREMENTAL_FIXED_RUNTIME_ADDR >> 8,
+            0x01, len(build_ted_incremental_fixed_runtime()), 0x00,
+            # Tail-call memcpy; its RET returns to fourth's CALL site.
+            0xC3, 0xB3, 0x09,
+        ]),
+    }
+    for address, code in fragments.items():
+        capacity = {
+            TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR: 31,
+            TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR: 24,
+            TED_INCREMENTAL_INSTALL_FINAL_ADDR: 21,
+            TED_INCREMENTAL_FIXED_COPY_LEAF_ADDR: 12,
+        }.get(address, 36)
+        assert len(code) <= capacity, (hex(address), len(code))
+    return fragments
+
+
+def build_ted_postcopy_dispatch() -> bytes:
+    """Route Ted's completed pure copy; retain other arena sanitizers."""
+    a = _Asm()
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x10)
+    a.jr(0x28, "ted")
+    a.db(0xC3, ARENA_SANITIZER_DISPATCH_ADDR & 0xFF,
+         ARENA_SANITIZER_DISPATCH_ADDR >> 8)
+    a.label("ted")
+    # The native map copier is fixed bank-1 code. Match the existing banked
+    # hazard helper contract by returning its restore bank in A.
+    a.db(0x3E, 0x01, 0xC9)
+    code = a.finish()
+    assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE, len(code)
+    return code
+
+
+def build_ted_native_postcopy_wrapper() -> bytes:
+    """Run Ted's byte-exact alternating copier, then its attr compiler."""
+    a = _Asm()
+    a.db(0x26, 0x98)                        # DB80 diagnostic entry
+    a.db(0xCD, 0xA7, 0x42)                  # DB82 direct-copy entry
+    a.jr(0x18, "postcopy")                  # DB85
+    a.db(0xCD, 0x95, 0x42)                  # DB87 stock alternating entry
+    a.label("postcopy")
+    # $028A's native caller observes AF returned by $4295.  The old wrapper
+    # leaked the bank-switch helper's A=1 and flags, perturbing Ted's next
+    # source/layout step even though BC/DE/HL were preserved by the compiler.
+    a.db(0xF5)
+    a.db(0x3E, 0x0D, 0xCD, 0x61, 0x00)      # map bank 13
+    compiler_addr = (
+        TED_INCREMENTAL_LAZY_GATE_ADDR
+        if (
+            _os.environ.get("PENTA_TED_INCREMENTAL_KEY", "0") == "1"
+            or _os.environ.get("PENTA_TED_DIRECT_PLANE", "0") == "1"
+        )
+        else TED_POSTCOPY_ATTR_COMPILER_ADDR
+    )
+    a.db(0xCD, compiler_addr & 0xFF, compiler_addr >> 8)
+    a.db(0x3E, 0x01, 0xCD, 0x61, 0x00)      # restore bank 1
+    a.db(0xF1, 0xC9)                        # exact native AF; RET
+    code = a.finish()
+    assert len(code) == 26
+    return code
+
+
+def build_ted_hdma_piggyback_copier() -> dict[int, bytes]:
+    """Publish Ted's maintained attrs after the stock inactive-map tile copy.
+
+    The routine is split only across architecture-exclusive, asserted-zero
+    bank-13 caves. C1A0 is packed 24x24 while the physical tilemaps have a
+    32-byte stride, so it cannot be a direct linear HDMA source.  The gate
+    first runs the stock row-aware copier into the inactive map.  This helper
+    then holds the matching immutable SVBK4/5 attribute plane for one 48-block
+    HBlank DMA.  IME remains disabled only for that transfer; no interrupt can
+    expose another WRAM bank to the DMA engine.
+    """
+    select_addr = 0x5830
+    setup_a_addr = 0x5860
+    setup_b_addr = 0x623C
+    setup_c_addr = 0x6530
+    wait_addr = 0x58C0
+    cold_replay_addr = TED_SANITIZER_COMPARE_ADDR
+
+    select = _Asm()
+    # DB87 has already toggled the native selector and copied the matching
+    # packed tile source.  Reconstruct that just-completed physical target
+    # without touching the selector a second time.
+    select.db(0xFA, 0x0B, 0xDC, 0xE6, 0x01, 0x26, 0x98)
+    select.jr(0x28, "selected")
+    select.db(0x26, 0x9C)
+    select.label("selected")
+    select.db(0xF3, 0xC3, setup_a_addr & 0xFF, setup_a_addr >> 8)
+
+    setup_a = bytes([
+        0x2E, 0x00,                       # L=0; preserve post-toggle A
+        # Select's A is the post-toggle map bit: $9800->SVBK4,
+        # $9C00->SVBK5. Hold it throughout the attribute HBlank DMA.
+        0xC6, 0x04, 0x47, 0xE0, 0x70,
+        0x3E, 0xD0, 0xE0, 0x51,           # padded attribute plane
+        0x7C, 0xE0, 0x53,                 # selected physical map
+        0xAF,
+        0xC3, setup_b_addr & 0xFF, setup_b_addr >> 8,
+    ])
+    setup_b = bytes([
+        0xE0, 0x52, 0xE0, 0x54,
+        0x3E, 0x01, 0xE0, 0x4F,           # destination VRAM attr bank
+        0x3E, 0xAF, 0xE0, 0x55,
+        0xC3, wait_addr & 0xFF, wait_addr >> 8,
+    ])
+    # Final ABI body. The fixed wrapper adds three pages to H and remaps ROM1.
+    setup_c = bytes([
+        0xAF, 0xE0, 0x4F,                 # restore VBK0
+        0x11, 0xE0, 0xC3,
+        0x01, 0x08, 0x00,
+        0xBF, 0xC9,                       # native Z+N flags; RET
+    ])
+
+    wait = _Asm()
+    wait.label("wait_inactive")
+    wait.db(0xF0, 0x55)
+    wait.db(0xCB, 0x7F)
+    wait.jr(0x28, "wait_inactive")
+    wait.db(
+        0x3E, 0x01, 0xE0, 0x70,           # native interrupt WRAM bank
+        0xAF, 0xE0, 0x4F,                 # native tile VRAM bank
+        0xFB,
+        0xC3, cold_replay_addr & 0xFF, cold_replay_addr >> 8,
+    )
+
+    cold_replay = _Asm()
+    cold_replay.db(
+        0xFA, TED_HDMA_COLD_REPLAY_ADDR & 0xFF,
+        TED_HDMA_COLD_REPLAY_ADDR >> 8,
+        0xB7,
+    )
+    cold_replay.jr(0x28, "done")
+    cold_replay.db(
+        0xAF,
+        0xEA, TED_HDMA_COLD_REPLAY_ADDR & 0xFF,
+        TED_HDMA_COLD_REPLAY_ADDR >> 8,
+        0x3C,
+        0xEA, 0x0B, 0xDC,                 # replay pre-toggle selector=1
+    )
+    cold_replay.label("done")
+    cold_replay.db(0xC3, setup_c_addr & 0xFF, setup_c_addr >> 8)
+
+    fragments = {
+        select_addr: select.finish(),
+        setup_a_addr: setup_a,
+        setup_b_addr: setup_b,
+        setup_c_addr: setup_c,
+        wait_addr: wait.finish(),
+        cold_replay_addr: cold_replay.finish(),
+    }
+    capacities = {
+        select_addr: 18, setup_a_addr: 18, setup_b_addr: 17,
+        setup_c_addr: 11, wait_addr: 18,
+        cold_replay_addr: ARENA_SANITIZER_FRAGMENT_SIZE,
+    }
+    for address, payload in fragments.items():
+        assert len(payload) <= capacities[address], (hex(address), len(payload))
+    return fragments
+
+
+def build_ted_hdma_piggyback_wrapper() -> bytes:
+    """Fixed-bank Ted entry: map the private copier and restore native ABI."""
+    code = bytes([
+        0x3E, 0x0D, 0xCD, 0x61, 0x00,
+        0xCD, 0x30, 0x58,
+        0x24, 0x24, 0x24,                  # map base -> stock final HL
+        0x3E, 0x01, 0xBF,
+        0xC3, 0x61, 0x00,                 # mapper RET returns to $028D
+    ])
+    assert len(code) == 17
+    return code
+
+
+def build_ted_inwindow_wrapper() -> bytes:
+    """Fixed-bank mapper for the Ted-only in-window tile/attr copier."""
+    code = bytes([
+        # Private SVBK4/5 makes the ordinary ISR stack physically wrong.
+        # $61B0 restores SVBK1 and re-enables IME before transport begins.
+        0xF3,
+        0x3E, 0x0D, 0xCD, 0x61, 0x00,
+        0xCD, TED_INWINDOW_ENTRY_ADDR & 0xFF,
+        TED_INWINDOW_ENTRY_ADDR >> 8,
+        0x00, 0x00,
+        0x3E, 0x01, 0xBF,
+        0xC3, 0x61, 0x00,
+    ])
+    assert len(code) == 17
+    return code
+
+
+def build_ted_inwindow_gate() -> bytes:
+    """Use stock publication cold, then the ready in-window copier."""
+    code = bytes([
+        0xFA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+        TED_INCREMENTAL_READY_ADDR >> 8,
+        0x3C,
+        0x28, 0x04,
+        0xCD, 0x91, 0xDB,
+        0xC9,
+        0xC3, 0x38, 0x08,
+    ])
+    assert len(code) <= 17
+    return code + bytes(17 - len(code))
+
+
+def _build_rejected_ted_incremental_helper_classifier() -> tuple[bytes, dict[int, bytes]]:
+    """Build the O(1) direct-write classifier and bounded crown repair.
+
+    The private entry at D500 is the publication dirty gate; D50A is called
+    for each native source write. D900/D000 are always publication-ready,
+    while DC00 retains raw tiles for the rare old/new-envelope repair.
+    """
+    a = _Asm()
+    a.db(0xFA, TED_INWINDOW_DIRTY_ADDR & 0xFF,
+         TED_INWINDOW_DIRTY_ADDR >> 8, 0xB7)
+    a.db(0xCA, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+         TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8)
+    a.db(0xC3, TED_INWINDOW_ENVELOPE_FRONT_ADDR & 0xFF,
+         TED_INWINDOW_ENVELOPE_FRONT_ADDR >> 8)
+    assert len(a.code) == 10
+    a.label("classify")
+    a.db(
+        0xC5,                              # preserve caller's loop counters
+        0x1A, 0x13, 0x47,                 # B = raw; advance source
+        0xD5,                              # save advanced source
+        0x54, 0x5D, 0x7A, 0xC6, 0x0C, 0x57,
+        0x78, 0x12,                       # raw DC00 cell
+        # Any canonical crown member may complete a differently ordered write.
+        # Reconstruct its candidate start and require all five raw cells.
+        0xFE, 0x02,
+    )
+    a.jr(0x38, "kind")
+    a.db(0xFE, 0x07)
+    a.jr(0x30, "kind")
+    crown_call = len(a.code)
+    a.db(0xCD, 0x00, 0x00)
+    a.label("kind")
+    a.db(0x78, 0xFE, 0x02)
+    a.jr(0x38, "plain")
+    a.db(0xFE, 0x77)
+    a.jr(0x38, "numbered")
+    a.db(0xFE, 0x7B)
+    a.jr(0x38, "neutral")
+    # Every measured sparse contour ID $7B-$86, including the connector
+    # halves $7C/$7E/$7F/$81, owns an explicit Ted material.
+    a.db(0xFE, 0x7B)
+    a.jr(0x38, "neutral")
+    a.db(0xFE, 0x87)
+    a.jr(0x38, "colored")
+    a.jr(0x18, "neutral")
+    a.label("numbered")
+    geometry_call = len(a.code)
+    a.db(0xCD, 0x00, 0x00)
+    a.jr(0x20, "neutral")
+    a.label("colored")
+    a.db(0xE5, 0x68, 0x26, WRAM_BG_TABLE >> 8, 0x7E, 0xE1)
+    a.jr(0x18, "attr")
+    a.label("plain")
+    a.db(0xAF)
+    a.jr(0x18, "attr")
+    a.label("neutral")
+    a.db(0xAF, 0x47)
+    a.label("attr")
+    a.db(
+        0x77,                             # selected attribute plane
+        0x54, 0x5D, 0x7A, 0xC6, 0x09, 0x57,
+        0x78, 0x12,                       # selected sanitized tile plane
+        0x23, 0xD1, 0xC1, 0xC9,
+    )
+
+    a.label("crown")
+    crown_addr = TED_INWINDOW_SANITIZER_ADDR + a.labels["crown"]
+    # Candidate start is current-(tile-$02). Reject a row wrap, then require
+    # the exact five-byte sequence regardless of native write order.
+    a.db(0xE5, 0xD5, 0xC5,
+         0x78, 0xD6, 0x02, 0x4F,
+         0x7D, 0xE6, 0x1F, 0xB9)
+    a.jr(0x38, "crown_out")
+    a.db(0x7D, 0x91, 0x6F, 0x54, 0x5D,
+         0x7A, 0xC6, 0x0C, 0x57)
+    a.db(0x0E, 0x02)
+    a.label("crown_cell")
+    a.db(0x1A, 0xB9)
+    a.jr(0x20, "crown_out")
+    a.db(0x13, 0x0C, 0x79, 0xFE, 0x07)
+    a.jr(0x20, "crown_cell")
+    # C=row and D=column for the candidate HL.
+    a.db(0x7D, 0xE6, 0x1F, 0x57,
+         0x7D, 0x07, 0x07, 0x07, 0xE6, 0x07, 0x4F,
+         0x7C, 0xE6, 0x03, 0x07, 0x07, 0x07, 0xB1, 0x4F,
+         0x21, TED_INWINDOW_CURRENT_VALID_ADDR & 0xFF,
+         TED_INWINDOW_CURRENT_VALID_ADDR >> 8, 0x7E, 0xB7)
+    a.jr(0x28, "crown_set")
+    a.db(0x23, 0x23, 0x7E, 0xB9)
+    a.jr(0x20, "crown_changed")
+    a.db(0x23, 0x7E, 0xBA)
+    a.jr(0x28, "crown_out")
+    a.label("crown_changed")
+    a.db(
+        0x21, TED_INWINDOW_CURRENT_ROW_ADDR & 0xFF,
+        TED_INWINDOW_CURRENT_ROW_ADDR >> 8,
+        0x11, TED_INWINDOW_OLD_ROW_ADDR & 0xFF,
+        TED_INWINDOW_OLD_ROW_ADDR >> 8,
+        0x2A, 0x12, 0x13, 0x7E, 0x12,
+    )
+    a.label("crown_set")
+    a.db(
+        0x21, TED_INWINDOW_CURRENT_VALID_ADDR & 0xFF,
+        TED_INWINDOW_CURRENT_VALID_ADDR >> 8,
+        0x36, 0x01, 0x23, 0x36, 0x01, 0x23, 0x71, 0x23, 0x72,
+    )
+    a.label("crown_out")
+    a.db(0xC1, 0xD1, 0xE1, 0xC9)
+
+    a.label("geometry")
+    geometry_addr = TED_INWINDOW_SANITIZER_ADDR + a.labels["geometry"]
+    a.db(0xC5, 0xD5, 0xE5,
+         0x7D, 0xE6, 0x1F, 0x57,
+         0x7D, 0x07, 0x07, 0x07, 0xE6, 0x07, 0x4F,
+         0x7C, 0xE6, 0x03, 0x07, 0x07, 0x07, 0xB1, 0x4F,
+         0xFA, TED_INWINDOW_CURRENT_ROW_ADDR & 0xFF,
+         TED_INWINDOW_CURRENT_ROW_ADDR >> 8, 0x5F, 0x79, 0x93,
+         0xE6, 0x1F, 0xFE, 0x0E)
+    a.jr(0x30, "geometry_out")
+    a.db(0x87, 0xC6, TED_INWINDOW_ROW_TABLE_ADDR & 0xFF, 0x6F,
+         0x26, TED_INWINDOW_ROW_TABLE_ADDR >> 8,
+         0xFA, TED_INWINDOW_CURRENT_COL_ADDR & 0xFF,
+         TED_INWINDOW_CURRENT_COL_ADDR >> 8, 0x4F,
+         0x7A, 0x91, 0xC6, 0x04, 0xE6, 0x1F,
+         0xBE)
+    a.jr(0x38, "geometry_out")
+    a.db(0x23, 0xBE)
+    a.jr(0x30, "geometry_out")
+    a.db(0xE1, 0xD1, 0xC1, 0xAF, 0xC9)
+    a.label("geometry_out")
+    a.db(0xE1, 0xD1, 0xC1, 0xF6, 0x01, 0xC9)
+
+    runtime = bytearray(a.finish())
+    crown_offset = a.labels["crown"]
+    geometry_offset = a.labels["geometry"]
+    fixed_crown_addr = TED_INWINDOW_PRIVATE_CROWN_HELPER_ADDR
+    fixed_geometry_addr = TED_INWINDOW_PRIVATE_GEOMETRY_HELPER_ADDR
+    runtime[crown_call + 1:crown_call + 3] = fixed_crown_addr.to_bytes(
+        2, "little"
+    )
+    runtime[geometry_call + 1:geometry_call + 3] = fixed_geometry_addr.to_bytes(
+        2, "little"
+    )
+    assert a.labels["classify"] == 10
+    classifier = runtime[:crown_offset]
+    crown_helper = runtime[crown_offset:geometry_offset]
+    geometry_helper = runtime[geometry_offset:]
+    assert len(classifier) <= TED_INWINDOW_SANITIZER_SOURCE_SIZE, len(classifier)
+    assert (
+        TED_INWINDOW_SANITIZER_ADDR + TED_INWINDOW_SANITIZER_SOURCE_SIZE
+        == TED_INWINDOW_PRIVATE_CROWN_HELPER_ADDR
+    )
+    assert TED_INWINDOW_PRIVATE_CROWN_HELPER_ADDR + len(crown_helper) <= 0xD600
+    assert TED_INWINDOW_PRIVATE_GEOMETRY_HELPER_ADDR + len(
+        geometry_helper
+    ) <= TED_DIRECT_TILE_PLANE_ADDR
+    classifier.extend(bytes(
+        TED_INWINDOW_SANITIZER_SOURCE_SIZE - len(classifier)
+    ))
+
+    # Publication repair is ROM-bank-13 code. Scan only the old and current
+    # 14x11 bounding rectangles, invoking the same exact classifier core.
+    repair = _Asm()
+    repair.db(0xAF, 0xEA, TED_INWINDOW_DIRTY_ADDR & 0xFF,
+              TED_INWINDOW_DIRTY_ADDR >> 8)
+    repair.db(0x21, TED_INWINDOW_OLD_ROW_ADDR & 0xFF,
+              TED_INWINDOW_OLD_ROW_ADDR >> 8,
+              0xCD, TED_INWINDOW_ANCHOR_FRONT_ADDR & 0xFF,
+              TED_INWINDOW_ANCHOR_FRONT_ADDR >> 8)
+    repair.db(0x21, TED_INWINDOW_CURRENT_ROW_ADDR & 0xFF,
+              TED_INWINDOW_CURRENT_ROW_ADDR >> 8,
+              0xCD, TED_INWINDOW_ANCHOR_FRONT_ADDR & 0xFF,
+              TED_INWINDOW_ANCHOR_FRONT_ADDR >> 8,
+              0xC3, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+              TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8)
+
+    scan_a = _Asm()
+    scan_a.db(0x2A, 0x57, 0x7E, 0xD6, 0x04, 0x5F,
+              0x7A, 0x6F, 0x26, 0x00)
+    for _ in range(5):
+        scan_a.db(0x29)
+    scan_a.db(0xC3, TED_INWINDOW_ENVELOPE_FINAL_ADDR & 0xFF,
+              TED_INWINDOW_ENVELOPE_FINAL_ADDR >> 8)
+
+    scan_b = bytes([
+        0x19, 0x7C, 0xC6, 0xD0, 0x67,
+        0x54, 0x5D, 0x7A, 0xC6, 0x0C, 0x57,
+        0x06, 0x0E,
+        0xC3, TED_INWINDOW_ANCHOR_TAIL_ADDR & 0xFF,
+        TED_INWINDOW_ANCHOR_TAIL_ADDR >> 8,
+    ])
+
+    scan_c = _Asm()
+    scan_c.label("row")
+    scan_c.db(0x0E, 0x0B)
+    scan_c.label("cell")
+    scan_c.db(0xCD, TED_INWINDOW_CLASSIFIER_ADDR & 0xFF,
+              TED_INWINDOW_CLASSIFIER_ADDR >> 8, 0x0D)
+    scan_c.jr(0x20, "cell")
+    scan_c.db(0x7D, 0xC6, 0x15, 0x6F,
+              0xC3, TED_INWINDOW_PLANE_SETUP_ADDR & 0xFF,
+              TED_INWINDOW_PLANE_SETUP_ADDR >> 8)
+
+    scan_d = bytes([
+        0x30, 0x01, 0x24,
+        0x7B, 0xC6, 0x15, 0x5F,
+        0xC3, TED_INWINDOW_ENVELOPE_TAIL_ADDR & 0xFF,
+        TED_INWINDOW_ENVELOPE_TAIL_ADDR >> 8,
+    ])
+    scan_e = bytes([
+        0x30, 0x01, 0x14,
+        0x05,
+        0xC2, TED_INWINDOW_ANCHOR_TAIL_ADDR & 0xFF,
+        TED_INWINDOW_ANCHOR_TAIL_ADDR >> 8,
+        0xC9,
+    ])
+
+    assert len(repair.finish()) <= 24, len(repair.finish())
+    assert len(scan_a.finish()) <= 18, len(scan_a.finish())
+    assert len(scan_b) <= 17, len(scan_b)
+    assert len(scan_c.finish()) <= 15, len(scan_c.finish())
+    assert len(scan_d) <= 13, len(scan_d)
+    assert len(scan_e) <= 9, len(scan_e)
+    return bytes(classifier), {
+        TED_INWINDOW_PRIVATE_CROWN_HELPER_ADDR: bytes(crown_helper),
+        TED_INWINDOW_PRIVATE_GEOMETRY_HELPER_ADDR: bytes(geometry_helper),
+        TED_INWINDOW_ENVELOPE_FRONT_ADDR: repair.finish(),
+        TED_INWINDOW_ANCHOR_FRONT_ADDR: scan_a.finish(),
+        TED_INWINDOW_ENVELOPE_FINAL_ADDR: scan_b,
+        TED_INWINDOW_ANCHOR_TAIL_ADDR: scan_c.finish(),
+        TED_INWINDOW_PLANE_SETUP_ADDR: scan_d,
+        TED_INWINDOW_ENVELOPE_TAIL_ADDR: scan_e,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR: bytes([
+            0xFA, TED_INWINDOW_TARGET_H_ADDR & 0xFF,
+            TED_INWINDOW_TARGET_H_ADDR >> 8, 0x67,
+            0x3E, 0x01, 0xE0, 0x70, 0xFB,
+            0xC3, TED_INWINDOW_SETUP_ADDR & 0xFF,
+            TED_INWINDOW_SETUP_ADDR >> 8,
+        ]),
+    }
+
+
+def build_ted_incremental_cell_classifier_draft(
+    *, packed_private_lut: bool = False,
+) -> tuple[bytes, dict[int, bytes]]:
+    """Build the O(1) 576-bit-mask cell writer.
+
+    D500 is a publication entry into bank-13 crown/mask maintenance. D503 is
+    the per-cell hot path. Its caller supplies C=the selected mask byte and
+    B=the cell's one-hot bit, so numbered body admission is one constant-time
+    AND rather than a per-cell divide. BC and DE are preserved so the native
+    writer and publication delta walker share this exact classifier. No helper lives in
+    switchable WRAM.
+    """
+    a = _Asm()
+    a.db(
+        0xC3, TED_INWINDOW_ENVELOPE_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ENVELOPE_FRONT_ADDR >> 8,
+    )
+    a.label("classify")
+    a.db(
+        # Input: A=raw tile, C=mask byte, B=one-hot bit, HL=attribute cell.
+        # The native wrappers own raw DC00 and source iteration.
+        0xD5, 0x57,                       # preserve DE; D=raw
+        0xFE, 0x02,
+    )
+    a.jr(0x38, "plain")
+    a.db(0xFE, 0x77)
+    a.jr(0x38, "numbered")
+    a.db(0xFE, 0x7B)
+    a.jr(0x38, "neutral")
+    a.db(0xFE, 0x87)
+    a.jr(0x30, "neutral")
+    # In $7B-$86, zero/nonzero in Ted's editable LUT is the exact sparse-ID
+    # whitelist. Carry remains set from CP $87 through the lookup, while the
+    # numbered AND below clears it, so both paths share the material fetch.
+    a.jr(0x18, "lookup")
+
+    a.label("numbered")
+    a.db(0x79, 0xA0)                     # selected mask byte AND one-hot bit
+    a.jr(0x28, "neutral")
+
+    a.label("lookup")
+    if packed_private_lut:
+        # The cold installer expands tile $00 at D5FF through tile $86 at
+        # D579.  Reversed storage makes the lookup raw->(FF-raw) and avoids a
+        # 16-bit D579+raw carry sequence in the hot classifier.
+        a.db(0xE5, 0x7A, 0x2F, 0x6F, 0x26, 0xD5, 0x7E, 0xE1)
+    else:
+        a.db(0xE5, 0x6A, 0x26, WRAM_BG_TABLE >> 8, 0x7E, 0xE1)
+    a.jr(0x30, "attr")                   # NC: numbered body material
+    a.db(0xB7)                            # C: sparse LUT entry must be nonzero
+    a.jr(0x28, "neutral")
+    a.jr(0x18, "attr")
+    a.label("plain")
+    a.db(0xAF)
+    a.jr(0x18, "attr")
+    a.label("neutral")
+    a.db(0xAF, 0x57)
+    a.label("attr")
+    a.db(
+        0x77,                             # selected attribute plane
+        # D0-D2 -> D9-DB: set bit 3, then advance one page.  The inverse is
+        # exact for all three visible plane pages and saves two hot bytes.
+        0xCB, 0xDC, 0x24,
+        0x7A, 0x77,                       # matching sanitized tile cell
+        0x25, 0xCB, 0x9C,
+        0x23, 0xD1, 0xC9,
+    )
+    assert (
+        TED_INWINDOW_SANITIZER_ADDR + a.labels["classify"]
+        == TED_INWINDOW_MASK_CLASSIFIER_ADDR
+    )
+    classifier = a.finish()
+    assert len(classifier) <= TED_INWINDOW_SANITIZER_SOURCE_SIZE, len(
+        classifier
+    )
+    classifier += bytes(
+        TED_INWINDOW_SANITIZER_SOURCE_SIZE - len(classifier)
+    )
+
+    # Publication-side crown/mask repair is intentionally the next bounded
+    # task. Keep the experiment blocked until those fragments and the D863
+    # ownership receipt are both present.
+    return classifier, {}
+
+
+def build_ted_incremental_mask_builder_draft() -> bytes:
+    """Assemble the publication-only 72-byte mask rebuild core.
+
+    The qualified corpus restricts complete crown columns to 4/8/12/16.
+    The resident envelope span bounds need only a zero/four-bit shift and
+    a zero/one-byte row offset. The separate corpus gate rejects any layout
+    outside that contract before this experiment can be promoted.
+    """
+    a = _Asm()
+    # Clear all 24 three-byte mask rows.
+    a.db(
+        0x21, TED_INWINDOW_BODY_MASK_ADDR & 0xFF,
+        TED_INWINDOW_BODY_MASK_ADDR >> 8,
+        0x01, TED_INWINDOW_BODY_MASK_SIZE, 0x00,
+        0xAF, 0xCD, 0xA8, 0x09,
+    )
+    # HL = D863 + current_row*3 + ((current_col-4)>>3).
+    a.db(
+        0xFA, TED_INWINDOW_CURRENT_ROW_ADDR & 0xFF,
+        TED_INWINDOW_CURRENT_ROW_ADDR >> 8,
+        0x6F, 0x26, 0x00, 0x44, 0x4D, 0x29, 0x09,
+        0x01, TED_INWINDOW_BODY_MASK_ADDR & 0xFF,
+        TED_INWINDOW_BODY_MASK_ADDR >> 8, 0x09,
+        0xFA, TED_INWINDOW_CURRENT_COL_ADDR & 0xFF,
+        TED_INWINDOW_CURRENT_COL_ADDR >> 8,
+        0xD6, 0x04, 0x57, 0xE6, 0x04,
+        0xE0, TED_SANITIZER_TILE_MASK_HRAM,
+        0x7A, 0x0F, 0x0F, 0x0F, 0xE6, 0x01, 0x85, 0x6F,
+        0x11, TED_ENVELOPE_ROW_TABLE_ROM_ADDR & 0xFF,
+        TED_ENVELOPE_ROW_TABLE_ROM_ADDR >> 8,
+    )
+    a.label("row")
+    # Convert normalized [left,right) bounds to an eleven-bit row template.
+    a.db(
+        0x1A, 0x13, 0x4F,                # C=left
+        0x1A, 0x13, 0x91,                # A=width; DE=next row bounds
+        0xD5, 0x59, 0x57,                # save table; E=left,D=width
+        0x01, 0x00, 0x00,                # BC=template
+    )
+    a.label("ones")
+    a.db(0x37, 0xCB, 0x11, 0xCB, 0x10, 0x15)
+    a.jr(0x20, "ones")
+    a.label("left")
+    a.db(0x7B, 0xB7)
+    a.jr(0x28, "align")
+    a.db(0xCB, 0x21, 0xCB, 0x10, 0x1D)
+    a.jr(0x18, "left")
+    a.label("align")
+    a.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xB7)
+    a.jr(0x28, "store")
+    for _ in range(4):
+        a.db(0xCB, 0x21, 0xCB, 0x10)
+    a.label("store")
+    a.db(0x71, 0x23, 0x70, 0x23, 0xD1, 0x7B, 0xFE, 0xFC)
+    a.jr(0x20, "row")
+    a.db(0xC9)
+    return a.finish()
+
+
+def build_ted_incremental_mask_publication_gate_draft() -> bytes:
+    """Validate the writer-accumulated crown and dispatch mask delta work."""
+    a = _Asm()
+    a.db(
+        0x21, TED_INWINDOW_CANDIDATE_COUNT_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_COUNT_ADDR >> 8,
+        0x7E, 0x36, 0x00, 0xFE, 0x01,
+    )
+    a.jr(0x20, "invalid")
+    a.db(
+        0x23, 0x5E, 0x23, 0x56,           # DE=candidate source
+        0x23, 0x46, 0x23, 0x4E,           # B=row,C=column
+        0xC5, 0x06, 0x02,
+    )
+    a.label("crown")
+    a.db(0x1A, 0x13, 0xB8)
+    a.jr(0x20, "invalid_pop")
+    a.db(0x04, 0x78, 0xFE, 0x07)
+    a.jr(0x20, "crown")
+    a.db(0xC1, 0x78, 0xFE, 0x0B)
+    a.jr(0x30, "invalid")
+    # Runtime bounds mirror the corpus gate: row <=10, col 4/8/12/16.
+    a.db(0x79, 0xFE, 0x04)
+    a.jr(0x38, "invalid")
+    a.db(0xFE, 0x11)
+    a.jr(0x30, "invalid")
+    a.db(0xE6, 0x03)
+    a.jr(0x20, "invalid")
+    # Identical crowns leave the resident mask untouched.
+    a.db(0x21, TED_INWINDOW_CURRENT_VALID_ADDR & 0xFF,
+         TED_INWINDOW_CURRENT_VALID_ADDR >> 8, 0x7E, 0xB7)
+    a.jr(0x28, "changed")
+    a.db(0x23, 0x7E, 0xB8)
+    a.jr(0x20, "changed")
+    a.db(0x23, 0x7E, 0xB9)
+    a.jr(0x28, "finish")
+    a.label("changed")
+    a.db(
+        0x21, TED_INWINDOW_CURRENT_VALID_ADDR & 0xFF,
+        TED_INWINDOW_CURRENT_VALID_ADDR >> 8,
+        0x36, 0x01, 0x23, 0x70, 0x23, 0x71,
+    )
+    a.jr(0x18, "rebuild")
+    a.label("invalid")
+    a.db(
+        0x21, TED_INWINDOW_CURRENT_VALID_ADDR & 0xFF,
+        TED_INWINDOW_CURRENT_VALID_ADDR >> 8, 0x36, 0x00,
+    )
+    a.jr(0x18, "rebuild")
+    a.label("invalid_pop")
+    a.db(0xC1)
+    a.jr(0x18, "invalid")
+    a.label("rebuild")
+    a.db(
+        0xCD, TED_INWINDOW_ENVELOPE_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ENVELOPE_FRONT_ADDR >> 8,
+        0xCD, TED_INWINDOW_ANCHOR_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ANCHOR_FRONT_ADDR >> 8,
+    )
+    a.label("finish")
+    a.db(
+        0xC3, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8,
+    )
+    return a.finish()
+
+
+def build_ted_incremental_specialized_fit_draft() -> tuple[bytes, bytes, bytes]:
+    """Assemble the compact crown gate, nibble builder, and fused repair.
+
+    This is a measured fit artifact, not an installer.  The writer-side
+    accumulator contract is D843=packed crown key, D844=precomputed low byte
+    of the D579 row base (including the byte offset), and D845=0/1 nibble
+    shift.  D85C holds the last published key; FF means no valid crown.
+    """
+    key_addr = TED_INWINDOW_CANDIDATE_ROW_ADDR
+    base_low_addr = TED_INWINDOW_CANDIDATE_COL_ADDR
+    shift_addr = base_low_addr + 1
+    current_key_addr = TED_INWINDOW_CURRENT_VALID_ADDR
+    diff_hram = TED_SANITIZER_COUNTER_HRAM
+
+    gate = _Asm()
+    gate.db(
+        0x21, TED_INWINDOW_CANDIDATE_COUNT_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_COUNT_ADDR >> 8,
+        0x7E, 0x36, 0x00, 0x3D,
+    )
+    gate.jr(0x20, "invalid")
+    gate.db(0x23, 0x5E, 0x23, 0x56, 0x06, 0x02)
+    gate.label("crown")
+    gate.db(0x1A, 0x13, 0xB8)
+    gate.jr(0x20, "invalid")
+    gate.db(0x04, 0x78, 0xFE, 0x07)
+    gate.jr(0x20, "crown")
+    gate.db(0xFA, key_addr & 0xFF, key_addr >> 8, 0xFE, 0xFF)
+    gate.jr(0x28, "invalid")
+    gate.jr(0x18, "compare")
+    gate.label("invalid")
+    gate.db(0x3E, 0xFF)
+    gate.label("compare")
+    gate.db(0x21, current_key_addr & 0xFF, current_key_addr >> 8, 0xBE)
+    gate.jr(0x28, "finish")
+    gate.db(
+        0x77,
+        0xCD, TED_INWINDOW_ENVELOPE_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ENVELOPE_FRONT_ADDR >> 8,
+    )
+    gate.label("finish")
+    gate.db(
+        0xC3, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8,
+    )
+
+    builder = _Asm()
+    builder.db(
+        0x21, TED_INWINDOW_NEXT_MASK_ADDR & 0xFF,
+        TED_INWINDOW_NEXT_MASK_ADDR >> 8,
+        0x01, TED_INWINDOW_BODY_MASK_SIZE, 0x00,
+        0xAF, 0xCD, 0xA8, 0x09,
+        0xFA, current_key_addr & 0xFF, current_key_addr >> 8,
+        0x3C,
+    )
+    builder.jr(0x28, "delta")
+    builder.db(
+        0xFA, base_low_addr & 0xFF, base_low_addr >> 8,
+        0x6F, 0x26, TED_INWINDOW_NEXT_MASK_ADDR >> 8,
+        0x11, TED_ENVELOPE_ROW_TABLE_ROM_ADDR & 0xFF,
+        TED_ENVELOPE_ROW_TABLE_ROM_ADDR >> 8,
+    )
+    builder.label("row")
+    builder.db(0x1A, 0x13, 0x4F, 0x1A, 0x13, 0x47)
+    builder.db(0xFA, shift_addr & 0xFF, shift_addr >> 8, 0xB7)
+    builder.jr(0x28, "store")
+    for _ in range(4):
+        builder.db(0xCB, 0x21, 0xCB, 0x10)
+    builder.label("store")
+    builder.db(0x71, 0x23, 0x70, 0x23, 0x23, 0x7B, 0xFE, 0xFC)
+    builder.jr(0x20, "row")
+    builder.label("delta")
+    builder.db(
+        0xC3, TED_INWINDOW_ANCHOR_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ANCHOR_FRONT_ADDR >> 8,
+    )
+
+    delta = _Asm()
+    delta.db(
+        0x21, TED_INWINDOW_NEXT_MASK_ADDR & 0xFF,
+        TED_INWINDOW_NEXT_MASK_ADDR >> 8,
+        0x11, TED_INWINDOW_BODY_MASK_ADDR & 0xFF,
+        TED_INWINDOW_BODY_MASK_ADDR >> 8,
+        0x01, 0x00, 0xD0,
+    )
+    calls: list[int] = []
+    advance_calls: list[int] = []
+    delta.label("row")
+    for _ in range(3):
+        calls.append(len(delta.code))
+        delta.db(0xCD, 0x00, 0x00)
+    # Reuse the byte worker's existing BC+=8/RET epilogue for row padding.
+    advance_calls.append(len(delta.code))
+    delta.db(0xCD, 0x00, 0x00)
+    delta.db(0x78, 0xFE, 0xD3)
+    delta.jr(0x20, "row")
+    delta.db(0xC9)
+
+    delta.label("byte")
+    byte_addr = TED_INWINDOW_ANCHOR_FRONT_ADDR + len(delta.code)
+    delta.db(0x1A, 0xAE, 0xE0, diff_hram, 0xB7)
+    delta.jr(0x28, "same")
+    delta.db(
+        0x2A, 0x12, 0x13,
+        0xE5, 0xD5, 0x60, 0x69, 0x4F,
+        0xF0, diff_hram, 0x5F, 0x06, 0x01,
+    )
+    delta.label("bit")
+    delta.db(0x7B, 0xA0)
+    delta.jr(0x28, "unchanged")
+    delta.db(
+        0xE5, 0x7C, 0xC6, 0x0C, 0x67, 0x7E, 0xE1,
+        0xCD, TED_INWINDOW_MASK_CLASSIFIER_ADDR & 0xFF,
+        TED_INWINDOW_MASK_CLASSIFIER_ADDR >> 8,
+    )
+    delta.jr(0x18, "next_bit")
+    delta.label("unchanged")
+    delta.db(0x23)
+    delta.label("next_bit")
+    delta.db(0xCB, 0x20)
+    delta.jr(0x20, "bit")
+    delta.db(0x44, 0x4D, 0xD1, 0xE1, 0xC9)
+    delta.label("same")
+    delta.db(0x23, 0x13)
+    delta.label("advance_attr")
+    advance_addr = TED_INWINDOW_ANCHOR_FRONT_ADDR + len(delta.code)
+    delta.db(0x79, 0xC6, 0x08, 0x4F)
+    delta.jr(0x30, "same_ready")
+    delta.db(0x04)
+    delta.label("same_ready")
+    delta.db(0xC9)
+    delta_blob = bytearray(delta.finish())
+    for operand in calls:
+        delta_blob[operand + 1:operand + 3] = bytes(
+            (byte_addr & 0xFF, byte_addr >> 8)
+        )
+    for operand in advance_calls:
+        delta_blob[operand + 1:operand + 3] = bytes(
+            (advance_addr & 0xFF, advance_addr >> 8)
+        )
+    return gate.finish(), builder.finish(), bytes(delta_blob)
+
+
+def build_ted_incremental_streaming_fit_draft() -> tuple[bytes, bytes]:
+    """Measure a no-next-mask streaming builder/XOR repair implementation."""
+    gate, _builder, _delta = build_ted_incremental_specialized_fit_draft()
+    prefix_addr = TED_INWINDOW_CANDIDATE_COL_ADDR + 2
+    shift_addr = TED_INWINDOW_CANDIDATE_COL_ADDR + 1
+    offset_addr = prefix_addr + 1
+    diff_hram = TED_SANITIZER_COUNTER_HRAM
+    rows_hram = TED_SANITIZER_EXPECTED_HRAM
+
+    a = _Asm()
+    a.db(
+        0x21, TED_INWINDOW_BODY_MASK_ADDR & 0xFF,
+        TED_INWINDOW_BODY_MASK_ADDR >> 8,
+        0x01, 0x00, 0xD0,
+        0x11, TED_ENVELOPE_ROW_TABLE_ROM_ADDR & 0xFF,
+        TED_ENVELOPE_ROW_TABLE_ROM_ADDR >> 8,
+        0x3E, 0x18, 0xE0, rows_hram,
+    )
+    row_calls: list[int] = []
+    zero_calls: list[int] = []
+    a.label("row")
+    a.db(0xFA, prefix_addr & 0xFF, prefix_addr >> 8, 0xB7)
+    a.jr(0x28, "maybe_body")
+    a.db(0x3D, 0xEA, prefix_addr & 0xFF, prefix_addr >> 8)
+    row_calls.append(len(a.code))
+    a.db(0xCD, 0x00, 0x00)
+    a.jr(0x18, "row_done")
+    a.label("maybe_body")
+    a.db(0x7B, 0xFE, 0xFC)
+    a.jr(0x28, "zero_row")
+    a.db(0xC5, 0x1A, 0x13, 0x4F, 0x1A, 0x13, 0x47)
+    a.db(0xFA, shift_addr & 0xFF, shift_addr >> 8, 0xB7)
+    a.jr(0x28, "shifted")
+    for _ in range(4):
+        a.db(0xCB, 0x21, 0xCB, 0x10)
+    a.label("shifted")
+    a.db(0xFA, offset_addr & 0xFF, offset_addr >> 8, 0xB7)
+    a.jr(0x28, "no_lead")
+    a.db(0xAF)
+    zero_calls.append(len(a.code))
+    a.db(0xCD, 0x00, 0x00)
+    a.label("no_lead")
+    a.db(0x79)
+    zero_calls.append(len(a.code))
+    a.db(0xCD, 0x00, 0x00)
+    a.db(0x78)
+    zero_calls.append(len(a.code))
+    a.db(0xCD, 0x00, 0x00)
+    a.db(0xFA, offset_addr & 0xFF, offset_addr >> 8, 0xB7)
+    a.jr(0x20, "body_done")
+    a.db(0xAF)
+    zero_calls.append(len(a.code))
+    a.db(0xCD, 0x00, 0x00)
+    a.label("body_done")
+    a.db(0xC1)
+    a.jr(0x18, "row_done")
+    a.label("zero_row")
+    row_calls.append(len(a.code))
+    a.db(0xCD, 0x00, 0x00)
+    a.label("row_done")
+    a.db(0xF0, rows_hram, 0x3D, 0xE0, rows_hram)
+    a.jr(0x20, "row")
+    a.db(0xC9)
+
+    a.label("zero_helper")
+    zero_addr = TED_INWINDOW_ENVELOPE_FRONT_ADDR + len(a.code)
+    for _ in range(3):
+        a.db(0xAF)
+        zero_calls.append(len(a.code))
+        a.db(0xCD, 0x00, 0x00)
+    a.db(0xC9)
+
+    a.label("byte")
+    byte_addr = TED_INWINDOW_ENVELOPE_FRONT_ADDR + len(a.code)
+    a.db(0xF5, 0xAE)
+    a.jr(0x28, "same")
+    a.db(
+        0xE0, diff_hram, 0xF1, 0x22,
+        0xE5, 0xD5, 0x60, 0x69, 0x4F,
+        0xF0, diff_hram, 0x5F, 0x06, 0x08,
+    )
+    a.label("bit")
+    a.db(0xCB, 0x1B)
+    a.jr(0x30, "unchanged")
+    a.db(0xCB, 0x19, 0x16, 0x00, 0xCB, 0x12)
+    a.db(
+        0xE5, 0x7C, 0xC6, 0x0C, 0x67, 0x7E, 0xE1,
+        0xCD, TED_INWINDOW_MASK_CLASSIFIER_ADDR & 0xFF,
+        TED_INWINDOW_MASK_CLASSIFIER_ADDR >> 8,
+    )
+    a.jr(0x18, "next_bit")
+    a.label("unchanged")
+    a.db(0xCB, 0x19, 0x23)
+    a.label("next_bit")
+    a.db(0x05)
+    a.jr(0x20, "bit")
+    a.db(0x44, 0x4D, 0xD1, 0xE1, 0xC9)
+    a.label("same")
+    a.db(0xF1, 0x23, 0x79, 0xC6, 0x08, 0x4F)
+    a.jr(0x30, "same_ready")
+    a.db(0x04)
+    a.label("same_ready")
+    a.db(0xC9)
+
+    blob = bytearray(a.finish())
+    for operand in row_calls:
+        blob[operand + 1:operand + 3] = bytes(
+            (zero_addr & 0xFF, zero_addr >> 8)
+        )
+    for operand in zero_calls:
+        blob[operand + 1:operand + 3] = bytes(
+            (byte_addr & 0xFF, byte_addr >> 8)
+        )
+    return gate, bytes(blob)
+
+
+def build_ted_incremental_packed_geometry_draft() -> tuple[bytes, bytes]:
+    """Return packed nibble spans plus their measured bit-setting builder."""
+    spans = (
+        (4, 9), (2, 10), (2, 10), (2, 10), (2, 10), (2, 11),
+        (1, 11), (0, 11), (0, 11), (0, 11), (1, 11), (2, 10),
+        (4, 10), (5, 9),
+    )
+    table = bytes((left << 4) | (right - 4) for left, right in spans)
+    table += bytes(1 << bit for bit in range(8))
+    assert len(table) == 22
+    mask_lut_addr = TED_ENVELOPE_ROW_TABLE_ROM_ADDR + 14
+    shift_addr = TED_INWINDOW_CANDIDATE_COL_ADDR + 1
+
+    a = _Asm()
+    a.db(
+        0x21, TED_INWINDOW_NEXT_MASK_ADDR & 0xFF,
+        TED_INWINDOW_NEXT_MASK_ADDR >> 8,
+        0x01, TED_INWINDOW_BODY_MASK_SIZE, 0x00,
+        0xAF, 0xCD, 0xA8, 0x09,
+        0xFA, TED_INWINDOW_CURRENT_VALID_ADDR & 0xFF,
+        TED_INWINDOW_CURRENT_VALID_ADDR >> 8, 0x3C,
+    )
+    a.jr(0x28, "delta")
+    a.db(
+        0xFA, TED_INWINDOW_CANDIDATE_COL_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_COL_ADDR >> 8,
+        0x6F, 0x26, TED_INWINDOW_NEXT_MASK_ADDR >> 8,
+        0x11, TED_ENVELOPE_ROW_TABLE_ROM_ADDR & 0xFF,
+        TED_ENVELOPE_ROW_TABLE_ROM_ADDR >> 8,
+    )
+    a.label("row")
+    a.db(
+        0x1A, 0x13, 0xD5, 0xE5, 0x47,
+        0xE6, 0x0F, 0xC6, 0x04, 0x4F,
+        0x78, 0xCB, 0x37, 0xE6, 0x0F, 0x47,
+        0x79, 0x90, 0x4F,
+        0xFA, shift_addr & 0xFF, shift_addr >> 8, 0x80,
+        0xFE, 0x08,
+    )
+    a.jr(0x38, "byte_ready")
+    a.db(0xD6, 0x08, 0x23)
+    a.label("byte_ready")
+    a.db(
+        0xC6, mask_lut_addr & 0xFF, 0x5F,
+        0x16, mask_lut_addr >> 8, 0x1A, 0x47,
+    )
+    a.label("bit")
+    a.db(0x7E, 0xB0, 0x77, 0xCB, 0x20)
+    a.jr(0x30, "same_byte")
+    a.db(0x23, 0x04)
+    a.label("same_byte")
+    a.db(0x0D)
+    a.jr(0x20, "bit")
+    a.db(0xE1, 0x23, 0x23, 0x23, 0xD1, 0x7B, 0xFE, 0xEE)
+    a.jr(0x20, "row")
+    a.label("delta")
+    a.db(
+        0xC3, TED_INWINDOW_ANCHOR_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ANCHOR_FRONT_ADDR >> 8,
+    )
+    return table, a.finish()
+
+
+def build_ted_incremental_rle_geometry_draft() -> tuple[bytes, bytes]:
+    """Measure the seven-run precomputed-template form of Ted's 14 rows."""
+    runs = (
+        (1, 0x01F0), (4, 0x03FC), (1, 0x07FC), (1, 0x07FE),
+        (3, 0x07FF), (1, 0x07FE), (1, 0x03FC),
+        # The last two singletons cannot be merged with an adjacent template.
+        (1, 0x03F0), (1, 0x01E0),
+    )
+    # Nine runs, not seven: repeated templates separated by other silhouettes
+    # remain distinct.  The table still reclaims one byte from the 28-byte
+    # span record and shifts each run only once.
+    table = b"".join(
+        bytes((count, mask & 0xFF, mask >> 8)) for count, mask in runs
+    )
+    assert len(table) == 27
+    shift_addr = TED_INWINDOW_CANDIDATE_COL_ADDR + 1
+    a = _Asm()
+    # A is the changed crown key supplied by the 50-byte gate.  $09A8
+    # preserves DE, so D carries validity across the clear without a reload.
+    a.db(
+        0x57,
+        0x21, TED_INWINDOW_NEXT_MASK_ADDR & 0xFF,
+        TED_INWINDOW_NEXT_MASK_ADDR >> 8,
+        0x01, TED_INWINDOW_BODY_MASK_SIZE, 0x00,
+        0xAF, 0xCD, 0xA8, 0x09,
+        0x14,
+    )
+    a.jr(0x28, "delta")
+    a.db(
+        0xFA, TED_INWINDOW_CANDIDATE_COL_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_COL_ADDR >> 8,
+        0x6F, 0x26, TED_INWINDOW_NEXT_MASK_ADDR >> 8,
+        0x11, TED_ENVELOPE_ROW_TABLE_ROM_ADDR & 0xFF,
+        TED_ENVELOPE_ROW_TABLE_ROM_ADDR >> 8,
+    )
+    a.label("run")
+    a.db(0x1A, 0x13, 0xF5, 0x1A, 0x13, 0x4F, 0x1A, 0x13, 0x47)
+    a.db(0xFA, shift_addr & 0xFF, shift_addr >> 8, 0xB7)
+    a.jr(0x28, "store")
+    for _ in range(4):
+        a.db(0xCB, 0x21, 0xCB, 0x10)
+    a.label("store")
+    a.db(0xF1)
+    a.label("repeat")
+    a.db(0x71, 0x23, 0x70, 0x23, 0x23, 0x3D)
+    a.jr(0x20, "repeat")
+    a.db(0x7B, 0xFE, (TED_ENVELOPE_ROW_TABLE_ROM_ADDR + len(table)) & 0xFF)
+    a.jr(0x20, "run")
+    a.label("delta")
+    a.db(
+        0xC3, TED_INWINDOW_ANCHOR_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ANCHOR_FRONT_ADDR >> 8,
+    )
+    return table, a.finish()
+
+
+def build_ted_incremental_packed_page_fit_draft() -> dict[str, bytes]:
+    """Assemble the packed-LUT capacity candidate without installing it."""
+    # D578 is the expansion pad immediately below tile-$86's D579 entry.  The
+    # installer necessarily writes it as zero, so it is also the packed
+    # architecture's cold-initialized current-key byte.  No classifier lookup
+    # can address it.
+    packed_current_key_addr = TED_INWINDOW_NEXT_MASK_ADDR - 1
+    # D579-D5FF is the expanded reverse palette LUT in this architecture, so
+    # its 72-byte next mask lives immediately after the resident D863-D8AA
+    # mask.  D8AB-D8F2 is the ownership-receipt-gated scratch interval.
+    packed_next_mask_addr = (
+        TED_INWINDOW_BODY_MASK_ADDR + TED_INWINDOW_BODY_MASK_SIZE
+    )
+    values = bytes(
+        ARENA_TILE_PAL["ted"].get(tile, 0) for tile in range(0x87)
+    )
+    assert all(value < 8 for value in values)
+    packed = bytes(
+        values[index] | (
+            (values[index + 1] if index + 1 < len(values) else 0) << 4
+        )
+        for index in range(0, len(values), 2)
+    )
+    assert len(packed) == 68
+    expanded = bytearray()
+    for value in packed:
+        expanded.extend((value & 0x0F, value >> 4))
+    assert bytes(expanded[:0x87]) == values
+    assert expanded[0x87] == 0
+
+    classifier, _ = build_ted_incremental_cell_classifier_draft(
+        packed_private_lut=True
+    )
+
+    gate = _Asm()
+    gate.db(
+        0x21, TED_INWINDOW_CANDIDATE_COUNT_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_COUNT_ADDR >> 8,
+        0x7E, 0x36, 0x00, 0x3D,
+    )
+    gate.jr(0x20, "invalid")
+    gate.db(0x23, 0x5E, 0x23, 0x56, 0x06, 0x02)
+    gate.label("crown")
+    gate.db(0x1A, 0x13, 0xB8)
+    gate.jr(0x20, "invalid")
+    gate.db(0x04, 0x78, 0xFE, 0x07)
+    gate.jr(0x20, "crown")
+    gate.db(0xFA, TED_INWINDOW_CANDIDATE_ROW_ADDR & 0xFF,
+            TED_INWINDOW_CANDIDATE_ROW_ADDR >> 8, 0xB7)
+    gate.jr(0x28, "invalid")
+    gate.jr(0x18, "compare")
+    gate.label("invalid")
+    gate.db(0xAF)
+    gate.label("compare")
+    gate.db(0x21, packed_current_key_addr & 0xFF,
+            packed_current_key_addr >> 8, 0xBE)
+    gate.jr(0x28, "finish")
+    gate.db(0x77, 0xCD, 0x00, 0x00)       # packed publication address patched
+    gate.label("finish")
+    gate.db(0xC3, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+            TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8)
+    gate_blob = gate.finish()
+
+    # The direct-plane initializer already materializes HL=source, DE=D500,
+    # and C=121 immediately before entering this helper.  Reuse that ABI:
+    # copying here would repeat eight bytes of setup at the tightest part of
+    # the fit.  The helper copies D500-D578, expands 68 packed bytes into
+    # D5FF..D578, then tail-jumps to a ten-byte private clear leaf.
+    installer = _Asm()
+    installer.db(
+        0xCD, 0xB3, 0x09,
+        0x21, TED_TABLE_ADDR & 0xFF, TED_TABLE_ADDR >> 8,
+        0x11, 0xFF, 0xD5, 0x06, 0x44,
+    )
+    installer.label("pair")
+    installer.db(
+        0x2A, 0x4F, 0xE6, 0x0F, 0x12, 0x1B,
+        0x79, 0xCB, 0x37, 0xE6, 0x0F, 0x12, 0x1B, 0x05,
+    )
+    installer.jr(0x20, "pair")
+    installer.db(0xC3, 0x00, 0x00)       # private clear leaf patched
+
+    # The final packed nibble is an asserted-zero pad, so the expander exits
+    # with A=0 and has already initialized the D578 published-key sentinel.
+    # Only the candidate count requires an explicit cold write. A changed
+    # first key rebuilds all 72 next-mask
+    # bytes and the fused XOR visits all 72 resident bytes, making a bulk
+    # D840-D8AA clear redundant.  The accumulator writer must overwrite its
+    # D841-D845 record before it increments D840; that remains an integration
+    # gate rather than an assumption made by this fit artifact.
+    clear = bytes([
+        0xEA, TED_INWINDOW_CANDIDATE_COUNT_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_COUNT_ADDR >> 8,
+        0xC9,
+    ])
+
+    _old_gate, builder, delta = build_ted_incremental_specialized_fit_draft()
+    # The changed key is live in A on entry. $09A8 preserves DE, so D carries
+    # validity across memset. The former final JP becomes natural fallthrough
+    # into the contiguous fused delta.
+    publication = bytearray(
+        # Packed gate invalidity is key zero, not the specialized draft's FF.
+        # Test D exactly; INC D would incorrectly turn invalid zero into one
+        # and build a mask from stale candidate geometry on the cold path.
+        bytes([0x57]) + builder[:10] + bytes([0x7A, 0xB7, 0x28, 0x2F])
+        + builder[16:-3] + delta
+    )
+    # Rewrite the specialized draft's D579 scratch operands to D8AB. The
+    # accumulator correspondingly supplies D844 as the low byte of its D8AB
+    # row base; every qualified row remains inside the D8 page.
+    publication[2:4] = packed_next_mask_addr.to_bytes(2, "little")
+    publication[20] = packed_next_mask_addr >> 8
+    publication[63:65] = packed_next_mask_addr.to_bytes(2, "little")
+    publication = bytes(publication)
+    assert len(gate_blob) == 48
+    assert len(installer.finish()) == 30
+    assert len(clear) == 4
+    assert len(publication) == 145
+    assert len(installer.finish()) + len(publication) == 175
+    assert len(gate_blob) + len(clear) == 52
+    return {
+        "packed_lut": packed,
+        "classifier": classifier,
+        "gate": gate_blob,
+        "installer": installer.finish(),
+        "clear": clear,
+        "publication": publication,
+    }
+
+
+def build_ted_incremental_packed_exact_fit_draft() -> dict[int, bytes]:
+    """Place the corrected packed experiment in its audited byte caves.
+
+    This remains a fit artifact, not a production installer.  In particular,
+    the accumulator writer and two-bank ready ordering still need integration
+    and receipts before these fragments may be emitted by the normal build.
+    """
+    fit = build_ted_incremental_packed_page_fit_draft()
+    publication = fit["publication"]
+    classifier = bytearray(fit["classifier"])
+
+    gate_count_addr = 0x7027
+    gate_crown_addr = 0x54F2
+    gate_setup_addr = 0x5890
+    gate_compare_addr = 0x53A5
+    delta_row_addr = 0x5D4C
+    delta_setup_addr = 0x5D7F
+    gate_invalid_addr = delta_setup_addr + 11
+    installer_front_addr = 0x5E48
+    installer_front_cont_addr = gate_crown_addr + 15
+    installer_low_mask_addr = 0x5E7B
+    installer_low_store_addr = 0xD573
+    installer_high_load_addr = 0x6250
+    installer_high_store_addr = 0x58A1
+    installer_control_addr = 0x6150
+    packed_key_addr = TED_INWINDOW_NEXT_MASK_ADDR - 1
+    packed_next_mask_addr = (
+        TED_INWINDOW_BODY_MASK_ADDR + TED_INWINDOW_BODY_MASK_SIZE
+    )
+    publication_addr = TED_TABLE_ADDR + 68 + TED_INWINDOW_SANITIZER_SOURCE_SIZE
+
+    # D500 publishes to the count gate. D503 remains the hot classifier ABI.
+    classifier[:3] = bytes((
+        0xC3, gate_count_addr & 0xFF, gate_count_addr >> 8,
+    ))
+    classifier_code_bytes = len(classifier.rstrip(b"\x00"))
+    assert classifier_code_bytes == 59
+
+    # Corrected publication is builder62 + delta-main27 + worker56.  The page
+    # tail owns only the builder and an absolute transfer to the delta setup.
+    builder = publication[:62]
+    worker = bytearray(publication[89:])
+    assert len(builder) == 62 and len(worker) == 56
+    byte_worker_addr = TED_INWINDOW_SANITIZER_ADDR + classifier_code_bytes
+    advance_worker_addr = byte_worker_addr + 46
+
+    row = bytearray()
+    for _ in range(3):
+        row.extend((0xCD, byte_worker_addr & 0xFF, byte_worker_addr >> 8))
+    row.extend((
+        0xCD, advance_worker_addr & 0xFF, advance_worker_addr >> 8,
+        0x78, 0xFE, 0xD3,
+        0x20, ((delta_row_addr - (delta_row_addr + 17)) & 0xFF),
+        0xC9,
+    ))
+    assert len(row) == 18 and row[-3:] == bytes((0x20, 0xEF, 0xC9))
+
+    delta_setup = bytes((
+        0x21, packed_next_mask_addr & 0xFF,
+        packed_next_mask_addr >> 8,
+        0x11, TED_INWINDOW_BODY_MASK_ADDR & 0xFF,
+        TED_INWINDOW_BODY_MASK_ADDR >> 8,
+        0x01, 0x00, 0xD0,
+        0x18, (delta_row_addr - (delta_setup_addr + 11)) & 0xFF,
+    ))
+    assert len(delta_setup) == 11 and delta_setup[-1] == 0xC2
+
+    gate_count = bytes((
+        0x21, TED_INWINDOW_CANDIDATE_COUNT_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_COUNT_ADDR >> 8,
+        0x7E, 0x36, 0x00, 0x3D,
+        0xC2, gate_invalid_addr & 0xFF, gate_invalid_addr >> 8,
+        0xC3, gate_setup_addr & 0xFF, gate_setup_addr >> 8,
+    ))
+    gate_setup = bytes((
+        0x23, 0x5E, 0x23, 0x56, 0x06, 0x02,
+        0xC3, gate_crown_addr & 0xFF, gate_crown_addr >> 8,
+    ))
+    gate_crown = bytes((
+        0x1A, 0x13, 0xB8,
+        0xC2, gate_invalid_addr & 0xFF, gate_invalid_addr >> 8,
+        0x04, 0x78, 0xFE, 0x07, 0x20, 0xF4,
+        0xC3, gate_compare_addr & 0xFF, gate_compare_addr >> 8,
+    ))
+    gate_compare = bytes((
+        0xFA, TED_INWINDOW_CANDIDATE_ROW_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_ROW_ADDR >> 8,
+        0xB7,
+        0x21, packed_key_addr & 0xFF, packed_key_addr >> 8,
+        0xBE, 0x28, 0x04, 0x77,
+        0xCD, publication_addr & 0xFF, publication_addr >> 8,
+        0xC3, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8,
+    ))
+    gate_invalid = bytes((
+        0xAF, 0xC3, (gate_compare_addr + 4) & 0xFF,
+        (gate_compare_addr + 4) >> 8,
+    ))
+    assert tuple(map(len, (
+        gate_count, gate_setup, gate_crown, gate_compare, gate_invalid,
+    ))) == (13, 9, 15, 17, 4)
+
+    # Memcpy exits at HL=76BD, DE=D579, BC=0. Reusing H/D and changing only
+    # L/E saves two bytes before the reverse packed-table expansion. The
+    # continuation falls directly into the packed-byte load, occupying the
+    # crown fragment's otherwise unusable nine-byte tail without a transfer.
+    installer_front = bytes((
+        0xCD, 0xB3, 0x09, 0x2E, 0x00,
+        0xC3, installer_front_cont_addr & 0xFF,
+        installer_front_cont_addr >> 8,
+    ))
+    installer_front_cont = bytes((
+        0x1E, 0xFF, 0x06, 0x44, 0x2A, 0x4F,
+        0xC3, installer_low_mask_addr & 0xFF,
+        installer_low_mask_addr >> 8,
+    ))
+    installer_low_mask = bytes((
+        0xE6, 0x0F,
+        0xC3, installer_low_store_addr & 0xFF,
+        installer_low_store_addr >> 8,
+    ))
+    installer_low_store = bytes((
+        0x12, 0x1B,
+        0xC3, installer_high_load_addr & 0xFF,
+        installer_high_load_addr >> 8,
+    ))
+    installer_high_load = bytes((
+        0x79, 0xCB, 0x37, 0xE6, 0x0F,
+        0xC3, installer_high_store_addr & 0xFF,
+        installer_high_store_addr >> 8,
+    ))
+    installer_high_store = bytes((
+        0x12, 0x1B, 0x05,
+        0xC3, installer_control_addr & 0xFF,
+        installer_control_addr >> 8,
+    ))
+    installer_control = bytes((
+        0xC2, (installer_front_cont_addr + 4) & 0xFF,
+        (installer_front_cont_addr + 4) >> 8,
+        # The asserted-zero pad nibble leaves A=0 on loop completion.
+        0xEA, TED_INWINDOW_CANDIDATE_COUNT_ADDR & 0xFF,
+        TED_INWINDOW_CANDIDATE_COUNT_ADDR >> 8,
+        0xC9,
+    ))
+    assert tuple(map(len, (
+        installer_front, installer_front_cont, installer_low_mask,
+        installer_low_store, installer_high_load,
+        installer_high_store, installer_control,
+    ))) == (8, 9, 5, 5, 8, 6, 7)
+
+    private_source = (
+        bytes(classifier[:classifier_code_bytes]) + bytes(worker)
+        + installer_low_store + b"\x00"
+    )
+    assert len(private_source) == TED_INWINDOW_SANITIZER_SOURCE_SIZE
+    assert private_source[-1] == 0  # D578 packed key/pad
+    page_tail = builder + bytes((
+        0xC3, delta_setup_addr & 0xFF, delta_setup_addr >> 8,
+        0x00, 0x00,
+    ))
+    assert len(page_tail) == 67
+
+    fragments = {
+        TED_TABLE_ADDR: fit["packed_lut"],
+        TED_TABLE_ADDR + 68: private_source,
+        publication_addr: page_tail,
+        gate_count_addr: gate_count,
+        gate_crown_addr: gate_crown + installer_front_cont,
+        gate_compare_addr: gate_compare,
+        delta_row_addr: bytes(row),
+        delta_setup_addr: delta_setup + gate_invalid,
+        installer_front_addr: installer_front,
+        gate_setup_addr: gate_setup,
+        installer_low_mask_addr: installer_low_mask,
+        installer_high_load_addr: installer_high_load,
+        installer_high_store_addr: installer_high_store,
+        installer_control_addr: installer_control,
+        installer_low_store_addr: installer_low_store,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR: bytes((
+            0xFA, TED_INWINDOW_TARGET_H_ADDR & 0xFF,
+            TED_INWINDOW_TARGET_H_ADDR >> 8, 0x67,
+            0x3E, 0x01, 0xE0, 0x70, 0xFB,
+            0xC3, TED_INWINDOW_SETUP_ADDR & 0xFF,
+            TED_INWINDOW_SETUP_ADDR >> 8,
+        )),
+    }
+    capacities = {
+        gate_count_addr: 13,
+        gate_crown_addr: 24,
+        gate_compare_addr: 17,
+        delta_row_addr: 18,
+        delta_setup_addr: 15,
+        installer_front_addr: 8,
+        gate_setup_addr: 9,
+        installer_low_mask_addr: 5,
+        installer_high_load_addr: 8,
+        installer_high_store_addr: 6,
+        installer_control_addr: 8,
+        installer_low_store_addr: 5,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR: 12,
+    }
+    for address, capacity in capacities.items():
+        assert len(fragments[address]) <= capacity, (
+            hex(address), len(fragments[address]), capacity
+        )
+    return fragments
+
+
+def build_ted_block_major_exact_fit_draft() -> dict[int, bytes]:
+    """Emit the closed block-major Ted mask candidate and its exact caves.
+
+    Even source rows keep the native two-byte destination pointers.  The
+    following otherwise-unaddressed odd-row bands keep one resident mask
+    nibble per 2x2 record.  A changed crown clears the old seven-run
+    silhouette and draws the new one; the published key changes only after
+    both passes return.
+    """
+    repair_addr = TED_INWINDOW_SANITIZER_ADDR + 59
+    renderer_addr = TED_TABLE_ADDR + 68 + TED_INWINDOW_SANITIZER_SOURCE_SIZE
+    repair_entry_addr = TED_ENVELOPE_COMPARE_ROM_ADDR
+    draw_table_addr = TED_ENVELOPE_ROW_TABLE_ROM_ADDR
+    clear_table_addr = draw_table_addr + 14
+    key_addr = TED_INWINDOW_NEXT_MASK_ADDR - 1
+    candidate_low_addr = TED_INWINDOW_CANDIDATE_SOURCE_ADDR
+    candidate_high_addr = candidate_low_addr + 1
+    private_setup_addr = 0x6140
+
+    values = bytes(
+        ARENA_TILE_PAL["ted"].get(tile, 0) for tile in range(0x87)
+    )
+    packed = bytes(
+        values[index]
+        | ((values[index + 1] if index + 1 < len(values) else 0) << 4)
+        for index in range(0, len(values), 2)
+    )
+    assert len(packed) == 68 and all(value < 8 for value in values)
+
+    classifier, _ = build_ted_incremental_cell_classifier_draft(
+        packed_private_lut=True
+    )
+    classifier_code = classifier.rstrip(b"\x00")
+    assert len(classifier_code) == 59
+
+    # Called only when the resident nibble differs.  The entry leaf below
+    # has already saved BC and placed desired in B / diff in A.
+    repair = _Asm()
+    repair.db(
+        0xD5, 0xE5, 0xF5, 0x78, 0x12,
+        0x21, 0xE8, 0xFF, 0x19,          # pointer = resident - 24
+        0x2A, 0x66, 0x6F,                # HL = stored attr pointer
+        0x48, 0xF1, 0x57, 0x06, 0x11,  # C=desired,D=diff,B=one-hot pair
+    )
+    repair.label("bit")
+    repair.db(0xCB, 0x70)
+    repair.jr(0x28, "row_ready")
+    repair.db(0x7D, 0xC6, 0x1E, 0x6F)
+    repair.jr(0x30, "row_ready")
+    repair.db(0x24)
+    repair.label("row_ready")
+    repair.db(0x7A, 0xA0)
+    repair.jr(0x28, "unchanged")
+    repair.db(
+        0xE5, 0x7C, 0xF6, 0x0C, 0x67, 0x7E, 0xE1,
+        0xCD, TED_INWINDOW_MASK_CLASSIFIER_ADDR & 0xFF,
+        TED_INWINDOW_MASK_CLASSIFIER_ADDR >> 8,
+    )
+    repair.jr(0x18, "next_bit")
+    repair.label("unchanged")
+    repair.db(0x23)
+    repair.label("next_bit")
+    repair.db(0xCB, 0x20)
+    repair.jr(0x30, "bit")
+    repair.db(0xE1, 0xD1, 0xC1, 0x13, 0x13, 0xC9)
+    repair_blob = repair.finish()
+    assert len(repair_blob) == 55
+
+    # Common compare/advance leaf.  The unchanged path is only eleven bytes;
+    # the changed path jumps into the 55-byte private worker above.
+    repair_entry = bytes((
+        0xE6, 0x0F,
+        0xC5, 0x47, 0x1A, 0xA8,
+        0xC2, repair_addr & 0xFF, repair_addr >> 8,
+        0xC1, 0x13, 0x13, 0xC9,
+    ))
+    assert len(repair_entry) == 13
+
+    renderer = _Asm()
+    repair_calls: list[int] = []
+    renderer.db(
+        0xB7, 0xC8,                      # token zero has no silhouette
+        0xC6, 0x1A, 0x5F,
+        0x3E, 0xD6, 0xCE, 0x00, 0x57,  # DE = D61A + token
+        0x06, 0x07,
+    )
+    renderer.label("run")
+    renderer.db(
+        0x2A, 0x4F, 0xCB, 0x37, 0xE6, 0x0F,
+        0x87, 0x87, 0x83, 0x5F,          # skip nibble is byte delta / 4
+    )
+    renderer.jr(0x30, "cursor_ready")
+    renderer.db(0x14)
+    renderer.label("cursor_ready")
+    renderer.db(
+        0x79, 0xE6, 0x0F, 0x4F,
+        0x2A, 0xF5, 0xCB, 0x37, 0xE6, 0x0F,
+    )
+    repair_calls.append(len(renderer.code))
+    renderer.db(0xCD, 0x00, 0x00)
+    renderer.label("middle")
+    # After the edge load, draw-table L is $E2-$EE and clear-table L is
+    # $F0-$FC.  Adding $10 and complementing carry materializes FF/00 in five
+    # bytes; the repair entry masks FF to the resident nibble $0F.
+    renderer.db(0x7D, 0xC6, 0x10, 0x3F, 0x9F)
+    repair_calls.append(len(renderer.code))
+    renderer.db(0xCD, 0x00, 0x00, 0x0D)
+    renderer.jr(0x20, "middle")
+    renderer.db(0xF1, 0xE6, 0x0F)
+    repair_calls.append(len(renderer.code))
+    renderer.db(0xCD, 0x00, 0x00, 0x05)
+    renderer.jr(0x20, "run")
+    renderer.db(0xC9)
+    renderer_blob = bytearray(renderer.finish())
+    for call in repair_calls:
+        renderer_blob[call + 1:call + 3] = repair_entry_addr.to_bytes(
+            2, "little"
+        )
+    renderer_blob = bytes(renderer_blob)
+    assert len(renderer_blob) == 59
+
+    # Native completed-2x2 writer.  The first raw cell is also the only
+    # corpus-qualified aligned tile-$06 crown completion point.
+    writer = _Asm()
+    writer.db(
+        0xF3, 0xF5, 0xD5, 0xE5,
+        0x62, 0x6B, 0x01, 0x60, 0x14, 0x09,
+        0x4E, 0x23, 0x46,
+        0x7D, 0xC6, 0x17, 0x6F,
+    )
+    writer.jr(0x30, "resident_ready")
+    writer.db(0x24)
+    writer.label("resident_ready")
+    writer.db(
+        0x7E, 0x60, 0x69, 0x4F, 0x06, 0x01,
+        0x1A, 0x13, 0xFE, 0x06,
+    )
+    writer.jr(0x20, "not_crown")
+    writer.db(
+        0xE5,
+        0x21, candidate_low_addr & 0xFF, candidate_low_addr >> 8,
+        0x73, 0x23, 0x72,
+        0xE1,
+    )
+    writer.label("not_crown")
+    writer.db(
+        0xCD, TED_INWINDOW_MASK_CLASSIFIER_ADDR & 0xFF,
+        TED_INWINDOW_MASK_CLASSIFIER_ADDR >> 8,
+        0xCB, 0x39, 0x1A, 0x13,
+        0xCD, TED_INWINDOW_MASK_CLASSIFIER_ADDR & 0xFF,
+        TED_INWINDOW_MASK_CLASSIFIER_ADDR >> 8,
+        0xCB, 0x39,
+        0x7B, 0xC6, 0x16, 0x5F,
+    )
+    writer.jr(0x30, "source_row")
+    writer.db(0x14)
+    writer.label("source_row")
+    writer.db(0x7D, 0xC6, 0x1E, 0x6F)
+    writer.jr(0x30, "attr_row")
+    writer.db(0x24)
+    writer.label("attr_row")
+    writer.db(
+        0x1A, 0x13,
+        0xCD, TED_INWINDOW_MASK_CLASSIFIER_ADDR & 0xFF,
+        TED_INWINDOW_MASK_CLASSIFIER_ADDR >> 8,
+        0xCB, 0x39, 0x1A,
+        0xCD, TED_INWINDOW_MASK_CLASSIFIER_ADDR & 0xFF,
+        TED_INWINDOW_MASK_CLASSIFIER_ADDR >> 8,
+        0xE1, 0xD1, 0xF1,
+        0xC3, TED_INCREMENTAL_TRACKER_EXIT_ADDR & 0xFF,
+        TED_INCREMENTAL_TRACKER_EXIT_ADDR >> 8,
+    )
+    writer_blob = writer.finish()
+    assert len(writer_blob) == 83
+
+    initializer = _Asm()
+    initializer.db(
+        0x21, 0x00, 0xD0, 0x01, 0x00, 0x03, 0xAF,
+        0xCD, 0xA8, 0x09,
+        0x26, 0xD9, 0x06, 0x03, 0xCD, 0xA8, 0x09,
+        0x26, 0xD6, 0x11, 0x00, 0xD0, 0x06, 0x0C,
+    )
+    initializer.label("pair")
+    initializer.db(0x0E, 0x0C)
+    initializer.label("pointer")
+    initializer.db(0x7B, 0x22, 0x7A, 0x22, 0x13, 0x13, 0x0D)
+    initializer.jr(0x20, "pointer")
+    initializer.db(0xAF, 0x0E, 0x0C)
+    initializer.label("resident")
+    initializer.db(0x22, 0x22, 0x0D)
+    initializer.jr(0x20, "resident")
+    initializer.db(0x7B, 0xC6, 0x28, 0x5F)
+    initializer.jr(0x30, "next_pair")
+    initializer.db(0x14)
+    initializer.label("next_pair")
+    initializer.db(0x05)
+    initializer.jr(0x20, "pair")
+    initializer.db(
+        0x21, (TED_TABLE_ADDR + 68) & 0xFF,
+        (TED_TABLE_ADDR + 68) >> 8,
+        0xC3, private_setup_addr & 0xFF, private_setup_addr >> 8,
+    )
+    initializer_blob = initializer.finish()
+    assert len(initializer_blob) == 59
+
+    continuation = bytes.fromhex("C1 13 13 EF C9 00 00 00 00")
+    runtime = (
+        writer_blob
+        + bytes(TED_INCREMENTAL_TRACKER_EXIT_ADDR
+                - TED_INCREMENTAL_TRACKER_ADDR - len(writer_blob))
+        + continuation + initializer_blob
+    )
+    runtime_capacity = sum(
+        length for _address, length in TED_INCREMENTAL_RUNTIME_SOURCE_CHUNKS
+    )
+    assert len(runtime) == 155 and runtime_capacity == 155
+    runtime += bytes(runtime_capacity - len(runtime))
+
+    draw_table = bytes.fromhex(
+        "02 CD A2 FF A3 F4 94 E5 94 F5 94 21 A1 B7"
+    )
+    clear_table = bytes.fromhex(
+        "02 00 A2 00 A3 00 94 00 94 00 94 00 A1 00"
+    )
+    assert len(draw_table + clear_table) == 28
+
+    gate_front_addr = TED_INWINDOW_ENVELOPE_FRONT_ADDR
+    gate_validate_addr = TED_INWINDOW_ANCHOR_FRONT_ADDR
+    gate_compare_addr = TED_INWINDOW_ENVELOPE_FINAL_ADDR
+    gate_invalid_addr = gate_compare_addr + 10
+    wrapper_front_addr = TED_INWINDOW_PLANE_SETUP_ADDR
+    wrapper_tail_addr = TED_INWINDOW_ANCHOR_TAIL_ADDR
+
+    gate_front = bytes((
+        0x21, candidate_low_addr & 0xFF, candidate_low_addr >> 8,
+        0x5E, 0x23, 0x56, 0x36, 0x00,
+        0x7A, 0xB7,
+        0xCA, gate_invalid_addr & 0xFF, gate_invalid_addr >> 8,
+        0x7B, 0xD6, 0x05, 0x5F, 0x06, 0x02,
+        0xC3, gate_validate_addr & 0xFF, gate_validate_addr >> 8,
+    ))
+    gate_validate = _Asm()
+    gate_validate.label("crown")
+    gate_validate.db(0x1A, 0x13, 0xB8)
+    gate_validate.db(0xC2, gate_invalid_addr & 0xFF, gate_invalid_addr >> 8)
+    gate_validate.db(0x04, 0xFE, 0x06)
+    gate_validate.jr(0x20, "crown")
+    gate_validate.db(
+        0x7B, 0xD6, 0xA9,
+        0xC3, gate_compare_addr & 0xFF, gate_compare_addr >> 8,
+    )
+    gate_validate_blob = gate_validate.finish()
+    gate_compare = bytes((
+        0x21, key_addr & 0xFF, key_addr >> 8, 0xBE,
+        0xCA, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8,
+        0xC3, wrapper_front_addr & 0xFF, wrapper_front_addr >> 8,
+        0xAF, 0xC3, gate_compare_addr & 0xFF, gate_compare_addr >> 8,
+    ))
+    assert (len(gate_front), len(gate_validate_blob), len(gate_compare)) == (
+        22, 17, 14
+    )
+
+    wrapper_front = bytes((
+        0xF5, 0x7E, 0xE5,
+        0x21, clear_table_addr & 0xFF, clear_table_addr >> 8,
+        0xCD, renderer_addr & 0xFF, renderer_addr >> 8,
+        0xE1,
+        0xC3, wrapper_tail_addr & 0xFF, wrapper_tail_addr >> 8,
+    ))
+    wrapper_tail = bytes((
+        0xF1, 0xF5, 0xE5,
+        0x21, draw_table_addr & 0xFF, draw_table_addr >> 8,
+        0xCD, renderer_addr & 0xFF, renderer_addr >> 8,
+        0xE1, 0xF1, 0x77,
+        # $5830 tail-jumps into D500 after selecting private WRAM bank 4/5,
+        # so the fixed-ROM return address at DFF5 belongs to bank 1.  A RET
+        # here consumed zeroes from the private stack window and jumped to
+        # $0000 on the first changed publication.  Converge with the unchanged
+        # gate: $61B0 restores SVBK1, then starts the normal transport.
+        0xC3, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8,
+    ))
+    assert len(wrapper_front) == 13 and len(wrapper_tail) == 15
+
+    installer_cont_addr = TED_INWINDOW_ENVELOPE_TAIL_ADDR
+    installer_low_mask_addr = 0x50E8
+    installer_low_store_addr = 0xD573
+    installer_high_load_addr = 0x6250
+    installer_high_store_addr = 0x61C0
+    installer_control_addr = 0x6100
+    private_setup = bytes((
+        0x11, TED_INWINDOW_SANITIZER_ADDR & 0xFF,
+        TED_INWINDOW_SANITIZER_ADDR >> 8,
+        0x0E, TED_INWINDOW_SANITIZER_SOURCE_SIZE,
+        0xC3, 0x48, 0x5E,
+    ))
+    installer_front = bytes((
+        0xCD, 0xB3, 0x09, 0x2E, 0x00,
+        0xC3, installer_cont_addr & 0xFF, installer_cont_addr >> 8,
+    ))
+    installer_cont = bytes((
+        0x1E, 0xFF, 0x06, 0x44, 0x2A, 0x4F,
+        0xC3, installer_low_mask_addr & 0xFF,
+        installer_low_mask_addr >> 8,
+    ))
+    installer_low_mask = bytes((
+        0xE6, 0x0F, 0xC3,
+        installer_low_store_addr & 0xFF, installer_low_store_addr >> 8,
+    ))
+    installer_low_store = bytes((
+        0x12, 0x1B, 0xC3,
+        installer_high_load_addr & 0xFF, installer_high_load_addr >> 8,
+    ))
+    installer_high_load = bytes((
+        0x79, 0xCB, 0x37, 0xE6, 0x0F, 0xC3,
+        installer_high_store_addr & 0xFF, installer_high_store_addr >> 8,
+    ))
+    installer_high_store = bytes((
+        0x12, 0x1B, 0x05, 0xC3,
+        installer_control_addr & 0xFF, installer_control_addr >> 8,
+    ))
+    installer_control = bytes((
+        0xC2, (installer_cont_addr + 4) & 0xFF,
+        (installer_cont_addr + 4) >> 8,
+        0xEA, candidate_high_addr & 0xFF, candidate_high_addr >> 8,
+        0xC9,
+    ))
+
+    private_source = (
+        classifier_code + repair_blob + b"\x00"
+        + installer_low_store + b"\x00"
+    )
+    assert len(private_source) == TED_INWINDOW_SANITIZER_SOURCE_SIZE
+    assert private_source[0x73:0x78] == installer_low_store
+    page_tail = renderer_blob + bytes(67 - len(renderer_blob))
+    assert len(page_tail) == 67
+
+    finish = bytes((
+        0xFA, TED_INWINDOW_TARGET_H_ADDR & 0xFF,
+        TED_INWINDOW_TARGET_H_ADDR >> 8, 0x67,
+        0x3E, 0x01, 0xE0, 0x70, 0xFB,
+        0xC3, TED_INWINDOW_SETUP_ADDR & 0xFF,
+        TED_INWINDOW_SETUP_ADDR >> 8,
+    ))
+    fragments = {
+        TED_INCREMENTAL_TRACKER_ADDR: runtime,
+        TED_TABLE_ADDR: packed,
+        TED_TABLE_ADDR + 68: private_source,
+        renderer_addr: page_tail,
+        repair_entry_addr: repair_entry,
+        draw_table_addr: draw_table + clear_table,
+        gate_front_addr: gate_front,
+        gate_validate_addr: gate_validate_blob,
+        gate_compare_addr: gate_compare,
+        wrapper_front_addr: wrapper_front,
+        wrapper_tail_addr: wrapper_tail,
+        0x5E48: installer_front,
+        installer_cont_addr: installer_cont,
+        installer_low_mask_addr: installer_low_mask,
+        installer_low_store_addr: installer_low_store,
+        installer_high_load_addr: installer_high_load,
+        installer_high_store_addr: installer_high_store,
+        installer_control_addr: installer_control,
+        private_setup_addr: private_setup,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR: finish,
+    }
+    capacities = {
+        TED_INCREMENTAL_TRACKER_ADDR: 155,
+        TED_TABLE_ADDR: 68,
+        TED_TABLE_ADDR + 68: 121,
+        renderer_addr: 67,
+        repair_entry_addr: 13,
+        draw_table_addr: 28,
+        gate_front_addr: 24,
+        gate_validate_addr: 18,
+        gate_compare_addr: 17,
+        wrapper_front_addr: 13,
+        wrapper_tail_addr: 15,
+        0x5E48: 8,
+        installer_cont_addr: 9,
+        installer_low_mask_addr: 5,
+        installer_low_store_addr: 5,
+        installer_high_load_addr: 8,
+        installer_high_store_addr: 6,
+        installer_control_addr: 8,
+        private_setup_addr: 9,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR: 12,
+    }
+    for address, payload in fragments.items():
+        assert len(payload) <= capacities[address], (
+            hex(address), len(payload), capacities[address]
+        )
+    ordered = sorted(
+        (address, address + len(payload))
+        for address, payload in fragments.items()
+        if address < 0x8000
+    )
+    for left, right in zip(ordered, ordered[1:]):
+        assert left[1] <= right[0], (left, right)
+    assert renderer_addr + len(page_tail) == 0x7700
+    return fragments
+
+
+def validate_ted_incremental_cell_layout(
+    classifier: bytes,
+    fragments: dict[int, bytes],
+) -> None:
+    """Fail closed on every provisional WRAM and bank-13 interval.
+
+    This validates assembly geometry only.  It is intentionally not an
+    ownership receipt and cannot authorize the blocked ROM installer.
+    """
+    expected_private: dict[int, tuple[int, int]] = {}
+    private = {
+        address: payload
+        for address, payload in fragments.items()
+        if address >= 0x8000
+    }
+    assert set(private) == set(expected_private), (
+        "incremental private helper set changed",
+        tuple(hex(address) for address in sorted(private)),
+    )
+    assert len(classifier) == TED_INWINDOW_SANITIZER_SOURCE_SIZE
+    classifier_end = TED_INWINDOW_SANITIZER_ADDR + len(classifier)
+    assert classifier_end == TED_INWINDOW_PRIVATE_CROWN_HELPER_ADDR
+
+    wram_intervals = [
+        (
+            TED_INWINDOW_SANITIZER_ADDR,
+            classifier_end,
+            "cell classifier",
+        ),
+        *(
+            (address, address + len(payload), f"private helper ${address:04X}")
+            for address, payload in private.items()
+        ),
+        (
+            TED_DIRECT_PLANE_POINTER_TABLE_ADDR,
+            TED_INWINDOW_ROW_TABLE_ADDR,
+            "direct-plane pointer table",
+        ),
+        (
+            TED_INWINDOW_ROW_TABLE_ADDR,
+            TED_INWINDOW_OLD_COL_ADDR + 1,
+            "row table and crown metadata",
+        ),
+        (
+            TED_INWINDOW_BODY_MASK_ADDR,
+            TED_INWINDOW_BODY_MASK_ADDR + TED_INWINDOW_BODY_MASK_SIZE,
+            "576-bit body mask",
+        ),
+        (
+            TED_DIRECT_TILE_PLANE_ADDR,
+            TED_DIRECT_TILE_PLANE_ADDR + 0x300,
+            "sanitized tile plane",
+        ),
+        (
+            TED_INWINDOW_RAW_TILE_PLANE_ADDR,
+            TED_INWINDOW_RAW_TILE_PLANE_ADDR + 0x300,
+            "raw tile plane",
+        ),
+    ]
+    for address, (limit, capacity) in expected_private.items():
+        payload = private[address]
+        assert len(payload) <= capacity
+        assert address + len(payload) <= limit
+    ordered_wram = sorted(wram_intervals)
+    for left, right in zip(ordered_wram, ordered_wram[1:]):
+        assert left[1] <= right[0], (
+            f"incremental WRAM overlap: {left[2]} / {right[2]}"
+        )
+
+    rom_fragments = {
+        address: payload
+        for address, payload in fragments.items()
+        if address < 0x8000
+    }
+    capacities = {
+        TED_INWINDOW_ENVELOPE_FRONT_ADDR: 24,
+        TED_INWINDOW_ANCHOR_FRONT_ADDR: 18,
+        TED_INWINDOW_ENVELOPE_FINAL_ADDR: 17,
+        TED_INWINDOW_ANCHOR_TAIL_ADDR: 15,
+        TED_INWINDOW_PLANE_SETUP_ADDR: 13,
+        TED_INWINDOW_ENVELOPE_TAIL_ADDR: 9,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR: 12,
+    }
+    assert not rom_fragments or set(rom_fragments) == set(capacities), (
+        "incremental ROM repair set changed",
+        tuple(hex(address) for address in sorted(rom_fragments)),
+    )
+    rom_intervals = []
+    for address, payload in rom_fragments.items():
+        end = address + len(payload)
+        assert 0x4000 <= address < end <= 0x8000
+        assert len(payload) <= capacities[address]
+        for protected_start, protected_end, owner in (
+            TED_INCREMENTAL_CELL_PROTECTED_ROM_RANGES
+        ):
+            assert end <= protected_start or address >= protected_end, (
+                f"incremental fragment ${address:04X}-${end - 1:04X} "
+                f"overlaps protected {owner}"
+            )
+        rom_intervals.append((address, end))
+    ordered_rom = sorted(rom_intervals)
+    for left, right in zip(ordered_rom, ordered_rom[1:]):
+        assert left[1] <= right[0], (
+            f"incremental ROM overlap: ${left[0]:04X}-${left[1] - 1:04X} "
+            f"/ ${right[0]:04X}-${right[1] - 1:04X}"
+        )
+
+
+def build_ted_inwindow_plane_sanitizer() -> tuple[bytes, dict[int, bytes]]:
+    """Sanitize one selected direct plane against Ted's physical geometry.
+
+    D900/D000 remain a private, immutable tile/attribute snapshot for the
+    whole publication.  Numbered body art is retained only inside the exact
+    fourteen-row crown-relative silhouette.  The four checker-floor IDs and
+    every rejected numbered scratch cell become neutral tile 0 / attr 0.
+    Tiles above $7A retain their native tile byte, but an explicit sparse-ID
+    whitelist forces every other high tile's attribute to zero.
+    """
+    runtime = _Asm()
+    # Fail closed until the unique five-tile crown has been found.
+    runtime.db(
+        0x3E, 0xFF,
+        0xEA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_ROW_ADDR >> 8,
+        0x21, 0x00, TED_DIRECT_TILE_PLANE_ADDR >> 8,
+    )
+    runtime.label("crown_scan")
+    runtime.db(0x2A, 0xFE, 0x02)
+    runtime.jr(0x20, "crown_next")
+    runtime.db(0xE5, 0x2A, 0xFE, 0x03)
+    runtime.jr(0x20, "crown_restore")
+    runtime.db(0x2A, 0xFE, 0x04)
+    runtime.jr(0x20, "crown_restore")
+    runtime.db(0x2A, 0xFE, 0x05)
+    runtime.jr(0x20, "crown_restore")
+    runtime.db(0x7E, 0xFE, 0x06)
+    runtime.label("crown_restore")
+    runtime.db(0xE1)
+    runtime.jr(0x28, "crown_found")
+    runtime.label("crown_next")
+    runtime.db(0x7C, 0xFE, 0xDC)
+    runtime.jr(0x20, "crown_scan")
+    # No crown is a fail-closed publication: the $FF anchor makes every
+    # numbered body cell fail the envelope predicate below.
+    runtime.jr(0x18, "plane_begin")
+
+    runtime.label("crown_found")
+    # HL is crown+1.  A split ROM leaf packs the exact physical anchor and
+    # jumps back to plane_begin, keeping the private D500 source within the
+    # neutral 121-byte Ted LUT tail.
+    runtime.db(
+        0xC3, TED_INWINDOW_ANCHOR_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ANCHOR_FRONT_ADDR >> 8,
+    )
+    runtime.label("plane_begin")
+    runtime.db(0xC3, TED_INWINDOW_PLANE_SETUP_ADDR & 0xFF,
+               TED_INWINDOW_PLANE_SETUP_ADDR >> 8)
+    runtime.label("cell")
+    runtime.db(0x1A, 0xFE, 0x02)
+    runtime.jr(0x38, "neutral_attr")
+    runtime.db(0xFE, 0x77)
+    runtime.jr(0x38, "numbered")
+    runtime.db(0xFE, 0x7B)
+    runtime.jr(0x38, "reject")             # checker floor $77-$7A
+    # Only the traced sparse contour IDs may retain a colored attribute.
+    # This explicit whitelist makes LUT-source reuse fail closed: arbitrary
+    # source bytes at IDs $87-$FF can never become published attributes.
+    runtime.db(0xFE, 0x7B)
+    runtime.jr(0x38, "neutral_attr")
+    runtime.db(0xFE, 0x87)
+    runtime.jr(0x38, "advance")
+    runtime.jr(0x18, "neutral_attr")
+
+    runtime.label("numbered")
+    runtime.db(
+        0xE5,
+        0xCD, TED_INWINDOW_ENVELOPE_FRONT_ADDR & 0xFF,
+        TED_INWINDOW_ENVELOPE_FRONT_ADDR >> 8,
+        0xE1,
+    )
+    runtime.jr(0x20, "reject")
+    runtime.jr(0x18, "advance")
+    runtime.label("neutral_attr")
+    runtime.db(0xAF, 0x77)
+    runtime.jr(0x18, "advance")
+    runtime.label("reject")
+    runtime.db(0xAF, 0x77, 0x12)
+    runtime.label("advance")
+    runtime.db(0x23, 0x13, 0x0C, 0x79, 0xFE, 0x20)
+    runtime.jr(0x20, "cell")
+    runtime.db(0x0E, 0x00, 0x04, 0x78, 0xFE, 0x18)
+    runtime.jr(0x20, "cell")
+    # Interrupts must never observe a private bank.  Setup reloads the saved
+    # physical target H and starts the unchanged 48-block transport.
+    runtime.db(0xC3, TED_INWINDOW_SANITIZER_FINISH_ADDR & 0xFF,
+               TED_INWINDOW_SANITIZER_FINISH_ADDR >> 8)
+    runtime_blob = runtime.finish()
+    assert len(runtime_blob) <= TED_INWINDOW_SANITIZER_SOURCE_SIZE, len(
+        runtime_blob
+    )
+    runtime_blob += bytes(
+        TED_INWINDOW_SANITIZER_SOURCE_SIZE - len(runtime_blob)
+    )
+
+    # Called with BC=row/column counters and DE=tile cursor.  The comparator
+    # at $6500 deliberately pops the saved DE before returning to D500.
+    front = _Asm()
+    front.db(
+        0xD5,
+        0xFA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_ROW_ADDR >> 8,
+        0x3C,
+    )
+    outside_fixups = [len(front.code)]
+    front.db(0xCA, 0x00, 0x00)
+    front.db(0x3D, 0x57, 0x78, 0x92, 0xE6, 0x1F, 0xFE, 0x0E)
+    outside_fixups.append(len(front.code))
+    front.db(0xD2, 0x00, 0x00)
+    front.db(0xC3, TED_INWINDOW_ENVELOPE_TAIL_ADDR & 0xFF,
+             TED_INWINDOW_ENVELOPE_TAIL_ADDR >> 8)
+    # Patch absolute branches to the tail's common outside return.
+    front_blob = bytearray(front.finish())
+    outside_addr = TED_INWINDOW_ENVELOPE_FINAL_ADDR + 13
+    for offset in outside_fixups:
+        assert front_blob[offset] in (0xCA, 0xD2)
+        front_blob[offset + 1:offset + 3] = outside_addr.to_bytes(2, "little")
+    assert len(front_blob) <= 24, len(front_blob)
+
+    middle = bytes([
+        0x87, 0xC6, TED_ENVELOPE_ROW_TABLE_ROM_ADDR & 0xFF, 0x6F,
+        0x26, TED_ENVELOPE_ROW_TABLE_ROM_ADDR >> 8,
+        0xC3, TED_INWINDOW_ENVELOPE_FINAL_ADDR & 0xFF,
+        TED_INWINDOW_ENVELOPE_FINAL_ADDR >> 8,
+    ])
+    assert len(middle) <= 18, len(middle)
+    final = bytes([
+        0xFA, TED_SANITIZER_ANCHOR_COL_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_COL_ADDR >> 8,
+        0x57, 0x79, 0x92, 0xC6, 0x04, 0xE6, 0x1F,
+        0xC3, TED_ENVELOPE_COMPARE_ROM_ADDR & 0xFF,
+        TED_ENVELOPE_COMPARE_ROM_ADDR >> 8,
+        0xD1, 0xF6, 0x01, 0xC9,
+    ])
+    assert len(final) <= 17, len(final)
+
+    anchor_front = bytes([
+        0x2B,
+        0x7D, 0xE6, 0x1F,
+        0xEA, TED_SANITIZER_ANCHOR_COL_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_COL_ADDR >> 8,
+        0x7D, 0xCB, 0x37, 0x0F, 0xE6, 0x07, 0x57,
+        0xC3, TED_INWINDOW_ANCHOR_TAIL_ADDR & 0xFF,
+        TED_INWINDOW_ANCHOR_TAIL_ADDR >> 8,
+    ])
+    assert len(anchor_front) <= 18, len(anchor_front)
+    anchor_tail = bytes([
+        0x7C, 0xE6, 0x03, 0x07, 0x07, 0x07, 0xB2,
+        0xEA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_ROW_ADDR >> 8,
+        0xC3,
+        (TED_INWINDOW_SANITIZER_ADDR + runtime.labels["plane_begin"]) & 0xFF,
+        (TED_INWINDOW_SANITIZER_ADDR + runtime.labels["plane_begin"]) >> 8,
+    ])
+    assert len(anchor_tail) <= 15, len(anchor_tail)
+    plane_setup = bytes([
+        0x21, 0x00, 0xD0,                 # HL = selected attr plane
+        0x11, 0x00, TED_DIRECT_TILE_PLANE_ADDR >> 8,
+        0x01, 0x00, 0x00,                 # B=row, C=column
+        0xC3,
+        (TED_INWINDOW_SANITIZER_ADDR + runtime.labels["cell"]) & 0xFF,
+        (TED_INWINDOW_SANITIZER_ADDR + runtime.labels["cell"]) >> 8,
+    ])
+    assert len(plane_setup) <= 13, len(plane_setup)
+    sanitizer_finish = bytes([
+        0xFA, TED_INWINDOW_TARGET_H_ADDR & 0xFF,
+        TED_INWINDOW_TARGET_H_ADDR >> 8, 0x67,
+        0x3E, 0x01, 0xE0, 0x70, 0xFB,
+        0xC3, TED_INWINDOW_SETUP_ADDR & 0xFF,
+        TED_INWINDOW_SETUP_ADDR >> 8,
+    ])
+    assert len(sanitizer_finish) <= 13, len(sanitizer_finish)
+    return runtime_blob, {
+        TED_INWINDOW_ENVELOPE_FRONT_ADDR: bytes(front_blob),
+        TED_INWINDOW_ENVELOPE_TAIL_ADDR: middle,
+        TED_INWINDOW_ENVELOPE_FINAL_ADDR: final,
+        TED_INWINDOW_ANCHOR_FRONT_ADDR: anchor_front,
+        TED_INWINDOW_ANCHOR_TAIL_ADDR: anchor_tail,
+        TED_INWINDOW_PLANE_SETUP_ADDR: plane_setup,
+        TED_INWINDOW_SANITIZER_FINISH_ADDR: sanitizer_finish,
+    }
+
+
+def build_ted_inwindow_copier() -> dict[int, bytes]:
+    """Copy native tiles and 48 attr blocks in the same HBlank windows."""
+    entry = bytes([
+        0xFA, 0x0B, 0xDC, 0x3C, 0xE6, 0x01, 0xEA, 0x0B, 0xDC,
+        0x47,                              # retain post-toggle selector
+        0x3E, 0x30,
+        0xE0, TED_INWINDOW_BLOCKS_HRAM,
+        0xC3, TED_INWINDOW_SELECT_ADDR & 0xFF,
+        TED_INWINDOW_SELECT_ADDR >> 8,
+    ])
+    select = bytes([
+        # B is the post-toggle selector. The direct writers use the
+        # equivalent pre-toggle mapping ``(DC0B & 1) XOR 5``; therefore the
+        # completed destination owns SVBK 4+B, not 5-B. Publishing the peer
+        # bank exposed the preceding physical map's attributes.
+        0x3E, 0x04, 0x80,                 # selected plane = 4+B
+        0xE0, TED_INWINDOW_BANK_HRAM,
+        0xE0, 0x70,
+        0x87, 0x87, 0x2F, 0xC6, 0xAD,    # bank 4/5 -> H $9C/$98
+        0xEA, TED_INWINDOW_TARGET_H_ADDR & 0xFF,
+        TED_INWINDOW_TARGET_H_ADDR >> 8,
+        0xC3, TED_INWINDOW_SANITIZER_ADDR & 0xFF,
+        TED_INWINDOW_SANITIZER_ADDR >> 8,
+    ])
+    setup = bytes([
+        0x3E, 0xD0, 0xE0, 0x51,
+        0xAF, 0xE0, 0x52,
+        0x7C, 0xE0, 0x53,
+        0xAF, 0xE0, 0x54, 0x6F,           # L=0 from the same XOR A
+        0xC3, TED_INWINDOW_INIT_ADDR & 0xFF,
+        TED_INWINDOW_INIT_ADDR >> 8,
+    ])
+    init = bytes([
+        0x11, 0x00, TED_DIRECT_TILE_PLANE_ADDR >> 8,
+        0x0E, 0x06,
+        0x06, 0x18,
+        0xC3, TED_INWINDOW_WAIT_ADDR & 0xFF,
+        TED_INWINDOW_WAIT_ADDR >> 8,
+    ])
+    wait = bytes([
+        0xF3,
+        0xF0, TED_INWINDOW_BANK_HRAM, 0xE0, 0x70,
+        0xF0, TED_INWINDOW_BLOCKS_HRAM, 0xB7,
+        0x28, 0x04,
+        0x3E, 0x01, 0xE0, 0x4F,
+        0xF0, 0x41, 0xE6, 0x03, 0xFE, 0x03, 0x20, 0xF8,
+        0xF0, 0x41, 0xE6, 0x03, 0x20, 0xFA,
+        0xC3, TED_INWINDOW_DMA_ADDR & 0xFF,
+        TED_INWINDOW_DMA_ADDR >> 8,
+    ])
+    dma = _Asm()
+    dma.db(0xF0, TED_INWINDOW_BLOCKS_HRAM, 0xB7)
+    dma.jr(0x28, "done")
+    dma.db(
+        0x3D, 0xE0, TED_INWINDOW_BLOCKS_HRAM,
+        0xAF, 0xE0, 0x55,                 # one immediate 16-byte block
+        0xE0, 0x4F,
+        0x3C, 0xE0, 0x70,
+    )
+    dma.label("done")
+    dma.db(
+        0x1A, 0x13, 0x22, 0x1A, 0x13, 0x22,
+        0x1A, 0x13, 0x22, 0x1A, 0x13, 0x22,
+        0x0D,
+        0xC2, TED_INWINDOW_EPILOGUE_ADDR & 0xFF,
+        TED_INWINDOW_EPILOGUE_ADDR >> 8,
+        0xC3, TED_INWINDOW_ROW_ADDR & 0xFF,
+        TED_INWINDOW_ROW_ADDR >> 8,
+    )
+    row = bytes([
+        0x7D, 0xC6, 0x08, 0x6F, 0x30, 0x01, 0x24,
+        0x05,
+        0xCA, TED_INWINDOW_FINISH_ADDR & 0xFF,
+        TED_INWINDOW_FINISH_ADDR >> 8,
+        0x0E, 0x06,
+        0xC3, TED_INWINDOW_EPILOGUE_ADDR & 0xFF,
+        TED_INWINDOW_EPILOGUE_ADDR >> 8,
+    ])
+    # Row arrives with A=B=0 on the final group, which bypasses the shared
+    # epilogue. Restore SVBK1 here too before exposing interrupts/returning.
+    finish = bytes([0x3C, 0xE0, 0x70, 0x01, 0x08, 0x00, 0xFB, 0xC9])
+    epilogue = bytes([
+        0x3E, 0x01, 0xE0, 0x70,           # interrupt-safe SVBK1
+        0xFB,
+        0xC3, TED_INWINDOW_WAIT_ADDR & 0xFF,
+        TED_INWINDOW_WAIT_ADDR >> 8,
+    ])
+    fragments = {
+        TED_INWINDOW_ENTRY_ADDR: entry,
+        TED_INWINDOW_SELECT_ADDR: select,
+        TED_INWINDOW_SETUP_ADDR: setup,
+        TED_INWINDOW_INIT_ADDR: init,
+        TED_INWINDOW_WAIT_ADDR: wait,
+        TED_INWINDOW_DMA_ADDR: dma.finish(),
+        TED_INWINDOW_ROW_ADDR: row,
+        TED_INWINDOW_FINISH_ADDR: finish,
+        TED_INWINDOW_EPILOGUE_ADDR: epilogue,
+    }
+    capacities = {
+        TED_INWINDOW_ENTRY_ADDR: 18,
+        TED_INWINDOW_SELECT_ADDR: 18,
+        TED_INWINDOW_SETUP_ADDR: 17,
+        TED_INWINDOW_INIT_ADDR: 11,
+        TED_INWINDOW_WAIT_ADDR: 36,
+        TED_INWINDOW_DMA_ADDR: 36,
+        TED_INWINDOW_ROW_ADDR: 16,
+        TED_INWINDOW_FINISH_ADDR: 8,
+        TED_INWINDOW_EPILOGUE_ADDR: 14,
+    }
+    for address, payload in fragments.items():
+        assert len(payload) <= capacities[address], (hex(address), len(payload))
+    return fragments
+
+
+def build_ted_hdma_piggyback_gate() -> bytes:
+    """Cold-safe DB80 gate for the stock copy plus paired publication.
+
+    The gate itself is copied during ordinary boot, so unlike the lazy Ted
+    clone it is guaranteed to exist before the first $028A publication.  A
+    zero C5FF sentinel forces the first stock toggle toward the inactive
+    $9800 map; ready calls preserve stock alternation.  DB91 owns the native
+    copy/compiler wrapper, and the fixed continuation publishes attributes.
+    """
+    code = bytes([
+        0xFA, TED_INCREMENTAL_READY_ADDR & 0xFF,
+        TED_INCREMENTAL_READY_ADDR >> 8,
+        0x3C,
+        0x28, 0x05,                       # ready: preserve natural toggle
+        0x3E, 0x01, 0xEA, 0x0B, 0xDC,    # cold: first target is $9800
+        0xCD, 0x91, 0xDB,
+        0xC3, 0x38, 0x08,
+    ])
+    assert len(code) == 17
+    return code
+
+
+def build_ted_hdma_piggyback_postcopy() -> bytes:
+    """DB91 stock-copy/lazy-compiler half of the cold-safe WRAM helper."""
+    code = bytes([
+        0xCD, 0x95, 0x42,                 # stock alternating row copier
+        0xF5,
+        0x3E, 0x0D, 0xCD, 0x61, 0x00,
+        0xCD, TED_INCREMENTAL_LAZY_GATE_ADDR & 0xFF,
+        TED_INCREMENTAL_LAZY_GATE_ADDR >> 8,
+        0x3E, 0x01, 0xCD, 0x61, 0x00,
+        0xF1, 0xC9,
+    ])
+    assert len(code) == 19
+    return code
+
+
+def build_ted_writer_mirror_runtime() -> tuple[bytes, int, int]:
+    """Record one native 2x2 write, then reproduce its exact return tail.
+
+    The hook replaces ``POP BC / INC DE / INC DE`` at $3136, after the stock
+    nested writer has already produced all four cells and restored HL/DE.
+    Keeping the tile writer entirely native avoids duplicating its private
+    loop ABI in WRAM.  The helper marks the completed metatile in both physical
+    map records, restores AF/DE/HL, and executes the displaced return tail.
+    It never selects switchable WRAM.
+    """
+    a = _Asm()
+    # AF contains the native final DEC-C result. BC's caller value is still on
+    # the stock stack; HL and DE have already been restored by $3133/$3134.
+    # The hook is global, so reject every non-Ted scene before doing any index
+    # arithmetic. Preserve the native AF flags across this test and reproduce
+    # the displaced tail byte-for-byte; Stage 1 must not pay Ted's bitmap cost.
+    a.db(0xF5, 0xFA, 0x80, 0xD8, 0xFE, 0x10)
+    a.jr(0x28, "track")
+    a.db(0xF1, 0xC1, 0x13, 0x13, 0xEF, 0xC9)
+    a.label("track")
+    # The stock five-byte tail never spans VBlank, but this bookkeeping can.
+    # Ted's mainline writer runs with IME set and the interrupt handler does
+    # not preserve HL, so keep this bounded O(1) section atomic. EI's delayed
+    # activation occurs after RET, exactly at the native caller boundary.
+    a.db(0xF3, 0xE5, 0xD5)
+    # Convert DE to an unsigned offset from the exact 576-byte native map
+    # buffer. Ted also uses this shared writer for unrelated destinations;
+    # rejecting those before indexing prevents dirty-map writes into C500+.
+    a.db(0x7B, 0xD6, 0xA0, 0x6F,
+         0x7A, 0xDE, 0xC1, 0x67,
+         0x7C, 0xFE, 0x02)
+    a.jr(0x38, "map_destination")
+    a.jr(0x20, "untracked")
+    a.db(0x7D, 0xFE, 0x40)
+    a.jr(0x30, "untracked")
+    a.label("map_destination")
+    # HL = packed byte offset, then sparse metatile bit index. Native callers
+    # can start a 2x2 write on either packed row parity, so all 24 rows x 12
+    # even columns need distinct bits (288 bits / 36 bytes per map).
+    a.db(
+         0xCB, 0x3C, 0xCB, 0x1D,           # HL = offset >> 1
+         0x54, 0x5D,                       # retain bit index in DE
+         0x7D, 0xE6, 0x07,
+         0xC6, TED_WRITER_MASK_TABLE_ADDR & 0xFF,
+         0x6F, 0x26, TED_WRITER_MASK_TABLE_ADDR >> 8, 0x4E,
+         0x62, 0x6B,
+         0xCB, 0x3C, 0xCB, 0x1D,
+         0xCB, 0x3C, 0xCB, 0x1D,
+         0xCB, 0x3C, 0xCB, 0x1D,           # HL = bit index >> 3
+         0x7D,
+         0xC6, TED_WRITER_DIRTY_9800_ADDR & 0xFF,
+         0x6F, 0x26, TED_WRITER_DIRTY_9800_ADDR >> 8,
+         0x7E, 0xB1, 0x77,
+         0x7D, 0xC6, TED_WRITER_BITMAP_SIZE, 0x6F,
+         0x7E, 0xB1, 0x77)
+    a.db(0xD1, 0xE1, 0xF1,                 # exact DE/HL/AF
+         0xC1, 0x13, 0x13, 0xEF, 0xFB, 0xC9) # native tail; delayed EI
+    a.label("untracked")
+    a.db(0xD1, 0xE1, 0xF1,
+         0xC1, 0x13, 0x13, 0xEF, 0xFB, 0xC9)
+    writer = a.finish()
+    assert len(writer) <= TED_WRITER_RUNTIME_LIMIT_ADDR - TED_WRITER_RUNTIME_ADDR, len(writer)
+
+    clear = _Asm()
+    # $4422 replacement: invalidate both physical mirrors, then reproduce the
+    # stock 576-byte zero fill exactly.
+    clear.db(0xCD, (TED_WRITER_CLEAR_RUNTIME_ADDR + 13) & 0xFF,
+             (TED_WRITER_CLEAR_RUNTIME_ADDR + 13) >> 8,
+             0x21, 0xA0, 0xC1, 0x01, 0x40, 0x02, 0xAF,
+             0xC3, 0xA8, 0x09)
+    invalidate_offset = len(clear.code)
+    clear.db(0x21, TED_WRITER_DIRTY_9800_ADDR & 0xFF,
+             TED_WRITER_DIRTY_9800_ADDR >> 8,
+             0x01, TED_WRITER_BITMAP_SIZE * 2, 0x00,
+             0x3E, 0xFF, 0xC3, 0xA8, 0x09)
+    clear_code = clear.finish()
+    assert len(clear_code) <= TED_WRITER_DIRTY_9800_ADDR - TED_WRITER_CLEAR_RUNTIME_ADDR
+
+    runtime = bytearray(
+        TED_WRITER_RUNTIME_SENTINEL_ADDR - TED_WRITER_RUNTIME_ADDR + 1
+    )
+    writer_off = 0
+    clear_off = TED_WRITER_CLEAR_RUNTIME_ADDR - TED_WRITER_RUNTIME_ADDR
+    runtime[writer_off:writer_off + len(writer)] = writer
+    runtime[clear_off:clear_off + len(clear_code)] = clear_code
+    masks_off = TED_WRITER_MASK_TABLE_ADDR - TED_WRITER_RUNTIME_ADDR
+    runtime[masks_off:masks_off + 8] = bytes(1 << bit for bit in range(8))
+    runtime[-1] = TED_WRITER_RUNTIME_SENTINEL_VALUE
+    return bytes(runtime), 0, clear_off + invalidate_offset
+
+
+def build_ted_writer_mirror_wrapper(publisher_addr: int) -> bytes:
+    """Append the dirty-metatile attribute plane to every native copy."""
+    code = bytes([
+        0xCD, 0x95, 0x42,                  # stock alternating tile copy
+        0xF5,
+        0x3E, 0x0D, 0xCD, 0x61, 0x00,
+        0xCD, TED_DIRTY_POSTCOPY_MAIN_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_MAIN_ADDR >> 8,
+        0x3E, 0x01, 0xCD, 0x61, 0x00,
+        0xF1, 0xC9,
+    ])
+    assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    return code
+
+
+def build_ted_writer_clear_gate() -> bytes:
+    """Use the mirror clear only after its C500 runtime is installed.
+
+    The native clear runs during cold boot before the existing OAM initializer
+    copies the writer runtime. This exact 13-byte bank-1 trampoline preserves
+    that early path and routes later clears through the dirty-map invalidator.
+    """
+    code = bytes([
+        0xFA, TED_WRITER_RUNTIME_SENTINEL_ADDR & 0xFF,
+        TED_WRITER_RUNTIME_SENTINEL_ADDR >> 8,
+        0x3D,                               # sentinel 1 -> Z
+        0xCA, TED_WRITER_CLEAR_RUNTIME_ADDR & 0xFF,
+        TED_WRITER_CLEAR_RUNTIME_ADDR >> 8,
+        0x21, 0xA0, 0xC1,                  # displaced stock LD HL,$C1A0
+        0xC3, 0x25, 0x44,                  # resume stock clear
+    ])
+    assert len(code) == 13
+    return code
+
+
+def build_ted_writer_fixed_stub() -> bytes:
+    """Enter the bank-13 ROM tracker from the fixed native writer tail."""
+    code = bytes([
+        0xF5,                               # preserve native AF
+        0xF3,                               # bounded tracker is atomic
+        0x3E, 0x0D, 0xCD, 0x61, 0x00,      # map bank 13
+        0xC3, TED_WRITER_ROM_RUNTIME_ADDR & 0xFF,
+        TED_WRITER_ROM_RUNTIME_ADDR >> 8,
+        # Bank-13 runtime pushes this fixed continuation before tail-mapping
+        # bank 14 through JP $0061.
+        0xF1,                               # exact native AF
+        0xC1, 0x13, 0x13, 0xEF, 0xFB, 0xC9,
+    ])
+    assert len(code) == 17
+    return code
+
+
+def build_ted_writer_clear_invalidator() -> bytes:
+    """Invalidate both physical Ted attribute mirrors on native source clear.
+
+    Stock $4422 clears the complete $C1A0 source before Ted rebuilds a pose.
+    The ordinary 2x2 writer subsequently marks body metatiles, but the cleared
+    checker/floor cells do not traverse that writer.  Marking both bank-local
+    dirty-map latch here makes the next publication of each physical map
+    compile the exact cleared and rebuilt source.  The helper then resumes the
+    displaced stock clear without touching the caller's WRAM bank.
+    """
+    code = bytes([
+        0x3E, 0x03,                        # both physical maps are stale
+        0xEA, TED_WRITER_START_E_ADDR & 0xFF,
+        TED_WRITER_START_E_ADDR >> 8,
+        0x21, 0xA0, 0xC1,                  # displaced LD HL,$C1A0
+        0xC3, 0x25, 0x44,                  # resume stock clear
+    ])
+    assert len(code) == 11
+    return code
+
+
+def build_ted_writer_rom_runtime() -> bytes:
+    """Mark one native 2x2 write in bank-local dirty maps.
+
+    Code lives in ROM because Ted overwrites both candidate common-WRAM pages.
+    The two 36-byte maps live at D300 in SVBK 2/3, immediately after each
+    0x300-byte attribute plane. No stack access occurs while SVBK is switched.
+    """
+    a = _Asm()
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x10)
+    a.jr(0x28, "track")
+    a.jr(0x18, "finish")
+    a.label("track")
+    a.db(0xE5, 0xD5)
+    a.db(0x7B, 0xD6, 0xA0, 0x6F,
+         0x7A, 0xDE, 0xC1, 0x67,
+         0x7C, 0xFE, 0x02)
+    a.jr(0x38, "map_destination")
+    a.jr(0x20, "untracked")
+    a.db(0x7D, 0xFE, 0x40)
+    a.jr(0x30, "untracked")
+    a.label("map_destination")
+    a.db(0xCB, 0x3C, 0xCB, 0x1D,           # metatile bit index
+         0x54, 0x5D,
+         0x7D, 0xE6, 0x07,
+         0xC6, (TED_WRITER_ROM_RUNTIME_ADDR + 0x70) & 0xFF,
+         0x6F, 0x26, TED_WRITER_ROM_RUNTIME_ADDR >> 8, 0x4E,
+         0x62, 0x6B,
+         0xCB, 0x3C, 0xCB, 0x1D,
+         0xCB, 0x3C, 0xCB, 0x1D,
+         0xCB, 0x3C, 0xCB, 0x1D,
+         0x7D, 0xC6, TED_WRITER_BANKED_DIRTY_ADDR & 0xFF,
+         0x6F, 0x26, TED_WRITER_BANKED_DIRTY_ADDR >> 8,
+         0x3E, 0x02, 0xE0, 0x70,
+         0x7E, 0xB1, 0x77,
+         0x3E, 0x03, 0xE0, 0x70,
+         0x7E, 0xB1, 0x77,
+         0x3E, 0x01, 0xE0, 0x70)
+    a.db(0xD1, 0xE1)
+    a.jr(0x18, "finish")
+    a.label("untracked")
+    a.db(0xD1, 0xE1)
+    a.label("finish")
+    continuation = TED_WRITER_FIXED_STUB_ADDR + 10
+    a.db(0x01, continuation & 0xFF, continuation >> 8, 0xC5,
+         0x3E, 0x0E,                        # native bank 14
+         0xC3, 0x61, 0x00)                 # mapper RET -> fixed continuation
+    code = bytearray(a.finish())
+    table_offset = 0x70
+    assert len(code) <= table_offset, len(code)
+    code.extend(bytes(table_offset - len(code)))
+    code.extend(bytes(1 << bit for bit in range(8)))
+    assert len(code) <= 0x9C, len(code)
+    return bytes(code)
+
+
+def build_ted_dirty_postcopy_fragments() -> dict[int, bytes]:
+    """Patch only dirty 2x2 attrs, then publish the selected physical plane."""
+    main = _Asm()
+    main.db(0xF3, 0xC5, 0xD5, 0xE5,
+            0x7C, 0xE6, 0xFC, 0xE0, TED_SANITIZER_TILE_MASK_HRAM,
+            0xFE, 0x9C,
+            0x01, TED_WRITER_BANKED_DIRTY_ADDR & 0xFF,
+            TED_WRITER_BANKED_DIRTY_ADDR >> 8,
+            0x3E, 0x02)
+    main.jr(0x20, "selected")
+    main.db(0x01, TED_WRITER_BANKED_DIRTY_ADDR & 0xFF,
+            TED_WRITER_BANKED_DIRTY_ADDR >> 8, 0x3E, 0x03)
+    main.label("selected")
+    # Retain selected SVBK in E so the invalidation helper can consume the
+    # corresponding one of the two source-clear bits in O(1).
+    main.db(0x5F, 0xE0, 0x70, 0xC3,
+            TED_WRITER_INVALIDATE_MAP_ADDR & 0xFF,
+            TED_WRITER_INVALIDATE_MAP_ADDR >> 8)
+
+    invalidate_map = _Asm()
+    invalidate_map.db(0x1D)                # SVBK 2/3 -> mask 1/2
+    invalidate_map.db(
+        0xFA, TED_WRITER_START_E_ADDR & 0xFF,
+        TED_WRITER_START_E_ADDR >> 8,
+        0xA3,                               # AND E
+    )
+    invalidate_map.db(
+        0xCA, TED_DIRTY_POSTCOPY_SCAN_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_SCAN_ADDR >> 8,
+    )
+    invalidate_map.db(
+        0xFA, TED_WRITER_START_E_ADDR & 0xFF,
+        TED_WRITER_START_E_ADDR >> 8,
+        0xAB,                               # XOR E; consume this map's bit
+        0xEA, TED_WRITER_START_E_ADDR & 0xFF,
+        TED_WRITER_START_E_ADDR >> 8,
+        0x21, TED_WRITER_BANKED_DIRTY_ADDR & 0xFF,
+        TED_WRITER_BANKED_DIRTY_ADDR >> 8,
+        0x01, TED_WRITER_BITMAP_SIZE, 0x00,
+        0x3E, 0xFF, 0xCD, 0xA8, 0x09,
+    )
+    invalidate_map.db(
+        0x01, TED_WRITER_BANKED_DIRTY_ADDR & 0xFF,
+        TED_WRITER_BANKED_DIRTY_ADDR >> 8,
+        0xC3, TED_DIRTY_POSTCOPY_SCAN_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_SCAN_ADDR >> 8,
+    )
+
+    scan = _Asm()
+    scan.db(0xC5, 0x60, 0x69, 0x06, TED_WRITER_BITMAP_SIZE, 0xAF)
+    scan.label("cell")
+    scan.db(0xB6, 0x23, 0x05)
+    scan.jr(0x20, "cell")
+    scan.db(0xC3, TED_DIRTY_POSTCOPY_SCAN_TAIL_ADDR & 0xFF,
+            TED_DIRTY_POSTCOPY_SCAN_TAIL_ADDR >> 8)
+    scan_tail = bytes([
+        0xC1, 0xB7,
+        0xCA, TED_DIRTY_POSTCOPY_FINAL_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_FINAL_ADDR >> 8,
+        0xC3, TED_DIRTY_POSTCOPY_SETUP_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_SETUP_ADDR >> 8,
+    ])
+
+    setup = bytes([
+        0x11, 0xA0, 0xC1, 0x21, 0x00, 0xD0,
+        0xAF, 0xE0, TED_SANITIZER_COUNTER_HRAM,
+        0x3E, TED_WRITER_BITMAP_SIZE, 0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0xC3, TED_DIRTY_POSTCOPY_BYTE_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_BYTE_ADDR >> 8,
+    ])
+
+    byte_loop = bytes([
+        0x0A, 0xF5, 0xAF, 0x02, 0xF1, 0x03, 0xC5, 0x06, 0x08,
+        0xEA, TED_WRITER_BANKED_SCRATCH_ADDR & 0xFF,
+        TED_WRITER_BANKED_SCRATCH_ADDR >> 8,
+        0xC3, TED_DIRTY_POSTCOPY_BIT_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_BIT_ADDR >> 8,
+    ])
+
+    bit = bytes([
+        0xFA, TED_WRITER_BANKED_SCRATCH_ADDR & 0xFF,
+        TED_WRITER_BANKED_SCRATCH_ADDR >> 8, 0x0F,
+        0xEA, TED_WRITER_BANKED_SCRATCH_ADDR & 0xFF,
+        TED_WRITER_BANKED_SCRATCH_ADDR >> 8,
+        0xD2, TED_WRITER_POINTER_ADVANCE_ADDR & 0xFF,
+        TED_WRITER_POINTER_ADVANCE_ADDR >> 8,
+        # Preserve CP's carry into the continuation: D<C3 means compile.
+        0x7A, 0xFE, 0xC3,
+        0xC3, TED_DIRTY_POSTCOPY_BIT_CONT_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_BIT_CONT_ADDR >> 8,
+    ])
+    bit_cont = bytes([
+        0x38, 0x06,                         # JR C,compile
+        0x7B, 0xFE, 0xC8,
+        0xD2, TED_WRITER_POINTER_ADVANCE_ADDR & 0xFF,
+        TED_WRITER_POINTER_ADVANCE_ADDR >> 8,
+        0xC5, 0xCD, TED_DIRTY_POSTCOPY_COMPILE_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_COMPILE_ADDR >> 8,
+        0xC3, TED_DIRTY_POSTCOPY_BIT_TAIL_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_BIT_TAIL_ADDR >> 8,
+    ])
+    bit_tail = bytes([
+        0xC1,
+        0xC3, TED_WRITER_POINTER_ADVANCE_ADDR & 0xFF,
+        TED_WRITER_POINTER_ADVANCE_ADDR >> 8,
+    ])
+
+    # Every bitmap bit represents the next horizontal 2x2 metatile, whether
+    # it was dirty or clean.  The original prototype omitted these increments
+    # and consequently recompiled all set bits from C1A0 into D000.  Keep this
+    # common step outside the already-full row-advance fragment.
+    pointer_advance = bytes([
+        0x13, 0x13, 0x23, 0x23,
+        0xC3, TED_DIRTY_POSTCOPY_ADVANCE_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_ADVANCE_ADDR >> 8,
+    ])
+
+    advance = _Asm()
+    advance.db(0xF0, TED_SANITIZER_COUNTER_HRAM, 0x3C, 0xFE, 0x0C)
+    advance.db(0x20, (
+        TED_DIRTY_POSTCOPY_ADVANCE_CONT_ADDR
+        - (TED_DIRTY_POSTCOPY_ADVANCE_ADDR + len(advance.code) + 2)
+    ) & 0xFF)
+    advance.db(0xAF, 0xE0, TED_SANITIZER_COUNTER_HRAM,
+               0x3E, 0x08, 0xCD, 0xDE, 0x09,
+               0xC3, (TED_DIRTY_POSTCOPY_ADVANCE_CONT_ADDR + 2) & 0xFF,
+               (TED_DIRTY_POSTCOPY_ADVANCE_CONT_ADDR + 2) >> 8)
+
+    # The NZ path stores its live column before falling into the common tail.
+    # Splitting at two exact 18-byte native-zero gaps avoids overwriting the
+    # stock data immediately following the former $5460 pseudo-cave.
+    advance_cont = bytes([
+        0xE0, TED_SANITIZER_COUNTER_HRAM,
+        0x05, 0xC2, TED_DIRTY_POSTCOPY_BIT_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_BIT_ADDR >> 8,
+        0xC1, 0xF0, TED_SANITIZER_EXPECTED_HRAM, 0x3D,
+        0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0xC2, TED_DIRTY_POSTCOPY_BYTE_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_BYTE_ADDR >> 8,
+        0xC3, TED_DIRTY_POSTCOPY_FINAL_FRONT_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_FINAL_FRONT_ADDR >> 8,
+    ])
+
+    compile_meta = _Asm()
+    compile_meta.db(0xD5, 0xE5, 0x06, WRAM_BG_TABLE >> 8)
+    for _ in range(2):
+        compile_meta.db(0x1A, 0x13, 0x4F, 0x0A, 0x22)
+    compile_meta.db(0xC3, TED_DIRTY_POSTCOPY_COMPILE_TAIL_ADDR & 0xFF,
+                    TED_DIRTY_POSTCOPY_COMPILE_TAIL_ADDR >> 8)
+    compile_tail = _Asm()
+    compile_tail.db(0x3E, 0x16, 0xCD, 0xE4, 0x09,
+                    0x3E, 0x1E, 0xCD, 0xDE, 0x09,
+                    0xC3, TED_DIRTY_POSTCOPY_COMPILE_BOTTOM_ADDR & 0xFF,
+                    TED_DIRTY_POSTCOPY_COMPILE_BOTTOM_ADDR >> 8)
+    compile_bottom = bytes([
+        0x1A, 0x13, 0x4F, 0x0A, 0x22,
+        0xC3, TED_DIRTY_POSTCOPY_COMPILE_FINAL_ADDR & 0xFF,
+        TED_DIRTY_POSTCOPY_COMPILE_FINAL_ADDR >> 8,
+    ])
+    compile_final = bytes([
+        0x1A, 0x13, 0x4F, 0x0A, 0x22,
+        0xE1, 0xD1, 0xC9,
+    ])
+
+    final_front = _Asm()
+    # The byte counter reaches zero on the dirty path, so INC A selects VBK1
+    # one byte more compactly than an immediate load.
+    final_front.db(0x3C, 0xE0, 0x4F,
+             0x3E, 0xD0, 0xE0, 0x51,
+             0xAF, 0xE0, 0x52, 0xE0, 0x54,
+             0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xE0, 0x53,
+             0x3E, 0x2F, 0xE0, 0x55,
+             0xC3, TED_DIRTY_POSTCOPY_FINAL_ADDR & 0xFF,
+             TED_DIRTY_POSTCOPY_FINAL_ADDR >> 8)
+    final = bytes([
+        0xAF, 0xE0, 0x4F,
+        0x3C, 0xE0, 0x70,
+        0xE1, 0xD1, 0xC1, 0xFB, 0xC9,
+    ])
+
+    fragments = {
+        TED_DIRTY_POSTCOPY_MAIN_ADDR: main.finish(),
+        TED_WRITER_INVALIDATE_MAP_ADDR: invalidate_map.finish(),
+        TED_DIRTY_POSTCOPY_SCAN_ADDR: scan.finish(),
+        TED_DIRTY_POSTCOPY_SCAN_TAIL_ADDR: scan_tail,
+        TED_DIRTY_POSTCOPY_SETUP_ADDR: setup,
+        TED_DIRTY_POSTCOPY_BYTE_ADDR: byte_loop,
+        TED_DIRTY_POSTCOPY_BIT_ADDR: bit,
+        TED_DIRTY_POSTCOPY_BIT_CONT_ADDR: bit_cont,
+        TED_DIRTY_POSTCOPY_BIT_TAIL_ADDR: bit_tail,
+        TED_WRITER_POINTER_ADVANCE_ADDR: pointer_advance,
+        TED_DIRTY_POSTCOPY_ADVANCE_ADDR: advance.finish(),
+        TED_DIRTY_POSTCOPY_ADVANCE_CONT_ADDR: advance_cont,
+        TED_DIRTY_POSTCOPY_COMPILE_ADDR: compile_meta.finish(),
+        TED_DIRTY_POSTCOPY_COMPILE_TAIL_ADDR: compile_tail.finish(),
+        TED_DIRTY_POSTCOPY_COMPILE_BOTTOM_ADDR: compile_bottom,
+        TED_DIRTY_POSTCOPY_COMPILE_FINAL_ADDR: compile_final,
+        TED_DIRTY_POSTCOPY_FINAL_FRONT_ADDR: final_front.finish(),
+        TED_DIRTY_POSTCOPY_FINAL_ADDR: final,
+    }
+    capacities = {
+        TED_DIRTY_POSTCOPY_MAIN_ADDR: 35,
+        TED_WRITER_INVALIDATE_MAP_ADDR: 36,
+        TED_DIRTY_POSTCOPY_SCAN_ADDR: 14,
+        TED_DIRTY_POSTCOPY_SCAN_TAIL_ADDR: 11,
+        TED_DIRTY_POSTCOPY_SETUP_ADDR: 18,
+        TED_DIRTY_POSTCOPY_BYTE_ADDR: 36,
+        TED_DIRTY_POSTCOPY_BIT_ADDR: 18,
+        TED_DIRTY_POSTCOPY_BIT_CONT_ADDR: 15,
+        TED_DIRTY_POSTCOPY_BIT_TAIL_ADDR: 8,
+        TED_WRITER_POINTER_ADVANCE_ADDR: 24,
+        TED_DIRTY_POSTCOPY_ADVANCE_ADDR: 18,
+        TED_DIRTY_POSTCOPY_ADVANCE_CONT_ADDR: 18,
+        TED_DIRTY_POSTCOPY_COMPILE_ADDR: 19,
+        TED_DIRTY_POSTCOPY_COMPILE_TAIL_ADDR: 17,
+        TED_DIRTY_POSTCOPY_COMPILE_BOTTOM_ADDR: 9,
+        TED_DIRTY_POSTCOPY_COMPILE_FINAL_ADDR: 8,
+        TED_DIRTY_POSTCOPY_FINAL_FRONT_ADDR: 31,
+        TED_DIRTY_POSTCOPY_FINAL_ADDR: 13,
+    }
+    for address, payload in fragments.items():
+        assert len(payload) <= capacities[address], (hex(address), len(payload))
+    return fragments
+
+
+def build_ted_cached_full_plane_runtime() -> bytes:
+    """Publish one clean 32x32 Ted tile+attribute plane from WRAM bank 2.
+
+    The native 24x24 workspace deliberately contains future composite poses,
+    so it is useful only for locating the unique five-tile crown.  A cache
+    miss rebuilds the complete checker and canonical numbered body; a hit is
+    two fixed 0x400-byte GDMA publications.  This removes stale edge cells
+    without a per-frame 32x32 classifier pass.
+    """
+    a = _Asm()
+    sparse_enabled = _os.environ.get("PENTA_TED_CACHED_SPARSE", "0") != "0"
+    separate_attr_fill = (
+        _os.environ.get("PENTA_TED_CACHED_CANONICAL_LIMBS", "0") == "1"
+    )
+    cache_bank = int(_os.environ.get("PENTA_TED_CACHE_WRAM_BANK", "2"), 0)
+    assert 2 <= cache_bank <= 7
+    absolute_jumps: list[tuple[int, str]] = []
+
+    def jp(label: str, opcode: int = 0xC3) -> None:
+        a.db(opcode, 0x00, 0x00)
+        absolute_jumps.append((len(a.code) - 2, label))
+    # The private bank-1 trampoline enters with interrupts disabled. Avoid a
+    # redundant DI here; the byte is needed for the fixed-bank restore tail.
+    a.db(0xC5, 0xD5, 0xE5)                # preserve caller
+    a.db(0x3E, cache_bank, 0xE0, 0x70)    # private cache planes
+
+    # Find the unique full $02-$06 crown in the completed 24x24 source.
+    a.db(0x21, 0xA0, 0xC1, 0x16, 0x00, 0x06, 0x18)
+    a.label("crown_row")
+    a.db(0x0E, 0x14)
+    a.label("crown_cell")
+    a.db(0x7E, 0xFE, 0x02)
+    a.jr(0x20, "crown_next")
+    a.db(0xE5, 0x1E, 0x03)                 # E = next crown tile
+    a.label("crown_run")
+    a.db(0x23, 0x7E, 0xBB)
+    a.jr(0x20, "crown_bad")
+    a.db(0x1C, 0x7B, 0xFE, 0x07)
+    a.jr(0x20, "crown_run")
+    a.db(0xE1, 0x7A,
+         0xEA, TED_CACHED_ANCHOR_ROW_ADDR & 0xFF,
+         TED_CACHED_ANCHOR_ROW_ADDR >> 8)
+    # The completed publication already exposes the crown at source column
+    # 20-C.  Adding the copier's historical eight-column workspace bias here
+    # shifted every cached attribute body left of its physical tiles; the
+    # 2,800-frame full-plane receipt measured that exact (0,-8) error on every
+    # publication. Store the physical crown coordinate directly.
+    a.db(0x3E, 0x14, 0x91,
+         0xEA, TED_CACHED_ANCHOR_COL_ADDR & 0xFF,
+         TED_CACHED_ANCHOR_COL_ADDR >> 8)
+    a.jr(0x18, "crown_found")
+    a.label("crown_bad")
+    a.db(0xE1)
+    a.label("crown_next")
+    a.db(0x23, 0x0D)
+    a.jr(0x20, "crown_cell")
+    # Skip the four packed-source columns not searched for a five-cell crown.
+    a.db(0x23, 0x23, 0x23, 0x23)
+    a.db(0x14, 0x05)
+    a.jr(0x20, "crown_row")
+    # Ted's sole caller is also used during his short native construction
+    # pre-roll, before a complete $02-$06 crown exists. Rebuilding from stale
+    # D806/D807 during that phase perturbs the boss state machine and can eject
+    # a fast candidate from the arena before its first real publication. Skip
+    # only that incomplete visual handoff; the first complete crown rebuilds
+    # and publishes the cache normally.
+    jp("finish")
+
+    a.label("crown_found")
+    # Preserve the physical crown column before the map-selector calculation
+    # overwrites A.  The old code saved A only afterwards, so E contained
+    # $98/$9C and the cache key ignored horizontal crown moves entirely.
+    a.db(0x5F)
+    # Only a completed Ted source owns the cached publication. Preserve the
+    # native pre-roll's selector until then; once complete, reproduce stock
+    # $4295's alternating-map state and retain its destination page.
+    # DC0B is not continuously boolean: Ted's native handoff exposes FE/FF
+    # sentinels between publications. Preserve that full toggled native byte
+    # in memory, but use its low bit as the physical $98/$9C map selector.
+    # Skipping FE/FF entirely left the displayed pose four rows behind for a
+    # deterministic nine-frame transition; storing a normalized value instead
+    # perturbed Ted's state machine. Masking only the working A register keeps
+    # both contracts intact.
+    a.db(0x21, 0x0B, 0xDC, 0x7E, 0xEE, 0x01, 0x77, 0xE6, 0x01)
+    a.db(0x07, 0x07, 0xC6, 0x98, 0xE0, TED_SANITIZER_TILE_MASK_HRAM)
+    # The seven stock anchors are four-cell aligned. Pack (row/4)*8 + col/4;
+    # the former row*8|col encoding overlapped bits 3-4 and collided when Ted
+    # moved horizontally by eight cells.
+    # Every native crown row is four-cell aligned, so row*2 already occupies
+    # disjoint eight-value bands. Combining it with col/4 is collision-free
+    # for the seven stock anchors and leaves the runtime sentinel untouched.
+    # A still owns the crown column returned by the scan; retain it before
+    # loading D.  Omitting this transfer accidentally keyed every pose from
+    # the ABI's stale E=$E0 and made an eight-column move look like a hit.
+    a.db(0x7A, 0x87, 0x47,
+         0x7B, 0x0F, 0x0F, 0xE6, 0x07, 0xB0, 0x3C, 0x4F)
+    a.db(0xF0, TED_SANITIZER_EXPECTED_HRAM, 0xB9)
+    jp("publish", 0xCA)
+    a.db(0x79, 0xE0, TED_SANITIZER_EXPECTED_HRAM)
+    a.label("rebuild")
+    if _os.environ.get("PENTA_TED_REBUILD_COUNTER", "0") == "1":
+        a.db(0x21, 0x09, 0xD7, 0x34)      # diagnostic rebuild counter
+    # A new anchor invalidates the old sparse-overlay restore list.  A cache
+    # hit keeps it so the sparse helper can restore precisely what the prior
+    # native pose covered before applying the next pose.
+    if sparse_enabled:
+        # The verified native sparse publisher owns one restore list.  A
+        # short-lived canonical-pose experiment added a second per-map list,
+        # but that path produced non-native geometry on every frame.  Keep the
+        # proven single-list invalidation byte-for-byte in expanded payloads.
+        a.db(0xAF, 0xEA, TED_CACHED_SPARSE_COUNT_ADDR & 0xFF,
+             TED_CACHED_SPARSE_COUNT_ADDR >> 8)
+    # Fill tile and attribute caches together. The former second 1,024-cell
+    # LUT pass made a cache miss cross a display frame; emitting the known
+    # checker attributes here leaves only the 117 body cells to look up.
+    a.db(0x21, 0x00, 0xD0)
+    if not separate_attr_fill:
+        a.db(0x11, 0x00, 0xD8)
+    a.db(0x0E, 0x10)
+    a.label("floor_pair")
+    a.db(0x06, 0x10)
+    a.label("floor_even")
+    a.db(0x3E, 0x77, 0x22, 0x3C, 0x22)
+    if not separate_attr_fill:
+        a.db(0x3E, 0x06, 0x12, 0x13, 0x3C, 0x12, 0x13)
+    else:
+        a.db(0x00)                         # retain proven miss-path VBlank phase
+    a.db(0x05)
+    a.jr(0x20, "floor_even")
+    a.db(0x06, 0x10)
+    a.label("floor_odd")
+    a.db(0x3E, 0x79, 0x22, 0x3C, 0x22)
+    if not separate_attr_fill:
+        a.db(0x3E, 0x07, 0x12, 0x13, 0x3D, 0x12, 0x13)
+    else:
+        a.db(0x00)                         # retain proven miss-path VBlank phase
+    a.db(0x05)
+    a.jr(0x20, "floor_odd")
+    a.db(0x0D)
+    a.jr(0x20, "floor_pair")
+    if separate_attr_fill:
+        a.db(0xCD, TED_CACHED_ATTR_CLEAR_ADDR & 0xFF,
+             TED_CACHED_ATTR_CLEAR_ADDR >> 8)
+    # Overlay numbered $02-$76 art using the compact [left+4,right+4)
+    # silhouette already shared with the strict classifier.
+    # FFA8 is the cached publisher's private counter scratch. Using LDH here
+    # saves three runtime bytes versus absolute D803 and keeps the sentinel
+    # byte outside executable code.
+    a.db(0x3E, 0x02, 0xE0, TED_SANITIZER_COUNTER_HRAM, # next tile ID
+         0x0E, 0x00,                       # C = relative row
+         0x21, TED_ENVELOPE_ROW_TABLE_ROM_ADDR & 0xFF,
+         TED_ENVELOPE_ROW_TABLE_ROM_ADDR >> 8)
+    a.label("body_row")
+    # Keep B as the left edge while A holds right-left.  The previous sequence
+    # copied the width back into B before calculating the destination column,
+    # so every row began at crown+width-4 instead of crown+left.  Its resulting
+    # +5/+6/+8/+10 horizontal bands are exactly what the long geometry receipt
+    # rejected.  Stack the width beneath the row-table cursor; this preserves
+    # the exact runtime size while leaving C as the relative row coordinate.
+    a.db(0x2A, 0x47, 0x2A, 0x90)           # B = left; A = right-left width
+    a.db(0xE5, 0xF5)                       # save table cursor, then width
+    # E = absolute column = crown column + left+4 - 4.
+    a.db(0xFA, TED_CACHED_ANCHOR_COL_ADDR & 0xFF,
+         TED_CACHED_ANCHOR_COL_ADDR >> 8,
+         0x80, 0xD6, 0x04, 0xE6, 0x1F, 0x5F)
+    # Tilemap columns wrap independently modulo 32. Without this mask, a
+    # right-edge pose spills Ted's positive columns into the following row,
+    # producing the characteristic split body and duplicated lower fringe.
+    # B = absolute row; form HL=$D000 + row*32 + column.
+    a.db(0xFA, TED_CACHED_ANCHOR_ROW_ADDR & 0xFF,
+         TED_CACHED_ANCHOR_ROW_ADDR >> 8, 0x81, 0x47)
+    a.db(0xE6, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x83, 0x6F)
+    a.db(0x78, 0x0F, 0x0F, 0x0F, 0xE6, 0x03, 0xC6, 0xD0, 0x67)
+    # DE is the matching attribute cell eight pages above HL. Bank-2 $D400
+    # hosts the executable row helper and intermittently overwrote the old
+    # cache. Metadata now lives at $D700, leaving $D800-$DBFF as the reserved
+    # Ted attribute plane without reaching the $DFxx stack.
+    a.db(0x54, 0x5D, 0x7A, 0xC6, 0x08, 0x57)
+    a.db(0xF1, 0x47)                       # B = saved row width
+    a.label("body_cell")
+    a.db(0xF0, TED_SANITIZER_COUNTER_HRAM, 0x22,
+         0x3C, 0xE0, TED_SANITIZER_COUNTER_HRAM, 0x3D, 0xE5,
+         0x6F, 0x26, TED_TABLE_ADDR >> 8, 0x7E, 0xE1, 0x12, 0x13,
+         0xCD, TED_CACHED_COLUMN_WRAP_ADDR & 0xFF,
+         TED_CACHED_COLUMN_WRAP_ADDR >> 8,
+         0x05)
+    a.jr(0x20, "body_cell")
+    a.db(0xE1, 0x0C, 0x79, 0xFE, 0x0E)
+    a.jr(0x20, "body_row")
+    if _os.environ.get("PENTA_TED_CACHE_CANARY", "0") == "1":
+        # Diagnostic only: A=$0E after the row-count comparison. An impossible
+        # attribute makes any later overwrite unambiguous without extra bytes.
+        a.db(0xEA, 0xA5, 0xD9)
+
+    a.label("publish")
+    if sparse_enabled:
+        a.db(0xCD, TED_CACHED_SPARSE_ENTRY_ADDR & 0xFF,
+             TED_CACHED_SPARSE_ENTRY_ADDR >> 8)
+    a.db(0xCD, TED_CACHED_PUBLISH_FRONT_ADDR & 0xFF,
+         TED_CACHED_PUBLISH_FRONT_ADDR >> 8)
+    # Publish only the off-screen map selected by stock $4295. Publishing the
+    # peer too writes through the currently visible map; the rebuild plus four
+    # 1 KiB GDMAs can cross a frame boundary and expose a partial Ted pose.
+    # Stock alternation prepares each map before LCDC selects it, so one
+    # complete tile+attribute pair per call is both sufficient and atomic to
+    # the viewer.
+    # The publisher returns with VBK0 already selected.
+    # Stock $4295 returns AF=$01C0; its caller consumes those flags while
+    # advancing Ted's source animation. CP A recreates Z+N without changing A.
+    a.label("finish")
+    a.db(0x3E, 0x01, 0xE0, 0x70,
+         0xE1, 0xD1, 0xC1,
+         # Return directly to fixed $028D; its stock JP $0D55 performs the
+         # caller's required bank-2 cleanup. Mapping bank 1 here was redundant
+         # and consumed five bytes from the C600 LUT boundary.
+         0xFA, 0x0B, 0xDC, 0xE6, 0x01, 0x07, 0x07,
+         0xC6, 0x9B, 0x67, 0x2E, 0x00,
+         0x3E, 0x01, 0xBF, 0xFB,
+         # Delay only after restoring bank/register state and scheduling IME.
+         # Holding interrupts off during this same cadence compensation made
+         # nine visible palette-transition frames miss their VBlank service.
+         0xC3, TED_CACHED_CADENCE_DELAY_ADDR & 0xFF,
+         TED_CACHED_CADENCE_DELAY_ADDR >> 8)
+    code = bytearray(a.finish())
+    for operand, label in absolute_jumps:
+        target = TED_CACHED_RUNTIME_ADDR + a.labels[label]
+        code[operand] = target & 0xFF
+        code[operand + 1] = target >> 8
+    runtime_capacity = WRAM_BG_TABLE - TED_CACHED_RUNTIME_ADDR
+    assert len(code) <= runtime_capacity, len(code)
+    return code + bytes(runtime_capacity - len(code))
+
+
+def build_ted_cached_full_plane_fragments() -> dict[int, bytes]:
+    """Fragmented lazy installer and banked entry for the WRAM publisher."""
+    runtime = build_ted_cached_full_plane_runtime()
+    sources = (
+        TED_SANITIZER_MAIN_ADDR, TED_SANITIZER_CLASSIFY_ADDR,
+        TED_SANITIZER_CROWN_ADDR, TED_SANITIZER_ACTIVE_ADDR,
+        TED_SANITIZER_ROW_TABLE_ADDR, TED_SANITIZER_GEOMETRY_CONT_ADDR,
+        TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR,
+        TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR,
+        TED_CACHED_RUNTIME_EXTRA_SOURCE_ADDR,
+    )
+    # $54F2-$5509 is a verified 24-byte zero record. Three formerly-unused
+    # tail bytes hold the safe fixed-bank return required by the private
+    # bank-1 entry, without taking space from any live asset.
+    capacities = (36, 36, 36, 36, 36, 36, 24, 31, 13)
+    fragments: dict[int, bytes] = {}
+    cursor = 0
+    copies = []
+    for source, capacity in zip(sources, capacities):
+        chunk = runtime[cursor:cursor + capacity]
+        fragments[source] = chunk
+        # The stock BC-counted memcpy treats BC=0 as 65,536 bytes.  Once the
+        # runtime was tightened to stop before C600, its ninth fragment became
+        # empty; emitting a nominal zero-byte copy corrupted the entire arena.
+        copies.append(bytes([
+            0x21, source & 0xFF, source >> 8,
+            0x11, (TED_CACHED_RUNTIME_ADDR + cursor) & 0xFF,
+            (TED_CACHED_RUNTIME_ADDR + cursor) >> 8,
+            0x01, len(chunk), 0x00, 0xCD, 0xB3, 0x09,
+        ]) if chunk else b"")
+        cursor += len(chunk)
+    assert cursor == len(runtime)
+    front = bytes([0xC5, 0xD5, 0xE5]) + b"".join(copies[:2]) + bytes([
+        0xC3, TED_SANITIZER_INSTALL_MIDDLE_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_MIDDLE_ADDR >> 8,
+    ])
+    middle = b"".join(copies[2:4]) + bytes([
+        0xC3, TED_SANITIZER_INSTALL_TAIL_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_TAIL_ADDR >> 8,
+    ])
+    tail = b"".join(copies[4:6]) + bytes([
+        0xC3, TED_SANITIZER_INSTALL_FINAL_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_FINAL_ADDR >> 8,
+    ])
+    final = b"".join(copies[6:8]) + bytes([
+        # Stock memcpy preserves AF, so stage the sentinel here and let the
+        # exact 21-byte $6FFF cave spend only its three-byte absolute store.
+        0x3E, TED_SANITIZER_RUNTIME_SENTINEL_VALUE,
+        0xC3, TED_CACHED_INSTALL_EXTRA_ADDR & 0xFF,
+        TED_CACHED_INSTALL_EXTRA_ADDR >> 8,
+        # Unreachable after the JP above. The WRAM publisher calls this exact
+        # seven-byte tail to begin immediate GDMA only from VBlank.
+        # Wait for the first scanline of VBlank, not merely any LY >= $90.
+        # The paired tile+attribute GDMAs need the complete ten-line window;
+        # entering late could expose the tile plane before its attributes.
+        0xF0, 0x44, 0xFE, 0x90, 0x20, 0xFA, 0xC9,
+    ])
+    install_extra = copies[8] + bytes([
+        0xEA, TED_SANITIZER_RUNTIME_SENTINEL_ADDR & 0xFF,
+        TED_SANITIZER_RUNTIME_SENTINEL_ADDR >> 8,
+        0xAF, 0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0xE1, 0xD1, 0xC1,
+        0xC3, TED_CACHED_RUNTIME_ADDR & 0xFF,
+        TED_CACHED_RUNTIME_ADDR >> 8,
+        # Unreachable after the JP above; the remaining asserted-zero cave is
+        # a shared post-wait GDMA commit subroutine.
+        0x3E, 0x3F, 0xE0, 0x55,
+        0xAF, 0xE0, 0x4F, 0xC9,
+    ])
+    entry = bytes([
+        0xFA, TED_SANITIZER_RUNTIME_SENTINEL_ADDR & 0xFF,
+        TED_SANITIZER_RUNTIME_SENTINEL_ADDR >> 8,
+        0xFE, TED_SANITIZER_RUNTIME_SENTINEL_VALUE,
+        0xCA, TED_CACHED_RUNTIME_ADDR & 0xFF,
+        TED_CACHED_RUNTIME_ADDR >> 8,
+        0xC3, TED_SANITIZER_INSTALL_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_ADDR >> 8,
+    ])
+    assert len(entry) == 11
+    publish_front_all = bytes([
+        0xAF, 0xE0, 0x4F, 0xE0, 0x52, 0xE0, 0x54,
+        0x3E, 0xD0, 0xE0, 0x51,
+        0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xE0, 0x53,
+        0xCD, TED_CACHED_GDMA_WAIT_ADDR & 0xFF,
+        TED_CACHED_GDMA_WAIT_ADDR >> 8,
+        0xCD, TED_CACHED_GDMA_COMMIT_ADDR & 0xFF,
+        TED_CACHED_GDMA_COMMIT_ADDR >> 8,
+    ])
+    publish_tail_all = publish_front_all[21:] + bytes([
+        0x3E, 0x01, 0xE0, 0x4F, 0xAF, 0xE0, 0x52, 0xE0, 0x54,
+        0x3E, 0xD8, 0xE0, 0x51,
+        0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xE0, 0x53,
+        # The tile GDMA immediately above starts at the beginning of VBlank.
+        # A second 1 KiB GDMA still fits in the same CGB VBlank budget; waiting
+        # for LY=$90 again exposed one full frame of new tiles with stale
+        # attributes whenever Ted crossed the physical-map wrap.
+        0xCD, TED_CACHED_GDMA_COMMIT_ADDR & 0xFF,
+        TED_CACHED_GDMA_COMMIT_ADDR >> 8, 0xC9,
+    ])
+    publish_front = publish_front_all[:21] + bytes([
+        0xC3, TED_CACHED_PUBLISH_TAIL_ADDR & 0xFF,
+        TED_CACHED_PUBLISH_TAIL_ADDR >> 8,
+    ])
+    # The 55D8 cave is exactly 13 bytes. Split before the complete ``LD A,D4``
+    # instruction; the former [:10] split made the jump opcode ($C3) become
+    # that instruction's immediate and never executed the attribute GDMA.
+    publish_tail = publish_tail_all[:9] + bytes([
+        0xC3, TED_CACHED_PUBLISH_TAIL_CONT_ADDR & 0xFF,
+        TED_CACHED_PUBLISH_TAIL_CONT_ADDR >> 8,
+    ])
+    publish_tail_cont = publish_tail_all[9:15] + bytes([
+        0xC3, TED_CACHED_PUBLISH_TAIL_FINAL_ADDR & 0xFF,
+        TED_CACHED_PUBLISH_TAIL_FINAL_ADDR >> 8,
+    ])
+    publish_tail_final = publish_tail_all[15:]
+    column_wrap = bytes([
+        0x7D, 0xE6, 0x1F, 0xC0,            # remain in the same map row
+        0x7D, 0xD6, 0x20, 0x6F,            # subtract 32 from low byte
+        0x7C, 0xDE, 0x00, 0x67,            # propagate borrow into H
+        0xC6, 0x08, 0x57, 0x5D, 0xC9,      # DE = corrected HL + $0800
+    ])
+    assert len(publish_tail) == 12
+    assert len(publish_tail_cont) == 9
+    assert len(publish_tail_final) == 6
+    assert len(entry + publish_front) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    for payload in (
+        front, middle, tail, final, install_extra, entry,
+        publish_tail, publish_tail_cont,
+        publish_tail_final,
+    ):
+        assert len(payload) <= ARENA_SANITIZER_FRAGMENT_SIZE, len(payload)
+    fragments.update({
+        TED_SANITIZER_INSTALL_ADDR: front,
+        TED_SANITIZER_INSTALL_MIDDLE_ADDR: middle,
+        TED_SANITIZER_INSTALL_TAIL_ADDR: tail,
+        TED_SANITIZER_INSTALL_FINAL_ADDR: final,
+        TED_CACHED_INSTALL_EXTRA_ADDR: install_extra,
+        TED_REGISTER_MATERIALIZER_FRONT_ADDR: entry + publish_front,
+        TED_CACHED_PUBLISH_TAIL_ADDR: publish_tail,
+        TED_CACHED_PUBLISH_TAIL_CONT_ADDR: publish_tail_cont,
+        TED_CACHED_PUBLISH_TAIL_FINAL_ADDR: publish_tail_final,
+        TED_CACHED_COLUMN_WRAP_ADDR: column_wrap,
+        # This delay runs after EI so VBlank service remains live. Three loops
+        # are 1.85% fast and four are 2.15% slow, so alternate them in bounded
+        # 16-frame blocks from the existing VBlank counter. A 253-iteration
+        # first loop
+        # offsets the constant selector cost; no new state or map scan is
+        # introduced, and cadence is decoupled from sparse-limb animation.
+        # by bypassing the stock 576-cell CPU copier. This is deterministic,
+        # independent of pose complexity, and touches no game state.
+        TED_CACHED_CADENCE_DELAY_ADDR: bytes.fromhex(
+            "F0 D4 E6 10 06 02 20 01 04 "
+            "0E FD 0D 20 FD "
+            "0E 00 0D 20 FD 05 20 F8 C9"
+        ),
+    })
+    return fragments
+
+
+def build_ted_cached_sparse_fragments() -> dict[int, bytes]:
+    """Track and publish Ted's native sparse limb cells without trails.
+
+    The 24x24 stock workspace contains 45 complete native poses plus a small
+    set of future-pose staging cells.  The numbered body is reconstructed by
+    the cache; this helper restores the prior sparse overlay byte-for-byte,
+    scans the current source, rejects only the two measured staging families,
+    and overlays each surviving limb with its YAML LUT attribute.  At most 22
+    cells are live in the full native pose corpus.
+    """
+    canonical_limbs = (
+        _os.environ.get("PENTA_TED_CACHED_CANONICAL_LIMBS", "0") == "1"
+    )
+    entry = _Asm()
+    entry.db(0xC5, 0xD5, 0xE5)             # preserve caller BC/DE/HL
+    entry.db(0xFA, TED_CACHED_SPARSE_COUNT_ADDR & 0xFF,
+             TED_CACHED_SPARSE_COUNT_ADDR >> 8, 0xB7)
+    entry.jr(0x28, "setup")
+    entry.db(0x47,
+             0x21, TED_CACHED_SPARSE_RECORDS_ADDR & 0xFF,
+             TED_CACHED_SPARSE_RECORDS_ADDR >> 8)
+    entry.db(0xC3, TED_CACHED_SPARSE_RESTORE_ADDR & 0xFF,
+             TED_CACHED_SPARSE_RESTORE_ADDR >> 8)
+    entry.label("setup")
+    entry.db(0xC3, TED_CACHED_SPARSE_SETUP_ADDR & 0xFF,
+             TED_CACHED_SPARSE_SETUP_ADDR >> 8)
+
+    restore = _Asm()
+    restore.label("loop")
+    restore.db(
+        0x5E, 0x23, 0x56, 0x23,            # DE = cached tile address
+        0x2A, 0x12,                        # restore old tile
+        0x7A, 0xC6, 0x08, 0x57,
+        0x2A, 0x12,                        # restore old attribute
+        0x05,
+    )
+    restore.jr(0x20, "loop")
+    restore.db(0xAF, 0xEA, TED_CACHED_SPARSE_COUNT_ADDR & 0xFF,
+               TED_CACHED_SPARSE_COUNT_ADDR >> 8)
+    restore.db(0xC3, TED_CACHED_SPARSE_SETUP_ADDR & 0xFF,
+               TED_CACHED_SPARSE_SETUP_ADDR >> 8)
+
+    setup = bytes([
+        0x21, 0xA0, 0xC1,                  # native 24x24 source
+        0x06, 0x18, 0x0E, 0x18,
+        0xC3, TED_CACHED_SPARSE_SCAN_ADDR & 0xFF,
+        TED_CACHED_SPARSE_SCAN_ADDR >> 8,
+    ])
+
+    scan = _Asm()
+    scan.label("cell")
+    scan.db(0x2A, 0xFE, 0x7B,
+            0xDA, TED_CACHED_SPARSE_SCAN_TAIL_ADDR & 0xFF,
+            TED_CACHED_SPARSE_SCAN_TAIL_ADDR >> 8,
+            0xFE, 0x87,
+            0xD2, TED_CACHED_SPARSE_SCAN_TAIL_ADDR & 0xFF,
+            TED_CACHED_SPARSE_SCAN_TAIL_ADDR >> 8,
+            0xCD, TED_CACHED_SPARSE_FILTER_ADDR & 0xFF,
+            TED_CACHED_SPARSE_FILTER_ADDR >> 8,
+            0xC3, TED_CACHED_SPARSE_SCAN_TAIL_ADDR & 0xFF,
+            TED_CACHED_SPARSE_SCAN_TAIL_ADDR >> 8)
+    scan_tail = _Asm()
+    scan_tail.db(0x0D, 0xC2,
+                 TED_CACHED_SPARSE_SCAN_ADDR & 0xFF,
+                 TED_CACHED_SPARSE_SCAN_ADDR >> 8,
+                 0x0E, 0x18, 0x05, 0xC2,
+                 TED_CACHED_SPARSE_SCAN_ADDR & 0xFF,
+                 TED_CACHED_SPARSE_SCAN_ADDR >> 8)
+    scan_tail.db(0xE1, 0xD1, 0xC1, 0xC9)
+
+    filt = _Asm()
+    filt.db(0xEA, TED_CACHED_SPARSE_TILE_ADDR & 0xFF,
+            TED_CACHED_SPARSE_TILE_ADDR >> 8)
+    # The scan front admits only $7B-$86. Reject the four holes here; ordinary
+    # numbered/checker cells never pay a CALL into this classifier.
+    for tile in (0x7C, 0x7E, 0x7F, 0x81):
+        filt.db(0xFE, tile, 0xC8)
+    # D/E = signed-five crown-relative row/column.
+    # B/C count down 24..1; convert them to forward 0..23 coordinates while
+    # subtracting the cached crown in one expression.
+    filt.db(0xFA, TED_CACHED_ANCHOR_ROW_ADDR & 0xFF,
+            TED_CACHED_ANCHOR_ROW_ADDR >> 8,
+            0x80, 0x2F, 0x3C, 0xC6, 0x18,
+            0xE6, 0x1F, 0x57)
+    filt.db(0xFA, TED_CACHED_ANCHOR_COL_ADDR & 0xFF,
+            TED_CACHED_ANCHOR_COL_ADDR >> 8,
+            0x81, 0x2F, 0x3C, 0xC6, 0x18,
+            0xE6, 0x1F, 0x5F)
+    # All observed left-side staging cells occupy relative columns -3..0 on
+    # row zero or a negative row.  The sole native exception is tile $83 at
+    # (-16,0), part of the long vertical extension.
+    filt.db(0x7B, 0xC6, 0x03, 0xE6, 0x1F, 0xFE, 0x04)
+    filt.jr(0x30, "edge_ok")
+    filt.db(0x7A, 0x3D, 0xFE, 0x0F)
+    filt.jr(0x38, "edge_ok")
+    filt.db(0xFA, TED_CACHED_SPARSE_TILE_ADDR & 0xFF,
+            TED_CACHED_SPARSE_TILE_ADDR >> 8, 0xFE, 0x83)
+    filt.jr(0x20, "reject")
+    filt.db(0x7A, 0xFE, 0x10)
+    filt.jr(0x20, "reject")
+    filt.db(0x7B, 0xB7)
+    filt.jr(0x20, "reject")
+    filt.label("edge_ok")
+    # Two late right-edge staging cells are otherwise geometrically valid.
+    filt.db(0x7B, 0xFE, 0x09)
+    filt.jr(0x20, "overlay")
+    filt.db(0x7A, 0xFE, 0x0E)
+    filt.jr(0x38, "overlay")
+    filt.db(0xFA, TED_CACHED_SPARSE_TILE_ADDR & 0xFF,
+            TED_CACHED_SPARSE_TILE_ADDR >> 8, 0xFE, 0x82)
+    filt.jr(0x28, "reject")
+    filt.db(0xFE, 0x85)
+    filt.jr(0x20, "overlay")
+    filt.label("reject")
+    filt.db(0xC9)
+    filt.label("overlay")
+    filt.db(0xFA, TED_CACHED_SPARSE_COUNT_ADDR & 0xFF,
+            TED_CACHED_SPARSE_COUNT_ADDR >> 8, 0xFE, 0x16, 0xD0)
+    filt.db(0xC3, TED_CACHED_SPARSE_OVERLAY_A_ADDR & 0xFF,
+            TED_CACHED_SPARSE_OVERLAY_A_ADDR >> 8)
+
+    overlay_a = bytes([
+        0xE5,
+        0xFA, TED_CACHED_ANCHOR_COL_ADDR & 0xFF,
+        TED_CACHED_ANCHOR_COL_ADDR >> 8, 0x83, 0xE6, 0x1F, 0x5F,
+        0xFA, TED_CACHED_ANCHOR_ROW_ADDR & 0xFF,
+        TED_CACHED_ANCHOR_ROW_ADDR >> 8, 0x82, 0xE6, 0x1F,
+        0xC3, TED_CACHED_SPARSE_OVERLAY_B_ADDR & 0xFF,
+        TED_CACHED_SPARSE_OVERLAY_B_ADDR >> 8,
+    ])
+    overlay_b = bytes([
+        0x57, 0x7A, 0xE6, 0x07,
+        0x07, 0x07, 0x07, 0x07, 0x07,
+        0x83, 0x6F,
+        0xC3, TED_CACHED_SPARSE_OVERLAY_C_ADDR & 0xFF,
+        TED_CACHED_SPARSE_OVERLAY_C_ADDR >> 8,
+    ])
+    overlay_c = bytes([
+        0x7A, 0x0F, 0x0F, 0x0F, 0xE6, 0x03, 0xC6, 0xD0, 0x67,
+        0x54, 0x5D,
+        0xC3, TED_CACHED_SPARSE_OVERLAY_D_ADDR & 0xFF,
+        TED_CACHED_SPARSE_OVERLAY_D_ADDR >> 8,
+    ])
+    overlay_d = bytes([
+        0xFA, TED_CACHED_SPARSE_COUNT_ADDR & 0xFF,
+        TED_CACHED_SPARSE_COUNT_ADDR >> 8, 0x87, 0x87, 0xC6, 0x20,
+        0x6F, 0x26, TED_CACHED_SPARSE_RECORDS_ADDR >> 8,
+        0xC3, TED_CACHED_SPARSE_OVERLAY_E_ADDR & 0xFF,
+        TED_CACHED_SPARSE_OVERLAY_E_ADDR >> 8,
+    ])
+    overlay_e = bytes([
+        0x73, 0x23, 0x72, 0x23, 0x1A, 0x22,
+        0x7A, 0xC6, 0x08, 0x57, 0x1A, 0x22,
+        0xC3, TED_CACHED_SPARSE_OVERLAY_F_ADDR & 0xFF,
+        TED_CACHED_SPARSE_OVERLAY_F_ADDR >> 8,
+    ])
+    overlay_f = bytes([
+        0x7A, 0xD6, 0x08, 0x57,
+        0xFA, TED_CACHED_SPARSE_TILE_ADDR & 0xFF,
+        TED_CACHED_SPARSE_TILE_ADDR >> 8, 0x12,
+        0x6F, 0x26, TED_TABLE_ADDR >> 8, 0x7E,
+        0xE1,
+        0xC3, TED_CACHED_SPARSE_OVERLAY_G_ADDR & 0xFF,
+        TED_CACHED_SPARSE_OVERLAY_G_ADDR >> 8,
+    ])
+    overlay_g = bytes([
+        # A is the LUT attribute. Preserve it while moving DE from the tile
+        # plane to the matching attribute plane; the former LD A,D sequence
+        # wrote literal $D4/$D5/$D6 bytes as attributes.
+        0xF5, 0x7A, 0xC6, 0x08, 0x57, 0xF1, 0x12,
+        0xC3, TED_CACHED_SPARSE_OVERLAY_H_ADDR & 0xFF,
+        TED_CACHED_SPARSE_OVERLAY_H_ADDR >> 8,
+    ])
+    overlay_h = bytes([
+        0xFA, TED_CACHED_SPARSE_COUNT_ADDR & 0xFF,
+        TED_CACHED_SPARSE_COUNT_ADDR >> 8, 0x3C,
+        0xEA, TED_CACHED_SPARSE_COUNT_ADDR & 0xFF,
+        TED_CACHED_SPARSE_COUNT_ADDR >> 8,
+        0xC9,
+    ])
+
+    fragments = {
+        TED_CACHED_SPARSE_ENTRY_ADDR: entry.finish(),
+        TED_CACHED_SPARSE_RESTORE_ADDR: restore.finish(),
+        TED_CACHED_SPARSE_SETUP_ADDR: setup,
+        TED_CACHED_SPARSE_SCAN_ADDR: scan.finish(),
+        TED_CACHED_SPARSE_SCAN_TAIL_ADDR: scan_tail.finish(),
+        TED_CACHED_SPARSE_FILTER_ADDR: filt.finish(),
+        TED_CACHED_SPARSE_OVERLAY_A_ADDR: overlay_a,
+        TED_CACHED_SPARSE_OVERLAY_B_ADDR: overlay_b,
+        TED_CACHED_SPARSE_OVERLAY_C_ADDR: overlay_c,
+        TED_CACHED_SPARSE_OVERLAY_D_ADDR: overlay_d,
+        TED_CACHED_SPARSE_OVERLAY_E_ADDR: overlay_e,
+        TED_CACHED_SPARSE_OVERLAY_F_ADDR: overlay_f,
+        TED_CACHED_SPARSE_OVERLAY_G_ADDR: overlay_g,
+        TED_CACHED_SPARSE_OVERLAY_H_ADDR: overlay_h,
+    }
+    if canonical_limbs:
+        # The raw 24x24 workspace includes future-pose staging cells. Scanning
+        # and heuristically filtering it can combine individually-valid limb
+        # cells into a layout that never exists natively. Alternate instead
+        # between two receipt-proven native poses: the numbered body alone and
+        # its compact three-cell tendril extension. This preserves visible
+        # animation while making every publication deterministic and O(1).
+        finish_addr = TED_CACHED_SPARSE_SCAN_TAIL_ADDR
+        pose_addr = TED_CACHED_SPARSE_FILTER_ADDR
+        fragments[TED_CACHED_SPARSE_SETUP_ADDR] = bytes([
+            0xC3, TED_CACHED_SPARSE_SCAN_ADDR & 0xFF,
+            TED_CACHED_SPARSE_SCAN_ADDR >> 8,
+        ])
+        # Use a bounded, state-independent 16-frame phase: eight frames with
+        # the compact native tendril pose, then eight body-only frames.  This
+        # is the receipt-proven v73 sequence and avoids scanning future-pose
+        # staging cells in the native 24x24 workspace.
+        fragments[TED_CACHED_SPARSE_SCAN_ADDR] = bytes([
+            0x21, TED_CACHED_LIMB_PHASE_ADDR & 0xFF,
+            TED_CACHED_LIMB_PHASE_ADDR >> 8,
+            0x34, 0xCB, 0x66,
+            0xCA, finish_addr & 0xFF, finish_addr >> 8,
+            0xC3, pose_addr & 0xFF, pose_addr >> 8,
+        ])
+        fragments[TED_CACHED_SPARSE_SCAN_TAIL_ADDR] = bytes([
+            0xE1, 0xD1, 0xC1, 0xC9,
+        ])
+        pose = bytearray()
+        for tile, row, column in (
+            (0x84, 5, -3),
+            (0x86, 5, 6),
+            (0x83, 10, -3),
+        ):
+            pose.extend((
+                0x3E, tile,
+                0xEA, TED_CACHED_SPARSE_TILE_ADDR & 0xFF,
+                TED_CACHED_SPARSE_TILE_ADDR >> 8,
+                0x11, column & 0x1F, row & 0x1F,
+                0xCD, TED_CACHED_SPARSE_OVERLAY_A_ADDR & 0xFF,
+                TED_CACHED_SPARSE_OVERLAY_A_ADDR >> 8,
+            ))
+        pose.extend((0xC3, finish_addr & 0xFF, finish_addr >> 8))
+        fragments[TED_CACHED_SPARSE_FILTER_ADDR] = bytes(pose)
+        # Use the ordinary byte-for-byte restore record even for this compact
+        # pose.  Skipping it removes numbered body cells permanently and was
+        # caught as non-native geometry on all 2,800 verification frames.
+        # Sixteen pairs of 32-cell rows form one complete checker attribute
+        # plane: even rows repeat 6,7 and odd rows repeat 7,6. Keeping this
+        # independent from the tile fill prevents DE/HL phase drift while
+        # retaining a fixed O(1) cache-miss cost.
+        fragments[TED_CACHED_ATTR_CLEAR_ADDR] = bytes([
+            0x21, 0x00, 0xD8, 0x0E, 0x10,
+            0x06, 0x10, 0x3E, 0x06,
+            0x22, 0x3C, 0x22, 0x3D, 0x05, 0x20, 0xF9,
+            0x06, 0x10, 0x3E, 0x07,
+            0x22, 0x3D, 0x22, 0x3C, 0x05, 0x20, 0xF9,
+            0x0D, 0x20, 0xE7, 0xC9,
+        ])
+    capacities = {
+        TED_CACHED_SPARSE_ENTRY_ADDR: 24,
+        TED_CACHED_SPARSE_RESTORE_ADDR: 24,
+        TED_CACHED_SPARSE_SETUP_ADDR: 11,
+        TED_CACHED_SPARSE_SCAN_ADDR: 17,
+        TED_CACHED_SPARSE_SCAN_TAIL_ADDR: 14,
+        TED_CACHED_SPARSE_FILTER_ADDR: 121,
+        TED_CACHED_ATTR_CLEAR_ADDR: 31,
+        TED_CACHED_SPARSE_OVERLAY_A_ADDR: 18,
+        TED_CACHED_SPARSE_OVERLAY_B_ADDR: 18,
+        TED_CACHED_SPARSE_OVERLAY_C_ADDR: 18,
+        TED_CACHED_SPARSE_OVERLAY_D_ADDR: 15,
+        TED_CACHED_SPARSE_OVERLAY_E_ADDR: 18,
+        TED_CACHED_SPARSE_OVERLAY_F_ADDR: 19,
+        TED_CACHED_SPARSE_OVERLAY_G_ADDR: 11,
+        TED_CACHED_SPARSE_OVERLAY_H_ADDR: 9,
+    }
+    for address, payload in fragments.items():
+        assert len(payload) <= capacities[address], (hex(address), len(payload))
+    return fragments
+
+
+def build_ted_cached_full_plane_wrapper() -> tuple[bytes, bytes, bytes]:
+    """Enter the cached publisher from Ted's receipt-proven sole caller.
+
+    The 2,800-frame native publication census identifies fixed ``$028A`` as
+    Ted's only alternating-map caller. Owning shared entry ``$4295`` or the
+    shared ``$DB80`` arena helper broke the cold title/Stage-1 route before Ted
+    existed. This trampoline lives in bank 1's asserted-zero ``$6FE4`` cave,
+    reaches a fixed-bank continuation which maps bank 13, establishes the
+    native return ABI, and tail-enters the lazy cached publisher.  The bank
+    switch cannot return into a switchable-bank continuation: after mapping
+    bank 13, the bytes at that return address would no longer be bank-1 code.
+    The publisher restores bank 1 before returning directly to $028D.
+    """
+    front = bytes([
+        0xF0, TED_SANITIZER_EXPECTED_HRAM,
+        0x47,
+        0xFA, 0x88, 0xD8,
+        0xB0,
+        0xCA, 0x95, 0x42,
+        0xC3, TED_CACHED_BANK1_TAIL_ADDR & 0xFF,
+        TED_CACHED_BANK1_TAIL_ADDR >> 8,
+    ])
+    tail = bytes([
+        0xC3, TED_CACHED_FIXED_CONT_ADDR & 0xFF,
+        TED_CACHED_FIXED_CONT_ADDR >> 8,
+    ])
+    fixed = bytes([
+        0xF3,
+        0x01, 0x08, 0x00,
+        0x11, 0xE0, 0xC3,
+        0x3E, 0x0D, 0xCD, 0x61, 0x00,
+        0xC3, TED_REGISTER_MATERIALIZER_FRONT_ADDR & 0xFF,
+        TED_REGISTER_MATERIALIZER_FRONT_ADDR >> 8,
+    ])
+    assert len(front) == 13 and len(tail) == 3 and len(fixed) == 15
+    return front, tail, fixed
+
+
+def build_ted_cached_ready_latch() -> bytes:
+    """Remember Ted's native activation until his next map publication.
+
+    The activation phase lasts many frames but need not overlap $028A. The
+    existing once-per-eight-frame palette probe calls this helper, which arms
+    FFA9 only before the cached runtime is installed. The installer clears the
+    latch, publishes a real anchor key, and sets C5FF so this becomes a cheap
+    early return for the remainder of the arena.
+    """
+    code = bytes([
+        0xFA, TED_SANITIZER_RUNTIME_SENTINEL_ADDR & 0xFF,
+        TED_SANITIZER_RUNTIME_SENTINEL_ADDR >> 8,
+        0xB7, 0xC0,                        # installed -> RET NZ
+        0xFA, 0x80, 0xD8, 0xFE, 0x10, 0xC0,
+        0xFA, 0x88, 0xD8, 0xB7, 0xC8,     # pre-activation -> RET Z
+        0x3E, 0xFF, 0xE0, TED_SANITIZER_EXPECTED_HRAM, 0xC9,
+    ])
+    assert len(code) == 21
+    return code
+
+
+def build_ted_cached_palette_gate() -> bytes:
+    """Latch native Ted readiness, then run the ordinary palette service."""
+    return bytes([
+        0xCD, TED_CACHED_READY_LATCH_ADDR & 0xFF,
+        TED_CACHED_READY_LATCH_ADDR >> 8,
+        0xC3, CONDITIONAL_PALETTE_ADDR & 0xFF,
+        CONDITIONAL_PALETTE_ADDR >> 8,
+    ])
+
+
+def build_ted_cached_abi_fragments() -> dict[int, bytes]:
+    """Materialize the exact BC/DE/HL contract returned by stock $4295."""
+    front = bytes([
+        0x01, 0x08, 0x00,                  # BC=$0008
+        0x11, 0xE0, 0xC3,                  # DE=$C3E0
+        0xC3, TED_CACHED_ABI_TAIL_ADDR & 0xFF,
+        TED_CACHED_ABI_TAIL_ADDR >> 8,
+    ])
+    tail = bytes([
+        0xFA, 0x0B, 0xDC, 0x07, 0x07,     # selected map * 4
+        0xC6, 0x9B, 0x67,                  # H=$9B/$9F
+        0x2E, 0x00, 0xC9,
+    ])
+    assert len(front) <= 11 and len(tail) <= 13
+    return {TED_CACHED_ABI_FRONT_ADDR: front, TED_CACHED_ABI_TAIL_ADDR: tail}
 
 
 def build_arena_attr_semantic_decider() -> tuple[bytes, bytes, bytes, bytes, bytes]:
@@ -3846,10 +9093,17 @@ def build_stage1_hazard_transition_repair() -> bytes:
     # base saved by the row helper. Recover D=$98/$9C without borrowing native
     # WRAM, then put the scanner return back for this routine's final RET.
     a.db(0xC1, 0xD1, 0xC5)                 # POP BC; POP DE; PUSH BC
-    # These cells change ownership only before the Gargoyle scene. Do not add
-    # the bounded HBlank waits to the post-handoff miniboss fight.
-    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x02)
-    a.jr(0x20, "done")
+    # The rotating cylinder remains visible while Stage 1 hands off from the
+    # ordinary gameplay scene ($02) to the Gargoyle/miniboss music scene
+    # ($0A).  The row publisher deliberately keeps running across that handoff,
+    # so its three bounded seam repairs must do the same; otherwise animated
+    # teeth are refreshed while their connector attributes retain the outgoing
+    # map's palette/bank bits.  Reject every other scene, but admit both exact
+    # Stage-1 identities.  The callee remains independently room-$12 gated.
+    # $02 and $0A differ only by bit 3; folding that bit is both exact for
+    # this pair and keeps the repair within its audited 65-byte cave.
+    a.db(0xFA, 0x80, 0xD8, 0xE6, 0xF7, 0xFE, 0x02)
+    a.db(0xC0)                              # RET NZ: unrelated scene
     a.db(
         0xCD,
         STAGE1_HAZARD_ROOM12_WALL_REPAIR_ADDR & 0xFF,
@@ -4222,7 +9476,7 @@ def build_stage1_hazard_bank1_neutral_art(rom: bytes) -> bytes:
 
 
 def build_stage1_hazard_room_dispatcher() -> bytes:
-    """Normalize both fixed-mapper stack contracts, then scan every copy.
+    """Normalize both Stage-1 completed-copy stack contracts, then scan.
 
     The two completed-copy routes reach this selector with different stack
     ownership. Bit 7 of B identifies the route whose synthetic return must be
@@ -4230,6 +9484,11 @@ def build_stage1_hazard_room_dispatcher() -> bytes:
     enters immediately after the helper's POP. A later Gargoyle cache replaced
     this distinction and corrupted bank-1 art/spike semantics after miniboss
     and low-health transitions.
+
+    The fixed-bank pure-copy gate admits only Stage 1 and its demo/miniboss
+    alias into bank 14, so this banked entry no longer needs to inspect arena
+    scenes or rewrite a synthetic return. Boss/arena atomic publications map
+    bank 13 directly from their separate fixed stub.
     """
     code = bytes([
         0xCB, 0x78,                         # BIT 7,B: helper owns frame?
@@ -4241,15 +9500,15 @@ def build_stage1_hazard_room_dispatcher() -> bytes:
         (STAGE1_HAZARD_ROW_HELPER_ADDR + 1) & 0xFF,
         (STAGE1_HAZARD_ROW_HELPER_ADDR + 1) >> 8,
     ])
-    assert len(code) <= 27
-    return code + bytes(27 - len(code))
+    assert len(code) == 9
+    return code
 
 
 def build_stage1_atomic_setup() -> bytes:
-    """Admit only Timer/audio while the packed map source is live."""
+    """Retain the exact destination and admit Timer while source is live."""
     code = bytes([
-        0x78,                               # A = B post-copy route token
-        0xE0, STAGE1_ATOMIC_ROUTE_HRAM,     # retain across atomic B/C use
+        0x7C,                               # A = native destination H
+        0xE0, ATOMIC_DEST_H_HRAM,           # retain across compile's H use
         0xF3,                               # DI before changing IE
         0xF0, 0xFF,                         # A = caller's IE
         0xEA, STAGE1_IE_CACHE_ADDR & 0xFF,
@@ -4263,18 +9522,38 @@ def build_stage1_atomic_setup() -> bytes:
 
 
 def build_stage1_atomic_wrap() -> bytes:
-    """Restore the stock interrupt-enabled return contract."""
+    """Map later dungeons/arenas, then restore IE and Ted's AF/IME contract.
+
+    The inline atomic completion reloads D880 immediately before this call.
+    The fixed selector returns for title/Stage 1 below $03 and maps later
+    dungeons plus boss arenas directly to bank 13, preventing any transient
+    bank-14 entry while retaining their post-copy completion contract.
+    """
     code = bytes([
-        0xCD,                               # gate tests cached route itself
+        0xFA, 0x80, 0xD8,                   # exact scene, not stale A=$01
+        0xCD,
         STAGE1_HAZARD_BANK0_MAP_ADDR & 0xFF,
         STAGE1_HAZARD_BANK0_MAP_ADDR >> 8,
-        0xF3,
+        0xC3,
+        STAGE1_ATOMIC_WRAP_TAIL_ADDR & 0xFF,
+        STAGE1_ATOMIC_WRAP_TAIL_ADDR >> 8,
+        0x00, 0x00, 0x00,                  # fixed-cave padding, unreachable
+    ])
+    assert len(code) == 12
+    return code
+
+
+def build_stage1_atomic_wrap_tail() -> bytes:
+    """Restore the exact pre-existing interrupt/AF completion contract."""
+    code = bytes([
         0xFA, STAGE1_IE_CACHE_ADDR & 0xFF,
         STAGE1_IE_CACHE_ADDR >> 8,
         0xE0, 0xFF,                         # restore caller's IE
-        0xFB, 0xC9,                         # EI; RET (delayed IME contract)
+        0x3E, 0x01,
+        0xBF,                               # A=$01, F=$C0
+        0xD9,                               # RETI; IME active immediately
     ])
-    assert len(code) == 11
+    assert len(code) == 9
     return code
 
 
@@ -4299,34 +9578,803 @@ def build_stage1_atomic_attr_stack_vector() -> bytes:
 
 
 def build_arena_atomic_attr_stack_helper() -> bytes:
-    """Restore Shalamar's stock checker cells before atomic publication.
+    """Compact WRAM dispatch to Ted or Shalamar's bounded sanitizer."""
+    a = _Asm()
+    # Never infer an arena from FFBA alone.  Cold Stage 1 legitimately carries
+    # the Ted selector value ($04) while publishing its first room, so that
+    # shortcut routed the live dungeon through the Ted sanitizer and left the
+    # initial map unpublished.  Ambiguous pre-scene groups now retain their
+    # native three source IDs; only persistent arena scenes may sanitize.
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x10)
+    a.jr(0x28, "ted")
+    a.db(0xFE, 0x0C)
+    a.jr(0x20, "native")
+    # E=$A0 selects the three possible page-aligned Shalamar checkpoints;
+    # the banked main rejects D!=$C1 before doing the whole-map sweep.
+    a.db(0x7B, 0xFE, 0xA0)
+    a.jr(0x20, "native")
+    # Fall through to the shared bank-13 mapper.
+    a.label("ted")
+    # Ted needs the bounded per-group geometry classifier.  Returning here
+    # neutralized only its attributes and left rejected staging tile IDs in
+    # the published map, producing obvious gray boss fragments at the arena
+    # edges.
+    a.label("bank13")
+    a.db(0x3E, 0x0D, 0xC3,
+         LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR & 0xFF,
+         LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR >> 8)
+    a.label("native")
+    # The copier normally has bank 1 selected. $61B0 is bank-13 ROM, not a
+    # fixed address: the former direct JP landed in bank-1 data and stranded
+    # cold Stage 1 before its first live map. This helper executes from WRAM,
+    # so switch around the materializer while preserving BC/DE/HL and stack.
+    a.db(0x3E, 0x0D, 0xCD, 0x61, 0x00)
+    a.db(0xCD, TED_TILE_COMMIT_RUNTIME_ADDR & 0xFF,
+         TED_TILE_COMMIT_RUNTIME_ADDR >> 8)
+    a.db(0x3E, 0x01, 0xCD, 0x61, 0x00, 0xC9)
+    code = a.finish()
+    assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    return code
 
-    The packed source at C1A0 is also animation scratch. Shalamar's rows 12+
-    and the right edge of rows 8..11 can contain future-frame tile IDs when
-    the copy begins. Stock timing never presents them as terrain, but DX's
-    atomic publisher can otherwise capture them. Replace only those proven
-    non-body groups with the arena's native 0/1 checker pattern *before* the
-    caller looks up attributes, keeping tile and palette planes coherent.
+
+def build_ted_source_sanitizer_fragments() -> dict[int, bytes]:
+    """Neutralize only the three Ted cells being published this group.
+
+    Ted's C1A0 workspace contains future shifted poses.  Sweeping all 24x24
+    cells freezes its native state machine.  The atomic copier already visits
+    every visible group, so classify those three source cells against their
+    physical destination and leave every not-yet-published staging cell alone.
+    """
+    main = _Asm()
+    main.db(
+        0xC5, 0xD5, 0xE5,
+        0x7A, 0xFE, 0xC1,
+    )
+    main.jr(0x20, "ready")
+    main.db(0x7B, 0xFE, 0xA0)
+    main.jr(0x20, "ready")
+    main.db(0xAF, 0xE0, TED_SANITIZER_EXPECTED_HRAM)
+    main.label("ready")
+    main.db(0x06, 0x03)
+    main.label("cell")
+    main.db(0xCD, TED_SANITIZER_CLASSIFY_ADDR & 0xFF,
+            TED_SANITIZER_CLASSIFY_ADDR >> 8, 0x13, 0x23, 0x05)
+    main.jr(0x20, "cell")
+    main.db(0xE1, 0xD1, 0xC1)
+    # This is the sole post-stack visit. The first three cells were classified
+    # before the whole source sweep, so neutralize their pending attrs; every
+    # later group observes the already-sanitized source.
+    main.db(0xF8, 0x05, 0xAF, 0x22, 0x23, 0x22, 0x23, 0x77)
+    main.db(0x3E, 0x01, 0xC9)
+
+    classify = _Asm()
+    classify.db(0x1A, 0xFE, 0x02, 0xD8, 0xFE, 0x77)
+    classify.jr(0x38, "body_tile")
+    classify.db(0xCD, TED_SANITIZER_SPECIAL_ADDR & 0xFF,
+                TED_SANITIZER_SPECIAL_ADDR >> 8, 0xC0)
+    classify.label("body_tile")
+    classify.db(0xF0, TED_SANITIZER_EXPECTED_HRAM, 0xB7)
+    classify.db(0xC2, TED_SANITIZER_ACTIVE_ADDR & 0xFF,
+                TED_SANITIZER_ACTIVE_ADDR >> 8)
+    classify.db(0xC3, TED_SANITIZER_ANCHOR_ADDR & 0xFF,
+                TED_SANITIZER_ANCHOR_ADDR >> 8)
+
+    anchor = _Asm()
+    anchor.db(0x1A, 0xFE, 0x02)
+    anchor.db(0xC2, TED_SANITIZER_CLEAR_ADDR & 0xFF,
+              TED_SANITIZER_CLEAR_ADDR >> 8)
+    anchor.db(0xCD, TED_SANITIZER_CROWN_ADDR & 0xFF,
+              TED_SANITIZER_CROWN_ADDR >> 8)
+    anchor.db(0xC2, TED_SANITIZER_CLEAR_ADDR & 0xFF,
+              TED_SANITIZER_CLEAR_ADDR >> 8)
+    anchor.db(0xC3, TED_SANITIZER_ANCHOR_PACK_ADDR & 0xFF,
+              TED_SANITIZER_ANCHOR_PACK_ADDR >> 8)
+
+    anchor_pack = _Asm()
+    # Pack physical anchor row/4 and column/4 into six bits, plus one.
+    anchor_pack.db(0x7C, 0xE6, 0x03, 0x07, 0x07, 0x07, 0x4F)
+    anchor_pack.db(0x7D, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0xE6, 0x07, 0x81)
+    anchor_pack.db(0xE6, 0x1C, 0x07, 0x4F)
+    anchor_pack.db(0x7D, 0x0F, 0x0F, 0xE6, 0x07, 0xB1, 0x3C)
+    anchor_pack.db(0xE0, TED_SANITIZER_EXPECTED_HRAM, 0xC9)
+
+    crown = _Asm()
+    crown.db(0xE5, 0x62, 0x6B, 0x23)
+    # Every native pose retains the leading $02,$03 pair. The late wrap pose
+    # deliberately replaces $04-$06 with $24,$25 and another partial crown;
+    # requiring all five numbered cells loses its anchor and publishes a
+    # composite map near frame 900.
+    for expected in (3,):
+        crown.db(0x2A, 0xFE, expected)
+        crown.jr(0x20, "bad")
+    crown.db(0xE1, 0xAF, 0xC9)
+    crown.label("bad")
+    crown.db(0xE1, 0x3E, 0x01, 0xB7, 0xC9)
+
+    active = _Asm()
+    active.db(0xC5, 0xD5, 0xE5, 0x45)
+    active.db(0xF0, TED_SANITIZER_EXPECTED_HRAM, 0x3D, 0x4F)
+    # D = current physical row = ((H&3)*8) | (L>>5).
+    active.db(0x7C, 0xE6, 0x03, 0x07, 0x07, 0x07, 0x57)
+    active.db(0x7D, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0xE6, 0x07, 0x82, 0x57)
+    active.db(0xC3, TED_SANITIZER_GEOMETRY_CONT_ADDR & 0xFF,
+              TED_SANITIZER_GEOMETRY_CONT_ADDR >> 8)
+
+    geometry_cont = _Asm()
+    # Relative row selects the two-byte [min+4,max+4) silhouette span.
+    geometry_cont.db(0x79, 0xE6, 0x38, 0x0F, 0x5F)
+    geometry_cont.db(0x7A, 0x93, 0xE6, 0x1F, 0xFE, 0x0E)
+    geometry_cont.db(0xD2, (TED_SANITIZER_COMPARE_ADDR + 24) & 0xFF,
+                     (TED_SANITIZER_COMPARE_ADDR + 24) >> 8)
+    geometry_cont.db(0x87, 0x5F, 0x16, 0x00)
+    geometry_cont.db(0x21, TED_SANITIZER_ROW_TABLE_ADDR & 0xFF,
+                     TED_SANITIZER_ROW_TABLE_ADDR >> 8, 0x19)
+    geometry_cont.db(0xC3, TED_SANITIZER_COMPARE_ADDR & 0xFF,
+                     TED_SANITIZER_COMPARE_ADDR >> 8)
+
+    # The crown fragment has six spare bytes after its return; continue the
+    # geometry comparison in a dedicated cave instead of crossing fragments.
+    compare = _Asm()
+    compare.db(0x79, 0xE6, 0x07, 0x07, 0x07, 0x57)
+    compare.db(0x78, 0xE6, 0x1F, 0x92, 0xC6, 0x04, 0xE6, 0x1F, 0xBE)
+    compare.jr(0x38, "outside")
+    compare.db(0x23, 0xBE)
+    compare.jr(0x30, "outside")
+    compare.db(0xE1, 0xD1, 0xC1, 0xC9)
+    compare.label("outside")
+    compare.db(0xE1, 0xD1, 0xC1, 0xC3,
+               TED_SANITIZER_CLEAR_ADDR & 0xFF,
+               TED_SANITIZER_CLEAR_ADDR >> 8)
+
+    special = _Asm()
+    special.db(0xFE, 0x7B)
+    special.jr(0x38, "not_sparse")
+    special.db(0xFE, 0x87)
+    special.jr(0x30, "not_sparse")
+    special.db(0xAF, 0xC9)  # Z: all and only $7B-$86
+    special.label("not_sparse")
+    special.db(0x3E, 0x01, 0xB7, 0xC9)
+    special.label("outside")
+    special.db(0xE1, 0xD1, 0xC1, 0xC3,
+               TED_SANITIZER_CLEAR_ADDR & 0xFF,
+               TED_SANITIZER_CLEAR_ADDR >> 8)
+
+    clear = _Asm()
+    clear.db(0x7D, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0xAD, 0xE6, 0x01, 0x12, 0xC9)
+
+    row_table = bytes([
+        4, 9, 2, 10, 2, 10, 2, 10, 2, 10, 2, 11, 1, 11,
+        0, 11, 0, 11, 0, 11, 1, 11, 2, 10, 4, 10, 5, 9,
+    ])
+
+    fragments = {
+        TED_SANITIZER_MAIN_ADDR: main.finish(),
+        TED_SANITIZER_CLASSIFY_ADDR: classify.finish(),
+        TED_SANITIZER_CROWN_ADDR: crown.finish(),
+        TED_SANITIZER_ACTIVE_ADDR: active.finish(),
+        TED_SANITIZER_SPECIAL_ADDR: special.finish(),
+        TED_SANITIZER_CLEAR_ADDR: clear.finish(),
+        TED_SANITIZER_ROW_TABLE_ADDR: row_table,
+        TED_SANITIZER_ANCHOR_ADDR: anchor.finish(),
+        TED_SANITIZER_GEOMETRY_CONT_ADDR: geometry_cont.finish(),
+        TED_SANITIZER_COMPARE_ADDR: compare.finish(),
+        TED_SANITIZER_ANCHOR_PACK_ADDR: anchor_pack.finish(),
+    }
+    for address, code in fragments.items():
+        assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE, (hex(address), len(code))
+    return fragments
+
+
+def build_ted_group_sanitizer_wram() -> bytes:
+    """Repair Ted's three stacked attributes without mutating source art.
+
+    One packed byte records crown position at four-cell precision.  Every
+    numbered body tile outside the 16x16 crown-relative publication envelope
+    becomes the native checker before its LUT lookup.  Future C1A0 cells are
+    untouched until their own three-cell group is actually published.
     """
     a = _Asm()
-    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x0C, 0xC0)
-    # H&3 is the eight-row block within either physical tilemap. Block zero
-    # is entirely body/background. Blocks two and three are entirely staging.
-    # In block one, bit 7 selects rows 12..15 and bit 4 selects only the
-    # three-wide groups starting at columns 18/21 in rows 8..11.
-    a.db(0x7C, 0xE6, 0x03, 0xC8, 0x3D)
+    call_operands: list[tuple[int, str]] = []
+
+    def call(label: str) -> None:
+        a.db(0xCD, 0x00, 0x00)
+        call_operands.append((len(a.code) - 2, label))
+
+    a.label("entry")
+    # Preserve caller BC/DE.  BC becomes the physical destination while HL
+    # walks the three attribute A bytes already stacked by the atomic copier.
+    a.db(0x44, 0x4D, 0xD5)                 # LD B,H / LD C,L / PUSH DE
+    # Keep the last complete crown until the next one is encountered. Ted's
+    # alternating physical map can wrap such that valid body rows are copied
+    # before the new crown group. Clearing the anchor at map column zero made
+    # those rows deterministically disappear, which looked like teleporting.
+    # The bank mapper's CALL return occupies two bytes above our entry SP;
+    # after saving BC/DE, SP+9 is the first stacked attribute A byte. SP+7
+    # would overwrite the RST return high byte and jump into $00xx on RET.
+    a.db(0xF8, 0x07)
+    a.db(0xAF, 0xE0, TED_SANITIZER_TILE_MASK_HRAM)
+    a.db(0x3E, 0x03, 0xE0, TED_SANITIZER_COUNTER_HRAM)
+    a.label("cell")
+    a.db(0x1A, 0xFE, 0x02)
+    a.jr(0x38, "next")
+    # Native floor IDs overlap the old broad numbered-body range. Always
+    # materialize them from physical destination parity; allowing a shifted
+    # source-floor cell through the body envelope breaks the $77-$7A lattice.
+    a.db(0xFE, 0x77)
+    a.jr(0x38, "body_tile")
+    a.db(0xFE, 0x7B)
+    a.jr(0x38, "clear")
+    # Numbered body plus the compact $7B-$86 animation-edge neighborhood.
+    # The intervening neutral IDs are still boss-local staging in scene $10.
+    a.db(0xFE, 0x87)
+    a.jr(0x30, "next")
+    a.db(0xFE, 0x7B)
+    a.jr(0x28, "sparse_tile")
+    a.db(0xFE, 0x7D)
+    a.jr(0x28, "sparse_tile")
+    a.db(0xFE, 0x80)
+    a.jr(0x28, "sparse_tile")
+    a.db(0xFE, 0x82)
+    a.jr(0x38, "next")
+    a.label("sparse_tile")
+    # Sparse $7B-$86 cells are Ted's native independently animated tendrils.
+    # Their measured corpus reaches rows -16..15; the former compact envelope
+    # clipped valid extension phases down to zero or one cell. Numbered torso
+    # containment is handled separately below, so retaining sparse cells does
+    # not admit the detached numbered-body copies this sanitizer targets.
+    a.jr(0x18, "next")
+    a.label("body_tile")
+    # A9=1 is the established active anchor and retains the exact fast-path
+    # cost. A9=2 means a row-zero staging crown is active; only that short-lived
+    # state scans for the later completed crown. A9=$53/$57 is a deferred map
+    # token emitted by the semantic boundary.
+    a.db(0xF0, TED_SANITIZER_EXPECTED_HRAM, 0x3D)
+    a.jr(0x28, "classify")
+    a.db(0x3C)
+    a.jr(0x28, "no_anchor")
+    a.db(0x3D, 0xFE, 0x40)                 # restored state-1; tokens are >=40
+    a.jr(0x30, "map_token")
+    a.db(0xE0, TED_SANITIZER_EXPECTED_HRAM)  # bounded crown-scan countdown
+    a.jr(0x18, "scan_crown")
+    a.label("map_token")
+    a.db(0x3C)                              # restore $53/$57 map token
+    a.db(0xCD, TED_MAP_ANCHOR_ACTIVATE_ROM_ADDR & 0xFF,
+         TED_MAP_ANCHOR_ACTIVATE_ROM_ADDR >> 8)
+    a.jr(0x20, "classify")
+    a.label("no_anchor")
+    a.db(0x1A, 0xFE, 0x02)
+    a.jr(0x20, "clear")                    # only tile $02 can be a crown
+    a.db(0xD5)
+    a.db(0xCD, TED_CROWN_PAIR_HELPER_ADDR & 0xFF,
+         TED_CROWN_PAIR_HELPER_ADDR >> 8)
+    a.db(0xD1)
     a.jr(0x20, "clear")
-    a.db(0x7D, 0xE6, 0x90, 0xC8)           # row>=12 or right-edge group
+    call("pack_anchor")
+    a.jr(0x18, "classify")
+    a.label("scan_crown")
+    a.db(0x1A, 0xFE, 0x02)
+    a.jr(0x20, "classify")                 # avoid helper cost for body bulk
+    a.db(0xCD, TED_SCAN_CROWN_HELPER_ROM_ADDR & 0xFF,
+         TED_SCAN_CROWN_HELPER_ROM_ADDR >> 8)
+    a.jr(0x30, "classify")                # NC: no crown or first staging crown
+    call("pack_anchor")
+    a.db(0x3E, 0x01, 0xE0, TED_SANITIZER_EXPECTED_HRAM)
+    a.label("classify")
+    a.db(0xE5)
+    call("inside_envelope")
+    a.db(0xE1)
+    a.jr(0x28, "next")                    # Z = visible body envelope
     a.label("clear")
-    # checker = destination row parity XOR destination column parity
-    a.db(
-        0x7D, 0x07, 0x07, 0x07, 0xAD, 0xE6, 0x01,
-        0x12, 0x13, 0xEE, 0x01,
-        0x12, 0x13, 0xEE, 0x01,
-        0x12, 0x1B, 0x1B, 0xC9,
+    # Reject scratch geometry and its stacked attribute atomically. Anchor
+    # correctness is essential here: a four-column error turned this intended
+    # containment mask into destructive clipping of the native boss.
+    a.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0xF6, 0x01,
+         0xE0, TED_SANITIZER_TILE_MASK_HRAM)
+    a.db(0xCD, TED_CHECKER_ATTR_HELPER_ADDR & 0xFF,
+         TED_CHECKER_ATTR_HELPER_ADDR >> 8)
+    a.label("next")
+    # Three rotations produce bits 7/6/5 in source order for the writer.
+    a.db(0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0x0F,
+         0xE0, TED_SANITIZER_TILE_MASK_HRAM)
+    a.db(0x13, 0x03, 0x23, 0x23)
+    a.db(0xF0, TED_SANITIZER_COUNTER_HRAM, 0x3D,
+         0xE0, TED_SANITIZER_COUNTER_HRAM)
+    a.jr(0x20, "cell")
+    a.db(0xD1, 0x0B, 0x0B, 0x0B, 0x60, 0x69)
+    a.db(0xC3, TED_REGISTER_MATERIALIZER_FRONT_ADDR & 0xFF,
+         TED_REGISTER_MATERIALIZER_FRONT_ADDR >> 8)
+
+    a.label("pack_anchor")
+    # BC is the physical destination of the canonical crown cell. Derive its
+    # row directly; the former DCE0 phase substitution made an early row-zero
+    # staging crown sticky and was the source of Ted's partial disappearance.
+    a.db(0xD5, 0x79, 0xCB, 0x37, 0x0F, 0xE6, 0x07, 0x57)
+    a.db(0x78, 0xE6, 0x03, 0x07, 0x07, 0x07, 0xB2)
+    a.db(0x57)
+    a.db(0xEA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+         TED_SANITIZER_ANCHOR_ROW_ADDR >> 8)
+    # The first numbered crown cell already lands at the native physical
+    # origin. The former nonzero-row +4 correction shifted a real (4,12)
+    # crown to (4,16), cutting roughly half of every ordinary pose.
+    a.db(0x79, 0xE6, 0x1F, 0x5F, 0x7B)
+    a.db(0xEA, TED_SANITIZER_ANCHOR_COL_ADDR & 0xFF,
+         TED_SANITIZER_ANCHOR_COL_ADDR >> 8)
+    if _os.environ.get("PENTA_TED_CACHE_CROWN", "1") == "1":
+        # Persist the completed crown in the cache owned by BC's physical map.
+        # This is crown-only work; the three-cell hot path and ordinary body
+        # cells retain their established timing.
+        a.db(0x78, 0xE6, 0x04, 0x0F)
+        a.db(0xC6, TED_SANITIZER_ANCHOR_9800_ROW_ADDR & 0xFF,
+             0x5F, 0x16, TED_SANITIZER_ANCHOR_9800_ROW_ADDR >> 8)
+        a.db(0xFA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+             TED_SANITIZER_ANCHOR_ROW_ADDR >> 8, 0x12, 0x13)
+        a.db(0xFA, TED_SANITIZER_ANCHOR_COL_ADDR & 0xFF,
+             TED_SANITIZER_ANCHOR_COL_ADDR >> 8, 0x12)
+    # The first canonical crown arms a bounded scan for one later completed
+    # crown in the same publication. The scan caller switches this to state 1
+    # immediately after that second crown is packed.
+    a.db(0xD1, 0x3E, 0x08,
+         0xE0, TED_SANITIZER_EXPECTED_HRAM, 0xC9)
+
+    a.label("inside_envelope")
+    a.db(0xD5)
+    # A = crown-relative physical row modulo 32.
+    a.db(0x79, 0xCB, 0x37, 0x0F, 0xE6, 0x07, 0x57)
+    a.db(0x78, 0xE6, 0x03, 0x07, 0x07, 0x07, 0xB2, 0x57)
+    a.db(0xFA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+         TED_SANITIZER_ANCHOR_ROW_ADDR >> 8, 0x5F)
+    a.db(0x7A, 0x93, 0xE6, 0x1F, 0xFE, 0x0E)
+    a.jr(0x30, "outside")
+    a.db(0x87, 0xC6, TED_ENVELOPE_ROW_TABLE_ROM_ADDR & 0xFF, 0x6F)
+    a.db(0x26, TED_ENVELOPE_ROW_TABLE_ROM_ADDR >> 8)
+    a.db(0x79, 0xE6, 0x1F, 0x57)
+    a.db(0xFA, TED_SANITIZER_ANCHOR_COL_ADDR & 0xFF,
+         TED_SANITIZER_ANCHOR_COL_ADDR >> 8, 0x5F)
+    a.db(0x7A, 0x93, 0xC6, 0x04, 0xE6, 0x1F)
+    a.db(0xC3, TED_ENVELOPE_COMPARE_ROM_ADDR & 0xFF,
+         TED_ENVELOPE_COMPARE_ROM_ADDR >> 8)
+    a.label("outside")
+    a.db(0xD1, 0xF6, 0x01, 0xC9)
+
+    code = bytearray(a.finish())
+    for operand, label in call_operands:
+        target = TED_SANITIZER_RUNTIME_ADDR + a.labels[label]
+        code[operand] = target & 0xFF
+        code[operand + 1] = target >> 8
+    # Keep the executable payload compact.  The installer's final fragment
+    # writes the readiness sentinel at C5FF separately; padding the payload
+    # all the way to that byte consumed two scarce ROM resource records and
+    # added pointless cold-entry copy time.
+    runtime_size = 257
+    assert len(code) <= runtime_size, (len(code), runtime_size)
+    code.extend(bytes(runtime_size - len(code)))
+    assert TED_SANITIZER_RUNTIME_ADDR + len(code) <= WRAM_BG_TABLE, (
+        len(code), hex(TED_SANITIZER_RUNTIME_ADDR + len(code))
     )
+    return bytes(code)
+
+
+def build_ted_checker_attr_helper() -> bytes:
+    """Write the BG6/BG7 material for one rejected checker destination.
+
+    BC is the physical map address and HL points at that cell's stacked
+    attribute.  The native $77-$7A checker alternates on both row and column,
+    so its palette is 6 + (address bit 5 XOR address bit 0).
+    """
+    code = bytes([
+        0x79,                               # LD A,C
+        0x07, 0x07, 0x07,                  # map row parity bit 5 -> bit 0
+        0xA9, 0xE6, 0x01,                  # XOR C; AND 1
+        0xC6, 0x06, 0x77, 0xC9,            # ADD 6; LD [HL],A; RET
+    ])
+    assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    return code
+
+
+def build_ted_crown_pair_helper() -> tuple[bytes, bytes]:
+    """Return Z only for the native leading $02,$03,$04 crown prefix."""
+    front = bytes([
+        0x1A, 0xFE, 0x02, 0xC0,            # current source cell is $02
+        0x13, 0x1A,                         # inspect following source cell
+        0xC3, TED_CROWN_PAIR_HELPER_CONT_ADDR & 0xFF,
+        TED_CROWN_PAIR_HELPER_CONT_ADDR >> 8,
+    ])
+    continuation = bytes([
+        0xFE, 0x03, 0xC0,                  # second cell is $03
+        0x13, 0x1A, 0xFE, 0x04, 0xC9,      # third cell is $04
+    ])
+    assert len(front) <= 9 and len(continuation) <= 9
+    return front, continuation
+
+
+def build_ted_inside_envelope_rom() -> tuple[bytes, bytes]:
+    """Return the fixed-ROM span comparator and exact row table."""
+    code = bytes([
+        0xBE, 0x38, 0x07,
+        0x23, 0xBE, 0x30, 0x03,
+        0xD1, 0xAF, 0xC9,
+        0xD1, 0x3C, 0xC9,
+    ])
+    table = bytes([
+        4, 9, 2, 10, 2, 10, 2, 10, 2, 10, 2, 11, 1, 11,
+        0, 11, 0, 11, 0, 11, 1, 11, 2, 10, 4, 10, 5, 9,
+    ])
+    return code, table
+
+
+def build_ted_map_anchor_activate_rom() -> bytes:
+    """Resolve a deferred $53/$57 map token to its cached active crown."""
+    a = _Asm()
+    a.db(
+        0xE5,
+        0xE6, 0x04, 0x0F,
+        0xC6, TED_SANITIZER_ANCHOR_9800_ROW_ADDR & 0xFF,
+        0x6F, 0x26, TED_SANITIZER_ANCHOR_9800_ROW_ADDR >> 8,
+        0x2A,
+        0xEA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_ROW_ADDR >> 8,
+        0x3C,
+    )
+    a.jr(0x28, "invalid")                 # cached row $FF has no crown yet
+    a.db(
+        0x7E,
+        0xEA, TED_SANITIZER_ANCHOR_COL_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_COL_ADDR >> 8,
+        0xCD, TED_ANCHOR_STATE_HELPER_ROM_ADDR & 0xFF,
+        TED_ANCHOR_STATE_HELPER_ROM_ADDR >> 8,
+        0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0xB7, 0xE1, 0xC9,
+    )
+    a.label("invalid")
+    a.db(0xAF, 0xE0, TED_SANITIZER_EXPECTED_HRAM, 0xE1, 0xC9)
     code = a.finish()
-    assert len(code) == 36
+    assert (
+        TED_MAP_ANCHOR_ACTIVATE_ROM_ADDR + len(code)
+        <= TED_ANCHOR_STATE_HELPER_ROM_ADDR
+    )
+    return code
+
+
+def build_ted_map_anchor_activate_tail_rom() -> bytes:
+    """Retired alias retained for diagnostics that import the builder."""
+    return b""
+
+
+def build_ted_anchor_state_helper_rom() -> bytes:
+    """Choose first-crown refresh or row-zero skip-first refresh state."""
+    a = _Asm()
+    a.db(0xFA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+         TED_SANITIZER_ANCHOR_ROW_ADDR >> 8, 0xB7)
+    a.jr(0x28, "row_zero")
+    a.db(0x3E, 0x08, 0xC9)                 # accept first canonical crown
+    a.label("row_zero")
+    a.db(0x3E, 0x3F, 0xC9)                 # skip staging crown; accept second
+    code = a.finish()
+    assert len(code) <= 21
+    return code
+
+
+def build_ted_scan_crown_helper_rom() -> bytes:
+    """Skip a publication's first staging crown; accept its second crown."""
+    a = _Asm()
+    a.db(0xD5)
+    a.db(0xCD, TED_CROWN_PAIR_HELPER_ADDR & 0xFF,
+         TED_CROWN_PAIR_HELPER_ADDR >> 8)
+    a.db(0xD1)
+    a.jr(0x20, "none")
+    a.db(0xF0, TED_SANITIZER_EXPECTED_HRAM, 0xFE, 0x30)
+    a.jr(0x38, "accept")                   # countdown < $30: second crown
+    a.db(0x3E, 0x08, 0xE0, TED_SANITIZER_EXPECTED_HRAM)
+    a.label("none")
+    a.db(0xAF, 0xC9)                       # NC: ignore/no crown
+    a.label("accept")
+    a.db(0x37, 0xC9)                       # C: caller packs completed crown
+    code = a.finish()
+    assert TED_SCAN_CROWN_HELPER_ROM_ADDR + len(code) <= 0x7700
+    return code
+
+
+def build_ted_anchor_self_patch_init() -> bytes:
+    """Initialize dual anchors, then restore the byte-exact hot entry."""
+    code = bytes([
+        0x3E, 0xFF,
+        0xEA, TED_SANITIZER_ANCHOR_9800_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_9800_ROW_ADDR >> 8,
+        0xEA, TED_SANITIZER_ANCHOR_9C00_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_9C00_ROW_ADDR >> 8,
+        0xEA, TED_SANITIZER_ANCHOR_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_ROW_ADDR >> 8,
+        0x3C, 0xE0, TED_SANITIZER_EXPECTED_HRAM,
+        0x21, TED_SANITIZER_RUNTIME_ADDR & 0xFF,
+        TED_SANITIZER_RUNTIME_ADDR >> 8,
+        0x3E, 0x44, 0x22,                  # LD B,H
+        0x3E, 0x4D, 0x22,                  # LD C,L
+        0x3E, 0xD5, 0x77,                  # PUSH DE
+        0xC3, TED_SANITIZER_RUNTIME_ADDR & 0xFF,
+        TED_SANITIZER_RUNTIME_ADDR >> 8,
+    ])
+    assert (
+        TED_SANITIZER_ANCHOR_INIT_RUNTIME_ADDR + len(code)
+        <= TED_SANITIZER_RUNTIME_SENTINEL_ADDR
+    )
+    return code
+
+
+def build_native_tile_materializer() -> bytes:
+    """Return native source IDs as B/C/FFA8 from bank-13 ROM."""
+    return bytes([
+        0x1A, 0x13, 0x47,
+        0x1A, 0x13, 0x4F,
+        0x1A, 0x13, 0xE0, TED_SANITIZER_COUNTER_HRAM,
+        0x3E, 0x01, 0xC9,
+    ])
+
+
+def build_ted_register_materializer() -> tuple[bytes, bytes, bytes]:
+    """Return Ted's three final tile IDs as B/C/FFA8 outside HBlank."""
+    front = bytes([
+        0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0x4F,
+        0x7D, 0xE6, 0x20, 0xCB, 0x37, 0xC6, 0x77, 0x47,
+        0xCB, 0x45, 0x28, 0x01, 0x04,
+        0xCB, 0x69, 0x1A, 0x13, 0x28, 0x01, 0x78,
+        0xE0, TED_SANITIZER_TILE_MASK_HRAM,
+        0xCB, 0x45, 0x28, 0x03, 0x05, 0x18, 0x01, 0x04,
+        0xC3, TED_REGISTER_MATERIALIZER_TAIL_ADDR & 0xFF,
+        TED_REGISTER_MATERIALIZER_TAIL_ADDR >> 8,
+    ])
+    tail = bytes([
+        0xCB, 0x71, 0x1A, 0x13, 0x28, 0x01, 0x78,
+        0xE0, TED_SANITIZER_COUNTER_HRAM,
+        0xCB, 0x45, 0x28, 0x03, 0x04, 0x18, 0x01, 0x05,
+        0xC3, TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR & 0xFF,
+        TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR >> 8,
+    ])
+    tail_cont = bytes([
+        0xCB, 0x79,
+        0xF0, TED_SANITIZER_COUNTER_HRAM, 0x4F,
+        0x1A, 0x13, 0x28, 0x01, 0x78,
+        0xE0, TED_SANITIZER_COUNTER_HRAM,
+        0xF0, TED_SANITIZER_TILE_MASK_HRAM, 0x47,
+        0x3E, 0x01, 0xC9,
+    ])
+    assert len(front) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    assert len(tail) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    assert len(tail_cont) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    return front, tail, tail_cont
+
+
+def build_ted_group_sanitizer_installer() -> tuple[bytes, bytes, bytes, bytes]:
+    """Lazily copy the fragmented runtime into C500 at Ted's first group."""
+    runtime = build_ted_group_sanitizer_wram()
+    sources = (
+        TED_SANITIZER_MAIN_ADDR,
+        TED_SANITIZER_CLASSIFY_ADDR,
+        TED_SANITIZER_CROWN_ADDR,
+        TED_SANITIZER_ACTIVE_ADDR,
+        TED_SANITIZER_ROW_TABLE_ADDR,
+        TED_SANITIZER_GEOMETRY_CONT_ADDR,
+        TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR,
+        TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR,
+    )
+    copies = []
+    cursor = 0
+    for source in sources:
+        span = min(
+            (21 if source == TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR
+             else 20 if source == TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR
+             else ARENA_SANITIZER_FRAGMENT_SIZE),
+            len(runtime) - cursor,
+        )
+        chunk = runtime[cursor:cursor + span]
+        if source == TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR:
+            chunk = chunk.rstrip(b"\x00")
+        length = len(chunk)
+        live = len(chunk.rstrip(b"\x00"))
+        if source == TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR and 0 < live <= 3:
+            # At most three executable bytes cross this fragment boundary.
+            # Direct WRAM stores are smaller than setting up memcpy and leave
+            # room for deterministic dual-anchor initialization.
+            target = TED_SANITIZER_RUNTIME_ADDR + cursor
+            direct = bytearray([0x21, target & 0xFF, target >> 8])
+            for index, value in enumerate(chunk[:live]):
+                direct.extend((0x36, value))
+                if index + 1 < live:
+                    direct.append(0x23)
+            copies.append(bytes(direct))
+        else:
+            copies.append(bytes([
+                0x21, source & 0xFF, source >> 8,
+                0x11, (TED_SANITIZER_RUNTIME_ADDR + cursor) & 0xFF,
+                (TED_SANITIZER_RUNTIME_ADDR + cursor) >> 8,
+                0x01, length, 0x00,
+                0xCD, 0xB3, 0x09,
+            ]) if any(chunk) else b"")
+        cursor += span
+    assert cursor == len(runtime)
+    second_copy = copies[1]
+    assert len(second_copy) == 12 and second_copy[3] == 0x11
+    # memcpy leaves DE immediately after the first 36-byte destination chunk;
+    # the second chunk is contiguous, so omit its redundant LD DE,nn setup.
+    second_copy = second_copy[:3] + second_copy[6:]
+    cache_init = bytes([
+        0x3E, 0xFF,
+        0xEA, TED_SANITIZER_ANCHOR_9800_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_9800_ROW_ADDR >> 8,
+        0xEA, TED_SANITIZER_ANCHOR_9C00_ROW_ADDR & 0xFF,
+        TED_SANITIZER_ANCHOR_9C00_ROW_ADDR >> 8,
+    ]) if _os.environ.get("PENTA_TED_DUAL_MAP_ANCHOR", "1") == "1" else b""
+    front = bytes([0xC5, 0xD5, 0xE5]) + copies[0] + second_copy + cache_init + bytes([
+        0xC3, TED_SANITIZER_INSTALL_MIDDLE_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_MIDDLE_ADDR >> 8,
+    ])
+    middle = b"".join(copies[2:4]) + bytes([
+        0xC3, TED_SANITIZER_INSTALL_TAIL_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_TAIL_ADDR >> 8,
+    ])
+    tail = b"".join(copies[4:6]) + bytes([
+        0xC3, TED_SANITIZER_INSTALL_FINAL_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_FINAL_ADDR >> 8,
+    ])
+    final = b"".join(copies[6:8]) + bytes([
+        0x3E, TED_SANITIZER_RUNTIME_SENTINEL_VALUE,
+        0xEA, TED_SANITIZER_RUNTIME_SENTINEL_ADDR & 0xFF,
+        TED_SANITIZER_RUNTIME_SENTINEL_ADDR >> 8,
+        0xE1, 0xD1, 0xC1,
+        0xC3, TED_SANITIZER_RUNTIME_ADDR & 0xFF,
+        TED_SANITIZER_RUNTIME_ADDR >> 8,
+    ])
+    assert len(front) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    assert len(middle) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    assert len(tail) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    assert len(final) <= ARENA_SANITIZER_FRAGMENT_SIZE
+    return front, middle, tail, final
+
+
+def build_ted_writer_mirror_installer(
+    runtime: bytes, initializer_addr: int,
+) -> tuple[bytes, bytes, bytes, bytes]:
+    """Install the global writer mirror during the existing boot sequence."""
+    sources = (
+        TED_SANITIZER_MAIN_ADDR,
+        TED_SANITIZER_CLASSIFY_ADDR,
+        TED_SANITIZER_CROWN_ADDR,
+        TED_SANITIZER_ACTIVE_ADDR,
+        TED_SANITIZER_ROW_TABLE_ADDR,
+        TED_SANITIZER_GEOMETRY_CONT_ADDR,
+    )
+    capacities = (36, 36, 36, 36, 36, 36)
+    copies = []
+    cursor = 0
+    for source, capacity in zip(sources, capacities):
+        if cursor == len(runtime):
+            break
+        length = min(capacity, len(runtime) - cursor)
+        copies.append(bytes([
+            0x21, source & 0xFF, source >> 8,
+            0x11, (TED_WRITER_RUNTIME_ADDR + cursor) & 0xFF,
+            (TED_WRITER_RUNTIME_ADDR + cursor) >> 8,
+            0x01, length, 0x00, 0xCD, 0xB3, 0x09,
+        ]))
+        cursor += length
+    assert cursor == len(runtime)
+    front = bytes([0xC5, 0xD5, 0xE5]) + b"".join(copies[:2]) + bytes([
+        0xC3, TED_SANITIZER_INSTALL_MIDDLE_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_MIDDLE_ADDR >> 8,
+    ])
+    middle = b"".join(copies[2:4]) + bytes([
+        0xC3, TED_SANITIZER_INSTALL_TAIL_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_TAIL_ADDR >> 8,
+    ])
+    tail = b"".join(copies[4:6]) + bytes([
+        # Clear both switchable-WRAM attr planes before the first dirty
+        # publication.  This makes the eight GDMA padding columns per row
+        # deterministic even after reinstalling over a stale savestate.
+        0x3E, 0x02, 0xE0, 0x70,
+        0x21, 0x00, 0xD0,
+        0xC3, TED_SANITIZER_INSTALL_FINAL_ADDR & 0xFF,
+        TED_SANITIZER_INSTALL_FINAL_ADDR >> 8,
+    ])
+    final = b"".join(copies[6:]) + bytes([
+        0x01, 0x00, 0x03, 0xAF, 0xCD, 0xA8, 0x09,
+        0x3E, 0x03, 0xE0, 0x70,
+        0x21, 0x00, 0xD0, 0x01, 0x00, 0x03,
+        0xAF, 0xCD, 0xA8, 0x09,
+        # The stock fill preserves A=0, so INC A restores SVBK=1 one byte
+        # cheaper than LD A,1 and leaves room for the writer sentinel.
+        0x3C, 0xE0, 0x70,
+        0xCD, initializer_addr & 0xFF, initializer_addr >> 8,
+        0x3E, TED_WRITER_RUNTIME_SENTINEL_VALUE,
+        0xEA, TED_WRITER_RUNTIME_SENTINEL_ADDR & 0xFF,
+        TED_WRITER_RUNTIME_SENTINEL_ADDR >> 8,
+        0xE1, 0xD1, 0xC1, 0xC9,
+    ])
+    for payload in (front, middle, tail, final):
+        assert len(payload) <= ARENA_SANITIZER_FRAGMENT_SIZE, len(payload)
+    return front, middle, tail, final
+
+
+def build_shalamar_source_sanitizer_fragments() -> dict[int, bytes]:
+    """Apply Shalamar's established staging mask once per publication."""
+    main = _Asm()
+    main.db(0xC5, 0xD5, 0xE5, 0x21, 0xA0, 0xC1, 0x06, 0x18)
+    main.label("row")
+    main.db(0x0E, 0x18)
+    main.label("cell")
+    main.db(0xCD, SHALAMAR_SANITIZER_CELL_ADDR & 0xFF,
+            SHALAMAR_SANITIZER_CELL_ADDR >> 8, 0x23, 0x0D)
+    main.jr(0x20, "cell")
+    main.db(0x05)
+    main.jr(0x20, "row")
+    main.db(0xE1, 0xD1, 0xC1)
+    main.db(0xCD, TED_TILE_COMMIT_RUNTIME_ADDR & 0xFF,
+            TED_TILE_COMMIT_RUNTIME_ADDR >> 8, 0xC9)
+
+    cell = _Asm()
+    cell.db(0x78, 0xFE, 0x0D)
+    cell.jr(0x38, "clear")              # countdown B<=12 -> rows 12+
+    cell.db(0xFE, 0x11, 0xD0)            # B>=17 -> rows 0..7
+    cell.db(0x79, 0xFE, 0x07, 0xD0)      # rows 8..11, columns <18
+    cell.label("clear")
+    cell.db(0x78, 0xA9, 0xE6, 0x01, 0x77, 0xC9)
+    fragments = {
+        SHALAMAR_SANITIZER_MAIN_ADDR: main.finish(),
+        SHALAMAR_SANITIZER_CELL_ADDR: cell.finish(),
+    }
+    for address, code in fragments.items():
+        assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE, (hex(address), len(code))
+    return fragments
+
+
+def build_arena_sanitizer_banked_dispatch(
+    *, writer_mirror: bool = False,
+) -> bytes:
+    """Route later dungeons or Shalamar/Ted post-copy sanitizers.
+
+    The fixed atomic selector shares this bank-13 entry between later-stage
+    publications and boss arenas. Stages 2-7 already built their complete
+    attribute plane in the inline copier, so they only need the mapper's A=1
+    return contract. Arena scenes continue into their source sanitizer.
+    """
+    a = _Asm()
+    production_dispatch = (
+        _os.environ.get("PENTA_TED_EXPANDED_PAYLOAD", "0") != "1"
+    )
+    if production_dispatch:
+        a.db(0xFA, 0x80, 0xD8, 0xD6, 0x03, 0xFE, 0x06)
+        a.jr(0x38, "later_dungeon")
+    a.db(0xFA, 0x02, 0xC6, 0xFE, 0x04)
+    a.db(0xCA, SHALAMAR_SANITIZER_MAIN_ADDR & 0xFF,
+         SHALAMAR_SANITIZER_MAIN_ADDR >> 8)
+    if writer_mirror:
+        # ROM-resident tracking has no lazy common-WRAM installation.
+        a.db(0x3E, 0x01, 0xC9)
+        if production_dispatch:
+            a.label("later_dungeon")
+            a.db(0x3E, 0x01, 0xC9)
+        code = a.finish()
+        assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE
+        return code
+    sentinel_addr = (
+        TED_WRITER_RUNTIME_SENTINEL_ADDR
+        if writer_mirror else TED_SANITIZER_RUNTIME_SENTINEL_ADDR
+    )
+    sentinel_value = (
+        TED_WRITER_RUNTIME_SENTINEL_VALUE
+        if writer_mirror else TED_SANITIZER_RUNTIME_SENTINEL_VALUE
+    )
+    a.db(0xFA, sentinel_addr & 0xFF, sentinel_addr >> 8)
+    a.db(0xFE, sentinel_value)
+    a.jr(0x28, "ted_installed")
+    a.db(0xC3, TED_SANITIZER_INSTALL_ADDR & 0xFF,
+         TED_SANITIZER_INSTALL_ADDR >> 8)
+    a.label("ted_installed")
+    a.db(0xC3, TED_SANITIZER_RUNTIME_ADDR & 0xFF,
+         TED_SANITIZER_RUNTIME_ADDR >> 8)
+    if production_dispatch:
+        a.label("later_dungeon")
+        a.db(0x3E, 0x01, 0xC9)
+    code = a.finish()
+    assert len(code) <= ARENA_SANITIZER_FRAGMENT_SIZE
     return code
 
 
@@ -4535,9 +10583,9 @@ def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
 
 
 def build_lava_attr_decider_bank0() -> bytes:
-    """Load bank 13 and enter the shared mapper relocated at $0849."""
+    """Load bank 14 for exact Stage-1/demo pure-copy publications."""
     code = bytes([
-        0x3E, 0x0D,
+        0x3E, 0x0E,
         0xC3,
         LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR & 0xFF,
         LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR >> 8,
@@ -4591,8 +10639,8 @@ def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     The WRAM payload is initialized on the title path before gameplay. Arena
     setup later clears the DF51 bookkeeping sentinel immediately before its
     first map copy without clearing the payload itself, so that sentinel must
-    not suppress the arena's atomic decision. The five-byte slot is retained
-    as cycle-neutral padding to preserve the proven caller phase.
+    not suppress the arena's atomic decision. The four-byte delay slot is
+    retained to preserve the proven caller phase.
 
     The caller presets D=$FF. The readiness path preserves B because neutral
     scenes take the pure copier without reinitializing it; the WRAM helper
@@ -4602,7 +10650,7 @@ def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     # The title entry calls three bytes before the gameplay decision. This
     # exact 28T delay preserves A=0/Z and the established title copier phase.
     a.db(0x18, 0x00, 0xC9)
-    a.db(0x00, 0x00, 0x00, 0x00, 0x00)
+    a.db(0x18, 0x00, 0x00, 0x00)
     # Demo takes the fixed cycle-equal trampoline below. Live publishes FFBD
     # in B, calls the C-keyed decider through the now-retired RST $18 vector,
     # then returns with the decider's flags intact.
@@ -4622,7 +10670,7 @@ def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     )
     del atomic_row_addr                     # stock-order path needs no wrap
     code = a.finish()
-    assert len(code) == 22
+    assert len(code) == 21
     return code
 
 
@@ -4727,8 +10775,18 @@ def build_oam_boss_lut_service() -> bytes:
     a.jr(0x20, "fill_loop")
     a.db(0xC9)
     code = a.finish()
-    assert OAM_BOSS_LUT_SERVICE_ADDR + len(code) <= CUTSCENE_PALETTE_CONT_ADDR
+    assert OAM_BOSS_LUT_SERVICE_ADDR + len(code) <= CUTSCENE_PALETTE_CONT_ADDR, len(code)
     return code
+
+
+def build_oam_boss_lut_fade_gate() -> bytes:
+    """Throttle idle hash work and reject it during native fades."""
+    return bytes([
+        0xF0, 0xD4, 0xE6, 0x07, 0xC0,
+        0xF0, 0x47, 0xFE, 0xE4, 0xC0,
+        0xC3, OAM_BOSS_LUT_SERVICE_ADDR & 0xFF,
+        OAM_BOSS_LUT_SERVICE_ADDR >> 8,
+    ])
 
 
 def _emit_semantic_attr_merge(a: _Asm, *, mirror_alternate: bool) -> None:
@@ -4895,7 +10953,25 @@ def build_oam_wram_copy() -> bytes:
         == OAM_CENTRAL_EMITTER_ADDR
     )
     stage7 = build_lava_attr_stage7_runtime()
-    arena_geometry = build_arena_atomic_attr_stack_helper()
+    if _os.environ.get("PENTA_TED_NATIVE_POSTCOPY", "0") == "1" and (
+        _os.environ.get("PENTA_TED_CACHED_FULL_PLANE", "0") != "1"
+    ):
+        if (
+            _os.environ.get("PENTA_TED_HDMA_PIGGYBACK", "0") == "1"
+            or _os.environ.get("PENTA_TED_INWINDOW_GDMA", "0") == "1"
+        ):
+            arena_geometry = (
+                (
+                    build_ted_inwindow_gate()
+                    if _os.environ.get("PENTA_TED_INWINDOW_GDMA", "0") == "1"
+                    else build_ted_hdma_piggyback_gate()
+                )
+                + build_ted_hdma_piggyback_postcopy()
+            )
+        else:
+            arena_geometry = build_ted_native_postcopy_wrapper()
+    else:
+        arena_geometry = build_arena_atomic_attr_stack_helper()
     first_capacity = OAM_FREE_EMITTER_ADDR - LAVA_ATTR_STAGE7_SOURCE_A_ADDR
     first_length = min(first_capacity, len(stage7))
     second_length = len(stage7) - first_length
@@ -4939,10 +11015,8 @@ def build_oam_wram_copy() -> bytes:
     # DAFA-DAFF, so separate cache clears were redundant. Their reclaimed
     # bytes leave an exact seven-byte data tail for Stage 4's final material
     # fragment after this unconditional jump.
-    a.db(
-        0xC3, OAM_WRAM_COPY_TAIL_ADDR & 0xFF,
-        OAM_WRAM_COPY_TAIL_ADDR >> 8,
-    )
+    a.db(0xC3, OAM_WRAM_COPY_TAIL_ADDR & 0xFF,
+         OAM_WRAM_COPY_TAIL_ADDR >> 8)
     code = a.finish()
     assert len(code) == 54
     assert OAM_WRAM_COPY_ADDR + len(code) == STAGE4_MATERIAL_HELPER_TAIL_ADDR
@@ -4962,10 +11036,10 @@ def build_stage1_attr_row_helper() -> bytes:
 
 
 def build_stage1_attr_row_initializer() -> tuple[bytes, bytes]:
-    """Generate the row helper in private WRAM bank 3, then restore bank 1."""
+    """Generate the shared row helper in cache banks 2 and 3."""
     a = _Asm()
     a.db(
-        0x3E, 0x03, 0xE0, 0x70,
+        0x3E, 0x02, 0xE0, 0x70,
         0x21,
         STAGE1_ATTR_ROW_HELPER_WRAM_ADDR & 0xFF,
         STAGE1_ATTR_ROW_HELPER_WRAM_ADDR >> 8,
@@ -4983,7 +11057,18 @@ def build_stage1_attr_row_initializer() -> tuple[bytes, bytes]:
         STAGE1_ATTR_ROW_INIT_TAIL_ADDR >> 8,
     )
     front = a.finish()
+    # The initializer is entered by JP, not CALL, so it can switch banked
+    # WRAM without hiding a return address.  Build bank 2 first, repeat the
+    # same generator in bank 3, then restore the stack's bank 1.
+    opcode_group_address = STAGE1_ATTR_ROW_INIT_ADDR + 9
     tail = bytes([
+        0xF0, 0x70, 0xE6, 0x07, 0xFE, 0x02, 0x20, 0x0C,
+        0x3E, 0x03, 0xE0, 0x70,
+        0x21,
+        STAGE1_ATTR_ROW_HELPER_WRAM_ADDR & 0xFF,
+        STAGE1_ATTR_ROW_HELPER_WRAM_ADDR >> 8,
+        0x06, 0x18,
+        0xC3, opcode_group_address & 0xFF, opcode_group_address >> 8,
         0x3E, 0xFF,
         0xEA, STAGE1_ATTR_CACHE_9800_ADDR & 0xFF,
         STAGE1_ATTR_CACHE_9800_ADDR >> 8,
@@ -5033,19 +11118,22 @@ def build_oam_wram_copy_tail(
             0x0E, semantic_tail_length,
             0xCD, 0xB3, 0x09,
         ])
-    front = semantic_prefix + bytes([
+    final = bytes([
         0xCD, init_addr & 0xFF, init_addr >> 8,
         0x3E, OAM_WRAM_SENTINEL_VALUE,
         0xEA, OAM_WRAM_SENTINEL_ADDR & 0xFF,
         OAM_WRAM_SENTINEL_ADDR >> 8,
-        0xE1, 0xD1, 0xC1,                   # restore OAM-copy caller regs
+        0xE1, 0xD1, 0xC1,
         0xC9,
     ])
-    assert len(front) <= 42
-    bank13 = front
-    bank14 = bytes()
-    assert len(bank13) <= 42
-    return bank13, bank14
+    continuation = final
+    front = semantic_prefix + bytes([
+        0xC3, OAM_WRAM_COPY_TED_HELPER_CONT_ADDR & 0xFF,
+        OAM_WRAM_COPY_TED_HELPER_CONT_ADDR >> 8,
+    ])
+    assert len(front) <= 36
+    assert len(continuation) <= 36
+    return front, continuation
 
 
 def build_native_glyph_restore() -> bytes:
@@ -5170,19 +11258,32 @@ def build_title_transition_service() -> bytes:
 
 
 def build_crystal_palette_rearm() -> bytes:
-    """Arm Crystal's bounded material pass on its exact scene transition.
+    """Arm the bounded material prepass only for Crystal Dragon.
 
-    The idle FFD4 clock is stopped by the native boss-entry fade, so a scene
-    hash cannot reliably schedule this pass. A is preserved; HL is scratch
-    because the transition service restores its caller's HL afterward.
+    Crystal needs its scene-local OBJ4-7 ghost palette before the native fade
+    completes.  Other bosses already have their global CRAM rows resident;
+    rearming them here overlaps the first arena-map publication and can expose
+    Ted's numbered staging cells at the physical edges.  A is preserved; HL
+    is scratch because the transition service restores its caller's HL.
     """
-    code = bytes([
-        0xFE, CRYSTAL_DRAGON_SCENE,
-        0xC0,                               # all non-Crystal scenes return
-        0x21, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
-        0x36, 0x11,
-        0xC9,
-    ])
+    if _os.environ.get("PENTA_TED_NATIVE_POSTCOPY", "0") == "1" and (
+        _os.environ.get("PENTA_TED_CACHED_FULL_PLANE", "0") != "1"
+        and _os.environ.get("PENTA_TED_WRITER_MIRROR", "0") != "1"
+    ):
+        # Native-postcopy mode needs the same transition-only call to advance
+        # Ted's LUT generation. The private dispatcher retains Crystal's
+        # original behavior and preserves A for the title transition service.
+        code = bytes([
+            0xC3, TED_POSTCOPY_SCENE_DISPATCH_ADDR & 0xFF,
+            TED_POSTCOPY_SCENE_DISPATCH_ADDR >> 8,
+        ]) + bytes(6)
+    else:
+        code = bytes([
+            0xFE, CRYSTAL_DRAGON_SCENE, 0xC0,  # RET NZ outside Crystal
+            0x21, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+            0x36, 0x11,                    # Crystal OBJ prepass, then rows
+            0xC9,
+        ])
     assert len(code) == SPOTLIGHT_PALETTE_MAP_ADDR - CRYSTAL_PALETTE_REARM_ADDR
     return code
 
@@ -5401,6 +11502,7 @@ def build_colorize_prelude() -> bytes:
     ])
     j_stale_window_hidden = len(c) + 1
     c.extend([0x28, 0x00])                # JR Z,window_off
+
     c.extend([0xF0, 0x4F, 0xF5, 0x3E, 0x01, 0xE0, 0x4F])
     c.extend([0xF0, 0x40, 0xE6, 0x40])    # LCDC window-map select
     c.extend([0x26, 0x98, 0x28, 0x02, 0x26, 0x9C])
@@ -5593,8 +11695,9 @@ def build_conditional_palette_phased() -> bytes:
     all bounded one-palette phases on consecutive VBlanks.
     """
     c = bytearray([
-        # Native BGP transitions own all CGB BG palettes until $E4. Leave the
-        # pending phase intact and resume it after the fade.
+        # Native BGP transitions own CRAM until the normal $E4 order returns.
+        # Servicing under black perturbs the arena publisher's interrupt
+        # schedule and can expose numbered Ted staging cells at map edges.
         0xF0, 0x47, 0xFE, 0xE4, 0xC0,
         0xFA, PALETTE_PHASE_ADDR & 0xFF,
         PALETTE_PHASE_ADDR >> 8,            # A = pending phase
@@ -5602,11 +11705,11 @@ def build_conditional_palette_phased() -> bytes:
         0xC2, PALETTE_LOADER_ADDR & 0xFF,
         PALETTE_LOADER_ADDR >> 8,           # pending: service every VBlank
         0xF0, 0xD4,                         # idle: stock VBlank tick
-        0xE6, 0x07,                         # probe state once per 8 frames
-        0xC0,                               # RET NZ
+        0xE6, 0x07,                         # probe once per eight frames
+        0xC0,
         0xCD,
         OAM_BOSS_LUT_SERVICE_ADDR & 0xFF,
-        OAM_BOSS_LUT_SERVICE_ADDR >> 8,     # transition-only miniboss LUT
+        OAM_BOSS_LUT_SERVICE_ADDR >> 8,
         # FFBE only selects between two already-resident Sara rows; it does
         # not own CRAM. Start with the miniboss flag instead.
         0xF0, 0xBF, 0x47,                  # B = FFBF
@@ -5638,7 +11741,7 @@ def build_conditional_palette_phased() -> bytes:
     ])
     assert (
         CONDITIONAL_PALETTE_IMPL_ADDR + len(c)
-        <= SPOTLIGHT_PALETTE_MAP_ADDR
+        <= CRYSTAL_PALETTE_REARM_ADDR
     )
     return bytes(c)
 
@@ -5706,7 +11809,7 @@ def build_phased_palette_loader(
     main.db(0xFE, 0x11)
     main.absolute(0xDA, "bg_phase")         # phases 9..16
     main.label("palette_done")
-    main.db(0xAF)                           # completed palette phase = 0
+    main.db(0xAF)
     main.absolute(0xC3, "store_phase")
 
     main.label("obj_phase")
@@ -6253,6 +12356,7 @@ def main(
     # 1. Build base v3.01 production ROM
     build_v301(palette_yaml=palette_yaml, output_path=base_output)
     rom = bytearray(base_output.read_bytes())
+    vanilla = Path("rom/Penta Dragon (J).gb").read_bytes()
     tuned_palettes = load_palettes_from_yaml(palette_yaml)
     cutscene_panels = load_cutscene_region_palettes(palette_yaml)
     later_stage_bg0_sources, later_stage_bg0_names = (
@@ -6299,18 +12403,20 @@ def main(
     )
     assert (
         LATER_STAGE_BG0_SOURCE_TABLE_ADDR + len(later_stage_bg0_sources)
-        <= STORY_REGION_BRIDGE_ADDR
+        <= LAVA_ATTR_STAGE7_SOURCE_A_ADDR
     )
+    # The base build still carries six stock bytes in this range.  Qualify
+    # them now; the generated-posmap reset below establishes the final owned
+    # padding before the table is installed.
     assert rom[
         later_stage_source_off:
         later_stage_source_off + len(later_stage_bg0_sources)
-    ] == bytes(len(later_stage_bg0_sources)), (
-        "later-stage BG0 source table asset gap is no longer free"
-    )
-    rom[
+    ] == vanilla[
         later_stage_source_off:
         later_stage_source_off + len(later_stage_bg0_sources)
-    ] = later_stage_bg0_sources
+    ] == bytes.fromhex("87 78 FF 00 00 FF"), (
+        "later-stage BG0 source table dispatcher tail changed"
+    )
     print(
         "  later-stage BG0 identities: "
         + ", ".join(
@@ -6581,7 +12687,115 @@ def main(
             LATER_PICKUP_HELPER_CAVE_SIZE
         ), f"later pickup helper cave at ${address:04X} is no longer free"
         rom[off:off + len(code)] = code
-    arena_geometry = build_arena_atomic_attr_stack_helper()
+    native_ted_postcopy = _os.environ.get(
+        "PENTA_TED_NATIVE_POSTCOPY", "0"
+    ) == "1"
+    cached_ted_full_plane = _os.environ.get(
+        "PENTA_TED_CACHED_FULL_PLANE", "0"
+    ) == "1"
+    cached_ted_install_only = _os.environ.get(
+        "PENTA_TED_CACHED_INSTALL_ONLY", "0"
+    ) == "1"
+    ted_writer_mirror = _os.environ.get(
+        "PENTA_TED_WRITER_MIRROR", "0"
+    ) == "1"
+    ted_incremental_key = _os.environ.get(
+        "PENTA_TED_INCREMENTAL_KEY", "0"
+    ) == "1"
+    ted_direct_plane = _os.environ.get(
+        "PENTA_TED_DIRECT_PLANE", "0"
+    ) == "1"
+    ted_hdma_piggyback = _os.environ.get(
+        "PENTA_TED_HDMA_PIGGYBACK", "0"
+    ) == "1"
+    ted_inwindow_gdma = _os.environ.get(
+        "PENTA_TED_INWINDOW_GDMA", "0"
+    ) == "1"
+    ted_incremental_cell = _os.environ.get(
+        TED_INCREMENTAL_CELL_ENV, "0"
+    ) == "1"
+    ted_block_major = _os.environ.get(TED_BLOCK_MAJOR_ENV, "0") == "1"
+    expanded_ted_payload = (
+        _os.environ.get("PENTA_TED_EXPANDED_PAYLOAD", "0") == "1"
+    )
+    expanded_ted_production = (
+        _os.environ.get("PENTA_TED_EXPANDED_PRODUCTION", "0") == "1"
+    )
+    assert not (expanded_ted_payload and expanded_ted_production), (
+        "expanded Ted payload and production roles are mutually exclusive"
+    )
+    assert not ted_block_major or (
+        ted_direct_plane and ted_inwindow_gdma and ted_incremental_cell
+    ), (
+        "PENTA_TED_BLOCK_MAJOR requires PENTA_TED_DIRECT_PLANE=1, "
+        "PENTA_TED_INWINDOW_GDMA=1, and PENTA_TED_INCREMENTAL_CELL=1"
+    )
+    assert not ted_hdma_piggyback or ted_direct_plane, (
+        "Ted HBlank piggyback requires the maintained direct plane"
+    )
+    assert not ted_inwindow_gdma or ted_direct_plane, (
+        "Ted in-window GDMA requires the maintained direct plane"
+    )
+    assert not ted_incremental_cell or ted_inwindow_gdma, (
+        "Ted incremental cell classifier requires in-window GDMA"
+    )
+    assert not (ted_hdma_piggyback and ted_inwindow_gdma), (
+        "choose only one Ted direct-plane publisher"
+    )
+    assert not (ted_incremental_key and ted_direct_plane), (
+        "choose either the incremental checksum or direct-plane experiment"
+    )
+    ted_incremental_key = ted_incremental_key or ted_direct_plane
+    ted_writer_track_only = _os.environ.get(
+        "PENTA_TED_WRITER_TRACK_ONLY", "0"
+    ) == "1"
+    ted_writer_install_only = _os.environ.get(
+        "PENTA_TED_WRITER_INSTALL_ONLY", "0"
+    ) == "1"
+    assert not ted_writer_track_only or ted_writer_mirror, (
+        "Ted writer tracking isolation requires the writer mirror"
+    )
+    assert not ted_writer_install_only or ted_writer_mirror, (
+        "Ted writer installer isolation requires the writer mirror"
+    )
+    native_ted_postcopy = (
+        native_ted_postcopy or cached_ted_full_plane or ted_writer_mirror
+        or ted_incremental_key
+    )
+    assert not ted_incremental_key or (
+        native_ted_postcopy and not cached_ted_full_plane
+        and not ted_writer_mirror
+    ), "incremental Ted key requires the native-postcopy cache lane"
+    assert (
+        not native_ted_postcopy
+        or cached_ted_full_plane
+        or stock_tile_copy
+        or compact_tile_copy
+    ), (
+        "Ted native postcopy requires a pure tile-copy baseline"
+    )
+    arena_geometry = (
+        (build_arena_atomic_attr_stack_helper()
+         if cached_ted_full_plane else
+         bytes.fromhex("CD 95 42 C9") if ted_writer_track_only else
+         build_ted_writer_mirror_wrapper(
+             TED_WRITER_RUNTIME_ADDR
+             + build_ted_writer_mirror_runtime()[1]
+         ) if ted_writer_mirror else build_ted_native_postcopy_wrapper())
+        if native_ted_postcopy else build_arena_atomic_attr_stack_helper()
+    )
+    if ted_hdma_piggyback:
+        arena_geometry = (
+            build_ted_hdma_piggyback_gate()
+            + build_ted_hdma_piggyback_postcopy()
+        )
+        assert len(arena_geometry) == LATER_PICKUP_HELPER_CAVE_SIZE
+    elif ted_inwindow_gdma:
+        arena_geometry = (
+            build_ted_inwindow_gate()
+            + build_ted_hdma_piggyback_postcopy()
+        )
+        assert len(arena_geometry) <= LATER_PICKUP_HELPER_CAVE_SIZE
     arena_geometry_off = (
         BANK13 + ARENA_ATOMIC_ATTR_STACK_HELPER_ROM_ADDR - 0x4000
     )
@@ -6764,19 +12978,30 @@ def main(
         <= VRAM_GLYPH_COPY_ADDR
     ), "story inactive helper collides with VRAM glyph loader"
     off = BANK13 + (SPLASH_TABLE_ADDR - 0x4000)
-    vanilla = Path("rom/Penta Dragon (J).gb").read_bytes()
     assert rom[off:off + 0x100] == vanilla[off:off + 0x100], \
         "reclaimed bank-13 region changed in the base build"
     rom[off:off + 0x100] = bytes(0x100)
     rom[off:off + len(story_attr)] = story_attr
-    story_region_bridge_off = (
-        BANK13 + (STORY_REGION_BRIDGE_ADDR - 0x4000)
+    # Bank-13 $4CE4-$4CF1 contains live, pointer-referenced stock records even
+    # though every byte is zero.  Preserve those records exactly and use the
+    # disabled fixed serial interrupt vector for the eight-byte bank bridge.
+    live_record_off = BANK13 + (0x4CE4 - 0x4000)
+    live_record_size = 0x4CF2 - 0x4CE4
+    assert rom[
+        live_record_off:live_record_off + live_record_size
+    ] == vanilla[live_record_off:live_record_off + live_record_size], (
+        "live bank-13 $4CE4-$4CF1 map records changed before story install"
     )
+    story_region_bridge_off = STORY_REGION_FIXED_BRIDGE_ADDR
+    assert len(story_region_bridge) == 8
     assert rom[
         story_region_bridge_off:
         story_region_bridge_off + len(story_region_bridge)
-    ] == bytes(len(story_region_bridge)), (
-        "bank-13 story-region bridge slot is no longer free"
+    ] == vanilla[
+        story_region_bridge_off:
+        story_region_bridge_off + len(story_region_bridge)
+    ] == bytes.fromhex("D9 7D FB 7D FD ED BF FF"), (
+        "fixed serial-vector story bridge slot changed"
     )
     story_region_bank6_off = (
         STORY_REGION_BANK * 0x4000
@@ -6873,7 +13098,7 @@ def main(
         f"{story_region_stats['row_runs']} runs / "
         f"{story_region_stats['data_bytes']} data bytes; "
         f"bridge={len(story_region_bridge)} bytes at "
-        f"bank13:0x{STORY_REGION_BRIDGE_ADDR:04X}, "
+        f"fixed:0x{STORY_REGION_FIXED_BRIDGE_ADDR:04X}, "
         f"writer={story_region_stats['writer_bytes']} bytes, "
         f"row-writer={story_region_stats['row_writer_bytes']} bytes at "
         f"bank6:0x{STORY_REGION_CAVE_START_ADDR:04X}"
@@ -7117,6 +13342,40 @@ def main(
     rom[posmap_off:posmap_off + (0x7E00 - POSMAP_DATA_ADDR)] = bytes(
         0x7E00 - POSMAP_DATA_ADDR
     )
+    assert rom[
+        later_stage_source_off:
+        later_stage_source_off + len(later_stage_bg0_sources)
+    ] == bytes(len(later_stage_bg0_sources)), (
+        "generated later-stage BG0 source-table tail is not clear"
+    )
+    rom[
+        later_stage_source_off:
+        later_stage_source_off + len(later_stage_bg0_sources)
+    ] = later_stage_bg0_sources
+    if ted_incremental_key:
+        for source_addr, source_payload in (
+            build_ted_incremental_runtime_sources().items()
+        ):
+            source_off = BANK13 + source_addr - 0x4000
+            current_source = bytes(
+                rom[source_off:source_off + len(source_payload)]
+            )
+            if ted_block_major and (
+                TED_TABLE_ADDR <= source_addr
+                and source_addr + len(source_payload) <= TED_TABLE_ADDR + 0x100
+            ):
+                ted_table = bytes(_bg_table_ted())
+                expected_source = ted_table[
+                    source_addr - TED_TABLE_ADDR:
+                    source_addr - TED_TABLE_ADDR + len(source_payload)
+                ]
+            else:
+                expected_source = bytes(len(source_payload))
+            assert current_source == expected_source, (
+                f"Ted incremental source cave ${source_addr:04X} is not free: "
+                f"{current_source.hex()}"
+            )
+            rom[source_off:source_off + len(source_payload)] = source_payload
     ptr_off = BANK13 + (POSMAP_PTR_TABLE - 0x4000)
     rom[ptr_off:ptr_off + 18] = bytes(18)
     rom[
@@ -7142,7 +13401,7 @@ def main(
         f"bank13:0x{PALETTE_COPY_CRAM8_ADDR:04X})"
     )
     room_bg_repair = build_room_bg_repair(
-        stage1_atomic_attrs=(not stock_tile_copy or native_room_writers)
+        stage1_atomic_attrs=(not stock_tile_copy or native_room_writers),
     )
     death_fade_helper = build_death_fade_helper()
     lava_attr_stage5_signature = build_lava_attr_sample_signature(
@@ -7180,9 +13439,112 @@ def main(
     lava_attr_stage5_front, lava_attr_decider_cont = build_lava_attr_decider()
     stage1_hazard_dispatcher = build_stage1_hazard_dispatcher()
     (
-        stage1_hazard_banked_entry13,
+    stage1_hazard_banked_entry13,
         stage1_hazard_banked_entry14,
     ) = build_stage1_hazard_banked_entries()
+    arena_sanitizer_dispatch = build_arena_sanitizer_banked_dispatch(
+        writer_mirror=ted_writer_mirror,
+    )
+    if not stock_tile_copy:
+        stage1_hazard_banked_entry13 = bytes([
+            0xC3, LAVA_ATTR_DECIDER_ADDR & 0xFF,
+            LAVA_ATTR_DECIDER_ADDR >> 8,
+        ])
+    ted_sanitizer_fragments = {}
+    if ted_writer_mirror:
+        # The tracker is ROM-resident; Ted overwrites both C400 and C500.
+        # Only the sparse banked-plane publisher needs fragmented bank-13
+        # resource records.
+        ted_sanitizer_fragments.update(build_ted_dirty_postcopy_fragments())
+    elif cached_ted_full_plane:
+        ted_sanitizer_fragments.update(build_ted_cached_full_plane_fragments())
+        ted_sanitizer_fragments[TED_CACHED_READY_LATCH_ADDR] = (
+            build_ted_cached_ready_latch()
+        )
+        ted_sanitizer_fragments[TED_CACHED_PALETTE_GATE_ADDR] = (
+            build_ted_cached_palette_gate()
+        )
+        if _os.environ.get("PENTA_TED_CACHED_SPARSE", "0") != "0":
+            ted_sanitizer_fragments.update(build_ted_cached_sparse_fragments())
+    elif native_ted_postcopy:
+        if ted_incremental_key:
+            ted_sanitizer_fragments.update(
+                build_ted_incremental_postcopy_attr_compiler()
+            )
+            ted_sanitizer_fragments.update(
+                build_ted_incremental_scene_installer()
+            )
+            ted_sanitizer_fragments.update(
+                build_ted_incremental_scene_rearm_fragments()
+            )
+            if ted_hdma_piggyback:
+                piggyback_fragments = build_ted_hdma_piggyback_copier()
+                assert not (
+                    set(piggyback_fragments) & set(ted_sanitizer_fragments)
+                ), "Ted piggyback fragments overlap the direct-plane runtime"
+                ted_sanitizer_fragments.update(piggyback_fragments)
+            elif ted_inwindow_gdma:
+                inwindow_fragments = build_ted_inwindow_copier()
+                assert not (
+                    set(inwindow_fragments) & set(ted_sanitizer_fragments)
+                ), "Ted in-window fragments overlap direct-plane runtime"
+                ted_sanitizer_fragments.update(inwindow_fragments)
+        else:
+            ted_sanitizer_fragments.update(
+                build_ted_compact_postcopy_attr_compiler()
+            )
+            ted_sanitizer_fragments.update(
+                build_ted_postcopy_scene_rearm_fragments()
+            )
+    else:
+        ted_sanitizer_runtime = build_ted_group_sanitizer_wram()
+        ted_runtime_sources = (
+            TED_SANITIZER_MAIN_ADDR, TED_SANITIZER_CLASSIFY_ADDR,
+            TED_SANITIZER_CROWN_ADDR, TED_SANITIZER_ACTIVE_ADDR,
+            TED_SANITIZER_ROW_TABLE_ADDR, TED_SANITIZER_GEOMETRY_CONT_ADDR,
+            TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR,
+            TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR,
+        )
+        cursor = 0
+        for source in ted_runtime_sources:
+            capacity = (
+                21 if source == TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR
+                else 20 if source == TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR
+                else ARENA_SANITIZER_FRAGMENT_SIZE
+            )
+            chunk = ted_sanitizer_runtime[cursor:cursor + capacity]
+            if source == TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR:
+                chunk = chunk.rstrip(b"\x00")
+            if chunk and any(chunk):
+                ted_sanitizer_fragments[source] = chunk
+            cursor += capacity
+        assert cursor == len(ted_sanitizer_runtime)
+        materializer = build_ted_register_materializer()
+        ted_sanitizer_fragments.update({
+            TED_REGISTER_MATERIALIZER_FRONT_ADDR: materializer[0],
+            TED_REGISTER_MATERIALIZER_TAIL_ADDR: materializer[1],
+            TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR: materializer[2],
+            TED_TILE_COMMIT_RUNTIME_ADDR: build_native_tile_materializer(),
+            TED_CHECKER_ATTR_HELPER_ADDR: build_ted_checker_attr_helper(),
+        })
+        ted_crown_pair, ted_crown_pair_cont = build_ted_crown_pair_helper()
+        ted_sanitizer_fragments[TED_CROWN_PAIR_HELPER_ADDR] = ted_crown_pair
+        ted_sanitizer_fragments[TED_CROWN_PAIR_HELPER_CONT_ADDR] = (
+            ted_crown_pair_cont
+        )
+        (
+            ted_installer_front,
+            ted_installer_middle,
+            ted_installer_tail,
+            ted_installer_final,
+        ) = build_ted_group_sanitizer_installer()
+        ted_sanitizer_fragments.update({
+            TED_SANITIZER_INSTALL_ADDR: ted_installer_front,
+            TED_SANITIZER_INSTALL_MIDDLE_ADDR: ted_installer_middle,
+            TED_SANITIZER_INSTALL_TAIL_ADDR: ted_installer_tail,
+            TED_SANITIZER_INSTALL_FINAL_ADDR: ted_installer_final,
+        })
+    shalamar_sanitizer_fragments = build_shalamar_source_sanitizer_fragments()
     (
         stage1_hazard_row_helper,
         stage1_hazard_row_compiler,
@@ -7234,10 +13596,10 @@ def main(
         stage1_hazard_row0_repair_tail,
     ) = build_stage1_hazard_row0_transition_repair()
     stage1_hazard_room_dispatcher = build_stage1_hazard_room_dispatcher()
-    oam_wram_copy_tail13, oam_wram_copy_tail14 = build_oam_wram_copy_tail(
-        postcomputed_attrs=buffered_stage1_attrs,
+    oam_wram_copy_tail13, oam_wram_copy_ted_helper_cont = build_oam_wram_copy_tail(
+        postcomputed_attrs=True,
     )
-    if buffered_stage1_attrs:
+    if True:
         stage1_attr_row_init_front, stage1_attr_row_init_tail = (
             build_stage1_attr_row_initializer()
         )
@@ -7276,6 +13638,28 @@ def main(
         (NATIVE_GLYPH_RESTORE_ADDR, build_native_glyph_restore()),
         (OAM_LUT_INIT_ADDR, build_oam_lut_init()),
     )
+    ted_envelope_compare, ted_envelope_table = build_ted_inside_envelope_rom()
+    for address, payload in (
+        (TED_ENVELOPE_COMPARE_ROM_ADDR,
+         b"" if ted_block_major else ted_envelope_compare),
+        (TED_ENVELOPE_ROW_TABLE_ROM_ADDR,
+         b"" if (ted_block_major or expanded_ted_production)
+         else ted_envelope_table),
+        (TED_MAP_ANCHOR_ACTIVATE_ROM_ADDR,
+         b"" if (cached_ted_full_plane or native_ted_postcopy)
+         else build_ted_map_anchor_activate_rom()),
+        (TED_ANCHOR_STATE_HELPER_ROM_ADDR,
+         b"" if (cached_ted_full_plane or native_ted_postcopy)
+         else build_ted_anchor_state_helper_rom()),
+        (TED_SCAN_CROWN_HELPER_ROM_ADDR,
+         b"" if (cached_ted_full_plane or native_ted_postcopy)
+         else build_ted_scan_crown_helper_rom()),
+    ):
+        payload_off = BANK13 + address - 0x4000
+        assert rom[payload_off:payload_off + len(payload)] == bytes(len(payload)), (
+            f"Ted envelope cave at ${address:04X} is no longer free"
+        )
+        rom[payload_off:payload_off + len(payload)] = payload
     room_bg_repair_off = BANK13 + (ROOM_BG_REPAIR_ADDR - 0x4000)
     rom[
         room_bg_repair_off:
@@ -7336,13 +13720,127 @@ def main(
             "Stage-1 hazard banked-entry cave is no longer free"
         )
         rom[entry_off:entry_off + len(payload)] = payload
-    del oam_wram_copy_tail14
+    arena_fragment_payloads = (
+        *sorted(ted_sanitizer_fragments.items()),
+        *sorted(shalamar_sanitizer_fragments.items()),
+        (ARENA_SANITIZER_DISPATCH_ADDR, arena_sanitizer_dispatch),
+    )
+    protected_title_glyph_off = BANK13 + 0x6D50 - 0x4000
+    protected_title_glyph = bytes(
+        rom[protected_title_glyph_off:protected_title_glyph_off + 0x20]
+    )
+    for address, payload in arena_fragment_payloads:
+        fragment_off = BANK13 + address - 0x4000
+        capacity = (
+            len(payload)
+            if (ted_writer_mirror
+                and address in (
+                    build_ted_dirty_postcopy_fragments()
+                    | build_shalamar_source_sanitizer_fragments()
+                )
+                or address in (
+                    ARENA_SANITIZER_DISPATCH_ADDR,
+                    TED_CACHED_GDMA_WAIT_ADDR,
+                    TED_INWINDOW_EPILOGUE_ADDR,
+                ))
+            or address in (TED_SANITIZER_RUNTIME_EXTRA_SOURCE_ADDR,
+                           TED_TILE_COMMIT_RUNTIME_ADDR,
+                           TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR,
+                           TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR,
+                           TED_REGISTER_MATERIALIZER_TAIL_ADDR,
+                           TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR,
+                           TED_CROWN_PAIR_HELPER_ADDR,
+                           TED_CROWN_PAIR_HELPER_CONT_ADDR,
+                           TED_CACHED_COLUMN_WRAP_ADDR,
+                           TED_CACHED_SPARSE_ENTRY_ADDR,
+                           TED_CACHED_SPARSE_RESTORE_ADDR,
+                           TED_CACHED_SPARSE_SETUP_ADDR,
+                           TED_CACHED_SPARSE_SCAN_ADDR,
+                           TED_CACHED_SPARSE_SCAN_TAIL_ADDR,
+                           TED_CACHED_SPARSE_FILTER_ADDR,
+                           TED_CACHED_ATTR_CLEAR_ADDR,
+                           TED_CACHED_CADENCE_DELAY_ADDR,
+                           TED_CACHED_READY_LATCH_ADDR,
+                           TED_CACHED_PALETTE_GATE_ADDR,
+                           TED_CACHED_SPARSE_OVERLAY_A_ADDR,
+                           TED_CACHED_SPARSE_OVERLAY_B_ADDR,
+                           TED_CACHED_SPARSE_OVERLAY_C_ADDR,
+                           TED_CACHED_SPARSE_OVERLAY_D_ADDR,
+                           TED_CACHED_SPARSE_OVERLAY_E_ADDR,
+                           TED_CACHED_SPARSE_OVERLAY_F_ADDR,
+                           TED_CACHED_SPARSE_OVERLAY_G_ADDR,
+                           TED_CACHED_SPARSE_OVERLAY_H_ADDR,
+                           TED_CACHED_RUNTIME_EXTRA_SOURCE_ADDR,
+                           TED_CACHED_INSTALL_EXTRA_ADDR,
+                           TED_CACHED_ABI_FRONT_ADDR,
+                           TED_CACHED_ABI_TAIL_ADDR,
+                           SHALAMAR_SANITIZER_MAIN_ADDR,
+                           SHALAMAR_SANITIZER_CELL_ADDR)
+            else ARENA_SANITIZER_FRAGMENT_SIZE
+        )
+        if (
+            cached_ted_full_plane
+            and address == TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR
+        ):
+            capacity = 24
+        elif ted_incremental_key:
+            capacity = {
+                TED_DIRTY_POSTCOPY_BIT_TAIL_ADDR: 8,
+                TED_REGISTER_MATERIALIZER_TAIL_CONT_ADDR: 24,
+                TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR: 31,
+                TED_INCREMENTAL_INSTALL_FINAL_ADDR: 21,
+                TED_INCREMENTAL_LAZY_GATE_ADDR: 11,
+                TED_INCREMENTAL_SCENE_CLEAR_ADDR: 9,
+                TED_DIRTY_POSTCOPY_COMPILE_FINAL_ADDR: 8,
+                0x5E6D: 19,
+                TED_INCREMENTAL_FIXED_COPY_LEAF_ADDR: 12,
+            }.get(address, capacity)
+        elif not (ted_writer_mirror or cached_ted_full_plane or native_ted_postcopy):
+            if address == TED_SANITIZER_RUNTIME_TAIL_A_SOURCE_ADDR:
+                capacity = 20
+            elif address == TED_SANITIZER_RUNTIME_TAIL_B_SOURCE_ADDR:
+                capacity = len(payload)
+        expanded_payload_helper = (
+            expanded_ted_payload
+            # This build is copied wholesale into a private expanded ROM
+            # bank.  Its Ted runtime may therefore reuse the arena LUT page;
+            # production continues to own the original bank-13 bytes.
+            and 0x7600 <= address < 0x7740
+        )
+        if not expanded_payload_helper:
+            assert rom[
+                fragment_off:fragment_off + capacity
+            ] == bytes(capacity), (
+                f"arena sanitizer cave ${address:04X} is no longer free: "
+                f"{bytes(rom[fragment_off:fragment_off + capacity]).hex()} "
+                f"({capacity} bytes)"
+            )
+        rom[fragment_off:fragment_off + len(payload)] = payload
+    if not expanded_ted_payload:
+        assert bytes(
+            rom[protected_title_glyph_off:protected_title_glyph_off + 0x20]
+        ) == protected_title_glyph, (
+            "Ted arena fragments changed protected title glyph $6D50-$6D6F"
+        )
     for bank, payload in ((BANK13, oam_wram_copy_tail13),):
         tail_off = bank + (OAM_WRAM_COPY_TAIL_ADDR - 0x4000)
         assert rom[tail_off:tail_off + 36] == bytes(36), (
             "cross-bank OAM WRAM-copy tail cave is no longer free"
         )
         rom[tail_off:tail_off + len(payload)] = payload
+    helper_cont_off = BANK13 + OAM_WRAM_COPY_TED_HELPER_CONT_ADDR - 0x4000
+    assert rom[
+        helper_cont_off:helper_cont_off + len(oam_wram_copy_ted_helper_cont)
+    ] == bytes(len(oam_wram_copy_ted_helper_cont)), (
+        "Ted tile-helper boot continuation cave is no longer free: "
+        + rom[
+            helper_cont_off:
+            helper_cont_off + len(oam_wram_copy_ted_helper_cont)
+        ].hex()
+    )
+    rom[
+        helper_cont_off:helper_cont_off + len(oam_wram_copy_ted_helper_cont)
+    ] = oam_wram_copy_ted_helper_cont
 
     for address, payload in (
         (STAGE1_ENTRY_PATCH_BODY_ADDR, stage1_entry_patch_body),
@@ -7634,6 +14132,62 @@ def main(
             f"demo pickup scanner slot at ${addr:04X} is no longer free"
         )
         rom[off:off + len(code)] = code
+    if ted_incremental_key:
+        for address, payload in build_ted_incremental_bank2_gate().items():
+            gate_off = BANK2 + address - 0x4000
+            assert rom[gate_off:gate_off + len(payload)] == bytes(
+                len(payload)
+            ), f"Ted bank-2 gate cave ${address:04X} is no longer free"
+            rom[gate_off:gate_off + len(payload)] = payload
+        direct_clone_hooks = not (
+            ted_direct_plane
+            and _os.environ.get("PENTA_TED_DIRECT_CLONE_HOOKS", "1") == "0"
+        )
+        if direct_clone_hooks:
+            call_off = BANK2 + TED_INCREMENTAL_BANK2_CALL_ADDR - 0x4000
+            assert rom[call_off:call_off + 3] == bytes.fromhex("CD 4D 06")
+            rom[call_off:call_off + 3] = bytes([
+                0xCD, TED_INCREMENTAL_BANK2_ENTRY_ADDR & 0xFF,
+                TED_INCREMENTAL_BANK2_ENTRY_ADDR >> 8,
+            ])
+            # $064A has no callers in the stock ROM. Preserve its fixed
+            # wrapper's native ROM-bank entry/restore and repoint only its
+            # inner CALL to the cold-installed, unbanked runtime.
+            assert rom[
+                TED_INCREMENTAL_UNUSED_WRAPPER_ADDR:
+                TED_INCREMENTAL_UNUSED_WRAPPER_ADDR + 7
+            ] == bytes.fromhex("EF CD A5 04 C3 55 0D")
+            rom[
+                TED_INCREMENTAL_UNUSED_WRAPPER_ADDR + 1:
+                TED_INCREMENTAL_UNUSED_WRAPPER_ADDR + 4
+            ] = bytes([
+                0xCD, TED_INCREMENTAL_FIXED_RUNTIME_ADDR & 0xFF,
+                TED_INCREMENTAL_FIXED_RUNTIME_ADDR >> 8,
+            ])
+        assert rom[0x30AF:0x30B2] == bytes.fromhex("11 A0 C1")
+        assert rom[0x3136:0x3139] == bytes.fromhex("C1 13 13")
+        if (
+            ted_direct_plane
+            and _os.environ.get("PENTA_TED_DIRECT_SINGLE_HOOKS", "1") != "0"
+        ):
+            # Ted has two later single-cell writers outside the cloned 2x2
+            # builder. Replace each complete displaced tail with a jump to
+            # its exact-ABI fixed-WRAM wrapper.
+            helper_a = TED_DIRECT_FIXED_HELPER_ADDR
+            helper_b = helper_a + 10
+            for address, stock, target in (
+                (TED_DIRECT_SINGLE_WRITER_A_PATCH_ADDR,
+                 bytes.fromhex("77 E1 C1"), helper_a),
+                (TED_DIRECT_SINGLE_WRITER_B_PATCH_ADDR,
+                 bytes.fromhex("F1 77 C9"), helper_b),
+            ):
+                patch_off = BANK2 + address - 0x4000
+                assert rom[patch_off:patch_off + 3] == stock, (
+                    f"Ted single-cell writer ABI changed at ${address:04X}"
+                )
+                rom[patch_off:patch_off + 3] = bytes([
+                    0xC3, target & 0xFF, target >> 8,
+                ])
     install_semantic_oam_intercepts(rom)
     print(
         "  semantic gameplay OBJ emitters: "
@@ -7760,11 +14314,15 @@ def main(
             external_attr_stack_helper_rst=STAGE1_SOURCE_GENERATION_RST,
             atomic_group_width=STAGE1_ATOMIC_GROUP_WIDTH,
         )
+        # The shared stack helper now materializes all three outgoing tile IDs
+        # before the STAT wait. The generator commits A/C/B directly, keeping
+        # branches and calls out of the VRAM-critical interval.
         # INC BC / DEC BC is register-neutral but deliberately retained: the
         # 16-cycle phase pair aligns every later HBlank commit. Removing it
         # reproduced transient walls/voids in the 20,000-frame Stage-1 copy
         # receipt even though the packed source itself remained byte-stable.
-        assert inline_blob[:7] == bytes.fromhex("2E 00 03 0B 16 FF CD")
+        assert inline_blob[:2] == bytes.fromhex("2E 00")
+        assert inline_blob[4:7] == bytes.fromhex("16 FF CD")
         atomic_row_marker = bytes([
             0x06, WRAM_BG_TABLE >> 8,
             0x3E,
@@ -7799,16 +14357,18 @@ def main(
         )
     inline_attr_decision = build_inline_attr_decision_helper(atomic_row_addr)
     stage1_atomic_wrap = build_stage1_atomic_wrap()
+    stage1_atomic_wrap_tail = build_stage1_atomic_wrap_tail()
     available = 0x436D - 0x42A7 + 1
     assert len(inline_blob) <= available
     if buffered_stage1_attrs:
-        title_pure_entry = 0x42A7 + len(inline_blob) - 14
-        assert inline_blob[-14:-3] == bytes([
-            0x26, 0x98, 0xAF, 0x6F, 0xCD,
+        title_tail_length = 14
+        title_pure_entry = 0x42A7 + len(inline_blob) - title_tail_length
+        title_prefix = bytes.fromhex("26 98 AF 6F")
+        assert inline_blob[-title_tail_length:-3] == title_prefix + bytes([
+            0xCD,
             INLINE_ATTR_DECISION_HELPER_ADDR & 0xFF,
             INLINE_ATTR_DECISION_HELPER_ADDR >> 8,
-            0x06, 0x05,
-            0x18, 0x00,
+            0x06, 0x05, 0x18, 0x00,
         ])
     else:
         title_pure_entry = 0x42A7 + len(inline_blob) - 12
@@ -7817,6 +14377,21 @@ def main(
         )
     inline_padding = bytes(available - len(inline_blob))
     rom[0x42A7:0x436E] = inline_blob + inline_padding
+    restoring_native_copier = (
+        stock_tile_copy
+        or compact_tile_copy
+        or semantic_stage1_prototype
+        or semantic_stage1_vblank_prototype
+    )
+    if not restoring_native_copier:
+        assert rom[
+            STAGE1_ATOMIC_WRAP_TAIL_ADDR:0x436E
+        ] == bytes(0x436E - STAGE1_ATOMIC_WRAP_TAIL_ADDR), (
+            "atomic wrapper bank-1 tail is no longer free"
+        )
+        rom[
+            STAGE1_ATOMIC_WRAP_TAIL_ADDR:0x436E
+        ] = stage1_atomic_wrap_tail
     assert 0x42A7 + len(inline_blob) <= 0x436E
     assert rom[0x42A0:0x42A7] == bytearray([0x26, 0x9C, 0xC3, 0xA7, 0x42, 0x26, 0x98])
     assert rom[0x0030:0x0033] == bytes.fromhex("C3 A5 42")
@@ -7868,6 +14443,93 @@ def main(
         else:
             rom[0x42A7:0x436E] = vanilla_rom[0x42A7:0x436E]
         rom[0x0030:0x0033] = vanilla_rom[0x0030:0x0033]
+        if stock_tile_copy:
+            # The inline decision/wrap helpers occupy the tail of the native
+            # fixed-bank free-OAM emitter. Restoring only the map copier left
+            # $3482-$34A2 as DX helper bytes, so the old "stock" diagnostic
+            # was not actually native and produced catastrophic boss traces.
+            # Keep the DX entry wrapper at $346F-$3481 (OBJ colorization), but
+            # restore its now-unreachable native tail alongside the copier.
+            rom[
+                INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3
+            ] = vanilla_rom[INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3]
+            if native_ted_postcopy and not cached_ted_full_plane:
+                # The 2,800-frame caller receipt proves every Ted publication
+                # comes from this one stock alternating-map call. Hooking only
+                # it avoids adding even a scene check to unrelated map copies.
+                assert rom[0x028A:0x028D] == bytes.fromhex("CD 95 42")
+                if not ted_writer_install_only:
+                    rom[0x028A:0x028D] = bytes.fromhex(
+                        "CD 80 DB" if (
+                            ted_writer_mirror or ted_hdma_piggyback
+                            or ted_inwindow_gdma
+                        ) else
+                        "CD 87 DB"
+                    )
+                if ted_writer_mirror and not ted_writer_install_only:
+                    assert rom[0x3136:0x3139] == bytes.fromhex("C1 13 13")
+                    rom[0x3136:0x3139] = bytes([
+                        0xC3,
+                        TED_WRITER_FIXED_STUB_ADDR & 0xFF,
+                        TED_WRITER_FIXED_STUB_ADDR >> 8,
+                    ])
+            if cached_ted_full_plane:
+                # The authoritative 2,800-frame native trace proves $028A is
+                # Ted's sole physical publication caller. Keep shared $4295
+                # completely stock so title and cold Stage 1 cannot enter the
+                # arena cache before its scene/runtime exists. The trampoline
+                # is private bank-1 zero space; DB80 retains the ordinary
+                # arena helper used by earlier scenes.
+                assert rom[0x028A:0x028D] == bytes.fromhex("CD 95 42")
+                if not cached_ted_install_only:
+                    cached_entry, cached_entry_tail, cached_fixed_cont = (
+                        build_ted_cached_full_plane_wrapper()
+                    )
+                    assert rom[
+                        TED_WRITER_CLEAR_GATE_ADDR:
+                        TED_WRITER_CLEAR_GATE_ADDR + 13
+                    ] == bytes(13), (
+                        "Ted cached bank-1 trampoline cave is not free"
+                    )
+                    rom[
+                        TED_WRITER_CLEAR_GATE_ADDR:
+                        TED_WRITER_CLEAR_GATE_ADDR + len(cached_entry)
+                    ] = cached_entry
+                    cached_tail_off = 0x4000 + (
+                        TED_CACHED_BANK1_TAIL_ADDR - 0x4000
+                    )
+                    assert rom[
+                        cached_tail_off:cached_tail_off + 9
+                    ] == bytes(9), "Ted cached bank-1 tail cave is not free"
+                    rom[
+                        cached_tail_off:
+                        cached_tail_off + len(cached_entry_tail)
+                    ] = cached_entry_tail
+                    rom[0x028A:0x028D] = bytes([
+                        0xCD,
+                        TED_WRITER_CLEAR_GATE_ADDR & 0xFF,
+                        TED_WRITER_CLEAR_GATE_ADDR >> 8,
+                    ])
+        elif compact_tile_copy and native_ted_postcopy:
+            # The compact diagnostic copier retains $4295's stock toggle ABI,
+            # so the same sole Ted caller can append the post-copy compiler.
+            # This composition tests whether its reclaimed tile-copy time can
+            # pay for complete attributes without dropping publications.
+            assert not cached_ted_full_plane
+            assert rom[0x028A:0x028D] == bytes.fromhex("CD 95 42")
+            rom[0x028A:0x028D] = bytes.fromhex(
+                "CD 80 DB" if (
+                    ted_writer_mirror or ted_hdma_piggyback
+                    or ted_inwindow_gdma
+                ) else "CD 87 DB"
+            )
+            if ted_writer_mirror and not ted_writer_install_only:
+                assert rom[0x3136:0x3139] == bytes.fromhex("C1 13 13")
+                rom[0x3136:0x3139] = bytes([
+                    0xC3,
+                    TED_WRITER_FIXED_STUB_ADDR & 0xFF,
+                    TED_WRITER_FIXED_STUB_ADDR >> 8,
+                ])
 
     if demo_compact_tile_copy:
         assert stock_tile_copy and native_room_writers, (
@@ -8116,6 +14778,10 @@ def main(
     # v3.01 cold-boot timing:
     # joypad -> scene/colorizer first, then the one-shot footer helper.
     # Sound remains owned by the original game; a second call here churns it.
+    conditional_palette_entry = (
+        TED_CACHED_PALETTE_GATE_ADDR
+        if cached_ted_full_plane else CONDITIONAL_PALETTE_ADDR
+    )
     wrapper = bytearray([
         0xC5,                                 # PUSH BC
         0xD5,                                 # PUSH DE
@@ -8140,13 +14806,13 @@ def main(
         PALETTE_PHASE_ADDR >> 8,           # LD A,[pending phase]
         0xB7,                              # OR A
         0x28, 0x05,                        # JR Z,palette_idle_probe
-        0xCD, CONDITIONAL_PALETTE_ADDR & 0xFF,
-        CONDITIONAL_PALETTE_ADDR >> 8,     # pending: service this VBlank
+        0xCD, conditional_palette_entry & 0xFF,
+        conditional_palette_entry >> 8,   # pending: service this VBlank
         0x18, 0x07,                        # JR palette_done
         0xF0, 0xD4,                        # idle: stock VBlank tick
         0xE6, 0x07,                        # once per eight frames
-        0xCC, CONDITIONAL_PALETTE_ADDR & 0xFF,
-        CONDITIONAL_PALETTE_ADDR >> 8,     # CALL Z,palette state probe
+        0xCC, conditional_palette_entry & 0xFF,
+        conditional_palette_entry >> 8,   # CALL Z,palette state probe
         # Robust joypad sampler inherited from the proven v3.01 wrapper.
         # FF93 is consumed by the game. SELECT+START is no longer intercepted.
         0x3E, 0x20,                           # LD A, 0x20 (directions)
@@ -8292,24 +14958,76 @@ def main(
             0xF1, 0xC3, 0x61, 0x00,
         ]))
     if use_stage1_hazard_hook:
-        hazard_mapper_offset = STAGE1_HAZARD_BANK0_MAP_ADDR - 0x0824
-        assert len(new_hook) <= hazard_mapper_offset
-        new_hook.extend(bytes(hazard_mapper_offset - len(new_hook)))
-        new_hook.extend(bytes([
-            0xF0, STAGE1_ATOMIC_ROUTE_HRAM, # completed-copy route token
-            0xFE, 0x03,
-            0xC8,                           # ordinary room: no mapper
-            0x3E, 0x0E,
-        ]))
-        assert 0x0824 + len(new_hook) == LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR
+        if _TED_CACHED_FULL_PLANE_ENV:
+            # Preserve the historical diagnostic layout; this mode requires
+            # native room writers and owns $0838 with its Ted continuation.
+            hazard_mapper_offset = STAGE1_HAZARD_BANK0_MAP_ADDR - 0x0824
+            assert len(new_hook) <= hazard_mapper_offset
+            new_hook.extend(bytes(hazard_mapper_offset - len(new_hook)))
+            new_hook.extend(bytes.fromhex("FE 0C 3E 0D CE 00 00"))
+            assert (
+                0x0824 + len(new_hook)
+                == LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR
+            )
+        else:
+            # Atomic completion reloads exact D880 immediately before calling
+            # this selector. The layered v65 lineage never reached the shared
+            # banked completion because stale A=$01 returned here. Admit only
+            # Penta's receipt-proven seam repair; waking every dormant arena
+            # post-copy sanitizer is a materially broader behavior change.
+            hazard_mapper_offset = STAGE1_HAZARD_BANK0_MAP_ADDR - 0x0824
+            assert len(new_hook) <= hazard_mapper_offset
+            new_hook.extend(bytes(hazard_mapper_offset - len(new_hook)))
+            new_hook.extend(bytes([
+                0xFE, 0x14,
+                0xC0,
+                0x3E, 0x0D,
+            ]))
+            assert (
+                0x0824 + len(new_hook)
+                == LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR
+            )
     assert len(new_hook) <= 47
     new_hook_padded = (new_hook + bytearray(47 - len(new_hook)))[:47]
     rom[0x0824:0x0824 + 47] = new_hook_padded
+    if ted_hdma_piggyback or ted_inwindow_gdma:
+        assert native_room_writers, (
+            "Ted direct fixed entry requires the room-rearm-free $0838 cave"
+        )
+        piggyback_wrapper = (
+            build_ted_inwindow_wrapper()
+            if ted_inwindow_gdma else build_ted_hdma_piggyback_wrapper()
+        )
+        assert rom[
+            ROOM_BG_REARM_BANK0_ADDR:
+            ROOM_BG_REARM_BANK0_ADDR + len(piggyback_wrapper)
+        ] == bytes(len(piggyback_wrapper)), (
+            "Ted piggyback fixed entry $0838-$0847 is not free"
+        )
+        rom[
+            ROOM_BG_REARM_BANK0_ADDR:
+            ROOM_BG_REARM_BANK0_ADDR + len(piggyback_wrapper)
+        ] = piggyback_wrapper
     if use_room_rearm_hooks:
         install_room_bg_rearm_hooks(
             rom,
             target_addr=ROOM_BG_REARM_BANK0_ADDR,
         )
+    if cached_ted_full_plane and not cached_ted_install_only:
+        assert not use_room_rearm_hooks, (
+            "Ted cached fixed continuation and room rearm cannot share $0838"
+        )
+        cached_fixed_cont = build_ted_cached_full_plane_wrapper()[2]
+        cached_fixed_end = TED_CACHED_FIXED_CONT_ADDR + len(cached_fixed_cont)
+        assert rom[
+            TED_CACHED_FIXED_CONT_ADDR:cached_fixed_end
+        ] == bytes(len(cached_fixed_cont)), (
+            "Ted cached fixed-bank continuation cave is not free: "
+            + bytes(rom[
+                TED_CACHED_FIXED_CONT_ADDR:cached_fixed_end
+            ]).hex()
+        )
+        rom[TED_CACHED_FIXED_CONT_ADDR:cached_fixed_end] = cached_fixed_cont
     lava_decider_bank0_map_entry = build_lava_attr_decider_bank0_map_entry()
     bank0_decider_end = (
         LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR
@@ -8322,6 +15040,50 @@ def main(
     rom[
         LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR:bank0_decider_end
     ] = lava_decider_bank0_map_entry
+    if ted_writer_mirror:
+        assert native_room_writers, (
+            "Ted ROM writer tracker currently owns the native-room free "
+            "VBlank padding at $0838"
+        )
+        clear_invalidator = build_ted_writer_clear_invalidator()
+        clear_invalidator_end = (
+            TED_WRITER_CLEAR_GATE_ADDR + len(clear_invalidator)
+        )
+        assert rom[
+            TED_WRITER_CLEAR_GATE_ADDR:clear_invalidator_end
+        ] == bytes(len(clear_invalidator)), (
+            "Ted writer invalidator cave at bank1:$6FE4 is no longer free"
+        )
+        assert rom[0x4422:0x4425] == bytes.fromhex("21 A0 C1")
+        rom[
+            TED_WRITER_CLEAR_GATE_ADDR:clear_invalidator_end
+        ] = clear_invalidator
+        rom[0x4422:0x4425] = bytes([
+            0xC3,
+            TED_WRITER_CLEAR_GATE_ADDR & 0xFF,
+            TED_WRITER_CLEAR_GATE_ADDR >> 8,
+        ])
+        writer_stub = build_ted_writer_fixed_stub()
+        assert rom[
+            TED_WRITER_FIXED_STUB_ADDR:
+            TED_WRITER_FIXED_STUB_ADDR + len(writer_stub)
+        ] == bytes(len(writer_stub))
+        rom[
+            TED_WRITER_FIXED_STUB_ADDR:
+            TED_WRITER_FIXED_STUB_ADDR + len(writer_stub)
+        ] = writer_stub
+        writer_runtime = build_ted_writer_rom_runtime()
+        writer_runtime_off = (
+            BANK13 + TED_WRITER_ROM_RUNTIME_ADDR - 0x4000
+        )
+        assert rom[
+            writer_runtime_off:writer_runtime_off + len(writer_runtime)
+        ] == bytes(len(writer_runtime)), (
+            "Ted ROM writer runtime cave at bank13:$7687 is no longer free"
+        )
+        rom[
+            writer_runtime_off:writer_runtime_off + len(writer_runtime)
+        ] = writer_runtime
     if not use_room_rearm_hooks:
         room_hook_status = "native FFBD writers/RST $00 retained"
     else:
@@ -8430,11 +15192,113 @@ def main(
         + len(spotlight_map)
     ]
     assert _map == spotlight_map
+    # Final handoff gate: the contiguous $7200-$7AFF range is nine complete
+    # boss attribute LUTs. No diagnostic/runtime payload may borrow even a
+    # tail from these pages after they are installed.
+    protected_arena_luts = bytearray(b"".join(
+        bytes(build_fn()) for _, _, build_fn in arena_tables
+    ))
+    assert len(protected_arena_luts) == 0x900
+    if ted_block_major:
+        exact = build_ted_block_major_exact_fit_draft()
+        for address, payload in exact.items():
+            if TED_TABLE_ADDR <= address < TED_TABLE_ADDR + 0x100:
+                start = address - ARENA_BASE_ADDR
+                protected_arena_luts[start:start + len(payload)] = payload
+    elif ted_inwindow_gdma:
+        # The in-window path cold-copies its private D500 sanitizer from the
+        # otherwise-neutral tail of Ted's own page.  No other boss page is
+        # touched, and the runtime whitelist clears every non-sparse high-ID
+        # attribute before publication.
+        sanitizer_source, _helpers = build_ted_inwindow_plane_sanitizer()
+        sanitizer_offset = (
+            TED_INWINDOW_SANITIZER_SOURCE_ADDR - ARENA_BASE_ADDR
+        )
+        protected_arena_luts[
+            sanitizer_offset:
+            sanitizer_offset + len(sanitizer_source)
+        ] = sanitizer_source
+    if expanded_ted_payload:
+        # Bank 13 from this build is copied to private Ted-only bank 16.  Its
+        # Angela LUT is never selected for Angela gameplay, so the receipt-
+        # proven unused $BB-$D6 interval safely carries Ted's envelope table.
+        # Production bank 13 remains the exact YAML-generated Angela table.
+        envelope_offset = TED_ENVELOPE_ROW_TABLE_ROM_ADDR - ARENA_BASE_ADDR
+        protected_arena_luts[
+            envelope_offset:envelope_offset + len(ted_envelope_table)
+        ] = ted_envelope_table
+    # Architecture-specific Ted helpers may intentionally occupy only the
+    # asserted-neutral tail ($7687-$76FF), never editable palette entries.
+    # Fold their exact generated bytes into the final identity receipt while
+    # retaining the full-range comparison against every other late write.
+    for address, payload in arena_fragment_payloads:
+        if TED_INWINDOW_SANITIZER_SOURCE_ADDR <= address < 0x7700:
+            start = address - ARENA_BASE_ADDR
+            protected_arena_luts[start:start + len(payload)] = payload
+    # Ted's source-qualified palette domain ends at tile $86.  Several
+    # independently identity-checked Ted helpers share the native-zero
+    # $7687-$76FF tail, so exclude only that asserted-neutral suffix from the
+    # aggregate LUT comparison.  Editable $7600-$7686 remains byte-exact.
+    ted_neutral_start = TED_INWINDOW_SANITIZER_SOURCE_ADDR - ARENA_BASE_ADDR
+    assert protected_arena_luts[ted_neutral_start:0x500] == bytes(
+        0x500 - ted_neutral_start
+    ) or ted_block_major or ted_inwindow_gdma or (
+        _os.environ.get("PENTA_TED_EXPANDED_PAYLOAD", "0") == "1"
+    )
+    protected_arena_luts[ted_neutral_start:0x500] = rom[
+        BANK13 + ARENA_BASE_ADDR - 0x4000 + ted_neutral_start:
+        BANK13 + ARENA_BASE_ADDR - 0x4000 + 0x500
+    ]
+    protected_arena_off = BANK13 + ARENA_BASE_ADDR - 0x4000
+    protected_arena_actual = rom[
+        protected_arena_off:protected_arena_off + len(protected_arena_luts)
+    ]
+    protected_arena_mismatches = [
+        index for index, (actual, expected) in enumerate(zip(
+            protected_arena_actual, protected_arena_luts
+        )) if actual != expected
+    ]
+    assert not protected_arena_mismatches, (
+        "protected boss LUT range $7200-$7AFF changed after installation",
+        [
+            (
+                hex(ARENA_BASE_ADDR + index),
+                hex(protected_arena_actual[index]),
+                hex(protected_arena_luts[index]),
+            )
+            for index in protected_arena_mismatches[:16]
+        ],
+    )
+    # Zero-valued stock structures are still live data.  This whole range is
+    # selected by the bank-13 map pointer table and must remain byte-identical
+    # through every late installation step.
+    live_record_off = BANK13 + (0x4CE4 - 0x4000)
+    live_record_size = 0x4CF2 - 0x4CE4
+    assert rom[
+        live_record_off:live_record_off + live_record_size
+    ] == vanilla[live_record_off:live_record_off + live_record_size], (
+        "live bank-13 $4CE4-$4CF1 map records changed after installation"
+    )
+    assert rom[
+        later_stage_source_off:
+        later_stage_source_off + len(later_stage_bg0_sources)
+    ] == later_stage_bg0_sources, (
+        "later-stage BG0 source table changed after installation"
+    )
+    if ted_block_major:
+        # DB80 is the in-window ready/cold gate.  DB87 is an operand byte
+        # inside its CALL $DB91 instruction; entering there executes SUB C
+        # followed by the undefined $DB opcode and freezes at PC=$DB88.
+        assert rom[0x028A:0x028D] == bytes.fromhex("CD 80 DB"), (
+            "block-major publisher caller must enter the DB80 gate",
+            rom[0x028A:0x028D].hex(),
+        )
     for offset, payload, label in cutscene_regions:
         assert rom[offset:offset + len(payload)] == payload, label
     print(
         "  ✅ title/gameplay OAM dispatcher + transition service + "
-        "complete spotlight roster map + cutscene CRAM loader verified"
+        "complete spotlight roster map + cutscene CRAM loader + protected "
+        "boss LUTs verified"
     )
 
     write_output_with_backup(

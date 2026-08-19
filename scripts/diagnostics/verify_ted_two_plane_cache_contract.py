@@ -13,8 +13,9 @@ CADENCE_SCHEMA = "penta-boss-publication-cadence-v3"
 RECORD_SIZE = 4 + 24 * 24
 TED_TABLE_OFFSET = 13 * 0x4000 + (0x7600 - 0x4000)
 SAMPLES = (
-    350, 230, 419, 221, 186, 151, 204, 390, 399, 196, 227,
-    303, 403, 431, 443, 163, 164, 185, 374, 437, 464, 564,
+    350, 182, 86, 403, 173, 437, 101, 186, 370, 303, 431, 82,
+    399, 221, 240, 390, 198, 227, 163, 209, 419, 94, 196, 204,
+    244, 564, 464, 144, 443, 374, 150, 14,
 )
 
 
@@ -67,11 +68,55 @@ def analyze(sources: list[bytes], table: bytes, samples: tuple[int, ...]) -> dic
 def compact_signature(source: bytes, samples: tuple[int, ...]) -> tuple[int, int]:
     """Return the production O(1)-sized raw-source signature.
 
-    The 22-cell raw sum has one observed attribute-layout collision.  Raw cell
-    221 separates exactly that pair, so the runtime needs only direct absolute
-    reads, ADDs, and one retained byte—no table walk or multiplication.
+    The 32-cell sum plus rolling-3 hash is collision-free across the qualified
+    and fresh generated-state Ted corpora. Both operations are eight-bit and
+    map directly to the ROM runtime's ADD-only loop.
     """
-    return sum(source[index] for index in samples) & 0xFF, source[221]
+    total = rolling = 0
+    for index in samples:
+        value = source[index]
+        total = (total + value) & 0xFF
+        rolling = (rolling * 3 + value) & 0xFF
+    return total, rolling
+
+
+def incremental_signature(source: bytes) -> tuple[int, int, int, int]:
+    """Exact runtime key maintained by the Ted-only cloned writer."""
+    sums = [0, 0, 0, 0]
+    for index, value in enumerate(source):
+        group = (index ^ (index >> 5)) & 3
+        sums[group] = (sums[group] + value) & 0xFF
+    return tuple(sums)  # type: ignore[return-value]
+
+
+def combined_corpus_negative_control(table: bytes) -> dict:
+    """Portable witness from qualified record 142 and fresh record 133."""
+    prefix = (
+        119, 68, 121, 4, 59, 22, 120, 121, 121, 120, 8, 27, 37, 81,
+        119, 200, 71, 87, 120, 120, 223, 121, 69, 77, 119, 107, 29,
+        119, 32, 121, 49,
+    )
+    qualified = prefix + (119,)
+    fresh = prefix + (131,)
+
+    def key(values: tuple[int, ...]) -> tuple[int, int]:
+        total = rolling = 0
+        for value in values:
+            total = (total + value) & 0xFF
+            rolling = (rolling * 3 + value) & 0xFF
+        return total, rolling
+
+    return {
+        "provenance": ["qualified:142", "fresh:133"],
+        "truncated_compact_collision": key(qualified[:-1]) == key(fresh[:-1]),
+        "full_compact_separates": key(qualified) != key(fresh),
+        "truncated_mapped_collision": bytes(
+            table[value] for value in qualified[:-1]
+        ) == bytes(table[value] for value in fresh[:-1]),
+        "full_mapped_separates": bytes(
+            table[value] for value in qualified
+        ) != bytes(table[value] for value in fresh),
+    }
 
 
 def analyze_compact(sources: list[bytes], table: bytes,
@@ -122,6 +167,11 @@ def analyze_runtime_keys(trace_path: Path, sources: list[bytes],
                          table: bytes) -> dict:
     keys = [bytes.fromhex(line[4:]) for line in trace_path.read_text().splitlines()
             if line.startswith("key=")]
+    key_bytes = sorted(set(map(len, keys)))
+    signature = incremental_signature if key_bytes == [4] else (
+        lambda source: compact_signature(source, SAMPLES)
+    )
+    expected = [bytes(signature(source)) for source in sources]
     layouts = [bytes(table[tile] for tile in source) for source in sources]
     owners: dict[bytes, bytes] = {}
     collisions = 0
@@ -135,8 +185,13 @@ def analyze_runtime_keys(trace_path: Path, sources: list[bytes],
             cache[cursor] = key
             cursor ^= 1
             misses += 1
+    exact_mismatches = sum(
+        observed != wanted for observed, wanted in zip(keys, expected)
+    ) + abs(len(keys) - len(expected))
     return {
         "keys": len(keys), "unique_keys": len(set(keys)),
+        "key_bytes": key_bytes,
+        "exact_compact_key_mismatches": exact_mismatches,
         "layout_collisions": collisions,
         "fifo_misses": misses, "fifo_hits": len(keys) - misses,
     }
@@ -167,15 +222,31 @@ def main() -> int:
     dx = ted.get("dx", {}) if isinstance(ted, dict) else {}
     source_path = Path(dx.get("source_trace", ""))
     rom = args.rom.read_bytes()
+    incremental_mode = rom[0x80EF:0x80F2] == bytes.fromhex("CD 8C 7A")
     table = rom[TED_TABLE_OFFSET:TED_TABLE_OFFSET + 256]
     raw_sources = source_path.read_bytes()
     sources = read_sources(source_path)
     metrics = analyze(sources, table, SAMPLES)
     prefix_control = analyze(sources, table, SAMPLES[:-1])
     compact = analyze_compact(sources, table, SAMPLES)
+    incremental = analyze_compact(sources, table, tuple(range(0)))
+    if incremental_mode:
+        layouts = [bytes(table[tile] for tile in source) for source in sources]
+        signatures = [incremental_signature(source) for source in sources]
+        owners: dict[tuple[int, int, int, int], bytes] = {}
+        collisions = 0
+        for signature, layout in zip(signatures, layouts):
+            previous = owners.setdefault(signature, layout)
+            collisions += previous != layout
+        incremental = {
+            "signature_bytes": 4,
+            "unique_signatures": len(set(signatures)),
+            "layout_collisions": collisions,
+        }
     compact_control = analyze_compact(
         sources, table, SAMPLES[:-1]
     )
+    combined_control = combined_corpus_negative_control(table)
     physical = analyze_physical_publications(sources, table, raw_sources)
     runtime = analyze_runtime_keys(Path(dx.get("trace", "")), sources, table)
     checks = {
@@ -187,25 +258,32 @@ def main() -> int:
         "bounded_layout_population": metrics["unique_layouts"] <= 64,
         "collision_free_signature": metrics["signature_collisions"] == 0,
         "collision_free_compact_signature":
-            compact["layout_collisions"] == 0,
-        "bounded_compact_signature": compact["signature_bytes"] == 2,
-        "bounded_compact_fifo_misses": compact["fifo_misses"] <= 50,
+            (incremental if incremental_mode else compact)["layout_collisions"] == 0,
+        "bounded_compact_signature":
+            (incremental if incremental_mode else compact)["signature_bytes"] in (2, 4),
+        "bounded_compact_fifo_misses":
+            incremental_mode or compact["fifo_misses"] <= 50,
         "bounded_physical_attribute_publications":
             physical["attribute_publications"] <= 90
             and physical["redundant_attribute_publications_skipped"] >= 390,
         "runtime_key_population": runtime["keys"] == metrics["records"],
+        "runtime_key_is_exact_compact_signature":
+            runtime["key_bytes"] == ([4] if incremental_mode else [2])
+            and runtime["exact_compact_key_mismatches"] == 0,
         "collision_free_runtime_key": runtime["layout_collisions"] == 0,
         "bounded_runtime_key_misses": runtime["fifo_misses"] <= 50,
         "overdiscriminating_runtime_key_negative_control":
             rejects_overdiscriminating_key(metrics["records"]),
         "no_false_cache_hits": metrics["false_cache_hits"] == 0,
-        "bounded_signature": metrics["signature_cells"] <= 24,
+        "bounded_signature": incremental_mode or metrics["signature_cells"] <= 32,
         "two_plane_compile_budget": metrics["two_plane_misses"] <= 50
             and metrics["full_compile_fraction"] <= 0.10,
         "truncated_signature_negative_control":
-            prefix_control["signature_collisions"] > 0,
+            combined_control["truncated_mapped_collision"]
+            and combined_control["full_mapped_separates"],
         "truncated_compact_signature_negative_control":
-            compact_control["layout_collisions"] > 0,
+            combined_control["truncated_compact_collision"]
+            and combined_control["full_compact_separates"],
     }
     receipt = {
         "schema": SCHEMA,
@@ -216,10 +294,12 @@ def main() -> int:
         "samples": list(SAMPLES),
         "metrics": metrics,
         "compact_signature": compact,
+        "incremental_signature": incremental,
         "physical_publication_cache": physical,
         "runtime_key": runtime,
         "negative_control": prefix_control,
         "compact_negative_control": compact_control,
+        "combined_corpus_negative_control": combined_control,
         "sources": {
             "rom": str(args.rom.resolve()),
             "cadence": str(args.cadence.resolve()),

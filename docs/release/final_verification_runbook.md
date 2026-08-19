@@ -44,10 +44,11 @@ finishing its gate battery.
 1. `python3 scripts/diagnostics/verify_release_candidate.py` full roster.
    Expected reds to clear with promotion: the ~20 ted_* gates, boss gates
    blocked behind them, and the Aug-14-build artifacts.
-2. Gates that need bookkeeping (not code) before green is honest:
-   - `boss_publication_cadence`: direction-only re-scope or phase-matched
-     pairs (`docs/release/known_deviations.md` gate note).
-   - Ted entry ceiling: re-derived limit with provenance comment.
+2. Receipt bookkeeping must remain explicit:
+   - `boss_trajectory_pairing` must pair all nine bosses and its phase-shifted
+     same-ROM null must remain exactly 0.00%.
+   - The top-level release ledger must retain every accepted target miss.
+   - Ted entry ceiling must retain its provenance comment.
 3. Deterministic suite double-build (`run_deterministic_suite.py`) for the
    hash-bound receipt.
 
@@ -61,6 +62,6 @@ finishing its gate battery.
 
 ## Known accepted deviations at ship time
 
-See `docs/release/known_deviations.md` — dungeon ~6% pace, boss-arena
-direction-only speed, crystal 1-cell wrap seam, white-paper opening scroll,
-DX title footer.
+See `docs/release/known_deviations.md` — remaining dungeon ~3% pace,
+matched-work boss throughput, Crystal's accepted slowdown and 1-cell wrap
+seam, title-attract duration, Ted's pending effect choice, and the DX footer.

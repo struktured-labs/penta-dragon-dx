@@ -407,13 +407,21 @@ def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
             and int(frame["bg_mismatch"]) > 0
         )
     ]
-    demo_return_sample = next(
-        (
-            int(frame["sample"])
-            for frame in frames
-            if mode == "demo" and frame["d880"] == "01"
-        ),
+    demo_return = next(
+        (frame for frame in frames
+         if mode == "demo" and frame["d880"] == "01"),
         None,
+    )
+    demo_entry_frame = (
+        int(frames[0]["emulated_frame"])
+        if mode == "demo" and frames else None
+    )
+    demo_return_sample = (
+        int(demo_return["sample"]) if demo_return is not None else None
+    )
+    demo_return_frame = (
+        int(demo_return["emulated_frame"])
+        if demo_return is not None else None
     )
     native_pickup_art = reserved_pickup_art_contract(rom)
     failures = []
@@ -423,12 +431,13 @@ def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
             f"{delay_hits} times"
         )
     if mode == "demo" and (
-        demo_return_sample is None
-        or not 300 <= demo_return_sample <= 500
+        demo_return_frame is None
+        or not 8200 <= demo_return_frame <= 9500
     ):
         failures.append(
-            "attract miniboss reel did not return to title in the OG-parity "
-            f"300..500-frame window (observed {demo_return_sample})"
+            "the deterministic attract loop did not return to title in its "
+            f"receipt-proven boot-frame window 8200..9500 "
+            f"(observed {demo_return_frame})"
         )
     if gameplay_bgp_pulses:
         failures.append(
@@ -500,7 +509,9 @@ def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
         "steady_all_white_active_bg_palettes": steady_all_white_active_bg,
         "steady_gameplay_bg_mismatches": steady_gameplay_bg_mismatches,
         "gameplay_bgp_pulses": gameplay_bgp_pulses,
+        "demo_entry_frame": demo_entry_frame,
         "demo_return_sample": demo_return_sample,
+        "demo_return_frame": demo_return_frame,
         "most_changed_frames": suspicious,
         "trace": str(trace),
     }
@@ -536,7 +547,7 @@ def main() -> int:
     try:
         for mode in modes:
             sample_frames = (
-                max(args.frames, 500) if mode == "demo" else args.frames
+                max(args.frames, 700) if mode == "demo" else args.frames
             )
             run_probe(
                 args.mgba, rom, output, mode, sample_frames, args.timeout

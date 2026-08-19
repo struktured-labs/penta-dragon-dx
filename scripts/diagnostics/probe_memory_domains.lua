@@ -1,10 +1,11 @@
-local OUT = assert(os.getenv("MEMORY_DOMAINS_OUT"))
-callbacks:add("frame", function()
-  local out = assert(io.open(OUT, "w"))
-  for key, value in pairs(emu.memory or {}) do
-    out:write(string.format("%s=%s\n", tostring(key), tostring(value)))
-  end
-  out:close()
-  local done = assert(io.open(OUT .. ".done", "w")); done:write("ok\n"); done:close()
-  emu:stop()
-end)
+local out = assert(os.getenv("MEMORY_DOMAINS_OUT"))
+local handle = assert(io.open(out, "w"))
+for key, value in pairs(emu.memory) do
+  handle:write(tostring(key) .. "\t" .. tostring(value) .. "\n")
+end
+for _, key in ipairs({"vram", "vram0", "vram1", "videoRam", "cgbVram"}) do
+  local ok, value = pcall(function() return emu.memory[key] end)
+  handle:write(string.format("probe:%s\t%s\t%s\n", key, tostring(ok), tostring(value)))
+end
+handle:close()
+os.exit(0)

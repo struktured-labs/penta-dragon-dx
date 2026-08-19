@@ -11,6 +11,8 @@ local POST_TRIGGER_KEYS = tonumber(
 local TRACE_SCANNER = os.getenv("LOW_HEALTH_TRACE_SCANNER") == "1"
 local TRACE_ATTR = os.getenv("LOW_HEALTH_TRACE_ATTR") == "1"
 local TRACE_LAYOUTS = os.getenv("LOW_HEALTH_TRACE_LAYOUTS") == "1"
+local STATE_OUT = os.getenv("LOW_HEALTH_STATE_OUT")
+local WATCH_BGP = os.getenv("LOW_HEALTH_WATCH_BGP") == "1"
 local frame, sample, done = 0, 0, false
 local music_transition_seen = false
 local scanner_path = "entry"
@@ -149,16 +151,18 @@ if TRACE_SCANNER then
   end)
 end
 
-assert(emu:setRangeWatchpoint(function(info)
-  local handle = assert(io.open(OUT .. ".writes.tsv", "a"))
-  handle:write(string.format(
-    "%d\t%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\n",
-    frame, register("PC") & 0xFFFF, emu:read8(0xFF99),
-    info.oldValue & 0xFF, info.newValue & 0xFF,
-    emu:read8(0xFF44), emu:read8(0xFF41), emu:read8(0xD880),
-    emu:read8(0xFFC1), emu:read8(0xDCDC), emu:read8(0xDCDD)))
-  handle:close()
-end, 0xFF47, 0xFF48, C.WATCHPOINT_TYPE.WRITE) > 0)
+if WATCH_BGP then
+  assert(emu:setRangeWatchpoint(function(info)
+    local handle = assert(io.open(OUT .. ".writes.tsv", "a"))
+    handle:write(string.format(
+      "%d\t%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\n",
+      frame, register("PC") & 0xFFFF, emu:read8(0xFF99),
+      info.oldValue & 0xFF, info.newValue & 0xFF,
+      emu:read8(0xFF44), emu:read8(0xFF41), emu:read8(0xD880),
+      emu:read8(0xFFC1), emu:read8(0xDCDC), emu:read8(0xDCDD)))
+    handle:close()
+  end, 0xFF47, 0xFF48, C.WATCHPOINT_TYPE.WRITE) > 0)
+end
 
 local function palette_bytes(accessor_name, index_port, data_port)
   local accessor = emu.memory[accessor_name]
@@ -276,6 +280,7 @@ local function visible_bg_receipt()
   local dynamic_tooth_positions = hazard_positions(function(column, row)
     return all_tiles[row * 32 + column]
   end)
+  emu:write8(0xFF4F, 1)
   for row = 0, 17 do
     for column = 0, 19 do
       local map_y = ((scy >> 3) + row) & 0x1F
@@ -284,7 +289,6 @@ local function visible_bg_receipt()
       tiles[offset] = all_tiles[offset]
     end
   end
-  emu:write8(0xFF4F, 1)
   for row = 0, 17 do
     for column = 0, 19 do
       local map_y = ((scy >> 3) + row) & 0x1F
@@ -414,6 +418,9 @@ callbacks:add("frame", function()
 
   if sample >= SAMPLES then
     done = true
+    if STATE_OUT and STATE_OUT ~= "" then
+      emu:saveStateFile(STATE_OUT)
+    end
     if TRACE_LAYOUTS then
       local layouts = assert(io.open(OUT .. ".layouts.bin", "wb"))
       for _, record in ipairs(layout_records) do

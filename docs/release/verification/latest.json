@@ -1,9 +1,9 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-08-09T12:37:12.003979+00:00",
-  "git_head_at_run": "2847a814f0f1da2a2beb1042c2b81445758eec68",
-  "source_fingerprint": "58aa788c2269c5b86a61d0d332ed7c7867246029dc20409c7d6b282ca715ed50",
+  "generated_at": "2026-08-19T07:47:56.536385+00:00",
+  "git_head_at_run": "38299b26bbef13df6f8b9be3428625f9ea948c7f",
+  "source_fingerprint": "07c162ef2da6b1b112557bf9207e239ef9da27348a13b4cfa82831b70d83203a",
   "source_inputs": [
     {
       "path": ".claude/settings.json",
@@ -17,8 +17,8 @@
     },
     {
       "path": ".githooks/pre-commit",
-      "sha256": "7acdb4dd0ba5c21c68e5830e5563d80dc9acd9e4ad653cd9c2390ab0124d419f",
-      "size": 213
+      "sha256": "59986ae3419558589318886dbdd933e533cfc1b575dfc42849122b6cbf32de00",
+      "size": 207
     },
     {
       "path": ".gitignore",
@@ -27,13 +27,33 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "db0a829d94c0749baa2b4bfb53b04535e2c5bfca43c93782e30a6fa81e67e0f3",
-      "size": 1144
+      "sha256": "f8e58e94c0bd92e9f9ab84a8803ea9a2044ff149bb711128c063de341e83a718",
+      "size": 1818
     },
     {
       "path": "CLAUDE.md",
-      "sha256": "8c0e72dc9b715c02da5a61c2d65dde32212987dd8e994b5592e06c1812de60f0",
-      "size": 17689
+      "sha256": "64b77a06f90295633a16354bb2a222a14fcb95158ad384a54aaa41675c7984db",
+      "size": 20405
+    },
+    {
+      "path": "docs/audit/boss_silhouette_contracts.json",
+      "sha256": "15af0cf10077887345ea2b06177023254d79a82b7d32175eea6ce2c539d2e76a",
+      "size": 1643
+    },
+    {
+      "path": "docs/audit/ted_baseline_v4/determinism.json",
+      "sha256": "a8e32fef0ff282b2cbece4daeba059d563787140ff6afb205f5cf3dd5041a482",
+      "size": 800
+    },
+    {
+      "path": "docs/audit/ted_baseline_v4/readiness.json",
+      "sha256": "e05fbf3627d44facfd4fdaeaba4a1d45bb66885334cfdec2fd53e415fe22e040",
+      "size": 2278
+    },
+    {
+      "path": "docs/audit/ted_candidate_baseline_v4.json",
+      "sha256": "eae6ad7f2f27f793009c728bb38df6fe9803e738b8f96331d9fc84ac7bb48e4b",
+      "size": 918
     },
     {
       "path": "mgba-qt.sh",
@@ -57,8 +77,8 @@
     },
     {
       "path": "palettes/penta_palettes_v097.yaml",
-      "sha256": "885af02c48bfef61830e53eab11ce852bb6d9f678db9c34a7361811fcd62de98",
-      "size": 11862
+      "sha256": "5ffe99c8e6d667fd0577388e404c443d4e8de6d2b51255ea4db68acab203f9bb",
+      "size": 12434
     },
     {
       "path": "palettes/spotlight_palette_map.yaml",
@@ -81,9 +101,19 @@
       "size": 533
     },
     {
+      "path": "rom/penta_dragon_dx.ips",
+      "sha256": "84e4b99b71aa6009842266f4d8177ed736dc6e260785ee54b39f79ec62d23d55",
+      "size": 271270
+    },
+    {
       "path": "scripts/arena_position.py",
       "sha256": "ce1a1b78ccf8d0506971d210ecda1090310834b5838667c776f2b38225bc8048",
       "size": 11680
+    },
+    {
+      "path": "scripts/arena_tables_data.py",
+      "sha256": "df584dfec514b663d6741a845f84dc616b277f64196b1227630d64d619a13ec4",
+      "size": 4801
     },
     {
       "path": "scripts/bg_experiment.py",
@@ -92,8 +122,13 @@
     },
     {
       "path": "scripts/build_release_bundle.py",
-      "sha256": "2a1672ec37a82005964cfe77117cb8201c50265e6137a72d2630adc59ba40105",
-      "size": 21552
+      "sha256": "727858d45b1c4340b297db764d000e9e8b84fedbe43424e56bab2258f4a9b038",
+      "size": 21629
+    },
+    {
+      "path": "scripts/build_ted_expanded_candidate.py",
+      "sha256": "82ec480f5d4392699a035a12c1cd13376995c7f0bacd028045ea651e6195a2b1",
+      "size": 9297
     },
     {
       "path": "scripts/build_v296_phantomsafe.py",
@@ -102,8 +137,8 @@
     },
     {
       "path": "scripts/build_v301_gdma.py",
-      "sha256": "a1f778058d43df8d3fec81d013e028c4e395369cf4ef0818f1661a25cfd14bfe",
-      "size": 88530
+      "sha256": "1d8513657d61624ec3c67fef5410bf63dd2a614f694eea5e800da1ac37e77723",
+      "size": 98240
     },
     {
       "path": "scripts/build_v301_teleport.py",
@@ -112,8 +147,8 @@
     },
     {
       "path": "scripts/build_v302_title_fix.py",
-      "sha256": "79437147a2a0e3e706097cdc78cdd738e64dc11433c5fc7a676e1a6e295db44e",
-      "size": 329023
+      "sha256": "94fd9d802201b62e51b2da9aece86d8636aa190cd2f0899581381a145de1cb53",
+      "size": 631783
     },
     {
       "path": "scripts/check_emulator_processes.sh",
@@ -131,14 +166,19 @@
       "size": 5695
     },
     {
+      "path": "scripts/deploy_pocket_rom.py",
+      "sha256": "0ac36580542bff2aaca5d777bee86247bb02e6350ef4300cf945fb30269f77df",
+      "size": 4096
+    },
+    {
       "path": "scripts/diagnostics/analyze_ending_page_discriminators.py",
       "sha256": "8ba4c186e85896ece88ceed197a5f0395e62aaa670cb31d3d088ee8e778f149a",
       "size": 11534
     },
     {
       "path": "scripts/diagnostics/analyze_stage1_hazard_layers.py",
-      "sha256": "ed8b2d28b1b4e4fb0d66696915b38158e16abb888545a6b9b7dafe73cc28d488",
-      "size": 27130
+      "sha256": "b7acbe9795a6b813a7d1f50ecaa6aa88f22bfcdbf54885f81d26cff9a29c570b",
+      "size": 27231
     },
     {
       "path": "scripts/diagnostics/analyze_stage1_pickup_art.py",
@@ -151,19 +191,69 @@
       "size": 7195
     },
     {
+      "path": "scripts/diagnostics/analyze_troop_publication_corpus.py",
+      "sha256": "0c1e9bbc2d0afa6a11777000540e4741cccf3122bb2d1726c7e7102ffad82b0b",
+      "size": 4713
+    },
+    {
+      "path": "scripts/diagnostics/boss_geometry_contract.py",
+      "sha256": "2c64353043fd3b4063727369147553a213e719f18daa1c76ad0f262ebdd8252f",
+      "size": 5939
+    },
+    {
+      "path": "scripts/diagnostics/capture_all_minibosses.py",
+      "sha256": "de1f9e4613499b01ed11cfeb4c924796a471172654cfbf56aa939e1aa6643c89",
+      "size": 10367
+    },
+    {
       "path": "scripts/diagnostics/capture_attract_reel.py",
-      "sha256": "cfc2060cfc21a59cde46f864dd3b9dbabe64fa5108cbed17fc64cbfb771a50ed",
-      "size": 6102
+      "sha256": "ee1bca7b417d844cd9ce5c54e569bb341d444f4e74e3565430bf31b3de8284b1",
+      "size": 9656
+    },
+    {
+      "path": "scripts/diagnostics/capture_boss_material_gallery.py",
+      "sha256": "266ae5c85f73fab0a3f8b11327f8e6a2bec5cd600cb2a6bfc009cb6a42a57f35",
+      "size": 10859
+    },
+    {
+      "path": "scripts/diagnostics/capture_boss_side_by_side.py",
+      "sha256": "5685914c47f40ba17a03394d98e925477cc0772ea9828f2fdbe4e42e3ca37fd1",
+      "size": 27727
+    },
+    {
+      "path": "scripts/diagnostics/capture_hidden_shmup_gallery.py",
+      "sha256": "d93e082d45944cb445ded9d1e4b8d30fc97d9b0c651e7c335a609c75fae09213",
+      "size": 4572
+    },
+    {
+      "path": "scripts/diagnostics/capture_stage_side_by_side.py",
+      "sha256": "b09959dd953c0d90e41f1b303ca000504143222e69785a568b13fce8a0f29d2b",
+      "size": 7156
+    },
+    {
+      "path": "scripts/diagnostics/capture_stream_scene_deck.py",
+      "sha256": "eba905f5436336da24120d57efa0a8f4932ad365abc6be109df5917c82c82ec7",
+      "size": 5854
+    },
+    {
+      "path": "scripts/diagnostics/compose_boss_material_comparison.py",
+      "sha256": "89615ae9b4c0a9e4b0e92b6b4d2071c2314eb8860484db6a042f7cf1f09cc67a",
+      "size": 4110
     },
     {
       "path": "scripts/diagnostics/diagnose_stage1_freeze.py",
-      "sha256": "a64aa4be1892272c987ed7b4ef0437fc4af3039383739a7400fe32fe04e1aee8",
-      "size": 2231
+      "sha256": "a963cdcf90e3ab6695b24afc267d6f7c90052c55e3bca1b3518160b4158d8651",
+      "size": 2289
+    },
+    {
+      "path": "scripts/diagnostics/dump_ted_vram_frame.lua",
+      "sha256": "c8a4a933d6e0076a986bd28bee13e4c9199d40f66b004d4dcc4bafc8bc3311e0",
+      "size": 1200
     },
     {
       "path": "scripts/diagnostics/generate_stream_boss_states.py",
-      "sha256": "79f7a3a9456f1d43ac5b888b81d1ef1193de8f8b1861addb467673696e65a870",
-      "size": 25698
+      "sha256": "8364575d779933b28ab91d57df3cc5bc6d233c9c49635a952e4939ac7dd56a18",
+      "size": 44320
     },
     {
       "path": "scripts/diagnostics/generate_stream_stage_states.py",
@@ -172,23 +262,38 @@
     },
     {
       "path": "scripts/diagnostics/generate_stream_story_states.py",
-      "sha256": "c6d292d3d2fb8c53a55af10be3f03c2048987cb9f2f06af1b683cc89bd8c08f1",
-      "size": 26523
+      "sha256": "d15a9b3707dbaa30ce61b4dc119f6600dd49aeb4b7a9d4dbcd5f0e0f33917266",
+      "size": 26624
+    },
+    {
+      "path": "scripts/diagnostics/inspect_ted_block_major_exact_fit.py",
+      "sha256": "ba07bc2812a1f667c046729b063bdbc91f76b98ebd6f5aaba82802824a4f2f11",
+      "size": 10914
+    },
+    {
+      "path": "scripts/diagnostics/inspect_ted_packed_exact_fit.py",
+      "sha256": "6d034ee2487eb2c375b979be5ddba1261b59191e05f1388dc30645621aaf386e",
+      "size": 1925
     },
     {
       "path": "scripts/diagnostics/inventory_attract_reel.py",
-      "sha256": "1724f22952242125a87db87a227b7d9607c6c1bf57a952bf0fae612eed674c3f",
-      "size": 17102
+      "sha256": "3f87c38892586fe14c5f808aeb26352af0f332875d6aa0cd12aa80286481ee49",
+      "size": 18404
     },
     {
       "path": "scripts/diagnostics/inventory_final_cutscene.py",
-      "sha256": "e79521c6a45e4bd763309c02fdb81cc979b1f2d0a5ce6ead18c58de0542d120c",
-      "size": 24066
+      "sha256": "d01fc83e9694ca223145857696c17bc51d1a604463c56ac64f13967788f3990f",
+      "size": 25116
+    },
+    {
+      "path": "scripts/diagnostics/inventory_final_cutscene_mgba.py",
+      "sha256": "83814d949e6d22d6e253a3afd8443d4486f004ef01b098dcd0c222b0bb4063c8",
+      "size": 7384
     },
     {
       "path": "scripts/diagnostics/inventory_opening_cutscene.py",
-      "sha256": "39844f777d02c48f509417e0d9cca50d3fc5a5d842a4eec4b1191d96dccfebce",
-      "size": 14319
+      "sha256": "86f425e71f7fc0d91216830d21111521b1cf637c9b85f5c126500bcd0d74fa81",
+      "size": 14388
     },
     {
       "path": "scripts/diagnostics/inventory_savestate_scenes.py",
@@ -197,13 +302,23 @@
     },
     {
       "path": "scripts/diagnostics/inventory_spotlight_roster.py",
-      "sha256": "74161614139105320d744872b2a5e4035908728377d6620c065629111615e8dd",
-      "size": 7410
+      "sha256": "725c8cee254c00de06a57e4a837839379670195ae1de03043161fb379be9a7d9",
+      "size": 7481
     },
     {
       "path": "scripts/diagnostics/make_cgb_test_rom.py",
       "sha256": "950a8e15d8de0bdc6d7ed1259f8ed9061d1be275bdc6071e7ed5144bf38ed193",
       "size": 766
+    },
+    {
+      "path": "scripts/diagnostics/make_semantic_oam_isolation.py",
+      "sha256": "8fbb45e1877a2025328a67dcb33e0a340860e20bb389be094c8adcb72f247890",
+      "size": 3375
+    },
+    {
+      "path": "scripts/diagnostics/make_vblank_service_isolation.py",
+      "sha256": "941878de5461ec56d9c5795ce9bdbdda36009be4bf6a8e519846c3f6aadb732c",
+      "size": 3717
     },
     {
       "path": "scripts/diagnostics/montage.py",
@@ -212,8 +327,78 @@
     },
     {
       "path": "scripts/diagnostics/normalize_mgba_state_pc.py",
-      "sha256": "621d819e9abc5b2ff1e3087c50d0193421b3002a29389cf9d3ea85198ba40736",
-      "size": 6369
+      "sha256": "7718f668eeca9b390af84aad1357c9ffd8dc59723b700b536f86ac9a47b32b01",
+      "size": 11960
+    },
+    {
+      "path": "scripts/diagnostics/patch_arena_9c_cache_relocation.py",
+      "sha256": "78e992e743a5b55ac9f8d741d2ec83d84ed1b1a2c1dd0cba88c874e33ead865b",
+      "size": 3520
+    },
+    {
+      "path": "scripts/diagnostics/patch_arena_decision_latch.py",
+      "sha256": "aea0663ac9820b2cc2a6896ae865d08c4497bda0072d4b2e13ef31b86ba5dc8c",
+      "size": 5816
+    },
+    {
+      "path": "scripts/diagnostics/patch_arena_semantic_helper_bank.py",
+      "sha256": "e5e604ef4126248e3ea2c29f7d4df12bdaa83edaa84e9e5db12c065b9ba43f7e",
+      "size": 6784
+    },
+    {
+      "path": "scripts/diagnostics/patch_bank13_4ce4_collision_isolation.py",
+      "sha256": "d14064ff8b4f0473b19c05c98fb9879b68bbe48d2815e5e8f612a1e1c9415259",
+      "size": 3198
+    },
+    {
+      "path": "scripts/diagnostics/patch_bg_sweep_isolation.py",
+      "sha256": "9b888e291b50dc13b58e438315ae6b0adc6c30e84b44e11ebb7b04e3de443abd",
+      "size": 2971
+    },
+    {
+      "path": "scripts/diagnostics/patch_later_stage_pure_isolation.py",
+      "sha256": "e930f1468aee413d6f236e87566befc394238f2e7cfeb1da3199f52baf18f80f",
+      "size": 3341
+    },
+    {
+      "path": "scripts/diagnostics/patch_native_map_route_isolation.py",
+      "sha256": "e5a528787742159429dca8d05da7694e24d73ed5f9f18a933d2a5c2e179bf674",
+      "size": 2978
+    },
+    {
+      "path": "scripts/diagnostics/patch_shalamar_native_cadence.py",
+      "sha256": "e5cc00f7b2c39ffefea9cecf69a46cb8d961821250f82d1141496b4cd0ed2f96",
+      "size": 3551
+    },
+    {
+      "path": "scripts/diagnostics/patch_ted_connector_palettes.py",
+      "sha256": "f19b303c3d15e42353379d7aae0ce0da963ab2d02813d837fd9e86016aa38f51",
+      "size": 1601
+    },
+    {
+      "path": "scripts/diagnostics/patch_ted_native_pose_bank.py",
+      "sha256": "655e8c48337c44992795a9751d9e1610bdde5a29e3c2d6ab2c66f7d5a2b1c242",
+      "size": 2609
+    },
+    {
+      "path": "scripts/diagnostics/patch_v78_cave_collision_relocation.py",
+      "sha256": "9b0b49821c457a8ccb7660d08a891d300c9191ca1dafcd60ffa4a1a027758e5e",
+      "size": 5217
+    },
+    {
+      "path": "scripts/diagnostics/patch_v78_scene_sweep_retirement.py",
+      "sha256": "4c692b56ffc3cbb0e7be83bbfbb772297a8191ecdd813c15c2e050cbb99b7c90",
+      "size": 3151
+    },
+    {
+      "path": "scripts/diagnostics/patch_v78_service_ret_isolation.py",
+      "sha256": "6fb8536d0d723fdc81c8797f5d90f47c72e7fdb13194c0d54d170ce19781782e",
+      "size": 4235
+    },
+    {
+      "path": "scripts/diagnostics/prepare_ted_forced_cold_state.py",
+      "sha256": "43467a43b958bdc854949ef3abe385d4b57d48b94de78510d9a32d22914e09b4",
+      "size": 2363
     },
     {
       "path": "scripts/diagnostics/probe_arena_alt_fullscan.lua",
@@ -224,6 +409,11 @@
       "path": "scripts/diagnostics/probe_arena_alternation_cause.lua",
       "sha256": "e8814321dceaedc19ac4adbc2fa0636c7496a1d1d566525bf165367d06cda6ff",
       "size": 2899
+    },
+    {
+      "path": "scripts/diagnostics/probe_arena_cache_ownership.lua",
+      "sha256": "65a8790d1ed5707900b2948cc3de68dc2403c4d55e83e346fa98cb8dac0a10f6",
+      "size": 2325
     },
     {
       "path": "scripts/diagnostics/probe_arena_cycle.lua",
@@ -267,13 +457,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_attract_pickup_palettes.lua",
-      "sha256": "2a6a780d69028e27b40a70f9af6d41b8e4ac8caaa5b62f8fd7cecdb24cb13a7e",
-      "size": 13144
+      "sha256": "5219f1f14b925dd8ab5da6af9984badb7a3f978870f8cc3a8e638948497dea94",
+      "size": 14376
     },
     {
       "path": "scripts/diagnostics/probe_attract_reel_inventory.lua",
-      "sha256": "371df6d975f927a6fcb5d9362728623331e86c956ba1beb5fc326fe4cb9104fb",
-      "size": 3870
+      "sha256": "0890e416fb11ec39f22957b044da801b95d175c7708a8fdc6e75a523f2156ea1",
+      "size": 5626
     },
     {
       "path": "scripts/diagnostics/probe_bg5_coldboot.lua",
@@ -296,14 +486,54 @@
       "size": 5223
     },
     {
+      "path": "scripts/diagnostics/probe_boot_progress.lua",
+      "sha256": "cb2becd4b5bcc5db0c8ec6eb91e9d1612b06ddeb3261602e38b627524e03f987",
+      "size": 859
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_animation.lua",
+      "sha256": "09302747d960ff708dbf09cf63e9a3bc1d6d7bdab59a67b1c739621069a510e1",
+      "size": 15042
+    },
+    {
       "path": "scripts/diagnostics/probe_boss_coord.lua",
       "sha256": "c346071d4c1f6d34ff68ac1a0a9396a74172334e6a058bc0e1232da2a0b88219",
       "size": 2087
     },
     {
+      "path": "scripts/diagnostics/probe_boss_entry_source_stages.lua",
+      "sha256": "64671bfb0edf6438dc2c8615ada55205596eab75c4b1b7cc3e9dbe36c42907ab",
+      "size": 1549
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_geometry.lua",
+      "sha256": "8dae33274fc119ab6afd7da699ae133827e138bed2328e735c97fbbfdeab3344",
+      "size": 3140
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_publication_cadence.lua",
+      "sha256": "b46987a1427aaf2ac19268d046d01dfc427df124a4bb2b93f837a268a735c955",
+      "size": 8274
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_semantic_cadence.lua",
+      "sha256": "68e96433959555485e6526bf6097d39843a464d1b25ad0a1f6266a6901c14bb7",
+      "size": 10085
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_speed_parity.lua",
+      "sha256": "58bc65881709bdaa715cd71fa0c3ea65ce8dcde30d014de6fc10f0d5a9875f2e",
+      "size": 6001
+    },
+    {
       "path": "scripts/diagnostics/probe_boss_state_receipt.lua",
-      "sha256": "55eb881e5a0fada36ff8055ea4bb149c21641840298cf25a1beb23c80edc658d",
-      "size": 4382
+      "sha256": "34c653243ad5e14e4c624b9db99526f294d03236b2f50fb4f11038edaeee3bda",
+      "size": 18510
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_trajectory_pairing.lua",
+      "sha256": "cd5968c2ff49a86a51faa391bd8767ac1af4c01f885a892a7754c1e0703f2781",
+      "size": 5822
     },
     {
       "path": "scripts/diagnostics/probe_cram_accessor.lua",
@@ -321,6 +551,16 @@
       "size": 2697
     },
     {
+      "path": "scripts/diagnostics/probe_crystal_flicker.lua",
+      "sha256": "08fb4da53fa25bc73e7943386b6d4cd2935dca3af80337cd06c739ddc8fb35d4",
+      "size": 10346
+    },
+    {
+      "path": "scripts/diagnostics/probe_crystal_oam_writers.lua",
+      "sha256": "e90fc99f6c2f4ad31ee74d118454d887108d8befc84939292685c424b9e8f8a1",
+      "size": 2806
+    },
+    {
       "path": "scripts/diagnostics/probe_cutscene_verify.lua",
       "sha256": "37ee42e6398d2ff38719b7335ac3c87117bfcd11f251e19aba004400e74e9b5a",
       "size": 3195
@@ -332,8 +572,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_death_gameover.lua",
-      "sha256": "40b645f97ed3e081bdadcf264f6127ab8f2a42b98654806fe20edd61357f9575",
-      "size": 7746
+      "sha256": "45f57bd9dcd773ac1da6d219f76367b75a1459dc9c124d53b12fa25f8083bd61",
+      "size": 8360
     },
     {
       "path": "scripts/diagnostics/probe_dungeon_fonttiles.lua",
@@ -356,6 +596,11 @@
       "size": 2263
     },
     {
+      "path": "scripts/diagnostics/probe_ending_inventory_mgba.lua",
+      "sha256": "8185585742fd30e09ce7735a0431dae9e5f3ef5be369bd9c3a15cc07260caf8d",
+      "size": 9147
+    },
+    {
       "path": "scripts/diagnostics/probe_ending_tail_state_integrity.lua",
       "sha256": "28d6c60c3718e272e8fb9a14025508168c668a6b7836f6fe434896bc65afe7e6",
       "size": 5933
@@ -367,8 +612,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_final_cutscene_mgba.lua",
-      "sha256": "23b765db48ac78b5487d0f50a0d7b32c1d456e37a87e9e4b169f5f9e243d6d5b",
-      "size": 15782
+      "sha256": "da0f28e58cf63035d7c31785431f001e7683f44588ecc8eac3ab0584ed5ee24e",
+      "size": 16049
     },
     {
       "path": "scripts/diagnostics/probe_final_story_state_integrity.lua",
@@ -382,8 +627,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_game_start_route.lua",
-      "sha256": "0169eff911b31b78e04a9134d8e0eca364728b2eeb459849a60f4693d8c01c48",
-      "size": 11027
+      "sha256": "672dffb468016e31535d75a252db62002c69ede9d47af972db6e396496f213f3",
+      "size": 11370
     },
     {
       "path": "scripts/diagnostics/probe_gameplay_cram.lua",
@@ -407,8 +652,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_generate_boss_state.lua",
-      "sha256": "1d873874753a4e52e2bc2d8e289d6b4ef55dbafcf2a338db2bb3daab808b418c",
-      "size": 5766
+      "sha256": "feb802a879cee8ff2c785496e3e5b433a9a42a682788bde4f9ddcaeef0282dfa",
+      "size": 39837
     },
     {
       "path": "scripts/diagnostics/probe_generate_ending_tail_state.lua",
@@ -421,14 +666,19 @@
       "size": 7082
     },
     {
+      "path": "scripts/diagnostics/probe_hidden_shmup_gallery.lua",
+      "sha256": "74dc20f446785b8eea9a5009675133ec4f2e2175ab83f1d6b9029157bb22f233",
+      "size": 2972
+    },
+    {
       "path": "scripts/diagnostics/probe_item_menu.lua",
       "sha256": "d982e4f1fe6c8d232a12d55a9a52b299ee8633fa359ab4b1201cca58629a4017",
       "size": 2553
     },
     {
       "path": "scripts/diagnostics/probe_later_stage_soak.lua",
-      "sha256": "aa383c8c8ba2744e2d2eaf0f09a68289add63d3e61f6f7358a1684e7381e247f",
-      "size": 21322
+      "sha256": "ac5ebd77006bb4dc645b3abeea7a273cd98270f8c5a6d697f78ba4cfccadabdc",
+      "size": 33858
     },
     {
       "path": "scripts/diagnostics/probe_lava_ffba.lua",
@@ -457,8 +707,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_low_health_flicker.lua",
-      "sha256": "c803b134e26d39f9308c6506b754b839b04096cf90f1c9c6edddc46db7ebf086",
-      "size": 14600
+      "sha256": "b926074345062fa4d42c47a644605073d3ee97874f00aca859598194f0dc386f",
+      "size": 17721
+    },
+    {
+      "path": "scripts/diagnostics/probe_low_health_transition_liveness.lua",
+      "sha256": "594de418f8030dba4b9e7e1fa93fc71b65d0e69cc4ff2b7760f07080e9370035",
+      "size": 1940
     },
     {
       "path": "scripts/diagnostics/probe_manual_game_start.lua",
@@ -466,9 +721,19 @@
       "size": 4262
     },
     {
+      "path": "scripts/diagnostics/probe_memory_domains.lua",
+      "sha256": "49562821c2fbdd059d465738d1697f3ec99e1b71ee5958fb13a5af7a40b3cd56",
+      "size": 459
+    },
+    {
       "path": "scripts/diagnostics/probe_menu_flicker.lua",
       "sha256": "e13cb6f68897533da51440a1935a71aa2c0ee7179991603081be824a69b09673",
       "size": 2980
+    },
+    {
+      "path": "scripts/diagnostics/probe_menu_icon_palettes.lua",
+      "sha256": "4f172513ce956b6eb989e2beb20cd02e3339073ffb8df78c2622acb24422ccf6",
+      "size": 4173
     },
     {
       "path": "scripts/diagnostics/probe_menu_window_order.lua",
@@ -497,13 +762,23 @@
     },
     {
       "path": "scripts/diagnostics/probe_palette_build_roundtrip.lua",
-      "sha256": "7bfcffc22d5df01054dbb1ff3f0bf23568c4b97d291c79df484b2ffd85802f1f",
-      "size": 5896
+      "sha256": "106913c34d445969fd64567b34a99dae1e972ddbcfa909787e2c1c6e87adf33d",
+      "size": 6161
+    },
+    {
+      "path": "scripts/diagnostics/probe_penta_seam_writers.lua",
+      "sha256": "fd97e2aa3df2264bccb2a7fda137164116a3f56231aa0a434ff56e869ebdd67a",
+      "size": 4357
     },
     {
       "path": "scripts/diagnostics/probe_pickup_live_palettes.lua",
-      "sha256": "6fd1e1656ab32f99819a80fbc32cd73f697363dec8eb797ffcadb2e76dbf4b42",
-      "size": 7166
+      "sha256": "c2ccef7724877d8cbffec1c36d16f3a3c7e5fa88d3acf37538bc517712e9c4c0",
+      "size": 10474
+    },
+    {
+      "path": "scripts/diagnostics/probe_prepare_ted_forced_cold.lua",
+      "sha256": "18b90ac29624cfbdcd42639c958e6d565aa3e8aee95d2fc17fe1ef313520d7c9",
+      "size": 1110
     },
     {
       "path": "scripts/diagnostics/probe_resume_stage1_visual.lua",
@@ -551,14 +826,24 @@
       "size": 1823
     },
     {
+      "path": "scripts/diagnostics/probe_spotlight_roster_mgba.lua",
+      "sha256": "72cfefbe620c79653dbd2d838c298d8fa1e5c2f7354c65ed55f63711ec4313df",
+      "size": 4494
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_miniboss_transition.lua",
+      "sha256": "6b87824e79f339a31f7ce5b11823e3fac02850171eb680511ff40f9f096e3d1d",
+      "size": 1410
+    },
+    {
       "path": "scripts/diagnostics/probe_stage1_no_bleed.lua",
-      "sha256": "f5b6820303c713236b008ca8aff0e5eb23ba8ab3a80d4edc8f15d803d499dfc7",
-      "size": 25240
+      "sha256": "ea83515a113f3cefb0b08b4eaa615c3cbc8a5169b167ad6c21bb843b66865e35",
+      "size": 26312
     },
     {
       "path": "scripts/diagnostics/probe_stage1_north_integrity.lua",
-      "sha256": "f79fefd85854d83691e400ae5afc6b4510a90b401b9e714fcf64b43cda9fc1fb",
-      "size": 20517
+      "sha256": "533703bf1453ed270675bb20a0bfb1725df2ce99777c856b69463715c5454ea3",
+      "size": 21838
     },
     {
       "path": "scripts/diagnostics/probe_stage1_pickup_art.lua",
@@ -572,13 +857,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage1_spike_palettes.lua",
-      "sha256": "86b1da0aea7a27614581e26e19d8edb5c955a0accd4d093ed95cde08e5268cae",
-      "size": 32328
+      "sha256": "ba07cf063219b0d465f252bcc5dfd60e91b01411f516383c3a8f179c8bbbd5e2",
+      "size": 37738
     },
     {
       "path": "scripts/diagnostics/probe_stage1_tilemap_copy.lua",
-      "sha256": "3e0a09fc1769791fa6c5444955954c567798247ab02b29358615968c4f39d9b9",
-      "size": 18014
+      "sha256": "879afc1186a629ecc5249d83fed4b5c18956cde7679c041f75bb84424d5b9e3b",
+      "size": 20003
+    },
+    {
+      "path": "scripts/diagnostics/probe_stage1_transition_key.lua",
+      "sha256": "0a19ad81f487a08fc0e4173a59e5d6a62438578f44f38d05eb0c5724c6612444",
+      "size": 5576
     },
     {
       "path": "scripts/diagnostics/probe_stage1_vram_dump.lua",
@@ -587,8 +877,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage_integrity.lua",
-      "sha256": "b4a1663f5cb196d2897a84609a8cce4095ce361ecb5e9bcf36885924825634c9",
-      "size": 5261
+      "sha256": "b7aa9ce566c5e9f6bc75325b250305a8a34170a4abbea2c7d7dd2d1099729476",
+      "size": 7813
     },
     {
       "path": "scripts/diagnostics/probe_stage_intro_menu.lua",
@@ -596,9 +886,14 @@
       "size": 2547
     },
     {
+      "path": "scripts/diagnostics/probe_stage_side_by_side.lua",
+      "sha256": "b48e9dc407b70020b0d4095f008efa9887c2d94859cef1243a5314410e25bd9b",
+      "size": 4965
+    },
+    {
       "path": "scripts/diagnostics/probe_stage_speed.lua",
-      "sha256": "d2a5c4d3c4a30418993752f650629ee9de91614378799e48158a85b7d55ac8e3",
-      "size": 13700
+      "sha256": "d9efe53ccc3038c78a1b0d7f9670b7aca45bf264b052bd9b3ca0b55af0a182ac",
+      "size": 22066
     },
     {
       "path": "scripts/diagnostics/probe_stale_window_state.lua",
@@ -616,6 +911,136 @@
       "size": 2303
     },
     {
+      "path": "scripts/diagnostics/probe_ted_anchor_trace.lua",
+      "sha256": "b5aec0475931346e81643ff1efea8e21edcf5d55fb340c031ac2392bdfa71a17",
+      "size": 1756
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_block_major_runtime.lua",
+      "sha256": "21f4247997434cdef7aae68de0ed066d32203b1c37f8f9ad2a935632f1988842",
+      "size": 2198
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_cache_planes.lua",
+      "sha256": "a115e51d311edc7ea29bea7f8cc66d0ddce49fdccc912e981fa73ef880c4a5f4",
+      "size": 3157
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_cached_publisher.lua",
+      "sha256": "0985309afc413cc1c5addc430550a049743f54913cc283687abbbbb00b4c6e4b",
+      "size": 5282
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_classifier.lua",
+      "sha256": "5d0263577dfb8a6a283fc5535ccb96fb56c81c5c476d8a4e64ac19e1b7e146f7",
+      "size": 908
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_crown_candidates.lua",
+      "sha256": "98a4c1d0f13f6924e4132c42eee23a2f8007dc391548123f5eef935cda6a6c84",
+      "size": 2035
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_determinism.lua",
+      "sha256": "5a74df8992144b3d004e82369b814cb844fa4ec17fc77f347451dfe1ce886d6e",
+      "size": 10087
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_direct_plane_semantics.lua",
+      "sha256": "b721b906cc292009a0392422e97be88996b0336196fc0c020150ca4960a2b8f5",
+      "size": 8645
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_first_ready_publication.lua",
+      "sha256": "8fa4a231a7892545e050573e3b21d9eaa75c9d9011bc54ab33cf40f9938c2d38",
+      "size": 4132
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_fixed_helper_ownership.lua",
+      "sha256": "b0ff027323b207ea7a4129756a37049d2943b45b760b54b9256e96f7f0513b66",
+      "size": 3263
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_foreign_source_writers.lua",
+      "sha256": "81150e47854ceca7b23a10a40e0e664fab0604fba865ebe0b79e7f3556ceb9e8",
+      "size": 3460
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_install_exact.lua",
+      "sha256": "41b7b43d467a66bb4ee97cfe8f06dd552e90cd96101b3e73f40213099279c6f5",
+      "size": 1494
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_inwindow_gdma.lua",
+      "sha256": "ce870a926c18dffac95db3b625de4926a1e8edb9cb744248b561161425534dff",
+      "size": 8531
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_materializer.lua",
+      "sha256": "54045a0b53387a659f204883fdda9a1bc27762b9bee272f57027cb5187366dd3",
+      "size": 894
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_private_gap_ownership.lua",
+      "sha256": "85fdc215ea6488b856b95713ca5265a9fb3b5b8c37c9c64fce81d5ea4723e5ed",
+      "size": 3534
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_publication_order.lua",
+      "sha256": "472bfef33b6dde90c96bf2bd9c0a5f8f2782a4c9b89e0246ec76b54c4ecb8aa5",
+      "size": 2005
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_publisher_route.lua",
+      "sha256": "b3908dde04c5c099d16cf33e18110d95d33ac22d72827638e03f79a513f24b7d",
+      "size": 2324
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_runtime.lua",
+      "sha256": "c3d6536fba2b54084de39e198622bfeea960821ad0c3709d7b08cdc9a10e52fe",
+      "size": 1226
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_sanitized_plane.lua",
+      "sha256": "a8665005b83e8c94daafdedd2ba0951c15e377b5be26977951c5df2bd0a1de18",
+      "size": 5137
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_source_layout.lua",
+      "sha256": "2ea6c6edd0a704abd35a9d4c70ee6a6fe221901cb9cf7d3ccd5af6a7073860d3",
+      "size": 1711
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_source_map_pairs.lua",
+      "sha256": "0f22e17acefe4090c7eaf5df371ed9a97f1475d4fe0e6a8d5498d0caf8c9b855",
+      "size": 2779
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_source_write_trace.lua",
+      "sha256": "d73334e082c8f0e2303c051af1e1311adf0119aebe1703dab4a6c244f5c05cb8",
+      "size": 2723
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_source_writers.lua",
+      "sha256": "0dd1cf41c9a05dcc68ec809700bef3f895e4541633f289ce41551dd428c0fd96",
+      "size": 5290
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_state_features.lua",
+      "sha256": "ce1aa3bac81bfa1c666ef661aef25ab89ce1ee04d471a5e6be4db8d7f72104c0",
+      "size": 1486
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_vram_writers.lua",
+      "sha256": "c4cb691c9a0205a827108aab5a56c15f2b6b67ade3d4a870542dcde6009bd2d9",
+      "size": 2992
+    },
+    {
+      "path": "scripts/diagnostics/probe_ted_wram_trace.lua",
+      "sha256": "fdd174d6eee613c98a5d36e1795ec6e5cc43dc6fa43ee6caa8b70de13afb33c6",
+      "size": 905
+    },
+    {
       "path": "scripts/diagnostics/probe_title_attr.lua",
       "sha256": "48149e2d1fa92113255142af39e213cc4e71d839cb494289109c73e0af14ef27",
       "size": 1427
@@ -631,6 +1056,16 @@
       "size": 8144
     },
     {
+      "path": "scripts/diagnostics/probe_title_visual_receipts_mgba.lua",
+      "sha256": "79c4ede7b0d3cad41dba17222a67938f55ae2cd85623990c212f988a8d1a0bb1",
+      "size": 6206
+    },
+    {
+      "path": "scripts/diagnostics/probe_vram_bank_access.lua",
+      "sha256": "f5f4cbf41d8e8cf8df66d6aef783f4997823cb9031a140b8928a1824a64fd28b",
+      "size": 751
+    },
+    {
       "path": "scripts/diagnostics/probe_vram_obj_inventory.lua",
       "sha256": "81850f8d7d3eadb1c23cb4e711370def9ba90784fd17308cbd7a76f1d73a34fa",
       "size": 1678
@@ -641,14 +1076,44 @@
       "size": 1735
     },
     {
+      "path": "scripts/diagnostics/probe_window_count.lua",
+      "sha256": "bc70d5426e42819316ea8c32ba39861fdbc804dfdd7f08f9a7eb8bc19effe803",
+      "size": 4832
+    },
+    {
+      "path": "scripts/diagnostics/probe_wram_canary.lua",
+      "sha256": "9d2cd8c228f2baddde299d263f00064f2a507ed5901a5643e7cca2a5b6c1ba23",
+      "size": 1211
+    },
+    {
       "path": "scripts/diagnostics/proto_position_blit_relative.lua",
       "sha256": "f35f59b1a33a2e0affdc59382fd83173da5b66ae00052adb3ffd6836f879d1d1",
       "size": 2887
     },
     {
+      "path": "scripts/diagnostics/prototype_arena_attr_only_cache.py",
+      "sha256": "79aeb6d155a977bc044240216d5a4ad8caec114b9bbfafaacf3346945a891533",
+      "size": 5744
+    },
+    {
+      "path": "scripts/diagnostics/prototype_arena_postcomputed_attrs.py",
+      "sha256": "610523e53beef637b0b3bdba7bbc665664174560fcad8bbf42661c3f2181445b",
+      "size": 4263
+    },
+    {
       "path": "scripts/diagnostics/prototype_cutscene_region_palettes.py",
       "sha256": "ec020e63a133c78e49e598094683f732f63c4244c75a24303629dd37122af79c",
       "size": 10126
+    },
+    {
+      "path": "scripts/diagnostics/prototype_ted_containment.lua",
+      "sha256": "95a0be827e20218777d4b2df54e17b60eef0f53f46cfb0e625c2e6bb34e8f48b",
+      "size": 2972
+    },
+    {
+      "path": "scripts/diagnostics/prototype_ted_expanded_bank.py",
+      "sha256": "2755d66515be16709c53101966371c690090846e45a462e8b3fa23b8f4ba2edf",
+      "size": 33256
     },
     {
       "path": "scripts/diagnostics/render_stage_integrity.py",
@@ -657,13 +1122,38 @@
     },
     {
       "path": "scripts/diagnostics/run_deterministic_suite.py",
-      "sha256": "7945c9554008580ec078f0598ed1c5401f80273e8a04fc00a0f9e15caa7618f5",
-      "size": 22962
+      "sha256": "ff25858a9190bba00056a0220d393d2c5ccaebc969de424fa27f425325ac6796",
+      "size": 25653
+    },
+    {
+      "path": "scripts/diagnostics/splice_rom_banks.py",
+      "sha256": "3752a9a40a97cc37dbcdfcff80f04c4d4d3dcb926d3df5d05858c92945dd18b9",
+      "size": 3007
     },
     {
       "path": "scripts/diagnostics/suite_contract.py",
-      "sha256": "25602fe5da93531f63be285da0a65fbd46790bd711f718621da62140a4d13462",
-      "size": 5157
+      "sha256": "46ce5be073847cbc3d43f70056f76fbb1f8f3f6f9ab8917a95960ba4b33ed55a",
+      "size": 6363
+    },
+    {
+      "path": "scripts/diagnostics/suite_release_ledger.py",
+      "sha256": "ce883d5b50baf65065821959490b6515e90b2cd4167ac13999a9688942788d94",
+      "size": 14530
+    },
+    {
+      "path": "scripts/diagnostics/ted_native_pose_contract.py",
+      "sha256": "4f6f5d1857e7717b7ee2d39077fb87442d82f45c6edb9830e314d076411ca960",
+      "size": 3830
+    },
+    {
+      "path": "scripts/diagnostics/ted_native_pose_contract_v2.py",
+      "sha256": "593c14b2072a4357de7acefbe262fcb68a52135f77c7523290d377854f8f6d10",
+      "size": 4161
+    },
+    {
+      "path": "scripts/diagnostics/ted_native_sparse_pose_data.py",
+      "sha256": "5deb9279d132b019f5dbf0731d8b5d1332b8f02fc1c2fbc6c1ed6ab08e66d9fe",
+      "size": 8661
     },
     {
       "path": "scripts/diagnostics/trace_native_bgp_writes.lua",
@@ -676,9 +1166,19 @@
       "size": 1872
     },
     {
+      "path": "scripts/diagnostics/verify_arena_cache_ownership.py",
+      "sha256": "cb8c35edbd21c6a41048e5017a64fbcf05bcee5307dbbdfef5aa5dc9f5ba4716",
+      "size": 9364
+    },
+    {
+      "path": "scripts/diagnostics/verify_arena_semantic_key.py",
+      "sha256": "718f1a6a48d0b9c488323c1113ff203d0b8d7ef3514a765d4bee80c5e8023cb0",
+      "size": 7322
+    },
+    {
       "path": "scripts/diagnostics/verify_attract_pickup_palettes.py",
-      "sha256": "245046a9cae9a6b71c1431213c9db7fdabf3113d6d7112e08b99b782b017a57f",
-      "size": 12159
+      "sha256": "7424549ad9267380b57f31e352512d1eb9ccc78b93b9e0f761a1e922e4b7fbdd",
+      "size": 12266
     },
     {
       "path": "scripts/diagnostics/verify_bonus_stage_live.py",
@@ -686,9 +1186,49 @@
       "size": 7140
     },
     {
+      "path": "scripts/diagnostics/verify_boss_atomic_attr_contract.py",
+      "sha256": "2a3b566266689b39189450438c2c31c9a5354cb79956ecb0d9905b2a82558c67",
+      "size": 8877
+    },
+    {
+      "path": "scripts/diagnostics/verify_boss_geometry.py",
+      "sha256": "d3cd5f76b88cc63560ee6253cfec5b56bf706c9a9ac5366f797352cdf63f040a",
+      "size": 26660
+    },
+    {
+      "path": "scripts/diagnostics/verify_boss_publication_cadence.py",
+      "sha256": "9767d21034173d27cdaceb486b6c327b589d77bcee33b44fe4bc911c33b995f4",
+      "size": 21154
+    },
+    {
+      "path": "scripts/diagnostics/verify_boss_semantic_cadence.py",
+      "sha256": "dbecbd04f0b8e2babf054e21a25ba05cb69eb3666b5be4fd333f7040f13df5c8",
+      "size": 15611
+    },
+    {
+      "path": "scripts/diagnostics/verify_boss_silhouette_offline.py",
+      "sha256": "cdf04598ef1fec57670b975f9038b7f2c52bc02a1c1543177f28bbd6212026ec",
+      "size": 14445
+    },
+    {
+      "path": "scripts/diagnostics/verify_boss_speed_parity.py",
+      "sha256": "718da2efab36fad20cb17088e83ae7bbe064c7189617854c9252cf68ddfaba86",
+      "size": 19249
+    },
+    {
+      "path": "scripts/diagnostics/verify_boss_trajectory_pairing.py",
+      "sha256": "354f1bc3ad1467fb42c52aa3ce82e30da538c1fd8f3126be934b5895c038a14b",
+      "size": 20928
+    },
+    {
       "path": "scripts/diagnostics/verify_cram_loading.py",
-      "sha256": "7111fb0fe4f5a978de60e8e12dbdd1d3a334c521a8f9fa2e3ab92b2c3da6da7c",
-      "size": 8390
+      "sha256": "3702dbf3d9f4ce1da8222477c9013fa446400edf53a1641f6b38a0956f032333",
+      "size": 8518
+    },
+    {
+      "path": "scripts/diagnostics/verify_crystal_dragon_ghost.py",
+      "sha256": "4fcf3bad5a1a38c881d3bdf458c77b77dca17704007bc797ea7c9d69624bab40",
+      "size": 12310
     },
     {
       "path": "scripts/diagnostics/verify_death_gameover.py",
@@ -702,18 +1242,18 @@
     },
     {
       "path": "scripts/diagnostics/verify_frame_flicker.py",
-      "sha256": "e0c17761b1c88ff52f002f686b367b2668b403ccd5c293803abc3a9d559b7b59",
-      "size": 21279
+      "sha256": "89046423fc700f75c8d6488529f28743fdf4f3831dd2e61abe85de6589bba3ac",
+      "size": 21694
     },
     {
       "path": "scripts/diagnostics/verify_game_start_routes.py",
-      "sha256": "faebbcb3228cddfa313d0ea417bd6762d3eef24f54899248bb26db403851f75d",
-      "size": 18155
+      "sha256": "2d480c64469b74b7fc67d465de29f860af4e477941697edc9c0a9f967c869b20",
+      "size": 18355
     },
     {
       "path": "scripts/diagnostics/verify_gameplay_obj_palettes.py",
-      "sha256": "9510e1fe3613a7f5c422578c9f1d55494eaff23e7f2ecabd53e0a4c52ca9650b",
-      "size": 6900
+      "sha256": "1891fafd141385ac5facde7a85bb091b13326458c2367dd73e404fcc2c0b8bd6",
+      "size": 8162
     },
     {
       "path": "scripts/diagnostics/verify_hardware_gate.py",
@@ -727,8 +1267,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_later_stage_soak.py",
-      "sha256": "d77a8319831440679bb6c221d0a9d13665efc74f3d76265793bf077dec612133",
-      "size": 14218
+      "sha256": "18b2f8f4f9212719da93239cb0413572973c17481b61e5d8df19bb9e885f1f35",
+      "size": 19947
     },
     {
       "path": "scripts/diagnostics/verify_levelselect_screen.py",
@@ -737,18 +1277,23 @@
     },
     {
       "path": "scripts/diagnostics/verify_live_palette_session.py",
-      "sha256": "94d880fea1f1cf2acb9a7eee84bcb6b37439e0d20b34b61115494702f50ab0ba",
-      "size": 35699
+      "sha256": "e6074f01bbbcbe62cead9f7ffdfc99f67726316eb807feabe7e1a8adebe7fc19",
+      "size": 41197
     },
     {
       "path": "scripts/diagnostics/verify_live_regression.py",
-      "sha256": "2b09ac82634d631983c3003b3ffac89aa8810f4ce3d1e74936abd515da2794ee",
-      "size": 6899
+      "sha256": "880fffa09583c43251aba1df2b4ba1a1cfd3b382d3a2b494d3bd335f756882fc",
+      "size": 8707
     },
     {
       "path": "scripts/diagnostics/verify_low_health_flicker.py",
-      "sha256": "d713211ad8f4e972dad7ad7c5fef8dcf7b9950f72644ffdfbfab23f0218f5c56",
-      "size": 15355
+      "sha256": "8f74e9694a6769f82333a12b37cd59317614732535126dd622be82fa8a4818bb",
+      "size": 18231
+    },
+    {
+      "path": "scripts/diagnostics/verify_menu_icon_palettes.py",
+      "sha256": "498fc48d2dc70fc389b4950c1d9233a257518c25e5e80c9f68f18fd49f13dcfc",
+      "size": 9823
     },
     {
       "path": "scripts/diagnostics/verify_menu_window_order.py",
@@ -757,18 +1302,23 @@
     },
     {
       "path": "scripts/diagnostics/verify_mgba_singleflight_guard.py",
-      "sha256": "ba3b5189d27222d681db86a9c94b247feafd41d250646b8e44c91e4514d0f08f",
-      "size": 12724
+      "sha256": "bd735b7a6e3334421991a715ff30480b48e573b398939c5ccd217c0284625c56",
+      "size": 13384
     },
     {
       "path": "scripts/diagnostics/verify_mister_release_workflow.py",
-      "sha256": "1c04d48d16afec505cdde7184b394437d9259ba1fec8cd72d403ed380d8b84e6",
-      "size": 4817
+      "sha256": "173201510518ae09a86cae384cc42f01f5e6d5d5cd186bc1d00d4f1997e12250",
+      "size": 4910
     },
     {
       "path": "scripts/diagnostics/verify_mister_reservation_guard.py",
-      "sha256": "451ae4bd3d2331077b50637e587b26f361eb44b6e1fb03272e669ffc200373cc",
-      "size": 5319
+      "sha256": "6e63a4484dffcda0f80920922bdfb401179572526c9e0fe1250ea228e057c65c",
+      "size": 5412
+    },
+    {
+      "path": "scripts/diagnostics/verify_native_tile_copy_contract.py",
+      "sha256": "2d084bb895c8195124a16bb32c3f4daea5158f00aa7cb2227c7e553bd41c0fb9",
+      "size": 1894
     },
     {
       "path": "scripts/diagnostics/verify_opening_to_stage1.py",
@@ -777,18 +1327,18 @@
     },
     {
       "path": "scripts/diagnostics/verify_palette_build_roundtrip.py",
-      "sha256": "c71c5e0144d3587d178ed198f142a67b81b43e1db8fb3cfbfa9f4fcc0a7b9e6a",
-      "size": 13213
+      "sha256": "4b0e5cec008952371d1eaedc41959f67e01f885f3692a8eae0790b854275525d",
+      "size": 18897
     },
     {
       "path": "scripts/diagnostics/verify_pickup_class_palettes.py",
-      "sha256": "78904001704e196631f2c5b5d82be3d91e7e3d912e4670e71a3e16d38a39eb73",
-      "size": 12664
+      "sha256": "aab7653a1cdf348db5ff8bd0155a025b981ccdef6524ebeadfe7a56cbe5f539e",
+      "size": 12765
     },
     {
       "path": "scripts/diagnostics/verify_pickup_live_palettes.py",
-      "sha256": "f725675e2431b6defacddf321b2b458269d57fa8e3fc432f8c13fb5d6f03316f",
-      "size": 14429
+      "sha256": "fbc3f6328d5186c4a129ee386df0e04bd9a2453dc442957ab559a7e8a41ec92c",
+      "size": 15616
     },
     {
       "path": "scripts/diagnostics/verify_pickup_live_retry.py",
@@ -796,54 +1346,74 @@
       "size": 4549
     },
     {
+      "path": "scripts/diagnostics/verify_precommit_policy.py",
+      "sha256": "2e0175a3a0479013952ec75702fdaed0d73a9acca439190c7d5d28005be1924b",
+      "size": 2461
+    },
+    {
       "path": "scripts/diagnostics/verify_release_candidate.py",
-      "sha256": "707b09040b959803ba8a1b30b9774d8adbaf292fa97e4d4b7d3c87a5075d1443",
-      "size": 32166
+      "sha256": "b4e0ccc00f4f8dee4fc8299ead285cae62ac16d172131f2e3a96de634ce219ba",
+      "size": 56930
+    },
+    {
+      "path": "scripts/diagnostics/verify_release_matrix_resume_contract.py",
+      "sha256": "0c5f24cb7741262bc6c9adbe7635c3f4b3f51678a74a94feaf4eb2afeedb7f60",
+      "size": 3877
     },
     {
       "path": "scripts/diagnostics/verify_release_patch.py",
-      "sha256": "ce176e8e9e2f770a3da6eddb72e1534dbd1d0e32a53ffd85f86a2663eef34d4b",
-      "size": 3999
+      "sha256": "4c19857a9adc880e86e54db890d2493bb5bf7836974463251168dfa0e4951d92",
+      "size": 4924
     },
     {
       "path": "scripts/diagnostics/verify_sara_palette.py",
-      "sha256": "f7d7ff6f56e04887e34f7a8a8c3c78934e3c9ff549935315a4bfb496ee4fdb68",
-      "size": 7394
+      "sha256": "abf26a6c622a81d8a19a532de9dfe14aea4fe80ad83d27664b689a649384b15f",
+      "size": 7452
     },
     {
       "path": "scripts/diagnostics/verify_sprite_flicker.py",
-      "sha256": "aef4b2ae03931f29725d0246512bbf7cbe0c52efc0af451b79675f2f5242e43c",
-      "size": 4050
+      "sha256": "1b33b19ff2d5e5e6cbd7080402b4757619467292d743ffa7141ec47739bdef7b",
+      "size": 4108
+    },
+    {
+      "path": "scripts/diagnostics/verify_stage1_code_isolation.py",
+      "sha256": "2e1263d75958ed1a4ba64932615cbed5e9370b3cf45ef47760777b4d0420666f",
+      "size": 5190
     },
     {
       "path": "scripts/diagnostics/verify_stage1_no_bleed.py",
-      "sha256": "158aa914cefde0e318f4dc5c47fcb2946f237cf1bb29ad2cbc3aea201cc9a125",
-      "size": 25182
+      "sha256": "7f0b9a1f604b9a038e62c09a0962be531342da5c10f8ce9114215f9fab874337",
+      "size": 25868
     },
     {
       "path": "scripts/diagnostics/verify_stage1_north_integrity.py",
-      "sha256": "37c9566277c2fedc5d88dbb321446ba499f7ee85f9448df29faff0504ae0cff2",
-      "size": 15467
+      "sha256": "1e6fa5d5ee8e26cd53193eb4a2b3455a30650c4297cd8f6bbf5f57224ad65b48",
+      "size": 21903
     },
     {
       "path": "scripts/diagnostics/verify_stage1_pickup_art.py",
-      "sha256": "c2b621d6262b5c86ec8200a15556faa8968cd644c78938de7df4d6ab446f8247",
-      "size": 11156
+      "sha256": "5a1228005599e2cda7aa7ca76019f1849f715d08c345977aabcf6efb35f85f78",
+      "size": 12281
     },
     {
       "path": "scripts/diagnostics/verify_stage1_spike_palettes.py",
-      "sha256": "56d6a14af1bae35cbb1be4e6ffa809884165ac2a9052316ba0aa0308359264a2",
-      "size": 66153
+      "sha256": "2ec3378649df186de3cdca4e6666a9cc2ed52b3b166b443686485575810c77f3",
+      "size": 76172
     },
     {
       "path": "scripts/diagnostics/verify_stage1_tilemap_copy.py",
-      "sha256": "8bbbb862af842d82ea285178829e3c601ec3bc65ea7ff63e68f64296a23d0eef",
-      "size": 13526
+      "sha256": "5e1017555a32e39f854311f2efa068cc6da05c2e88b0ee05495a357cfc86fda5",
+      "size": 17045
+    },
+    {
+      "path": "scripts/diagnostics/verify_stage1_transition_key.py",
+      "sha256": "f2cbb699622e2e9f82b834fea87793d1b6bfb6cb492caef56f376e49dab05d83",
+      "size": 10149
     },
     {
       "path": "scripts/diagnostics/verify_stage_speed_matrix.py",
-      "sha256": "1353066c7c55bc050938e37f2c9b082e03fbb219bad8233cea2b9c936d62afae",
-      "size": 10449
+      "sha256": "dc38fc57be10142a41c6478e13d4d91918fc4937774a2b08ac65ec92e9c287d4",
+      "size": 17070
     },
     {
       "path": "scripts/diagnostics/verify_stale_window_state.py",
@@ -852,18 +1422,118 @@
     },
     {
       "path": "scripts/diagnostics/verify_story_attr_production.py",
-      "sha256": "8512a20566226d196cc7e51afbfa79d51b4110c92fffb0a877e3175074e3a930",
-      "size": 16729
+      "sha256": "5e032ad42c9a85c892cc3150bb42312e6cb3cc1b27ba4248e81bd47a3ac66370",
+      "size": 17110
     },
     {
       "path": "scripts/diagnostics/verify_suite_receipt.py",
-      "sha256": "5545a311b2c6fa82d5669c0d94f8b8230a651113ac329caa6b2d52b917eb8db3",
-      "size": 5878
+      "sha256": "473d267328d84dd1a4c55eac7635330673513fe3dfc7b5693d00cf36d9e05812",
+      "size": 6832
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_block_major_mask_model.py",
+      "sha256": "6847f9276e82dfd83d1245364364d09329945f3d4d861dfc8405738ae4d5eead",
+      "size": 8094
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_cache_plane_reservation.py",
+      "sha256": "7c5cafb28fdd196adfc4b7e797d201c4193cd2f059ea2e65941c1ad28ea062ab",
+      "size": 6628
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_candidate_delta.py",
+      "sha256": "53fba914810f2f67b927e4abd129356d820f06ae8d071fb13246ace3d17fc50b",
+      "size": 11071
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_classifier.py",
+      "sha256": "65cf96a8df3224e83ee0f73273f55d1b3fb78c2051d6737438eec0ff8fe08138",
+      "size": 10271
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_contract_controls.py",
+      "sha256": "868f2138bfca8af91b81217f8ad97199d7551439b85e0f3bae5c0febaf72990a",
+      "size": 31647
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_determinism.py",
+      "sha256": "5438b267119d48d5b7a215d158427c16944d683d4a8d0fb64e66735cc7c415cc",
+      "size": 24484
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_direct_plane_index_contract.py",
+      "sha256": "e03385d4aeb561d45d60ce699e518b8b5895fc9d1dd7337ca8ce4845f0e0f0d6",
+      "size": 3334
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_edge_invariant.py",
+      "sha256": "4c86b09580f29594c14818fdd263af4c1292044486428bdccf1ffea9ba5b94e2",
+      "size": 4672
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_expanded_integration.py",
+      "sha256": "cdd14dc57924ae94194d993c2adacdc60919e76934e36b3782b08bc0a70e3aa0",
+      "size": 12912
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_incremental_cell_contract.py",
+      "sha256": "396749f7f860f413af6f058967635fd63bed90ccd9b893dcdac34f497ef779d1",
+      "size": 6547
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_incremental_mask_corpus.py",
+      "sha256": "f3f675ea3e6c101536f11eba669b248b4c3e08a2a0efe6b0e7d850e5116af076",
+      "size": 7349
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_incremental_sanitizer_model.py",
+      "sha256": "d3d9c56929b995ac44283bfbe1b3dd1ce9ed5745ca2c7a67800adc18e557bdc0",
+      "size": 9690
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_materializer.py",
+      "sha256": "0a1147995778d350da9de18a9ab7e942e53eca2e4c288f94497c8bebdfbb3064",
+      "size": 7706
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_packed_crown_key.py",
+      "sha256": "38c5e46b5ebbe7151eaaeb0f390ae4b61444b207f4d66c466dc8f414f3d639fe",
+      "size": 3717
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_publication_sequence.py",
+      "sha256": "1db6ae017619463390feed6b692aa0f2a17bc4f488da48b53a2eb7e55eb424aa",
+      "size": 5135
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_release_readiness.py",
+      "sha256": "10fe0e073704bb44650b54d399b00a1300e1c9cfbd4c282f0f1da6f15db8adc6",
+      "size": 20881
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_settled_pose_contract.py",
+      "sha256": "c4499187e1a9b902b51c015bcfdfebef39348af77d4e1d6bd19109611cd1dd6a",
+      "size": 3478
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_source_publication.py",
+      "sha256": "92fef95cf1b66feb632846d05aff06f02e833c5673b20a2a68c683727c139fd1",
+      "size": 6763
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_two_plane_cache_contract.py",
+      "sha256": "3b08ec94f8847f00899ca0bf8fd7e978d77ee448bd7dcf1647d7f9156b6f2a3d",
+      "size": 12902
+    },
+    {
+      "path": "scripts/diagnostics/verify_ted_writer_ownership.py",
+      "sha256": "dcef896c6b3f67ff425d4e61da5e9f4644e0f1676dfef29d4b889aff54ed01ef",
+      "size": 2110
     },
     {
       "path": "scripts/diagnostics/verify_title_cursor_pixels.py",
-      "sha256": "6201c82d06805ba99f46eeb548020f00a1d539e79cb4d97f206933e22d9a464b",
-      "size": 8185
+      "sha256": "9882183d4c351c979c74c182d817c539d5b8be5e6e603505cd401850b135063c",
+      "size": 8230
     },
     {
       "path": "scripts/diagnostics/verify_title_showcase_mgba.py",
@@ -872,8 +1542,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_title_visual_receipts.py",
-      "sha256": "f1b2a016561e95486e9d58da06412bb612200209b28fa0894c547c50225eb0d5",
-      "size": 10073
+      "sha256": "5c97025d885d16cc280998a1ad60c956fd45ed197407b3f7bdf065d337068529",
+      "size": 7847
+    },
+    {
+      "path": "scripts/diagnostics/verify_window_count.py",
+      "sha256": "eead1b395afc5838b0ef713cf6a05ebd0a22581b5f81a5735ec844d8f74774e2",
+      "size": 7737
     },
     {
       "path": "scripts/hooks/guard_mgba_launch.py",
@@ -902,13 +1577,13 @@
     },
     {
       "path": "scripts/live_palette_editor.py",
-      "sha256": "b886baea5f634c7964d1545f02203297e3eff46a1aec9c6195feadd79aec57db",
-      "size": 35811
+      "sha256": "48e5e8c8dc64b7ed05cadc88e7675fa955f33bbee6a9b70514f7650fcc478ba2",
+      "size": 35925
     },
     {
       "path": "scripts/lua/live_palettes.lua",
-      "sha256": "86aa97ceab2717a03eaddcd213ec07a19b1df6af2e11eeb9fd90b22707e9ff9b",
-      "size": 23937
+      "sha256": "b65ca11683f9afb9e5917bf2f41297a07012b19c1e15ab2a59e6fb09002eb286",
+      "size": 25818
     },
     {
       "path": "scripts/mgba-headless-singleflight",
@@ -922,8 +1597,8 @@
     },
     {
       "path": "scripts/mgba_singleflight.py",
-      "sha256": "782fe0f2c21b174ca54a0acab15a145b38c9743c951533ca8ef9030df87e80f8",
-      "size": 5976
+      "sha256": "6475c791468ffa2cd0ca0f73ab28af4e424aef067a7d6b33bcacff05c0e52e07",
+      "size": 6090
     },
     {
       "path": "scripts/mister.py",
@@ -1011,6 +1686,11 @@
       "size": 10487
     },
     {
+      "path": "scripts/probes/probe_flash_attribution_mgba.lua",
+      "sha256": "5abc944861d7355844277080b438901abb10aa162b3205c53d80955275883f7e",
+      "size": 3046
+    },
+    {
       "path": "scripts/probes/spin_shoot_test.lua",
       "sha256": "b321e78318a83b591bf058259a74b0530ef7b3b2b31f1297e692c07f6cfa5617",
       "size": 3496
@@ -1037,13 +1717,13 @@
     },
     {
       "path": "scripts/probes/verify_boss_arena_palettes.py",
-      "sha256": "a040322389239c4337c3293a237b0cf45d67d9c652879002b703cf3f0053244e",
-      "size": 10785
+      "sha256": "d2be134910268428b5a438dfbfe2968239f0e8b0ed7066cf7bf3daa3137b364f",
+      "size": 17644
     },
     {
       "path": "scripts/probes/verify_flash_attribution.py",
-      "sha256": "146290899b8daaddaca10f40142d919b0cbbf5e2ca6869c18dcb92af25bc2bd1",
-      "size": 6982
+      "sha256": "1d2c1df3c2cb7b12d8ed47f3738a7c4755a0b230f4048ae98ff6ef7c476fc604",
+      "size": 4525
     },
     {
       "path": "scripts/probes/verify_gameplay_palette.py",
@@ -1062,8 +1742,8 @@
     },
     {
       "path": "scripts/probes/verify_phantom_d887.py",
-      "sha256": "2fb9d5a3b2de3580b892f9fabea91a79d5756cf7879fe3fb31d3e51ddb83e5a5",
-      "size": 9474
+      "sha256": "d23dcb7a2c038f242c0c4ff3d36cccd3ba34f6182edeeb1dc96df8bad95b26a0",
+      "size": 9558
     },
     {
       "path": "scripts/probes/verify_scroll_tearing.py",
@@ -1077,8 +1757,8 @@
     },
     {
       "path": "scripts/probes/verify_title_animation_frames.py",
-      "sha256": "0b67bd1a3dcaa06bd9e0f218c155577ded12159e0eae74cf6d14b1323f8f5592",
-      "size": 4123
+      "sha256": "571da316c33a14ccc7ac8b3132ff5ae8183450c47c78b87000c2beea4a608a26",
+      "size": 4181
     },
     {
       "path": "scripts/probes/verify_title_color.py",
@@ -1087,13 +1767,13 @@
     },
     {
       "path": "scripts/probes/verify_title_screen_integration.py",
-      "sha256": "e50f83140d532e799ac9ab2a0f60d50e24dd6fb69f090da0a8c7f6386fe3885e",
-      "size": 8710
+      "sha256": "5a14da3d88a43b414a0298f6bb373ba957e3cd2ac3fa6e7b2ee4f797209570ef",
+      "size": 8907
     },
     {
       "path": "scripts/record_palette_approval.py",
-      "sha256": "014e5d83fcda0f1947d9a070735e28b45a7487aae4c3548f5fde8a32f273caae",
-      "size": 3929
+      "sha256": "e84cd41b88b28627a1c22c76bf3345c20250842065959dc8c0d8361a7c11ba84",
+      "size": 6236
     },
     {
       "path": "scripts/stage1_hazard_art.py",
@@ -1137,8 +1817,8 @@
     },
     {
       "path": "src/penta_dragon_dx/patch_builder.py",
-      "sha256": "d1fe2a51f26498013bc09585d36e727293dc1618f26778fc8a26ae245f8b0d24",
-      "size": 3103
+      "sha256": "68b7150d595657e99fe5252e06399889e1f950a6b787564235d072f852d55933",
+      "size": 3106
     },
     {
       "path": "src/penta_dragon_dx/rom_utils.py",
@@ -1156,23 +1836,30 @@
       "size": 68306
     }
   ],
+  "build_profile": {
+    "name": "expanded-ted-menu",
+    "expanded_ted": true,
+    "native_sparse": true,
+    "native_pose_table": true,
+    "menu_icon_colors": true
+  },
   "candidate": {
-    "size": 262144,
-    "md5": "e8baabaaa6b5d5073dba12985e8cfe00",
-    "sha256": "32c3ab3daba362f65dde949e0b350eb65c963f8483bd491e2db76da8bf4bbf7e"
+    "size": 524288,
+    "md5": "8d23820479a23cb432c59f3366ea4a37",
+    "sha256": "c3f7cd1cf0df1136132d147107fdc3ea8ec40d3d20d5603c9124c57830843cbc"
   },
   "deterministic_build": {
     "passes": 2,
     "byte_identical": true,
-    "build_a_sha256": "32c3ab3daba362f65dde949e0b350eb65c963f8483bd491e2db76da8bf4bbf7e",
-    "build_b_sha256": "32c3ab3daba362f65dde949e0b350eb65c963f8483bd491e2db76da8bf4bbf7e"
+    "build_a_sha256": "c3f7cd1cf0df1136132d147107fdc3ea8ec40d3d20d5603c9124c57830843cbc",
+    "build_b_sha256": "c3f7cd1cf0df1136132d147107fdc3ea8ec40d3d20d5603c9124c57830843cbc"
   },
   "matrix": {
     "status": "emulator-pass",
     "scope": "full",
-    "gate_count": 53,
+    "gate_count": 78,
     "failures": 0,
-    "manifest_sha256": "5960e5bf51e856ffc42c8add243eb7eac5f40d35879923ad7f137f91e7a79eef",
+    "manifest_sha256": "e15a6ea555a455332f0b1a15abb336194bfc9d1561a6de15d6e83063bda9eaa9",
     "results": [
       {
         "name": "emulator_singleflight_guard",
@@ -1181,106 +1868,118 @@
         "duration_seconds": 0.264
       },
       {
+        "name": "release_matrix_resume_contract",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.032
+      },
+      {
         "name": "title_footer_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.519
+        "duration_seconds": 0.416
       },
       {
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.118
+        "duration_seconds": 1.015
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.668
+        "duration_seconds": 0.365
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 20.203
+        "duration_seconds": 19.955
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.83
+        "duration_seconds": 6.727
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.421
+        "duration_seconds": 8.027
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.516
+        "duration_seconds": 0.466
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.339
+        "duration_seconds": 12.387
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.951
+        "duration_seconds": 17.644
+      },
+      {
+        "name": "menu_icon_palettes",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 12.938
       },
       {
         "name": "menu_window_publish_order",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.775
+        "duration_seconds": 5.773
       },
       {
         "name": "stale_gameplay_window",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.626
+        "duration_seconds": 6.724
       },
       {
         "name": "levelselect_screen",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.387
+        "duration_seconds": 11.837
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 168.353
+        "duration_seconds": 168.979
       },
       {
         "name": "game_start_after_attract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 10.984
+        "duration_seconds": 9.931
       },
       {
         "name": "opening_to_stage1_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.462
+        "duration_seconds": 15.44
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 43.148
+        "duration_seconds": 263.223
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 24.513
+        "duration_seconds": 24.001
       },
       {
         "name": "pickup_class_palettes",
@@ -1292,157 +1991,295 @@
         "name": "attract_pickup_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.292
+        "duration_seconds": 10.886
       },
       {
         "name": "stage1_spike_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 35.836
+        "duration_seconds": 33.177
       },
       {
         "name": "stage1_spike_miniboss_transition",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 43.054
+        "duration_seconds": 40.378
       },
       {
         "name": "pickup_live_retry_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.164
+        "duration_seconds": 0.114
       },
       {
         "name": "pickup_live_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 92.042
+        "duration_seconds": 85.433
       },
       {
         "name": "stage1_pickup_art",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.529
+        "duration_seconds": 7.077
       },
       {
         "name": "bonus_stage_live",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.982
+        "duration_seconds": 6.074
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 13.62
+        "duration_seconds": 11.531
       },
       {
         "name": "stage1_tilemap_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 25.397
+        "duration_seconds": 20.153
       },
       {
         "name": "stage1_north_route_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.506
+        "duration_seconds": 19.199
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 53.116
+        "duration_seconds": 59.164
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 29.726
+        "duration_seconds": 27.758
       },
       {
         "name": "low_health_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.166
+        "duration_seconds": 16.892
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.802
+        "duration_seconds": 13.036
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.897
+        "duration_seconds": 1.52
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 51.796
+        "duration_seconds": 77.341
       },
       {
         "name": "stage2_stream_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.173
+        "duration_seconds": 13.237
+      },
+      {
+        "name": "stage_side_by_side_all7",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 89.876
+      },
+      {
+        "name": "boss_atomic_attr_contract",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.114
+      },
+      {
+        "name": "ted_expanded_integration",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.114
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 119.229
+        "duration_seconds": 115.163
+      },
+      {
+        "name": "ted_entry",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 12.962
+      },
+      {
+        "name": "ted_og_entry",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 12.285
+      },
+      {
+        "name": "ted_cadence",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 30.713
+      },
+      {
+        "name": "boss_geometry_all9",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 5.077
+      },
+      {
+        "name": "ted_determinism",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 15.639
+      },
+      {
+        "name": "ted_release_readiness_receipt",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.032
+      },
+      {
+        "name": "ted_candidate_delta",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.032
+      },
+      {
+        "name": "ted_release_readiness",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.032
+      },
+      {
+        "name": "boss_semantic_cadence",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 83.383
+      },
+      {
+        "name": "boss_og_states",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 59.572
+      },
+      {
+        "name": "boss_og_material_gallery_all9",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 77.642
+      },
+      {
+        "name": "boss_og_silhouette_gallery",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.114
+      },
+      {
+        "name": "boss_speed_parity",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 239.234
+      },
+      {
+        "name": "boss_trajectory_pairing_null",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 24.404
+      },
+      {
+        "name": "boss_trajectory_pairing",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 248.418
+      },
+      {
+        "name": "boss_publication_cadence",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 234.974
+      },
+      {
+        "name": "crystal_dragon_ghost",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 24.207
+      },
+      {
+        "name": "boss_material_gallery_all9",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 79.046
+      },
+      {
+        "name": "boss_silhouette_gallery",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.114
+      },
+      {
+        "name": "boss_material_side_by_side",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 0.215
       },
       {
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 99.075
+        "duration_seconds": 98.678
       },
       {
         "name": "title_idle_reel",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.075
+        "duration_seconds": 4.674
       },
       {
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 32.333
+        "duration_seconds": 44.182
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.522
+        "duration_seconds": 2.168
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 20.411
+        "duration_seconds": 17.8
       },
       {
         "name": "pre_final_inventory",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.172
+        "duration_seconds": 70.472
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.082
+        "duration_seconds": 12.233
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.323
+        "duration_seconds": 12.644
       },
       {
         "name": "ending_discriminators",
@@ -1454,37 +2291,37 @@
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 43.84
+        "duration_seconds": 42.48
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 57.669
+        "duration_seconds": 27.908
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 275.04
+        "duration_seconds": 266.454
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 92.285
+        "duration_seconds": 71.482
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.626
+        "duration_seconds": 13.084
       },
       {
         "name": "candidate_ips_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.064
+        "duration_seconds": 0.115
       },
       {
         "name": "mister_reservation_guard",
@@ -1493,6 +2330,317 @@
         "duration_seconds": 0.215
       }
     ]
+  },
+  "release_ledger": {
+    "schema": "penta-release-ledger-v1",
+    "accepted_deviation_count": 12,
+    "accepted_deviations": [
+      {
+        "id": "boss_angela_matched_transition_cadence",
+        "scope": "angela",
+        "measurement": "matched_player_facing_transition_cadence",
+        "direction": "faster",
+        "ratio_dx_over_og": 0.8494623655913979,
+        "deviation_percent": 15.053763440860212,
+        "target_percent": 2.0,
+        "pairing_confidence": "deep",
+        "policy": "accepted_bounded_speedup",
+        "evidence": "boss_trajectory"
+      },
+      {
+        "id": "boss_cameo_matched_transition_cadence",
+        "scope": "cameo",
+        "measurement": "matched_player_facing_transition_cadence",
+        "direction": "faster",
+        "ratio_dx_over_og": 0.841927303465765,
+        "deviation_percent": 15.807269653423495,
+        "target_percent": 2.0,
+        "pairing_confidence": "deep",
+        "policy": "accepted_bounded_speedup",
+        "evidence": "boss_trajectory"
+      },
+      {
+        "id": "boss_crystal_dragon_speed",
+        "scope": "crystal_dragon",
+        "measurement": "arena_loop_throughput",
+        "direction": "slower",
+        "ratio_dx_over_og": 0.9657266864730151,
+        "deviation_percent": 3.4273313526984928,
+        "target_percent": 2.0,
+        "accepted_floor_ratio": 0.95,
+        "policy": "operator_accepted_slow_boss",
+        "evidence": "boss_speed"
+      },
+      {
+        "id": "boss_faze_matched_transition_cadence",
+        "scope": "faze",
+        "measurement": "matched_player_facing_transition_cadence",
+        "direction": "faster",
+        "ratio_dx_over_og": 0.879032258064516,
+        "deviation_percent": 12.096774193548399,
+        "target_percent": 2.0,
+        "pairing_confidence": "deep",
+        "policy": "accepted_bounded_speedup",
+        "evidence": "boss_trajectory"
+      },
+      {
+        "id": "boss_penta_dragon_matched_transition_cadence",
+        "scope": "penta_dragon",
+        "measurement": "matched_player_facing_transition_cadence",
+        "direction": "faster",
+        "ratio_dx_over_og": 0.884,
+        "deviation_percent": 11.6,
+        "target_percent": 2.0,
+        "pairing_confidence": "deep",
+        "policy": "accepted_bounded_speedup",
+        "evidence": "boss_trajectory"
+      },
+      {
+        "id": "boss_riff_matched_transition_cadence",
+        "scope": "riff",
+        "measurement": "matched_player_facing_transition_cadence",
+        "direction": "faster",
+        "ratio_dx_over_og": 0.8848920863309351,
+        "deviation_percent": 11.510791366906492,
+        "target_percent": 2.0,
+        "pairing_confidence": "thin",
+        "policy": "accepted_bounded_speedup",
+        "evidence": "boss_trajectory"
+      },
+      {
+        "id": "boss_troop_matched_transition_cadence",
+        "scope": "troop",
+        "measurement": "matched_player_facing_transition_cadence",
+        "direction": "faster",
+        "ratio_dx_over_og": 0.8591954022988506,
+        "deviation_percent": 14.080459770114938,
+        "target_percent": 2.0,
+        "pairing_confidence": "deep",
+        "policy": "accepted_bounded_speedup",
+        "evidence": "boss_trajectory"
+      },
+      {
+        "id": "stage_1_speed",
+        "scope": "stage_1",
+        "measurement": "input_identical_gameplay_throughput",
+        "direction": "slower",
+        "ratio_dx_over_og": 0.97,
+        "deviation_percent": 3.0000000000000027,
+        "target_percent": 2.0,
+        "accepted_floor_ratio": 0.96,
+        "policy": "accepted_slowdown_floor",
+        "evidence": "gameplay_speed"
+      },
+      {
+        "id": "stage_5_speed",
+        "scope": "stage_5",
+        "measurement": "input_identical_gameplay_throughput",
+        "direction": "slower",
+        "ratio_dx_over_og": 0.9681,
+        "deviation_percent": 3.190000000000004,
+        "target_percent": 2.0,
+        "accepted_floor_ratio": 0.96,
+        "policy": "accepted_slowdown_floor",
+        "evidence": "gameplay_speed"
+      },
+      {
+        "id": "stage_7_speed",
+        "scope": "stage_7",
+        "measurement": "input_identical_gameplay_throughput",
+        "direction": "slower",
+        "ratio_dx_over_og": 0.9737,
+        "deviation_percent": 2.629999999999999,
+        "target_percent": 2.0,
+        "accepted_floor_ratio": 0.96,
+        "policy": "accepted_slowdown_floor",
+        "evidence": "gameplay_speed"
+      },
+      {
+        "id": "ted_publication_cadence",
+        "scope": "ted",
+        "measurement": "publication_event_rate",
+        "direction": "slower",
+        "ratio_dx_over_og": 0.9859793013773587,
+        "deviation_percent": 1.4020698622641325,
+        "target_percent": 1.0,
+        "policy": "accepted_phase_deviation",
+        "evidence": "ted_readiness"
+      },
+      {
+        "id": "title_attract_combined_duration",
+        "scope": "title_attract_demo",
+        "measurement": "combined_route_duration",
+        "direction": "slower",
+        "ratio_dx_over_og": 1.1155042203465126,
+        "deviation_percent": 11.550422034651264,
+        "release_envelope_percent": 15.0,
+        "policy": "accepted_combined_route_envelope",
+        "evidence": "title_attract"
+      }
+    ],
+    "boss_matched_work_timing": [
+      {
+        "boss": "angela",
+        "classification": "paired",
+        "matched_transitions": 373,
+        "slip_aware_matched": 373,
+        "ratio_dx_over_og_frames_per_iter": 0.8512357734527577,
+        "slowdown_percent": -14.87642265472423,
+        "within_two_percent": false,
+        "transition_slowdown_percent": -15.053763440860212,
+        "transition_within_two_percent": false,
+        "pairing_confidence": "deep",
+        "policy_status": "accepted_bounded_speedup",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      },
+      {
+        "boss": "cameo",
+        "classification": "paired",
+        "matched_transitions": 434,
+        "slip_aware_matched": 434,
+        "ratio_dx_over_og_frames_per_iter": 0.8419273034657649,
+        "slowdown_percent": -15.807269653423505,
+        "within_two_percent": false,
+        "transition_slowdown_percent": -15.807269653423495,
+        "transition_within_two_percent": false,
+        "pairing_confidence": "deep",
+        "policy_status": "accepted_bounded_speedup",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      },
+      {
+        "boss": "crystal_dragon",
+        "classification": "paired",
+        "matched_transitions": 64,
+        "slip_aware_matched": 286,
+        "ratio_dx_over_og_frames_per_iter": 1.0386462375963688,
+        "slowdown_percent": 3.864623759636876,
+        "within_two_percent": false,
+        "transition_slowdown_percent": 3.6055143160127257,
+        "transition_within_two_percent": false,
+        "pairing_confidence": "deep",
+        "policy_status": "accepted_operator_slowdown",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      },
+      {
+        "boss": "faze",
+        "classification": "paired",
+        "matched_transitions": 460,
+        "slip_aware_matched": 460,
+        "ratio_dx_over_og_frames_per_iter": 0.8827888061759029,
+        "slowdown_percent": -11.721119382409706,
+        "within_two_percent": false,
+        "transition_slowdown_percent": -12.096774193548399,
+        "transition_within_two_percent": false,
+        "pairing_confidence": "deep",
+        "policy_status": "accepted_bounded_speedup",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      },
+      {
+        "boss": "penta_dragon",
+        "classification": "paired",
+        "matched_transitions": 398,
+        "slip_aware_matched": 398,
+        "ratio_dx_over_og_frames_per_iter": 0.8840000000000001,
+        "slowdown_percent": -11.599999999999987,
+        "within_two_percent": false,
+        "transition_slowdown_percent": -11.6,
+        "transition_within_two_percent": false,
+        "pairing_confidence": "deep",
+        "policy_status": "accepted_bounded_speedup",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      },
+      {
+        "boss": "riff",
+        "classification": "paired",
+        "matched_transitions": 31,
+        "slip_aware_matched": 31,
+        "ratio_dx_over_og_frames_per_iter": 0.8848920863309351,
+        "slowdown_percent": -11.510791366906492,
+        "within_two_percent": false,
+        "transition_slowdown_percent": -11.510791366906492,
+        "transition_within_two_percent": false,
+        "pairing_confidence": "thin",
+        "policy_status": "accepted_bounded_speedup",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      },
+      {
+        "boss": "shalamar",
+        "classification": "paired",
+        "matched_transitions": 132,
+        "slip_aware_matched": 426,
+        "ratio_dx_over_og_frames_per_iter": 0.9874798115297856,
+        "slowdown_percent": -1.252018847021441,
+        "within_two_percent": true,
+        "transition_slowdown_percent": -1.58052114480991,
+        "transition_within_two_percent": true,
+        "pairing_confidence": "deep",
+        "policy_status": "within_target",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      },
+      {
+        "boss": "ted",
+        "classification": "paired",
+        "matched_transitions": 288,
+        "slip_aware_matched": 288,
+        "ratio_dx_over_og_frames_per_iter": 1.0193905817174516,
+        "slowdown_percent": 1.939058171745156,
+        "within_two_percent": true,
+        "transition_slowdown_percent": 1.939058171745156,
+        "transition_within_two_percent": true,
+        "pairing_confidence": "deep",
+        "policy_status": "within_target",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      },
+      {
+        "boss": "troop",
+        "classification": "paired",
+        "matched_transitions": 178,
+        "slip_aware_matched": 254,
+        "ratio_dx_over_og_frames_per_iter": 0.869603825136612,
+        "slowdown_percent": -13.039617486338795,
+        "within_two_percent": false,
+        "transition_slowdown_percent": -14.080459770114938,
+        "transition_within_two_percent": false,
+        "pairing_confidence": "deep",
+        "policy_status": "accepted_bounded_speedup",
+        "interpretation": "arena_loop_throughput_and_player_facing_transition_cadence"
+      }
+    ],
+    "trajectory_null_control": {
+      "boss": "cameo",
+      "phase_shifted": true,
+      "slowdown_percent": 0.0,
+      "transition_slowdown_percent": 0.0,
+      "result": "exact_zero",
+      "evidence": "boss_trajectory_null"
+    },
+    "evidence": {
+      "title_attract": {
+        "path": "artifacts/title-idle-reel.summary.json",
+        "sha256": "4425901661edfaaa1df90e9766e9b64047852992886daf46843101cfcd1a3aba"
+      },
+      "gameplay_speed": {
+        "path": "artifacts/gameplay-speed/manifest.json",
+        "sha256": "4f664f56c8fb7199534e14bbcc3ff5131015877e89d8b12dda4b7c77b1936b55"
+      },
+      "boss_speed": {
+        "path": "artifacts/boss-speed-parity.json",
+        "sha256": "fef00881ac769370c0b4897637696b34598b70c9bbeaee0e3c1c27a6769357c3"
+      },
+      "boss_trajectory": {
+        "path": "artifacts/boss-trajectory-pairing.json",
+        "sha256": "01810b6f26544f371c9156952fd16758fa79d6259fbc4746db47f50023b5de64"
+      },
+      "boss_trajectory_null": {
+        "path": "artifacts/boss-trajectory-pairing-null.json",
+        "sha256": "7732835472b37d30f5296bcb135fa9acff5ee36246ab2e8a99bcba025621c369"
+      },
+      "ted_readiness": {
+        "path": "artifacts/ted-release-readiness/report.json",
+        "sha256": "c3a5f039e6cb288cc669b658e3f042dc3add2ae61986458316299f95ab97eba0"
+      }
+    },
+    "ledger_sha256": "0ed9062a3ddb0960d79a2fcc7cdae3d16869b2b7ac25b8d62cd094a69bd170ba"
   },
   "rom_committed": false,
   "hardware_status": "pending-reservation-backed-mister"

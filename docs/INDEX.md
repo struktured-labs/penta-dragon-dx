@@ -76,11 +76,10 @@ then dive into the specific subsystem you care about.
   GDMA design only; see its two correction banners). Comparison to
   vanilla and v3.00.
 - [`FINDINGS_2026_08_16_boss_speed_instrumentation.md`](FINDINGS_2026_08_16_boss_speed_instrumentation.md)
-  — **CURRENT speed picture.** Dungeon ~6% slow (copier explains ~1%);
-  five of nine boss arenas measured FASTER than OG; state-pair boss
-  percentages are direction-only; arena main loop is bank2:$406F, not
-  $016C. New instruments: `verify_boss_speed_parity.py`,
-  `verify_window_count.py`.
+  — **HISTORICAL instrumentation diagnosis.** Established the arena-loop
+  anchor and exposed phase-confounded percentages. The current 78-gate
+  receipt adds deterministic transition-aligned timing; see
+  [`release/known_deviations.md`](release/known_deviations.md).
 - [`speed_optimization_plan_v3.md`](speed_optimization_plan_v3.md) —
   **CURRENT fix plan** for the dungeon gap (window-count results, ranked
   options, verification bar). Supersedes plans v1/v2.

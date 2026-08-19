@@ -28,6 +28,7 @@ DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 
 LIVE_GATES = (
     "emulator_singleflight_guard",
+    "release_matrix_resume_contract",
     "title_footer_integration",
     "title_animation_frames",
     "flash_attribution",
@@ -37,6 +38,7 @@ LIVE_GATES = (
     "title_cursor",
     "stage_intro_timing",
     "menu_hud_and_combo",
+    "menu_icon_palettes",
     "menu_window_publish_order",
     "stale_gameplay_window",
     "levelselect_screen",
@@ -63,7 +65,9 @@ LIVE_GATES = (
     "later_stage_integrity",
     "later_stage_soak",
     "stage2_stream_soak",
+    "stage_side_by_side_all7",
     "boss_atomic_attr_contract",
+    "ted_expanded_integration",
     "boss_arenas",
     "boss_geometry_all9",
     "ted_contract_controls",
@@ -77,14 +81,22 @@ LIVE_GATES = (
     "ted_determinism",
     "ted_source_publication",
     "ted_publication_sequence",
+    "ted_incremental_mask_corpus",
     "ted_release_readiness_receipt",
     "ted_candidate_delta",
     "ted_release_readiness",
     "boss_semantic_cadence",
     "boss_og_states",
+    "boss_og_material_gallery_all9",
+    "boss_og_silhouette_gallery",
+    "boss_speed_parity",
+    "boss_trajectory_pairing_null",
+    "boss_trajectory_pairing",
     "boss_publication_cadence",
     "crystal_dragon_ghost",
     "boss_material_gallery_all9",
+    "boss_silhouette_gallery",
+    "boss_material_side_by_side",
     "death_gameover",
     "title_idle_reel",
     "spotlight_full_roster",
@@ -104,28 +116,26 @@ LIVE_GATES = (
 )
 
 
-def registered_gate_names() -> set[str]:
-    """Return the authoritative release-matrix inventory without running it."""
+def registered_gate_names(rom: Path) -> set[str]:
+    """Return the profile-aware release inventory without running it."""
 
     from verify_release_candidate import build_gates
 
-    placeholder_rom = ROOT / "tmp" / "penta-live-contract.gb"
     placeholder_output = ROOT / "tmp" / "penta-live-contract"
     return {
-        gate.name for gate in build_gates(placeholder_rom, placeholder_output)
+        gate.name for gate in build_gates(rom, placeholder_output)
     }
 
 
-def verify_contract() -> list[str]:
+def profile_gates(rom: Path) -> tuple[tuple[str, ...], list[str]]:
+    """Select exactly the gates applicable to *rom* from the profile superset."""
+
     failures: list[str] = []
     if len(LIVE_GATES) != len(set(LIVE_GATES)):
         failures.append("LIVE_GATES contains duplicate names")
-    missing = sorted(set(LIVE_GATES) - registered_gate_names())
-    if missing:
-        failures.append(
-            "live gate(s) absent from release matrix: " + ", ".join(missing)
-        )
-    omitted = sorted(registered_gate_names() - set(LIVE_GATES))
+    registered = registered_gate_names(rom)
+    selected = tuple(name for name in LIVE_GATES if name in registered)
+    omitted = sorted(registered - set(selected))
     if omitted:
         failures.append(
             "release gate(s) omitted from pre-stream profile: "
@@ -155,7 +165,7 @@ def verify_contract() -> list[str]:
             "boss cadence exception is not Crystal Dragon alone: "
             + ", ".join(map(str, exceptions))
         )
-    return failures
+    return selected, failures
 
 
 def main() -> int:
@@ -182,18 +192,18 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    failures = verify_contract()
+    live_gates, failures = profile_gates(args.rom.resolve())
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
         return 1
     if args.list:
-        print("\n".join(LIVE_GATES))
+        print("\n".join(live_gates))
         return 0
     if args.check_contract:
         print(
             f"PASS: dedicated live profile registers all "
-            f"{len(LIVE_GATES)} required gates."
+            f"{len(live_gates)} required gates."
         )
         return 0
     if args.output is None:
@@ -210,10 +220,10 @@ def main() -> int:
     ]
     if args.resume:
         command.append("--resume")
-    for gate in LIVE_GATES:
+    for gate in live_gates:
         command.extend(("--only", gate))
 
-    print("Live regression gates: " + ", ".join(LIVE_GATES), flush=True)
+    print("Live regression gates: " + ", ".join(live_gates), flush=True)
     result = subprocess.run(command, cwd=ROOT, check=False)
     if result.returncode:
         return result.returncode
@@ -224,7 +234,7 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         print(f"FAIL: live profile did not produce a readable manifest: {exc}")
         return 1
-    expected = set(LIVE_GATES)
+    expected = set(live_gates)
     source_fingerprint, source_inputs = source_snapshot()
     selected = set(manifest.get("selected_gates", []))
     results = manifest.get("results", [])
@@ -245,16 +255,16 @@ def main() -> int:
         or manifest.get("source_inputs_intact") is not True
         or selected != expected
         or passed != expected
-        or len(results) != len(LIVE_GATES)
+        or len(results) != len(live_gates)
     ):
         print(
             "FAIL: release verifier returned success without an exact "
-            f"{len(LIVE_GATES)}/{len(LIVE_GATES)} live manifest"
+            f"{len(live_gates)}/{len(live_gates)} live manifest"
         )
         return 1
     print(
         f"PASS: dedicated live regression is green "
-        f"({len(passed)}/{len(LIVE_GATES)}); receipt: {manifest_path}"
+        f"({len(passed)}/{len(live_gates)}); receipt: {manifest_path}"
     )
     return 0
 

@@ -14,10 +14,12 @@ local TRACE = os.getenv("STAGE_SPEED_TRACE")
 local LIFECYCLE = os.getenv("STAGE_SPEED_LIFECYCLE")
 local INPUT_MODE = os.getenv("STAGE_SPEED_MODE") or "right"
 local LIMIT = tonumber(os.getenv("STAGE_SPEED_FRAMES") or "600")
+local STAGE1_DECIDER_MODE = os.getenv("STAGE_SPEED_STAGE1_DECIDER_MODE") or "native"
 local ATOMIC_ADDR = tonumber(os.getenv("STAGE_SPEED_ATOMIC_ADDR") or "0")
+local TRACE_ADDRS_RAW = os.getenv("STAGE_SPEED_TRACE_ADDRS") or ""
 local EXPECTED_SCENE = TARGET + 2
 local KEY_A, KEY_START = 0x01, 0x08
-local KEY_RIGHT, KEY_LEFT = 0x10, 0x20
+local KEY_RIGHT, KEY_LEFT, KEY_UP, KEY_DOWN = 0x10, 0x20, 0x40, 0x80
 
 local frame, phase, seeded, confirmed = 0, "title", false, false
 local stable_frames, play_frames = 0, 0
@@ -25,7 +27,20 @@ local main_loop_hits, central_emitter_hits, free_emitter_hits = 0, 0, 0
 local last_main_loop_frame, max_main_loop_gap = -1, 0
 local tile_copy_hits, atomic_attr_passes = 0, 0
 local atomic_call_indices = {}
-local previous_scx, scroll_changes = -1, 0
+local trace_addr_hits, trace_addrs = {}, {}
+local pc_sample_counts = {}
+local ff_scan_hits, ff_scan_trace = 0, {}
+local stage4_parser_trace = {}
+for raw in string.gmatch(TRACE_ADDRS_RAW, "[^,]+") do
+  local address = tonumber(raw)
+  if address then
+    trace_addrs[#trace_addrs + 1] = address
+    trace_addr_hits[address] = 0
+  end
+end
+local postcopy_decisions, postcopy_dirty_decisions = 0, 0
+local postcopy_dirty_tile_copy_indices = {}
+local previous_scx, previous_scy, scroll_changes = -1, -1, 0
 -- FFC1 is a gameplay sub-mode flag, not a universal active/inactive bit.
 -- Retain its high-frame count and first transition as diagnostic telemetry;
 -- scene stability and main-loop throughput are the actual continuity gates.
@@ -87,8 +102,7 @@ local function scene_sample()
 end
 
 local function profile_lava_attr_map()
-  if phase ~= "play" or (TARGET ~= 0 and TARGET ~= 4 and TARGET ~= 6)
-      or emu:read8(0xD880) ~= EXPECTED_SCENE then
+  if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE then
     return
   end
   lava_copy_hits = lava_copy_hits + 1
@@ -98,9 +112,14 @@ local function profile_lava_attr_map()
   for offset = 0, 575 do
     local tile = emu:read8(0xC1A0 + offset)
     rawset[#rawset + 1] = string.format("%02X", tile)
-    local desired = ((TARGET == 0 and is_stage1_pickup(tile))
-      or (TARGET == 4 and LAVA5[tile])
-      or (TARGET == 6 and LAVA7[tile])) and 1 or 0
+    -- Stage 1 predates the shared C600 semantic LUT. Every later dungeon
+    -- compiles its stage-local pickup/material/lava assignments into that
+    -- page during scene entry, so sampling the LUT records the attribute
+    -- plane the ROM actually requests instead of maintaining a partial list
+    -- of hard-coded Stage 5/7 tile families here.
+    local desired = TARGET == 0
+      and (is_stage1_pickup(tile) and 1 or 0)
+      or (emu:read8(0xC600 + tile) & 0x07)
     current[offset + 1] = desired
     if desired ~= 0 then
       packed_bits = packed_bits + 2 ^ (offset % 8)
@@ -194,6 +213,22 @@ breakpoints_available = pcall(function()
       profile_lava_attr_map()
     end
   end, 0x42A7)
+  -- The production postcomputed copier latches a dirty decision in B.7,
+  -- copies the tile plane at stock width, then tests that stable bit here.
+  -- FFE0 has already been reused by this point, so sampling it at $42A7
+  -- cannot describe the executed attribute path.
+  emu:setBreakpoint(function()
+    if phase == "play" then
+      postcopy_decisions = postcopy_decisions + 1
+      local b = read_register("B") & 0xFF
+      if (b & 0x80) ~= 0 then
+        postcopy_dirty_decisions = postcopy_dirty_decisions + 1
+        postcopy_dirty_tile_copy_indices[
+          #postcopy_dirty_tile_copy_indices + 1
+        ] = tile_copy_hits
+      end
+    end
+  end, 0x42F5)
   if ATOMIC_ADDR > 0 then
     emu:setBreakpoint(function()
       if phase == "play" then
@@ -201,6 +236,42 @@ breakpoints_available = pcall(function()
         atomic_call_indices[#atomic_call_indices + 1] = lava_copy_hits
       end
     end, ATOMIC_ADDR)
+  end
+  for _, configured_address in ipairs(trace_addrs) do
+    local address = configured_address
+    emu:setBreakpoint(function()
+      if phase == "play" then
+        trace_addr_hits[address] = trace_addr_hits[address] + 1
+      end
+    end, address)
+  end
+  -- Stage 4 can enter stock's $0E6B FF-terminated list scan for whole
+  -- rendered frames. Capture its exact RAM cursor and caller contract so a
+  -- slowdown caused by malformed data is distinguishable from renderer cost.
+  emu:setBreakpoint(function()
+    if phase == "play" then
+      ff_scan_hits = ff_scan_hits + 1
+      if #ff_scan_trace < 256 then
+        local hl = read_register("HL") & 0xFFFF
+        ff_scan_trace[#ff_scan_trace + 1] = string.format(
+          "%04X:%02X:%02X:%04X", hl, emu:read8(hl),
+          read_register("B") & 0xFF, entry_return() & 0xFFFF)
+      end
+    end
+  end, 0x0E6B)
+  for _, configured_address in ipairs({0x0DF6, 0x0DFA, 0x0E3C, 0x0E5A, 0x0E65}) do
+    local address = configured_address
+    emu:setBreakpoint(function()
+      if phase == "play" and #stage4_parser_trace < 256 then
+        stage4_parser_trace[#stage4_parser_trace + 1] = string.format(
+          "%d:%04X:%02X:%02X:%02X:%02X:%02X:%04X:%04X:%02X",
+          play_frames, address, read_register("A") & 0xFF,
+          read_register("B") & 0xFF, read_register("C") & 0xFF,
+          read_register("D") & 0xFF, read_register("E") & 0xFF,
+          read_register("HL") & 0xFFFF, read_register("SP") & 0xFFFF,
+          emu:read8(0xFF99))
+      end
+    end, address)
   end
 end)
 
@@ -217,6 +288,8 @@ local function finish()
   handle:write(string.format('  "final_scene": %d,\n', final_scene))
   handle:write(string.format('  "frames": %d,\n', play_frames))
   handle:write(string.format(
+    '  "stage1_decider_mode": "%s",\n', STAGE1_DECIDER_MODE))
+  handle:write(string.format(
     '  "breakpoints_available": %s,\n', tostring(breakpoints_available)))
   handle:write(string.format('  "main_loop_hits": %d,\n', main_loop_hits))
   handle:write(string.format(
@@ -227,10 +300,46 @@ local function finish()
     '  "central_emitter_hits": %d,\n', central_emitter_hits))
   handle:write(string.format('  "free_emitter_hits": %d,\n', free_emitter_hits))
   handle:write(string.format('  "tile_copy_hits": %d,\n', tile_copy_hits))
+  handle:write(string.format(
+    '  "postcopy_decisions": %d,\n', postcopy_decisions))
+  handle:write(string.format(
+    '  "postcopy_dirty_decisions": %d,\n', postcopy_dirty_decisions))
+  handle:write(string.format(
+    '  "postcopy_dirty_tile_copy_indices": [%s],\n',
+    table.concat(postcopy_dirty_tile_copy_indices, ",")))
   handle:write(string.format('  "atomic_attr_passes": %d,\n', atomic_attr_passes))
   handle:write(string.format(
     '  "atomic_call_indices": [%s],\n',
     table.concat(atomic_call_indices, ",")))
+  local trace_parts = {}
+  for _, address in ipairs(trace_addrs) do
+    trace_parts[#trace_parts + 1] = string.format(
+      '"0x%04X":%d', address, trace_addr_hits[address])
+  end
+  handle:write(string.format(
+    '  "trace_addr_hits": {%s},\n', table.concat(trace_parts, ",")))
+  local pc_keys, pc_parts = {}, {}
+  for address in pairs(pc_sample_counts) do pc_keys[#pc_keys + 1] = address end
+  table.sort(pc_keys)
+  for _, address in ipairs(pc_keys) do
+    pc_parts[#pc_parts + 1] = string.format(
+      '"0x%04X":%d', address, pc_sample_counts[address])
+  end
+  handle:write(string.format(
+    '  "pc_samples": {%s},\n', table.concat(pc_parts, ",")))
+  local ff_parts = {}
+  for _, record in ipairs(ff_scan_trace) do
+    ff_parts[#ff_parts + 1] = string.format('"%s"', record)
+  end
+  handle:write(string.format('  "ff_scan_hits": %d,\n', ff_scan_hits))
+  handle:write(string.format(
+    '  "ff_scan_trace": [%s],\n', table.concat(ff_parts, ",")))
+  local parser_parts = {}
+  for _, record in ipairs(stage4_parser_trace) do
+    parser_parts[#parser_parts + 1] = string.format('"%s"', record)
+  end
+  handle:write(string.format(
+    '  "stage4_parser_trace": [%s],\n', table.concat(parser_parts, ",")))
   handle:write(string.format('  "lava_copy_hits": %d,\n', lava_copy_hits))
   handle:write(string.format('  "attr_map_changes": %d,\n', attr_map_changes))
   handle:write(string.format('  "attr_map_unchanged": %d,\n', attr_map_unchanged))
@@ -337,8 +446,23 @@ callbacks:add("frame", function()
         and emu:read8(0xFFC1) == 1 then
       stable_frames = stable_frames + 1
       if stable_frames >= 120 then
+        if TARGET == 0 and STAGE1_DECIDER_MODE == "pure" then
+          -- Diagnostic upper bound: keep all Stage-1 copies on the native-
+          -- width tile-only route. Attribute correctness is intentionally
+          -- out of scope for this isolation run.
+          emu:write8(0xDAD7, 0xAF)         -- XOR A
+          emu:write8(0xDAD8, 0xC9)         -- RET Z
+        elseif TARGET == 0 and STAGE1_DECIDER_MODE == "dirty" then
+          -- Opposite bound: force every Stage-1 source copy through the
+          -- changed-layout publisher.
+          emu:write8(0xDAD7, 0x3E)         -- LD A,$01
+          emu:write8(0xDAD8, 0x01)
+          emu:write8(0xDAD9, 0xB7)         -- OR A
+          emu:write8(0xDADA, 0xC9)         -- RET NZ
+        end
         phase = "play"
         previous_scx = emu:read8(0xFF43)
+        previous_scy = emu:read8(0xFF42)
       end
     else
       stable_frames = 0
@@ -350,6 +474,8 @@ callbacks:add("frame", function()
   play_frames = play_frames + 1
   local sampled_scene, compiler_unreadable, sampled_pc, sampled_svbk =
     scene_sample()
+  local sampled_pc_key = sampled_pc & 0xFFFF
+  pc_sample_counts[sampled_pc_key] = (pc_sample_counts[sampled_pc_key] or 0) + 1
   if sampled_scene == EXPECTED_SCENE or compiler_unreadable then
     expected_scene_frames = expected_scene_frames + 1
     if compiler_unreadable then
@@ -392,13 +518,20 @@ callbacks:add("frame", function()
   elseif INPUT_MODE == "patrol" then
     if play_frames % 120 < 60 then emu:setKeys(KEY_RIGHT)
     else emu:setKeys(KEY_LEFT) end
+  elseif INPUT_MODE == "vertical-patrol" then
+    if play_frames % 120 < 60 then emu:setKeys(KEY_UP)
+    else emu:setKeys(KEY_DOWN) end
   else
     emu:setKeys(KEY_RIGHT)
   end
 
   local scx = emu:read8(0xFF43)
-  if scx ~= previous_scx then scroll_changes = scroll_changes + 1 end
+  local scy = emu:read8(0xFF42)
+  if scx ~= previous_scx or scy ~= previous_scy then
+    scroll_changes = scroll_changes + 1
+  end
   previous_scx = scx
+  previous_scy = scy
 
   if play_frames >= LIMIT then finish() end
 end)

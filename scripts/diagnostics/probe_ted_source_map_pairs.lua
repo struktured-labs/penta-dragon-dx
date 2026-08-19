@@ -7,6 +7,7 @@ local FRAMES = tonumber(os.getenv("TED_SOURCE_MAP_FRAMES") or "600")
 local SCENE, SOURCE = 0x10, 0xC1A0
 local STOCK_ROM = os.getenv("TED_SOURCE_MAP_STOCK") == "1"
 local CLEAR_LOWER_ONCE = os.getenv("TED_SOURCE_MAP_CLEAR_LOWER") == "1"
+local CLEAR_ALL_ONCE = os.getenv("TED_SOURCE_MAP_CLEAR_ALL") == "1"
 local frame, samples, finished = 0, 0, false
 local trace = assert(io.open(OUT .. ".bin", "wb"))
 
@@ -37,8 +38,9 @@ callbacks:add("frame", function()
     emu:write8(0xD888, 0)
     emu:write8(0xDD06, 0)
     if emu:read8(0xD880) ~= SCENE then finish("wrong-scene"); return end
-    if CLEAR_LOWER_ONCE and samples == 0 then
-        for row = 14, 23 do
+    if (CLEAR_LOWER_ONCE or CLEAR_ALL_ONCE) and samples == 0 then
+        local first_row = CLEAR_ALL_ONCE and 0 or 14
+        for row = first_row, 23 do
             for column = 0, 23 do
                 local floor = 0x77 + 2 * (row & 1) + (column & 1)
                 emu:write8(SOURCE + row * 24 + column, floor)

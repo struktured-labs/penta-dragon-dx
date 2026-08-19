@@ -115,7 +115,11 @@ def main() -> int:
     if not args.mgba:
         parser.error("mgba-qt was not found")
 
-    with tempfile.TemporaryDirectory(prefix="penta-live-palette-") as tmp:
+    scratch = ROOT / "tmp"
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-live-palette-", dir=scratch
+    ) as tmp:
         tmpdir = Path(tmp)
         live_file = tmpdir / "live.txt"
         palette_yaml = tmpdir / "palettes.yaml"

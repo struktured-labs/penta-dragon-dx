@@ -26,6 +26,7 @@ local blank_publishes, afterimage_fills = 0, 0
 local boss_released = false
 local body_writes = {false, false}
 local diagnostic_write = false
+local material_reloaded, phase_reloaded, helpers_reloaded = false, false, false
 
 local function hex_range(address, length)
     local bytes = {}
@@ -187,25 +188,42 @@ callbacks:add("frame", function()
     if finished then return end
     frame = frame + 1
     emu:setKeys(0)
-    emu:write8(0xDCBB, 0xF0)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    -- D000-DFFF is banked. Candidate arena publishers can remain on SVBK2/3
+    -- across a frame callback; reading D880 or applying keep-alive writes in
+    -- that window corrupts the private attribute plane and invents a scene
+    -- exit. Defer every D-range diagnostic write until bank 0/1 is visible.
+    local svbk = emu:read8(0xFF70) & 0x07
+    local wram_accessible = svbk == 0 or svbk == 1
+    local scene = EXPECTED_SCENE
+    if wram_accessible then
+        scene = emu:read8(0xD880)
+        emu:write8(0xDCBB, 0xF0)
+        emu:write8(0xDCDC, 0xFF)
+        emu:write8(0xDCDD, 0xFF)
+        -- Match the established boss-corpus survival policy. Without these
+        -- neutralizations some synthetic arena fixtures resolve the fight
+        -- before the scene-isolation control can observe a palette.
+        emu:write8(0xD888, 0x00)
+        emu:write8(0xDD06, 0x00)
 
-    if frame == 1 and RELOAD_MATERIAL then
-        -- Production phases 5..8 own OBJ slots 4..7. This is a diagnostic
-        -- re-arm, not a palette write: the ROM's bounded loader does the copy.
-        emu:write8(0xDF4C, 0x05)
-    end
-    if frame == 1 and RELOAD_PHASE then
-        emu:write8(0xDF4C, RELOAD_PHASE & 0xFF)
-    end
-    if frame == 1 and RELOAD_WRAM_HELPERS then
-        -- Save states retain the prior DA00-DAFF helper image. Clearing the
-        -- production sentinel asks the ROM to recopy its current helper ABI.
-        emu:write8(0xDF51, 0x00)
+        if RELOAD_MATERIAL and not material_reloaded then
+            -- Production phases 5..8 own OBJ slots 4..7. This is a diagnostic
+            -- re-arm, not a palette write: the ROM's loader does the copy.
+            emu:write8(0xDF4C, 0x05)
+            material_reloaded = true
+        end
+        if RELOAD_PHASE and not phase_reloaded then
+            emu:write8(0xDF4C, RELOAD_PHASE & 0xFF)
+            phase_reloaded = true
+        end
+        if RELOAD_WRAM_HELPERS and not helpers_reloaded then
+            -- Clearing the production sentinel asks the ROM to recopy its
+            -- current helper ABI.
+            emu:write8(0xDF51, 0x00)
+            helpers_reloaded = true
+        end
     end
 
-    local scene = emu:read8(0xD880)
     if scene ~= EXPECTED_SCENE then
         trace:write(string.format("frame=%d scene=%02X\n", frame, scene))
         finish("wrong-scene")

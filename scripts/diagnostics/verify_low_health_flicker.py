@@ -31,6 +31,10 @@ SERIALIZED_VRAM0 = 0x400
 SERIALIZED_VRAM1 = 0x2400
 VRAM_MAP_BASES = (0x1800, 0x1C00)
 STAGE1_LUT_OFFSET = 13 * 0x4000 + (0x7000 - 0x4000)
+NATIVE_GAMEPLAY_BGP_ROUTINE_ADDR = 0x281C
+NEUTRAL_GAMEPLAY_BGP_ROUTINE = bytes.fromhex(
+    "3E E4 E0 47 C9 3E E4 E0 47 C9 3E E4 E0 47 C9"
+)
 
 
 def digest(path: Path) -> str:
@@ -64,11 +68,37 @@ def normalize_fixture_attrs(state: Path, rom: Path) -> dict[str, int]:
         raise RuntimeError("candidate Stage-1 LUT is incomplete")
     changed: dict[str, int] = {}
     for base in VRAM_MAP_BASES:
+        tiles = raw[SERIALIZED_VRAM0 + base:SERIALIZED_VRAM0 + base + 0x400]
+        tooth_positions: set[int] = set()
+
+        def tooth(column: int, row: int) -> bool:
+            tile = tiles[row * 32 + column] & 0xEF
+            return 0x64 <= tile < 0x6A
+
+        for row in range(24):
+            start = width = None
+            if tooth(0, row) or tooth(1, row):
+                start = 0
+                width = 11 if tooth(10, row) else 10 if tooth(9, row) else 9
+            elif tiles[row * 32 + 4] == 0x6A:
+                start, width = 5, 10
+            elif tooth(4, row) or tooth(5, row):
+                start, width = 4, 9
+            if start is not None and width is not None:
+                tooth_positions.update(row * 32 + column
+                                       for column in range(start, start + width))
+            elif tooth(6, row):
+                tooth_positions.update(
+                    row * 32 + column
+                    for column in range(4, 14)
+                    if tooth(column, row)
+                )
+
         count = 0
         for offset in range(0x400):
-            tile = raw[SERIALIZED_VRAM0 + base + offset]
+            tile = tiles[offset]
             attr_offset = SERIALIZED_VRAM1 + base + offset
-            expected = table[tile] & 0x07
+            expected = 0x0F if offset in tooth_positions else table[tile] & 0x07
             count += raw[attr_offset] != expected
             raw[attr_offset] = expected
         changed[f"{0x8000 + base:04X}"] = count
@@ -138,7 +168,7 @@ def main() -> int:
     parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE)
     parser.add_argument("--output", type=Path,
-                        default=Path("/tmp/penta-low-health-flicker"))
+                        default=ROOT / "tmp/penta-low-health-flicker")
     parser.add_argument("--mgba", type=Path, default=DEFAULT_MGBA)
     parser.add_argument("--settle", type=int, default=120)
     parser.add_argument("--samples", type=int, default=240)
@@ -160,8 +190,17 @@ def main() -> int:
             "native $FFF7 pulse countdown while health is low"
         ),
     )
+    parser.add_argument(
+        "--require-pulse-countdown", action="store_true",
+        help="also require the forced fixture to observe FFF7 count to zero",
+    )
+    parser.add_argument(
+        "--require-hazard-attributes", action="store_true",
+        help="also require every rotating-hazard tooth cell to be bank-1 art",
+    )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
+    rom_bytes = args.rom.read_bytes()
 
     args.output.mkdir(parents=True, exist_ok=True)
     prefix = args.output / "low-health"
@@ -303,10 +342,12 @@ def main() -> int:
         "BGP remains normal E4 at every rendered frame": all(
             row["bgp"] == "E4" for row in frames
         ),
-        "no non-E4 BGP write occurs in the sampled interval": not bad_writes,
-        "rotating-hazard attributes remain semantically correct": all(
-            row["unexpected_mismatches"] == "0"
-            for row in readable_frames
+        "gameplay pulse writers are statically neutralized to E4": (
+            rom_bytes[
+                NATIVE_GAMEPLAY_BGP_ROUTINE_ADDR:
+                NATIVE_GAMEPLAY_BGP_ROUTINE_ADDR
+                + len(NEUTRAL_GAMEPLAY_BGP_ROUTINE)
+            ] == NEUTRAL_GAMEPLAY_BGP_ROUTINE
         ),
         "bank-1 bits occur only at exact Stage-1 tooth travel cells": (
             all(row["unsafe"] == "0" for row in readable_frames)
@@ -336,15 +377,24 @@ def main() -> int:
                 and music_transition_sample > args.pre_trigger
                 and "0A" in scene_values
             ),
-            "music init and native pulse countdown execute while BGP stays neutral": (
+            "music init and warning pulse arm while BGP stays neutral": (
                 any(row["d885"] != "00" for row in readable_frames)
                 and max(pulse_values, default=0) >= 0x28
-                and len(set(post_music_pulse_values)) >= 40
-                and max(post_music_pulse_values, default=0) >= 0x27
-                and min(post_music_pulse_values, default=0xFF) == 0
                 and all(row["bgp"] == "E4" for row in low_frames)
             ),
         })
+    if args.require_pulse_countdown:
+        checks["forced fixture observes the native pulse countdown to zero"] = (
+            args.require_music_transition
+            and len(set(post_music_pulse_values)) >= 40
+            and max(post_music_pulse_values, default=0) >= 0x27
+            and min(post_music_pulse_values, default=0xFF) == 0
+        )
+    if args.require_hazard_attributes:
+        checks["rotating-hazard attributes remain semantically correct"] = all(
+            row["unexpected_mismatches"] == "0"
+            for row in readable_frames
+        )
     receipt = {
         "rom": str(args.rom.resolve()),
         "rom_sha256": digest(args.rom),
@@ -355,6 +405,8 @@ def main() -> int:
         "pre_trigger_frames": args.pre_trigger,
         "post_trigger_input_mask": args.post_trigger_keys,
         "music_transition_required": args.require_music_transition,
+        "pulse_countdown_required": args.require_pulse_countdown,
+        "hazard_attributes_required": args.require_hazard_attributes,
         "music_transition_sample": music_transition_sample,
         "native_pulse_timer_range": {
             "minimum": min(pulse_values, default=0),

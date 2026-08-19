@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -31,6 +32,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 PROBE = ROOT / "scripts/diagnostics/probe_boss_geometry.lua"
 DEFAULT_MGBA = ROOT / "scripts/mgba-headless-singleflight"
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def run_probe(mgba: Path, rom: Path, state: Path, prefix: Path,
               scene: int, frames: int, warmup: int, timeout: float) -> None:
     for suffix in (".done", ".tsv"):
@@ -136,30 +143,84 @@ TED_NUMBERED_BODY_OFFSETS = frozenset(
 
 def ted_crown_by_frame(
     samples: list[tuple[int, int, int, int, int, int, int, int, int, int]],
-) -> tuple[dict[int, tuple[int, int]], list[dict[str, object]]]:
-    """Locate Ted's unique $02-$06 crown in each sampled physical map."""
+) -> tuple[
+    dict[int, tuple[int, int]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+]:
+    """Locate Ted's unique $02-$06 crown in each sampled viewport.
+
+    The probe records only cells contributing to the current LCD viewport.
+    During horizontal camera wrap, the right or left viewport boundary can
+    clip one or two crown cells even though the rendered boss is intact. An
+    exact three/four-tile prefix or suffix is accepted only when the missing
+    continuation is absent from the sampled coordinate set. This preserves a
+    spatial anchor without treating arbitrary numbered scratch as a crown.
+    """
     tiles: dict[int, dict[tuple[int, int], int]] = {}
     for frame, _base, _scy, _scx, row, col, *_middle, tile, _attr in samples:
         tiles.setdefault(frame, {})[(row, col)] = tile
     anchors: dict[int, tuple[int, int]] = {}
     violations: list[dict[str, object]] = []
+    clipped: list[dict[str, object]] = []
+    crown = [0x02, 0x03, 0x04, 0x05, 0x06]
     for frame, layout in tiles.items():
         matches = [
             (row, col)
             for row, col in layout
             if [layout.get((row, col + offset)) for offset in range(5)]
-            == [0x02, 0x03, 0x04, 0x05, 0x06]
+            == crown
         ]
         if len(matches) == 1:
             anchors[frame] = matches[0]
+            continue
+
+        partials: list[tuple[int, int, str, int]] = []
+        if not matches:
+            for (row, col), tile in layout.items():
+                if tile == crown[0]:
+                    length = 1
+                    while (
+                        length < len(crown)
+                        and layout.get((row, col + length)) == crown[length]
+                    ):
+                        length += 1
+                    if (
+                        3 <= length < len(crown)
+                        and (row, col + length) not in layout
+                    ):
+                        partials.append((row, col, "right", length))
+                if tile in crown[1:]:
+                    index = crown.index(tile)
+                    if (row, col - 1) in layout:
+                        continue
+                    length = 1
+                    while (
+                        index + length < len(crown)
+                        and layout.get((row, col + length))
+                        == crown[index + length]
+                    ):
+                        length += 1
+                    if index + length == len(crown) and length >= 3:
+                        partials.append((row, col - index, "left", length))
+        if len(partials) == 1:
+            row, col, edge, length = partials[0]
+            anchors[frame] = (row, col)
+            clipped.append({
+                "frame": frame,
+                "anchor": [row, col],
+                "edge": edge,
+                "visible_crown_tiles": length,
+            })
         elif len(violations) < 20:
             violations.append({
                 "kind": "ted-crown-count",
                 "frame": frame,
                 "count": len(matches),
                 "matches": matches,
+                "clipped_candidates": partials,
             })
-    return anchors, violations
+    return anchors, violations, clipped
 
 
 def analyze_crystal_cached_layout(
@@ -282,10 +343,12 @@ def analyze(name: str,
         )
     lut = expected_lut(name)
     if name == "ted":
-        from arena_tables_data import TED_BODY_TILE_IDS
+        from arena_tables_data import TED_BODY_TILE_IDS, TED_FLOOR_TILE_PAL
         ted_body_tile_ids = TED_BODY_TILE_IDS
+        ted_floor_tile_ids = frozenset(TED_FLOOR_TILE_PAL)
     else:
         ted_body_tile_ids = frozenset()
+        ted_floor_tile_ids = frozenset()
     palette_samples = Counter(attr for *_prefix, attr in samples)
     scroll_samples = Counter(
         (scy, scx) for _frame, _base, scy, scx, *_tail in samples
@@ -307,9 +370,11 @@ def analyze(name: str,
     ted_numbered_outside_body = 0
     ted_spatial_examples: list[dict[str, object]] = []
     if name == "ted":
-        ted_anchors, ted_anchor_violations = ted_crown_by_frame(samples)
+        ted_anchors, ted_anchor_violations, ted_clipped_anchors = (
+            ted_crown_by_frame(samples)
+        )
     else:
-        ted_anchors, ted_anchor_violations = {}, []
+        ted_anchors, ted_anchor_violations, ted_clipped_anchors = {}, [], []
     raw_lut_mismatches_by_frame: Counter[int] = Counter()
     base_by_frame = {
         frame: base for frame, base, *_tail in samples
@@ -361,7 +426,11 @@ def analyze(name: str,
                 ted_body_samples += 1
                 if attr == 0:
                     ted_body_uncolored += 1
-            elif attr != 0:
+            elif tile not in ted_floor_tile_ids and attr != 0:
+                # The checker floor $77-$7A deliberately owns BG6/BG7 and is
+                # already checked against its exact LUT material above. Only
+                # colored cells outside both the body and that floor are
+                # foreign arena debris.
                 ted_nonbody_colored += 1
             # $02-$76 are Ted's sequential numbered art.  Any colored copy
             # outside the crown-relative silhouette is arena scratch, even
@@ -436,6 +505,8 @@ def analyze(name: str,
         "ted_nonbody_colored_samples": ted_nonbody_colored,
         "ted_crown_frames": len(ted_anchors),
         "ted_crown_violations": len(ted_anchor_violations),
+        "ted_clipped_crown_frames": len(ted_clipped_anchors),
+        "ted_clipped_crown_examples": ted_clipped_anchors[:20],
         "ted_numbered_outside_body_samples": ted_numbered_outside_body,
         "ted_observed_body_tile_ids": sorted(
             set(observed_tiles) & ted_body_tile_ids
@@ -501,6 +572,7 @@ def main() -> int:
         )
         receipt = {
             "rom": str(rom),
+            "rom_sha256": sha256(rom),
             "frames_per_boss": args.frames,
             "restored_state_warmup_frames": args.warmup_frames,
             "strict_bosses": sorted(strict_names),
@@ -526,6 +598,8 @@ def main() -> int:
                 args.frames,
                 name in strict_names,
             )
+            metrics["state_sha256"] = sha256(matches[0])
+            metrics["trace_sha256"] = sha256(prefix.with_suffix(".tsv"))
             receipt["bosses"][name] = metrics
             label = metrics["contract_status"].upper()
             print(

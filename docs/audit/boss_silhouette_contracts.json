@@ -1,0 +1,32 @@
+{
+  "schema": "penta-dragon-dx-boss-silhouette-v1",
+  "contracts": {
+    "troop": {
+      "kind": "checker-clear-field",
+      "cell_size": 8,
+      "minimum_cell_colors": 2,
+      "minimum_repeated_background_cells": 8,
+      "clear_rectangles": [[12, 16, 0, 20], [16, 18, 0, 8], [16, 18, 12, 20]],
+      "maximum_foreign_cells": 0,
+      "gallery_phase_fractions": [0.25, 0.5],
+      "gallery_maximum_mean_foreign_cells": 15,
+      "gallery_maximum_peak_foreign_cells": 20,
+      "stock_receipt_sha256": "d069ad784777735e5ff341f5135de07ff02332d399bee9f729aba67617278de7",
+      "stock_receipt_note": "A ten-second stock phase corpus averages 13.53 foreign cells and peaks at 63 because native staging crosses the clear field. The short release gallery uses a tighter mean <=15 and peak <=20 bound while retaining strict per-frame telemetry."
+    },
+    "penta_dragon": {
+      "kind": "detached-fragment",
+      "background": "dominant-color",
+      "connectivity": 8,
+      "ignored_rectangles": [[120, 144, 64, 96]],
+      "minimum_fragment_pixels": 5,
+      "maximum_fragment_pixels": 128,
+      "maximum_detached_fragments": 0,
+      "gallery_phase_fractions": [0.25, 0.5, 0.75, 1.0],
+      "gallery_minimum_clean_phases": 2,
+      "gallery_maximum_peak_detached_fragments": 3,
+      "stock_receipt_sha256": "bb0e2d2e6d968bec079dfbb34d0d607a424b0e9db7aaa291f761026944b70493",
+      "stock_receipt_note": "Both stock and DX phase corpora contain two clean phases and two native detached-head phases, phase-shifted across their non-cross-loadable states. Require at least two clean phases and never more than three fragments."
+    }
+  }
+}

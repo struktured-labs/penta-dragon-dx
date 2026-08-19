@@ -39,7 +39,7 @@ ROUTE_COMMAND_VALUES = {0x0C, 0x26}
 BASELINE_CACHE = Path(
     os.environ.get(
         "PENTA_PHANTOM_BASELINE_CACHE",
-        "/tmp/penta_phantom_d887_baseline.json",
+        str(PROJECT_ROOT / "tmp" / "penta_phantom_d887_baseline.json"),
     )
 )
 
@@ -137,6 +137,7 @@ def _baseline_key(rom_path: str, frames: int) -> str:
 
 
 def get_baseline(rom_path: str, frames: int, force: bool = False) -> int:
+    BASELINE_CACHE.parent.mkdir(parents=True, exist_ok=True)
     key = _baseline_key(rom_path, frames)
     if not force and BASELINE_CACHE.exists():
         try:

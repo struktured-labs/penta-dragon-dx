@@ -24,6 +24,7 @@ Palette mapping (bg_table):
                            (slate blue-gray; Stage 1 scene only)
   - pal7 overridden to pal0 colors (hides stale CGB boot-ROM attrs)
 """
+import os
 import sys
 from pathlib import Path
 import yaml
@@ -634,7 +635,7 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
 
     This variant performs three or four WRAM LUT lookups *before* waiting for
     HBlank, pushes the resulting attributes, then commits each tile group and
-    its matching attributes in the same mode-0/mode-2 interval.  A
+    its matching attributes in the same mode-0/mode-2 interval. A
     departing pickup is therefore neutralized before its replacement floor
     tile can be rendered. Four-wide matches the stock tile-only cadence;
     three-wide reserves extra PPU margin for vertically scrolling pickup rows.
@@ -645,6 +646,18 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     that needs this atomic commit.
     """
     code = bytearray()
+    ted_phase_nops = int(os.environ.get("PENTA_TED_PHASE_NOPS", "0"))
+    assert 0 <= ted_phase_nops <= 7
+    # A split INC/DEC pair is register/flag neutral only at the instruction
+    # boundaries.  The arena publisher can be interrupted between them,
+    # shifting Ted's map handoff and leaving numbered body fragments at the
+    # physical edges.  The single JR +0 cadence is the 600-frame-proven form.
+    setup_phase = os.environ.get("PENTA_TED_SETUP_PHASE", "jr")
+    setup_phase_bytes = {
+        "incdec": [0x03, 0x0B],           # 16T, register/flag neutral
+        "jr": [0x18, 0x00],               # 12T, register neutral
+        "nops": [0x00, 0x00],             # 8T, register/flag neutral
+    }[setup_phase]
     targets = {}
 
     def emit(opcodes):
@@ -681,7 +694,7 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         code[pos] = target & 0xFF
         code[pos + 1] = (target >> 8) & 0xFF
 
-    assert atomic_group_width in (3, 4)
+    assert atomic_group_width in (2, 3, 4)
     assert 24 % atomic_group_width == 0
 
     # H is the caller-selected $98/$9C map base.
@@ -709,7 +722,7 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
             # The WRAM helper reloads D880 after checking its sentinel. Keep
             # the established 16T setup cadence without a redundant 3-byte
             # load; 16-bit INC/DEC preserve both BC and flags.
-            0x03, 0x0B,
+            *setup_phase_bytes,
             0x16, 0xFF,
             0xCD,
             external_decision_helper_addr & 0xFF,
@@ -731,6 +744,7 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
             # whole-map two-column shift between this setup and row 0.
             0x11, 0xA0, 0xC1,
         ])
+        emit([0x00] * ted_phase_nops)
         if external_attr_commit_addr is not None:
             emit([0x06, 0x18])              # buffered path: 24 rows in B
     if external_decision_helper_addr is None:
@@ -772,22 +786,22 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         # Precompute the four palette bytes in reverse source order. They then
         # pop forward after the stock tile writer without a destination rewind.
         # B keeps the LUT page for the full row; FFE0 owns its six-group count.
-        if external_attr_stack_helper_rst is not None:
-            # The shared arena helper repairs any stock staging cells in the
-            # packed source before their tile IDs are used for either plane.
-            # In particular, Shalamar's lower/right scratch cells must become
-            # checker tiles before the LUT lookup; clearing only the stacked
-            # attrs still rendered those scratch tiles as gray debris.
-            assert external_attr_stack_helper_rst in (
-                0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF,
-            )
-            emit([external_attr_stack_helper_rst])
         emit([0x13] * atomic_group_width)    # advance to source-group end
         for _ in range(atomic_group_width):
             emit([
                 0x1B, 0x1A,                 # DE--; tile=[DE]
                 0x4F, 0x0A, 0xF5,           # C=tile; PUSH table[tile]
             ])
+        if external_attr_stack_helper_rst is not None:
+            assert external_attr_stack_helper_rst in (
+                0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF,
+            )
+            # One post-stack visit repairs source/attributes atomically.
+            # The shared arena helper materializes the three outgoing tile
+            # IDs through the tile-0 HRAM mailbox plus C/B. The banked arena
+            # path returns A=1 so the fixed mapper restores ROM bank 1; only
+            # after the complete RST chain returns is tile 0 safe to stack.
+            emit([external_attr_stack_helper_rst])
     # One wait per four tiles, matching the pure/stock cadence.  The external
     # atomic setup enters with IME clear, and every later group returns from
     # the explicit register-safe interrupt slot below with IME clear.  Keeping
@@ -800,8 +814,12 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
     emit_jr_back(0x20, "atomic_stat0")
 
     # Tile IDs first in VBK0, using the stock source/advance sequence.
-    for _ in range(atomic_group_width):
-        emit([0x1A, 0x13, 0x22])
+    if external_attr_stack_helper_rst is not None:
+        assert atomic_group_width == 3
+        emit([0x78, 0x22, 0x79, 0x22, 0xF0, 0xA8, 0x22])
+    else:
+        for _ in range(atomic_group_width):
+            emit([0x1A, 0x13, 0x22])
 
     if external_attr_commit_addr is None:
         # Then matching attrs in VBK1. Reverse-order precompute leaves attr 0
@@ -818,6 +836,8 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         ])                                  # DEC FFE0 group count; retain flags
     else:
         emit([0x0D])                        # DEC group count
+    if external_attr_stack_helper_rst is not None:
+        emit([0x06, WRAM_BG_TABLE >> 8])    # restore LUT page; retain count flags
     emit_jr_back(0x20, "atomic_group")
 
     if external_decision_helper_addr is not None:
@@ -828,13 +848,17 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         # bytes instead. HL remains stack-safe and the fixed setup masks out
         # re-entrant VBlank service until the completed map is published.
         emit([
-            0x7A, 0xEA, 0x30, 0xDF,         # save D
-            0x7B, 0xEA, 0x31, 0xDF,         # save E
+            # The Timer ISR can mutate a stacked DE save, but HL is proven
+            # stack-safe. Borrow HL to save DE in adjacent fixed WRAM, keep
+            # the caller's VRAM destination beneath it, then restore in place.
+            # This is seven bytes smaller than four absolute A-mediated moves
+            # and leaves the exact scene classifiers byte-neutral overall.
             0xE5,
+            0x21, 0x30, 0xDF,
+            0x72, 0x23, 0x73,
             0xFB, 0x00, 0xF3,
+            0x5E, 0x2B, 0x56,
             0xE1,
-            0xFA, 0x30, 0xDF, 0x57,         # restore D
-            0xFA, 0x31, 0xDF, 0x5F,         # restore E
         ])
 
     # Destination rows are 32 bytes while packed source rows are 24.
@@ -853,6 +877,9 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         emit_jr_back(0x18, "atomic_row")
     else:
         emit_jr_back(0x20, "atomic_row")
+        # The row terminator leaves A=$E0. Reload the persistent scene for the
+        # fixed atomic selector: dungeon scenes return, arenas map bank 13.
+        emit([0xFA, 0x80, 0xD8])
         if external_attr_commit_addr is not None:
             attr_commit_call = len(code) + 1
             emit([0xCD, 0x00, 0x00])
@@ -930,14 +957,16 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
         # and prerecorded input stream do not shift phase.
         emit([0x78, 0xFE, 0x05, 0x00, 0x00, 0x00, 0xFB, 0xC9])
     else:
-        # B is a post-copy route token supplied by the scene decider. Live
-        # Stage-1 copies carry FFBD; title and prerecorded play carry $05.
-        # Room $05 is also the long north-route approach, so testing it here
-        # avoids a fixed-bank CALL on both timing-sensitive paths. The fixed
-        # helper rejects ordinary room $03 after the call.
+        # Route only exact Stage 1 ($02) and its demo/miniboss alias ($0A)
+        # after the interruptible native copy. Clearing bit 3 folds those two
+        # identities to $02 without admitting title, later dungeons, or any
+        # boss arena. The fixed helper loads bank 14 and runs the selective
+        # hazard/pickup publisher; every other scene returns at stock cadence.
         emit([
-            0x78, 0xFE, 0x05,
-            0xC4,
+            0xFA, 0x80, 0xD8,
+            0xE6, 0xF7,
+            0xFE, 0x02,
+            0xCC,
             external_post_copy_helper_addr & 0xFF,
             external_post_copy_helper_addr >> 8,
             0xFB, 0xC9,
@@ -1203,7 +1232,6 @@ def create_inline_tile_copy_postcomputed_attrs(
     assert external_source_sanitizer_rst in (
         0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF,
     )
-
     emit([
         0x2E, 0x00,                         # L=0; H is selected map base
         0x03, 0x0B,                         # retained phase alignment
@@ -1269,6 +1297,13 @@ def create_inline_tile_copy_postcomputed_attrs(
     emit([0xFB, 0xC9])
 
     patch_jr(j_compile)
+    # Shalamar's semantic-change helper can prepare the attribute plane while
+    # sanitizing its source map.  The tile loop above retains the decision in
+    # FFE0; it does not use that byte as a row counter until the optional
+    # compiler below.  Read the decision directly.  The rejected B.6 latch
+    # corrupted B's still-live native copy state and broke five boss arenas.
+    emit([0xF0, 0xE0, 0xFE, 0x03])          # prepared Shalamar plane?
+    j_publish_prepared = jr_fwd(0x28)       # JR Z
     mark("compile_attrs")
     emit([
         0xF3,                               # bounded post-copy compile
@@ -1289,21 +1324,51 @@ def create_inline_tile_copy_postcomputed_attrs(
     ])
     jr_back(0x20, "compile_row")
 
-    # LCDC.3 names the visible map; publish to its off-screen opposite.
+    # Publish to the native copier's exact destination, retained by the dirty
+    # setup before this compiler borrowed H. Inferring the destination from
+    # LCDC.3 is wrong during scroll boundaries: the stock engine can refresh
+    # the visible physical map, which formerly left that map's attributes stale
+    # while correctly coloring its peer.
+    patch_jr(j_publish_prepared)
     emit([
-        0xF0, 0x40, 0x0F, 0xE6, 0x04, 0xEE, 0x9C, 0x67,
+        0x3E, 0x03, 0xE0, 0x70,             # fused path also needs bank 3
+        0xF0, 0xA5, 0x67,
         0xAF, 0xE0, 0x54,
         0x3E, 0x01, 0xE0, 0x4F,
         0x3E, 0xD0, 0xE0, 0x51,
         0xAF, 0xE0, 0x52,
         0x7C, 0xE0, 0x53,
+    ])
+    if os.environ.get("PENTA_ARENA_ATTR_GDMA", "0") == "1":
+        # Throughput experiment: one bounded 48-block general DMA. This must
+        # clear the arena scroll/flicker gates before promotion because an
+        # active native HBlank DMA would be terminated by a new transfer.
+        emit([0x3E, 0x2F, 0xE0, 0x55])
+    else:
         # An LCD-off Stage-1 transition cannot advance HBlank DMA; an immediate
         # transfer is safe there. While LCDC.7 is set, use bounded HBlank DMA
         # and wait for all 48 blocks before the native map flip.
-        0xF0, 0x40, 0xCB, 0x7F,
-        0x3E, 0x2F, 0x28, 0x02, 0x3E, 0xAF,
-        0xE0, 0x55,
-        0xF0, 0x55, 0xCB, 0x7F, 0x28, 0xFA,
+        if os.environ.get("PENTA_SHALAMAR_HALF_HDMA", "0") == "1":
+            # Shalamar's established sanitizer guarantees rows 12..23 are
+            # neutral checker tiles. Transfer only the twelve boss-bearing
+            # 32-byte map rows after cold arena setup; the geometry gate must
+            # prove that both physical maps begin with neutral lower rows.
+            emit([
+                0xF0, 0x40, 0xCB, 0x7F,
+                0x3E, 0x2F, 0x28, 0x0B,
+                0xFA, 0x80, 0xD8, 0xFE, 0x0C,
+                0x3E, 0x97, 0x28, 0x02, 0x3E, 0xAF,
+                0xE0, 0x55,
+                0xF0, 0x55, 0xCB, 0x7F, 0x28, 0xFA,
+            ])
+        else:
+            emit([
+                0xF0, 0x40, 0xCB, 0x7F,
+                0x3E, 0x2F, 0x28, 0x02, 0x3E, 0xAF,
+                0xE0, 0x55,
+                0xF0, 0x55, 0xCB, 0x7F, 0x28, 0xFA,
+            ])
+    emit([
         0xAF, 0xE0, 0x4F,
         0x3C, 0xE0, 0x70,
         0xC3,

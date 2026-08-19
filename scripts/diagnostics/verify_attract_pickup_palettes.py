@@ -112,8 +112,11 @@ def main() -> int:
         path.unlink()
 
     rom_bytes = rom.read_bytes()
-    if len(rom_bytes) != 0x40000:
-        parser.error(f"ROM is {len(rom_bytes)} bytes, expected 262144")
+    if len(rom_bytes) < 0x40000 or len(rom_bytes) % 0x4000:
+        parser.error(
+            f"ROM is {len(rom_bytes)} bytes; expected at least 262144 "
+            "and a whole number of 16 KiB banks"
+        )
     lut = rom_bytes[BG_TABLE_OFFSET:BG_TABLE_OFFSET + 256]
     pickup_ids = bytearray(256)
     for pickup in PICKUPS:

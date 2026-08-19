@@ -433,8 +433,11 @@ def main() -> int:
     rom = rom_path.read_bytes()
     stock = stock_path.read_bytes()
     state = serialized_state(state_path)
-    if len(rom) != 0x40000:
-        raise SystemExit(f"FAIL: ROM is {len(rom)} bytes, expected 262144")
+    if len(rom) < 0x40000 or len(rom) % 0x4000:
+        raise SystemExit(
+            f"FAIL: ROM is {len(rom)} bytes; expected at least 262144 "
+            "and a whole number of 16 KiB banks"
+        )
     if len(stock) != 0x40000:
         raise SystemExit(
             f"FAIL: stock ROM is {len(stock)} bytes, expected 262144"

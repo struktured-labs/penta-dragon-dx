@@ -1,15 +1,18 @@
 def build_ips_patch(original: bytes, modified: bytes) -> bytes:
-    if len(original) != len(modified):
-        raise ValueError("IPS builder currently requires equal length ROMs (no trunc/extend).")
-    if len(original) > 0x1000000:
+    if len(modified) < len(original):
+        raise ValueError("IPS builder does not truncate ROMs.")
+    if len(modified) > 0x1000000:
         raise ValueError("IPS uses 24-bit offsets and cannot address ROMs larger than 16 MiB.")
     records = []
     i = 0
-    while i < len(original):
-        if original[i] != modified[i]:
+    while i < len(modified):
+        differs = i >= len(original) or original[i] != modified[i]
+        if differs:
             start = i
             chunk = bytearray()
-            while i < len(original) and original[i] != modified[i]:
+            while i < len(modified) and (
+                i >= len(original) or original[i] != modified[i]
+            ):
                 chunk.append(modified[i])
                 i += 1
                 if len(chunk) == 0xFFFF:  # IPS max block length
@@ -28,12 +31,12 @@ def build_ips_patch(original: bytes, modified: bytes) -> bytes:
 
 
 def apply_ips_patch(original: bytes, patch: bytes) -> bytes:
-    """Apply a standard IPS patch to an equal-length ROM image.
+    """Apply a standard literal/RLE IPS patch, including ROM expansion.
 
-    Literal and RLE records are supported. A three-byte truncate/expand size
-    after the EOF marker is deliberately rejected: the release builder emits
-    equal-length Game Boy ROMs, so accepting a size-changing patch would hide
-    a packaging error.
+    Records beyond the input end extend the image. The release builder writes
+    every extension byte explicitly, so reconstruction never depends on a
+    patcher's choice of gap-fill value. A three-byte truncate size after EOF
+    remains rejected because release images never shrink.
     """
     if not patch.startswith(b"PATCH"):
         raise ValueError("Invalid IPS header.")
@@ -71,10 +74,7 @@ def apply_ips_patch(original: bytes, patch: bytes) -> bytes:
 
         end = offset + len(payload)
         if end > len(output):
-            raise ValueError(
-                f"IPS record 0x{offset:06X}..0x{end:06X} exceeds "
-                f"the {len(output)}-byte ROM."
-            )
+            output.extend(bytes(end - len(output)))
         output[offset:end] = payload
 
     if cursor != len(patch):

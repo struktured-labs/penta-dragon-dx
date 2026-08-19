@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## [v3.01-stream-rc11] - 2026-08-19
+
+### Qualified
+
+- Promote the 512 KiB stream candidate after a 78/78 deterministic emulator
+  matrix and two byte-identical builds. The receipt binds SHA-256
+  `c3f7cd1cf0df1136132d147107fdc3ea8ec40d3d20d5603c9124c57830843cbc`
+  to the exact checked-in source and distribution IPS.
+- Finish the current pass over menu icons, semantic pickup colors, rotating
+  Stage 1 hazards, low-health behavior, the complete title spotlight roster,
+  every story/ending route, all seven stages, and all nine bosses.
+- Record the remaining stream-candidate compromises openly: audience palette
+  approval and a reservation-backed MiSTer pass are still pending; accepted
+  cadence differences live in the top-level release ledger.
 
 - Correct the project's speed picture (2026-08-16, measured): the dungeon
   runs ~6% slower than the original (Stage 1 0.943 / Stage 5 0.939 via the
@@ -30,8 +43,6 @@
 
 This project records source-level changes only. Copyrighted ROM images and
 emulator save/state files are never release artifacts in this repository.
-
-## [Unreleased]
 
 ### Added
 

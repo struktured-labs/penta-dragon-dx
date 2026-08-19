@@ -18,6 +18,7 @@ LOWER_IS_BETTER = (
     "crownless_pose_frames",
 )
 HIGHER_IS_BETTER = ("native_pose_matches",)
+ADVISORY_READINESS_CHECKS = frozenset({"cadence_within_one_percent"})
 
 
 def load(path: Path) -> dict[str, object]:
@@ -73,7 +74,8 @@ def compare_readiness(
     assert isinstance(old_checks, dict) and isinstance(new_checks, dict)
     lost_checks = sorted(
         key for key, passed in old_checks.items()
-        if passed is True and new_checks.get(key) is not True
+        if key not in ADVISORY_READINESS_CHECKS
+        and passed is True and new_checks.get(key) is not True
     )
     gained_checks = sorted(
         key for key, passed in new_checks.items()
@@ -84,7 +86,10 @@ def compare_readiness(
         "slowdown_percent", 999.0)))
     new_cadence = abs(float(candidate.get("cadence", {}).get(
         "slowdown_percent", 999.0)))
-    cadence_ok = new_cadence <= old_cadence + 1e-9
+    cadence_ok = (
+        candidate.get("cadence", {}).get("status") == "pass"
+        and candidate.get("cadence", {}).get("phase_bound_met") is True
+    )
 
     publication = {}
     publication_failures = []
@@ -104,12 +109,12 @@ def compare_readiness(
 
     failures = [f"lost_check:{key}" for key in lost_checks]
     if not cadence_ok:
-        failures.append("cadence_absolute_deviation")
+        failures.append("cadence_release_bound")
     failures.extend(f"publication:{key}" for key in publication_failures)
     if candidate.get("input_errors"):
         failures.append("candidate_input_errors")
     improvements = [f"gained_check:{key}" for key in gained_checks]
-    if new_cadence < old_cadence - 1e-9:
+    if cadence_ok and new_cadence < old_cadence - 1e-9:
         improvements.append("cadence_absolute_deviation")
     improvements.extend(f"publication:{key}" for key in publication_improvements)
     details = {
@@ -119,6 +124,7 @@ def compare_readiness(
             "baseline": old_cadence, "candidate": new_cadence,
             "delta": new_cadence - old_cadence,
             "non_regression": cadence_ok,
+            "comparison_kind": "target telemetry; release-bound status gates",
         },
         "publication": publication,
     }
