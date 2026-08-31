@@ -15,8 +15,10 @@ palette tuning with a live audience.
 pending.**
 
 - Title footer: `DX V3.01 STRUK LABS`
-- Current candidate: **78/78 deterministic emulator gates**, SHA-256
-  `c3f7cd1cf0df1136132d147107fdc3ea8ec40d3d20d5603c9124c57830843cbc`
+- Current Stage-1 repair candidate: SHA-256
+  `484cd678bd6724f7ab9c128a985a0a50db1c523ad406103a8f57bd84784f4611`.
+  Its menu, wall-edge, entrance, hazard-color, deterministic-replay, and 95%
+  speed gates pass; the exact receipt bundle also passed independent review.
 - Stage 1, pickups, rotating hazards, title reel, bosses, and story scenes are
   colorized.
 - Qualified: Ted's arena colorization and flicker containment. Stream-day
@@ -146,6 +148,12 @@ passing gates.
 This repository contains source code, palette data, verification tools, and a
 ROM-free IPS patch. It does not contain the original or modified game ROM,
 save files, or emulator states.
+
+Apply `rom/penta_dragon_dx.ips` to a clean Japanese *Penta Dragon* ROM whose
+MD5 is `df43e0adfdc74b2829c7e95e91c71a28`. The patched 512 KiB ROM must have
+SHA-256 `484cd678bd6724f7ab9c128a985a0a50db1c523ad406103a8f57bd84784f4611`.
+It can then be played in a Game Boy Color emulator such as mGBA or copied to
+`Assets/gbc/common/` on an Analogue Pocket SD card.
 
 *Penta Dragon* is owned by its original rights holders. Penta Dragon DX is an
 unofficial fan project.
