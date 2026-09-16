@@ -28,6 +28,7 @@ DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 
 LIVE_GATES = (
     "emulator_singleflight_guard",
+    "stage1_visual_contract_controls",
     "release_matrix_resume_contract",
     "title_footer_integration",
     "title_animation_frames",
@@ -40,17 +41,28 @@ LIVE_GATES = (
     "menu_hud_and_combo",
     "menu_icon_palettes",
     "menu_window_publish_order",
+    "stage1_captured_menu_stationary",
     "stale_gameplay_window",
+    "stage_card_stability",
     "levelselect_screen",
     "game_start_routes",
     "game_start_after_attract",
     "opening_to_stage1_integrity",
     "gameplay_speed_parity",
+    "gameplay_movement_stress",
     "gameplay_bg_palettes",
     "pickup_class_palettes",
     "attract_pickup_palettes",
     "stage1_spike_palettes",
     "stage1_spike_miniboss_transition",
+    "stage1_hazard_menu",
+    "stage1_hazard_menu_mutation",
+    "stage1_current_hazard_state",
+    "stage1_current_hazard_menu",
+    "stage1_current_hazard_mutations",
+    "stage1_exact_destination_mutation",
+    "stage1_current_pickup_state",
+    "stage1_current_pickup_host_palettes",
     "pickup_live_retry_contract",
     "pickup_live_palettes",
     "stage1_pickup_art",
@@ -61,6 +73,8 @@ LIVE_GATES = (
     "gameplay_obj_palettes",
     "frame_flicker",
     "low_health_flicker",
+    "low_health_scene0b_publication",
+    "pocket_stage1_visual_incident",
     "miniboss_color",
     "later_stage_integrity",
     "later_stage_soak",
@@ -98,6 +112,9 @@ LIVE_GATES = (
     "boss_silhouette_gallery",
     "boss_material_side_by_side",
     "death_gameover",
+    "gameover_restart",
+    "gameover_spike_restart",
+    "gameover_saved_spike_restart",
     "title_idle_reel",
     "spotlight_full_roster",
     "opening_cutscene",
@@ -175,6 +192,8 @@ def main() -> int:
     parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--timeout-scale", type=float, default=1.0)
+    parser.add_argument("--verify-manifest", type=Path,
+                        help="read-only: validate an existing complete current full-matrix manifest")
     parser.add_argument(
         "--check-contract",
         action="store_true",
@@ -191,12 +210,20 @@ def main() -> int:
         help="resume passed gates from the output manifest",
     )
     args = parser.parse_args()
+    if args.verify_manifest is not None and (args.output is not None or args.resume or args.list or args.check_contract):
+        parser.error("--verify-manifest cannot be combined with run/list/contract options")
 
     live_gates, failures = profile_gates(args.rom.resolve())
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
         return 1
+    if args.verify_manifest is not None:
+        try:
+            return verify_full_manifest(args.verify_manifest, args.rom.resolve(), live_gates)
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            print(f"FAIL: {error}")
+            return 1
     if args.list:
         print("\n".join(live_gates))
         return 0
@@ -266,6 +293,52 @@ def main() -> int:
         f"PASS: dedicated live regression is green "
         f"({len(passed)}/{len(live_gates)}); receipt: {manifest_path}"
     )
+    return 0
+
+
+def verify_full_manifest(path: Path, rom: Path, live_gates: tuple[str, ...]) -> int:
+    """Reuse actual full-matrix evidence; do not emit or relabel a playtest."""
+    import hashlib
+    from runtime_tools import emulator_runtime_snapshot, runtime_snapshots_match
+    from verify_release_candidate import build_gates
+    expected_rom = rom.read_bytes()
+    before = path.read_bytes()
+    manifest = json.loads(before)
+    fingerprint, inputs = source_snapshot()
+    md5 = hashlib.md5(expected_rom).hexdigest()
+    expected = {"status": "emulator-pass", "scope": "full", "failures": 0,
+                "rom_md5": md5, "rom_size": len(expected_rom),
+                "source_rom_md5_after": md5, "tested_rom_md5_after": md5,
+                "rom_hashes_intact": True, "source_inputs_intact": True,
+                "source_fingerprint": fingerprint, "source_fingerprint_after": fingerprint,
+                "source_input_count": len(inputs), "runtime_tools_intact": True}
+    for key, value in expected.items():
+        if manifest.get(key) != value or type(manifest.get(key)) is not type(value):
+            raise ValueError(f"live full-matrix evidence {key} differs")
+    runtime = emulator_runtime_snapshot()
+    if not runtime_snapshots_match(
+        manifest.get("runtime_tools"),
+        manifest.get("runtime_tools_after"),
+        runtime,
+    ):
+        raise ValueError("live full-matrix runtime identities are not current")
+    for name in ("source_rom", "tested_rom"):
+        if Path(manifest[name]).read_bytes() != expected_rom:
+            raise ValueError(f"live full-matrix {name} bytes differ")
+    order = [gate.name for gate in build_gates(rom, path.parent)]
+    rows = manifest.get("results")
+    if (not isinstance(rows, list) or len(rows) != len(order)
+            or any(not isinstance(row, dict) for row in rows)
+            or [row.get("name") for row in rows] != order
+            or manifest.get("selected_gates") != order or set(order) != set(live_gates)
+            or any(row.get("status") != "passed" or type(row.get("returncode")) is not int
+                   or row["returncode"] != 0 for row in rows)):
+        raise ValueError("live full-matrix evidence is not the exact complete passing roster")
+    if (path.read_bytes() != before or rom.read_bytes() != expected_rom
+            or source_snapshot() != (fingerprint, inputs)
+            or not runtime_snapshots_match(emulator_runtime_snapshot(), runtime)):
+        raise ValueError("live full-matrix evidence changed during verification")
+    print(f"PASS: existing full matrix covers all {len(order)} live gates; no new playtest was run: {path}")
     return 0
 
 

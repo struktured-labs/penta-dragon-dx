@@ -26,10 +26,25 @@ from pathlib import Path
 from PIL import Image
 
 from boss_geometry_contract import BOSSES, NAMES as BOSS_NAMES
-from normalize_mgba_state_pc import normalize
+from normalize_mgba_state_pc import normalize, retarget_rom_identity
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def scratch_root() -> Path:
+    """Prefer large scratch, but obey the project-local fallback contract."""
+    for candidate in (Path("/mnt/data/tmp"), ROOT / "tmp"):
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                prefix="penta-scratch-probe-", dir=candidate
+            ):
+                pass
+            return candidate
+        except OSError:
+            continue
+    raise RuntimeError("neither /mnt/data/tmp nor repository tmp/ is writable")
 # Same supported Japanese base as build_release_bundle.py / verify_release_patch.py.
 SUPPORTED_BASE_MD5 = "df43e0adfdc74b2829c7e95e91c71a28"
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
@@ -98,6 +113,7 @@ DF51 = WRAM + (0xDF51 - WRAM_START)
 C5FF = WRAM + (0xC5FF - WRAM_START)
 C500 = WRAM + (0xC500 - WRAM_START)
 FF99 = HRAM + (0xFF99 - 0xFF80)
+FFB7 = HRAM + (0xFFB7 - 0xFF80)
 FFBA = HRAM + (0xFFBA - 0xFF80)
 FFBF = HRAM + (0xFFBF - 0xFF80)
 FFC0 = HRAM + (0xFFC0 - 0xFF80)
@@ -106,6 +122,80 @@ FF91 = HRAM + (0xFF91 - 0xFF80)
 FFA7 = HRAM + (0xFFA7 - 0xFF80)
 FFA8 = HRAM + (0xFFA8 - 0xFF80)
 FFA9 = HRAM + (0xFFA9 - 0xFF80)
+
+
+from arena_palette_storage import PALETTE_STORAGE_SHA256, arena_palette_table
+
+PENTA_SYNC_DMA_SHA256 = "9e1bbb5165e8f9e772dbaef2eb7b2cd05260deeb7b1cf230e2f3f98904f8881e"
+ENTRY_WHITE_SHA256 = {
+    "8234bd8400f7284d115fe622ccccd44bc354e4b5322591c24332028c83dcb2b4",
+    "69896bb1ba8f60fee7f5fd8c9044b90972f16255c726f2b00beaffec320d6722",
+}
+PENTA_SYNC_INHERITORS_SHA256 = {
+    # r475 combines bank-20 boss repairs and bank13/28 Stage-7 work without
+    # changing r456d's synchronous Penta entry or relocated Ted latches.
+    "59384e3c0ea5508ade2ff8d08af2f3012c4eff1f5f9cf1cebb2f04273cd1693f",
+    # r517 changes only ending/story handoffs and inherits that entry bytewise.
+    "e3eb4d99a8b88ecdc61ca02b0823f97d8a0e773054c00349b4e1939513965932",
+    # r518 changes only the completed-page E7 ending reveal rule.
+    "918d95a88349aa2bb29c5a52285c79d5dba7a014848e5ccf41bae46890961808",
+    # r519 changes only the epilogue pre-fade reset route in bank 1/20.
+    "9b368aaef0e48757fb0bfed108e30f20490150f329e78b6001ed0b53fa7f7af9",
+    # r520 preserves caller AF across that exact bank-20 dispatcher.
+    "6e56a1589072b878df4135e02950c617cb8c87aace4b53fe58dc554b429f7261",
+    # r521 bypasses the inherited POP HLs after restoring dispatch state.
+    "37c9e9eccd78013727e1657075e37f02c4e7dc3534eb05baee9f7890fe3246ba",
+    # r522 gates the added black fill to the completed epilogue context.
+    "9172cdc991afb93c1ae10cc46a3b81503ca0872f6a3f34a6ee44f581bbff09e7",
+    # r523 branches from r518 through a private cycle-equivalent dispatcher.
+    "e6559ff3c4687d58b43e90f67f55bd35be62a644e855caee41d968509a65aceb",
+    # r524 retains r518 credit-path cycles and uses an unreachable branch.
+    "e2ffa7e6c91cb630066524c49c00b56243f9bc61b137bab367b97a441c95224a",
+    # r525 makes the inherited repeated-row CRAM fill atomic in VBlank.
+    "9ec2fb605c5e4e98a945aee422c8a95284192d8c44b88bcab783c3d3b09d837b",
+    # r526 retries only the final repeated-row color pair at a safe LCD edge.
+    "16dcaa83d2d21d33357f332415810afad9b0a83e79f9aee4163789d77e3576cd",
+    # r527 performs that pair retry through the inherited phase wait.
+    "13beaa1b0867dc71153538531838e00c101b355c2b3bdb8823184784ea78cc6b",
+    # r528 changes only the inherited four-byte palette publisher path.
+    "e8da7fde311acecc6b2fa052a501b18636c7c416091db9df329d59f07fdf5b50",
+    # r529 corrects r528's register-restore order in those same code spans.
+    "5c49fa5d01a91b2b07e7546d4bd6856cb23697678690cf2e6b734d3fa10ec208",
+    # r530 changes only that palette path and preserves all boss-state ABIs.
+    "46b498d85bb50f44fac92c6ee67d362236e66cecc3f372df22e7defe2b87aa30",
+    "9d44e9d1c03c60e95b91f76752a47d5631cf6062188a7ef80667a289af569855",
+    "055a2754355439b60e4e310adf89854f4db16e70a27182edad8ed902e3c43821",
+    "4fc5028a50250130c87d6a84414b409e050e55407e9fb2ac0e05af7ce288a4ba",
+    "727ee4969da086fe3c62185ca2f0bba1b62cc60d8190710f5db9bfc8b50b260b",
+    # Menu/title-only overlay; synchronous boss entry/latch ABIs unchanged.
+    "681b4668446c547644aaa4924ca0d6dd44782dc59133540c59708fa160c178d3",
+    "fe14b0e3c392b3d822208684636e1017cb093613d28e6ca477999535df164576",
+    "b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350",  # r536: inherited observer/data ABI
+    "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b",  # title row guard: unchanged gameplay observer/data ABI
+    "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d",  # death/restart successor: unchanged boss sync ABI
+    "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
+    "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
+    # Private bank-20 loading entry; synchronous boss/latch bytes unchanged.
+    "f2339ff5161ab6e80a948ab37cb4205b8cd53f372cb50c4436219457d2e825e3",
+}
+
+
+def relocated_ted_latches(rom: bytes) -> bool:
+    if hashlib.sha256(rom).hexdigest() not in {
+        "15ab73c3c04a3caf1c4186335a073ca49b5dc21199335ca9d85eca56ad7da21b",
+        PENTA_SYNC_DMA_SHA256,
+        PALETTE_STORAGE_SHA256,
+        *ENTRY_WHITE_SHA256,
+        *PENTA_SYNC_INHERITORS_SHA256,
+        "d82f563d856995fc1844d48cdd317b12f2ac9218f023eec376ee73bc24308074",
+        "b331c5e0339c26672651d0592dc658ebd9c42f4d759c1e5227e18115d0661892",
+    }:
+        return False
+    if rom[0x44364:0x44366] != bytes.fromhex("E0 72"):
+        raise ValueError("reviewed Ted latch relocation changed")
+    return True
+
+
 def md5(path: Path) -> str:
     digest = hashlib.md5()
     with path.open("rb") as handle:
@@ -132,13 +222,16 @@ def run_until_marker(
     marker: Path,
     timeout: float,
 ) -> None:
-    process = subprocess.Popen(
-        command,
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    # Preserve initialization/Lua errors instead of turning them into an
+    # unexplained timeout. The log stays beside this run's owned marker.
+    log = marker.with_suffix(".log").open("wb")
+    try:
+        process = subprocess.Popen(
+            command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT,
+        )
+    except BaseException:
+        log.close()
+        raise
     try:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -159,6 +252,7 @@ def run_until_marker(
         raise TimeoutError(f"timed out waiting for {marker.name}")
     finally:
         terminate(process)
+        log.close()
 
 
 def generate_safe_stage1(
@@ -200,12 +294,22 @@ def generate_safe_stage1(
         timeout=timeout,
         check=False,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"safe Stage 1 generation exited {result.returncode}")
     if not state.is_file() or state.stat().st_size < 1024:
-        raise RuntimeError("safe Stage 1 state was not created")
+        raise RuntimeError(
+            "safe Stage 1 state was not created"
+            + (
+                f" (mGBA exited {result.returncode})"
+                if result.returncode != 0 else ""
+            )
+        )
     if not meta.is_file():
-        raise RuntimeError("safe Stage 1 metadata was not created")
+        raise RuntimeError(
+            "safe Stage 1 metadata was not created"
+            + (
+                f" (mGBA exited {result.returncode})"
+                if result.returncode != 0 else ""
+            )
+        )
     detail = meta.read_text()
     required = (
         "target=0",
@@ -216,11 +320,28 @@ def generate_safe_stage1(
         "state_saved=true",
     )
     if not stock_rom:
-        required += ("FF91=01", "DF0D=02", "unsafe_attr=0")
+        required += ("DF0D=02", "unsafe_attr=0")
     missing = [token for token in required if token not in detail]
+    fields = dict(
+        token.split("=", 1)
+        for token in detail.split()
+        if "=" in token
+    )
+    if not stock_rom and int(fields.get("FF91", "00"), 16) == 0:
+        missing.append("FF91!=00")
     if missing:
         raise RuntimeError(
             f"safe Stage 1 state failed validation: {', '.join(missing)}"
+        )
+    # Offscreen Qt/mGBA can terminate with SIGSEGV after Lua has atomically
+    # written both the savestate and its strict metadata receipt.  Those
+    # artifacts are the contract; a post-receipt teardown crash must not
+    # discard an otherwise byte-valid state. Missing or malformed output has
+    # already failed closed above.
+    if result.returncode != 0:
+        print(
+            "NOTE: safe Stage 1 artifacts completed before mGBA teardown "
+            f"status {result.returncode}"
         )
     return state
 
@@ -278,7 +399,10 @@ def patch_state(
             f"safe state is not at FETCH: {raw[CPU_EXECUTION_STATE]}"
         )
 
-    normalized_hash = (target + 1) & 0xFF  # FFBF/FFC0/FFD0 are normalized 0
+    # The release palette cache keys on persistent FFB7 scene identity, not
+    # the synthetic FFBA selector.  This injected state is still settled
+    # Stage 1 until the stock boss dispatcher publishes the true arena scene.
+    normalized_hash = (raw[FFB7] + 1) & 0xFF
     palette_normalization = (
         [
             0xAF,
@@ -354,7 +478,7 @@ def patch_state(
     # on a natural playthrough where the stage pass settled long beforehand.
     if target == 4 and not stock_rom:
         raw[DF00] = (
-            raw[FFBF] ^ raw[FFC0] ^ raw[FFD0] ^ raw[FFBA]
+            raw[FFBF] ^ raw[FFC0] ^ raw[FFD0] ^ raw[FFB7]
         ) + 1 & 0xFF
     if not stock_rom:
         # These are DX runtime sentinels/mailboxes, not stock-game scratch.
@@ -363,7 +487,8 @@ def patch_state(
         raw[C5FF] = 0
         raw[DBFF] = 0
         raw[DF51] = 0
-        raw[FFA7] = raw[FFA8] = raw[FFA9] = 0
+        if rom is None or not relocated_ted_latches(rom.read_bytes()):
+            raw[FFA7] = raw[FFA8] = raw[FFA9] = 0
         # The synthetic dispatcher can arm Ted's native source writer before
         # the ordinary lazy OAM initializer runs. A natural playthrough has
         # already installed this C500 helper by then; reconstruct that exact
@@ -411,6 +536,9 @@ def capture_final(
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
         BOSS_STOCK_ROM="1" if stock_rom else "0",
+        BOSS_RELOCATED_TED_LATCHES=(
+            "1" if relocated_ted_latches(rom.read_bytes()) else "0"
+        ),
         BOSS_WRITER_MIRROR=(
             "1" if rom.read_bytes()[0x3136:0x3139] == bytes.fromhex("C3 38 08")
             else "0"
@@ -478,7 +606,7 @@ def generate_one(
     name = BOSS_NAMES[target]
     expected_scene = BOSSES[target].scene
     with tempfile.TemporaryDirectory(
-        prefix=f"penta-boss{target}-", dir="/mnt/data/tmp"
+        prefix=f"penta-boss{target}-", dir=scratch_root()
     ) as tmp:
         tmpdir = Path(tmp)
         injected = tmpdir / "injected.ss0"
@@ -729,6 +857,10 @@ def recapture_one(
     env = os.environ.copy()
     env.update(
         BOSS_RECEIPT_OUT=str(prefix),
+        # Load only after the receipt probe has registered every callback.
+        # mGBA's CLI -t load races script attachment and can begin otherwise
+        # identical boss replays one arena iteration apart.
+        PENTA_STATE_FILE=str(source_state.resolve()),
         BOSS_RECEIPT_STATE_OUT=str(state),
         BOSS_RECEIPT_FRAMES="120",
         # The fixture is machine-preservingly retargeted below with the
@@ -760,8 +892,6 @@ def recapture_one(
         [
             mgba,
             "--fastforward",
-            "-t",
-            str(source_state),
             "-C",
             f"savegamePath={staging}",
             "-C",
@@ -908,7 +1038,7 @@ def recapture_from_fixtures(
             + ", ".join(str(path) for path in missing)
         )
     with tempfile.TemporaryDirectory(
-        prefix="penta-boss-recapture-", dir="/mnt/data/tmp"
+        prefix="penta-boss-recapture-", dir=scratch_root()
     ) as tmp:
         staging = Path(tmp)
         normalized_states: dict[int, Path] = {}
@@ -939,6 +1069,12 @@ def recapture_from_fixtures(
                     preserve_machine=True,
                     arena_table=target,
                 )
+                if relocated_ted_latches(rom_bytes):
+                    # The curated pre-r316 fixture still identifies a CGB-
+                    # compatible cartridge. CRC retargeting alone cannot
+                    # load it on the reviewed CGB-only candidate. This helper
+                    # permits only the $80->$C0 header identity transition.
+                    retarget_rom_identity(normalized_state, normalized_state, rom)
             normalized_states[target] = normalized_state
         try:
             results = [
@@ -948,16 +1084,7 @@ def recapture_from_fixtures(
                     normalized_states[target],
                     staging,
                     target,
-                    rom_bytes[
-                        PALETTE_ROM_BANK * ROM_BANK_SIZE
-                        + ARENA_TABLE_BASE
-                        + target * BG_TABLE_SIZE
-                        - ROM_BANK_SIZE:
-                        PALETTE_ROM_BANK * ROM_BANK_SIZE
-                        + ARENA_TABLE_BASE
-                        + (target + 1) * BG_TABLE_SIZE
-                        - ROM_BANK_SIZE
-                    ],
+                    arena_palette_table(rom_bytes, target),
                     timeout,
                     stock_rom=stock_rom,
                 )
@@ -1095,12 +1222,18 @@ def main() -> int:
     # legitimately fall through into final-story state before a long palette
     # hold. Generate the ordinary eight from Stage 1, then retarget the curated
     # live Penta fixture with the candidate's exact runtime/table payloads.
-    fresh_targets = [target for target in targets if target != 8]
+    cold_penta = hashlib.sha256(rom_bytes).hexdigest() in {
+        PENTA_SYNC_DMA_SHA256,
+        PALETTE_STORAGE_SHA256,
+        *ENTRY_WHITE_SHA256,
+        *PENTA_SYNC_INHERITORS_SHA256,
+    }
+    fresh_targets = [target for target in targets if target != 8 or cold_penta]
     results: list[tuple[int, str]] = []
     if fresh_targets:
         with tempfile.TemporaryDirectory(
             prefix="penta-safe-stage1-",
-            dir="/mnt/data/tmp",
+            dir=scratch_root(),
         ) as tmp:
             safe_state = generate_safe_stage1(
                 args.mgba,
@@ -1116,22 +1249,27 @@ def main() -> int:
                     safe_state,
                     output,
                     target,
-                    rom_bytes[
-                        PALETTE_ROM_BANK * ROM_BANK_SIZE
-                        + ARENA_TABLE_BASE
-                        + target * BG_TABLE_SIZE
-                        - ROM_BANK_SIZE:
-                        PALETTE_ROM_BANK * ROM_BANK_SIZE
-                        + ARENA_TABLE_BASE
-                        + (target + 1) * BG_TABLE_SIZE
-                        - ROM_BANK_SIZE
-                    ],
+                    arena_palette_table(rom_bytes, target),
                     args.timeout,
                     stock_rom=stock_rom,
                 )
                 for target in fresh_targets
             )
-    if 8 in targets:
+    if 8 in targets and cold_penta:
+        # r454 restores synchronous arena publication, so Penta can be seeded
+        # from this ROM's cold boot too. Require a separate sustained replay;
+        # entry alone passed even when the r443 deferred DMA left stale colors.
+        audit = output / "penta-live-audit"
+        audit.mkdir(exist_ok=True)
+        stem = "boss8_penta_dragon"
+        start = PALETTE_ROM_BANK * ROM_BANK_SIZE + ARENA_TABLE_BASE + 8 * BG_TABLE_SIZE - ROM_BANK_SIZE
+        detail = recapture_one(args.mgba, args.rom.resolve(), output / f"{stem}.ss0",
+                               audit, 8, rom_bytes[start:start + BG_TABLE_SIZE], args.timeout)
+        shutil.copy2(output / f"{stem}.report", output / f"{stem}.entry.report")
+        for suffix in (".ss0", ".report", ".png"):
+            shutil.copy2(audit / f"{stem}{suffix}", output / f"{stem}{suffix}")
+        results = [(target, text) for target, text in results if target != 8] + [detail]
+    elif 8 in targets:
         results.extend(
             recapture_from_fixtures(
                 args.mgba,
@@ -1149,7 +1287,7 @@ def main() -> int:
         "rom": str(args.rom.resolve()),
         "rom_md5": rom_md5,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "method": (
+        "method": ("fresh Stage-1 stock dispatcher for all nine; Penta independently replay-audited" if cold_penta else
             "fresh Stage-1 stock dispatcher for bosses 0-7; machine-preserved "
             "native pre-final fixture for Penta Dragon; release ROM capture"
         ),

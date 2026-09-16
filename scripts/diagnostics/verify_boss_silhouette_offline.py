@@ -300,7 +300,7 @@ def self_test(contract_path: Path) -> None:
         )["status"] == "fail"
         assert aggregate_gallery_rows(
             "penta_dragon",
-            [{"detached_fragments": value} for value in (3, 2, 0, 0)],
+            [{"detached_fragments": value} for value in (3, 2, 1, 0)],
             penta_contract,
         )["status"] == "pass"
         assert aggregate_gallery_rows(

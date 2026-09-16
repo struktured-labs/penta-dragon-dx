@@ -29,6 +29,14 @@ DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 DEFAULT_STATES = ROOT / "tmp/palette_session/story_states"
 DEFAULT_PALETTES = ROOT / "palettes/penta_palettes_v097.yaml"
 PROBE = Path(__file__).with_name("probe_story_attr_production.lua")
+# Clean DX END contract: only the centered END glyph and the copyright row are
+# visible. Stock exposes two following rows of script workspace as garbage
+# characters, which is intentionally corrected rather than preserved.
+END_GLYPH_ROWS = {
+    6: bytes.fromhex("00 00 00 00 00 00 00 58 6F 60 61 42 41 00 00 00 00 00 00 00"),
+    7: bytes.fromhex("00 00 00 00 00 00 00 52 7F 70 71 52 51 00 00 00 00 00 00 00"),
+    14: bytes.fromhex("00 00 00 00 00 2E 2F 3E 3F 00 19 01 0E 0F 0D 01 0E 00 00 00"),
+}
 SPECS = (
     ("opening", "neutral", 0, 0x15, {}),
     ("opening_book", "story", 1, 0x15, {"SEQUENCE": 0x02}),
@@ -69,6 +77,47 @@ def parse_report(path: Path) -> dict[str, str]:
     )
 
 
+def referenced_cram_rows(kind: str, palette: int, mask: str) -> tuple[int, ...]:
+    """Return BG CRAM rows that can affect this visible 20x18 page."""
+    if kind == "ending":
+        rows = {palette}
+    elif kind == "story":
+        rows = {0}
+        try:
+            rows.update(int(value) for value in mask)
+        except ValueError as exc:
+            raise ValueError("story mask contains a non-palette digit") from exc
+    elif kind == "neutral":
+        rows = {0}
+    else:
+        raise ValueError(f"unknown page kind: {kind}")
+    if not rows or min(rows) < 0 or max(rows) > 7:
+        raise ValueError(f"invalid BG palette row set: {sorted(rows)}")
+    return tuple(sorted(rows))
+
+
+def referenced_cram_matches(
+    actual_hex: str,
+    expected_hex: str,
+    kind: str,
+    palette: int,
+    mask: str,
+) -> bool:
+    """Require byte-exact YAML colors for every visible attribute reference."""
+    try:
+        actual = bytes.fromhex(actual_hex)
+        expected = bytes.fromhex(expected_hex)
+        rows = referenced_cram_rows(kind, palette, mask)
+    except (TypeError, ValueError):
+        return False
+    if len(actual) != 64 or len(expected) != 64:
+        return False
+    return all(
+        actual[row * 8:(row + 1) * 8] == expected[row * 8:(row + 1) * 8]
+        for row in rows
+    )
+
+
 def terminate(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
         return
@@ -104,7 +153,7 @@ def write_contact_sheet(
     return path
 
 
-def screenshot_metrics(path: Path) -> dict[str, int | float]:
+def screenshot_metrics(path: Path) -> dict[str, int | float | str]:
     """Measure the rendered frame, independently of its tile attributes."""
     with Image.open(path) as source:
         image = source.convert("RGB")
@@ -113,8 +162,12 @@ def screenshot_metrics(path: Path) -> dict[str, int | float]:
                 f"{path.name} screenshot is {image.size}, expected 160x144"
             )
         colors = image.getcolors(maxcolors=160 * 144)
+        pixel_values = list(image.getdata())
         chromatic = sum(
             max(pixel) - min(pixel) >= 24 for pixel in image.getdata()
+        )
+        morphology = bytes(
+            1 if max(pixel) > 8 else 0 for pixel in pixel_values
         )
     if not colors:
         raise RuntimeError(f"{path.name} has an invalid color histogram")
@@ -126,6 +179,7 @@ def screenshot_metrics(path: Path) -> dict[str, int | float]:
         "non_dominant_pixels": pixels - dominant,
         "dominant_fraction": dominant / pixels,
         "chromatic_pixels": chromatic,
+        "morphology_sha256": hashlib.sha256(morphology).hexdigest(),
     }
 
 
@@ -152,8 +206,7 @@ def visual_semantic_contract(
 
     # The reviewed book keeps its masonry corners outside the warm page mask.
     book_warm = (
-        {(x, 0) for x in range(7, 13)}
-        | {(x, y) for y in range(1, 6) for x in range(6, 14)}
+        {(x, y) for y in range(1, 6) for x in range(6, 14)}
         | {(x, 6) for x in range(7, 13)}
     )
     require(
@@ -161,8 +214,8 @@ def visual_semantic_contract(
         cells_with(1, 5) == book_warm,
     )
     require(
-        "OpeningBook top masonry corners remain BG6",
-        masks[1][0][6] == 6 and masks[1][0][13] == 6,
+        "OpeningBook top masonry row remains BG6",
+        all(value == 6 for value in masks[1][0]),
     )
 
     # A tile-wide warm face rectangle cannot follow mixed face/hair pixels.
@@ -171,13 +224,22 @@ def visual_semantic_contract(
         "Sara portrait contains no blocky BG5 face rectangle",
         not cells_with(2, 5) and not cells_with(7, 5),
     )
+    sara_costume = (
+        {(x, 6) for x in range(9, 11)}
+        | {(x, 7) for x in range(8, 12)}
+    )
     require(
-        "Sara face cells remain continuous BG2",
+        "Sara face cells remain continuous BG2 above the costume",
         all(
             masks[2][y][x] == 2
-            for y in range(4, 7)
+            for y in range(4, 6)
             for x in range(8, 12)
         ),
+    )
+    require(
+        "Sara costume mask is tapered instead of a flat neckline stripe",
+        cells_with(2, 6) == sara_costume
+        and cells_with(7, 6) == sara_costume,
     )
 
     eye_green = (
@@ -196,21 +258,52 @@ def visual_semantic_contract(
         cells_with(3, 6) == eye_socket,
     )
 
+    post_final_crest = (
+        {(x, 0) for x in range(9, 11)}
+        | {(x, 1) for x in range(8, 12)}
+        | {(x, 2) for x in range(9, 11)}
+    )
+    require(
+        "PostFinalDragon crest is tapered instead of a 4x3 fire block",
+        cells_with(5, 7) == post_final_crest,
+    )
+    require(
+        "PostFinalDragon body is one continuous material below its crest",
+        all(
+            masks[5][y][x] == 2
+            for y in range(3, 8)
+            for x in range(20)
+        ),
+    )
+    post_final_body = cells_with(5, 2)
+
+    lisa_body = (
+        {(x, 0) for x in range(8, 15)}
+        | {(x, 1) for x in range(7, 15)}
+        | {(x, y) for y in range(2, 5) for x in range(5, 15)}
+        | {(x, y) for y in range(5, 7) for x in range(5, 15)}
+        | {(x, 7) for x in range(9, 15)}
+    )
+    require(
+        "LisaDragonPortrait uses one tapered body silhouette without bands",
+        cells_with(6, 2) == lisa_body,
+    )
+
     expected_palette_sets = {
         1: {5, 6},
-        2: {2, 4, 7},
+        2: {2, 6, 7},
         3: {3, 6, 7},
         4: {3, 4, 5},
-        5: {5, 6},
-        6: {2, 5, 7},
-        7: {2, 4, 7},
+        5: {2, 7},
+        6: {2, 7},
+        7: {2, 6, 7},
     }
     actual_palette_sets = {
         art_id: {value for row in mask for value in row}
         for art_id, mask in masks.items()
     }
     require(
-        "all opening and unstudied final panels retain reviewed palette sets",
+        "all opening and final panels retain reviewed palette sets",
         actual_palette_sets == expected_palette_sets,
     )
 
@@ -239,8 +332,12 @@ def visual_semantic_contract(
             for key, value in actual_palette_sets.items()
         },
         "book_warm_cells": len(book_warm),
+        "sara_costume_cells": len(sara_costume),
         "dragon_eye_green_cells": len(eye_green),
         "dragon_socket_cells": len(eye_socket),
+        "post_final_crest_cells": len(post_final_crest),
+        "post_final_body_cells": len(post_final_body),
+        "lisa_body_cells": len(lisa_body),
         "bg6_words": [f"{word:04X}" for word in bg6],
     }, failures
 
@@ -257,7 +354,7 @@ def run_one(
     mask: str,
     expected_cram: str,
     timeout: float,
-) -> tuple[dict[str, str], dict[str, int | float]]:
+) -> tuple[dict[str, str], dict[str, int | float | str]]:
     report = output.with_suffix(".report")
     done = output.with_suffix(".done")
     screenshot = output.with_suffix(".png")
@@ -333,9 +430,16 @@ def run_one(
         and render["chromatic_pixels"] < 16
     ):
         raise RuntimeError(f"{state.name} rendered no visible chroma: {render}")
-    if expected_cram and values.get("cram") != expected_cram:
+    if expected_cram and values.get("cram_referenced_exact") != "true":
         raise RuntimeError(
-            f"{state.name} CRAM {values.get('cram')} != YAML {expected_cram}"
+            f"{state.name} probe did not certify referenced CRAM rows"
+        )
+    if expected_cram and not referenced_cram_matches(
+        values.get("cram", ""), expected_cram, kind, palette, mask
+    ):
+        rows = referenced_cram_rows(kind, palette, mask)
+        raise RuntimeError(
+            f"{state.name} referenced CRAM rows {rows} do not match YAML"
         )
     return values, render
 
@@ -416,6 +520,36 @@ def main() -> int:
                 expected_cram if kind != "neutral" else "",
                 args.timeout,
             )
+            if stem == "ending_end":
+                try:
+                    tiles = bytes.fromhex(values["tiles"])
+                except (KeyError, ValueError) as exc:
+                    raise RuntimeError(
+                        "END page did not report its exact visible tilemap"
+                    ) from exc
+                if len(tiles) != 360:
+                    raise RuntimeError(
+                        f"END page reported {len(tiles)} tiles, expected 360"
+                    )
+                expected_tiles = bytearray(360)
+                for row, values_row in END_GLYPH_ROWS.items():
+                    expected_tiles[row * 20:(row + 1) * 20] = values_row
+                if tiles != expected_tiles:
+                    differing = [
+                        index for index, (actual, expected) in enumerate(
+                            zip(tiles, expected_tiles)
+                        ) if actual != expected
+                    ]
+                    raise RuntimeError(
+                        "END page differs from the clean glyph/copyright-only "
+                        f"contract at {len(differing)} cells"
+                    )
+            story_row = int(values["row"], 16)
+            if kind == "story" and not 0x08 <= story_row <= 0x12:
+                raise RuntimeError(
+                    f"{stem}: story completion cursor {values['row']} is "
+                    "outside the complete art/full-panel range 08..12"
+                )
             results.append({
                 "state": stem,
                 "kind": kind,
@@ -448,16 +582,22 @@ def main() -> int:
         "story_contract": (
             "all 160 top-panel cells exactly match the YAML region mask; "
             "all 200 dialogue cells remain BG0 with no unsafe attr bits; "
-            "the live 64-byte BG CRAM deck exactly matches the YAML and the "
+            "the exact layout appears after the eight art rows and no later "
+            "than completion of the full 18-row art/dialogue publication; "
+            "every BG CRAM row referenced by the visible attributes exactly "
+            "matches the YAML (unused rows may be page-local aliases), and the "
             "native screenshot is nonblank/chromatic; reviewed page, face, "
             "eye/socket, and every final-panel palette silhouette is locked"
         ),
         "ending_contract": (
             "all 360 visible cells exactly match the selected BG palette "
-            "with no unsafe attr bits; the live 64-byte BG CRAM deck exactly "
-            "matches the YAML and the rendered frame cannot be blank; $C600 "
+            "with no unsafe attr bits; every BG CRAM row referenced by those "
+            "attributes exactly matches the YAML (unused rows may be page-local "
+            "aliases), and the rendered frame cannot be blank; $C600 "
             "is recorded diagnostically because the stock ending tail reuses "
-            "it as script workspace"
+            "it as script workspace; the END page must contain only its exact "
+            "centered glyph and copyright row, with the two exposed workspace "
+            "rows deterministically blank"
         ),
         "results": results,
         "visual_semantics": visual_semantics,

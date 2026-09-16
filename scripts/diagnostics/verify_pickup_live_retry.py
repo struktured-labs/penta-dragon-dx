@@ -26,20 +26,54 @@ from verify_pickup_live_palettes import run_state
 
 
 def main() -> int:
-    with tempfile.TemporaryDirectory(prefix="penta-pickup-retry-") as name:
+    scratch = Path(__file__).resolve().parents[2] / "tmp"
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-pickup-retry-", dir=scratch
+    ) as name:
         output = Path(name)
+        runtime_image = output / "candidate-stage1-runtime.bin"
+        runtime_payload = bytes(range(41))
+        runtime_image.write_bytes(runtime_payload)
+        helper_image = output / "candidate-stage1-helper.bin"
+        helper_payload_buffer = bytearray(range(160))
+        helper_payload_buffer[0x77:] = runtime_payload
+        helper_payload = bytes(helper_payload_buffer)
+        helper_image.write_bytes(helper_payload)
+        lut_image = output / "candidate-stage1-lut.bin"
+        lut_payload = bytes(range(256))
+        lut_image.write_bytes(lut_payload)
         calls = 0
+        candidate_images_seen = []
+        stale_artifacts_cleared = False
 
         def crash_then_render(command, **kwargs):
-            nonlocal calls
+            nonlocal calls, stale_artifacts_cleared
             calls += 1
-            if calls == 1:
-                return subprocess.CompletedProcess(command, -11)
             environment = kwargs["env"]
-            Path(environment["PICKUP_LIVE_OUT"]).write_text("frames=180\n")
-            Image.new("RGB", (160, 144), "black").save(
-                environment["PICKUP_LIVE_SCREENSHOT"]
+            report = Path(environment["PICKUP_LIVE_OUT"])
+            screenshot = Path(environment["PICKUP_LIVE_SCREENSHOT"])
+            candidate_images_seen.append(
+                Path(environment["PICKUP_LIVE_RUNTIME"]) == runtime_image
+                and Path(environment["PICKUP_LIVE_HELPER"]) == helper_image
+                and Path(environment["PICKUP_LIVE_LUT"]) == lut_image
+                and runtime_image.read_bytes() == runtime_payload
+                and helper_image.read_bytes() == helper_payload
+                and lut_image.read_bytes() == lut_payload
             )
+            if not candidate_images_seen[-1]:
+                return subprocess.CompletedProcess(command, 97)
+            if calls == 1:
+                # A crashed transport may leave apparently complete outputs.
+                # Poison both so the retry proves it starts from a clean slate.
+                report.write_text("frames=poisoned\n")
+                Image.new("RGB", (160, 144), "red").save(screenshot)
+                return subprocess.CompletedProcess(command, -11)
+            stale_artifacts_cleared = not report.exists() and not screenshot.exists()
+            if not stale_artifacts_cleared:
+                return subprocess.CompletedProcess(command, 98)
+            report.write_text("frames=180\n")
+            Image.new("RGB", (160, 144), "black").save(screenshot)
             return subprocess.CompletedProcess(command, 0)
 
         pickup = SimpleNamespace(name="Shield", palette=5, tiles=(0x3C,))
@@ -56,6 +90,9 @@ def main() -> int:
                 1.0,
                 18,
                 2,
+                runtime_image=runtime_image,
+                helper_image=helper_image,
+                lut_image=lut_image,
             )
 
         attempts = result.get("launch_attempts", [])
@@ -73,6 +110,12 @@ def main() -> int:
             "each attempt keeps a distinct diagnostic log": (
                 attempts[0]["log"] != attempts[1]["log"]
                 and all(Path(item["log"]).is_file() for item in attempts)
+            ),
+            "every attempt receives the exact candidate helper, runtime, and LUT": (
+                candidate_images_seen == [True, True]
+            ),
+            "retry discards artifacts left by the crashed transport": (
+                stale_artifacts_cleared
             ),
         }
 

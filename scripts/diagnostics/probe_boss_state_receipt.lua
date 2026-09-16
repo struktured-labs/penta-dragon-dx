@@ -2,6 +2,8 @@
 -- receipt plus exact production table/CRAM bytes.
 
 local OUT = assert(os.getenv("BOSS_RECEIPT_OUT"), "BOSS_RECEIPT_OUT required")
+local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
+    "PENTA_STATE_FILE required")
 local STATE_OUT = os.getenv("BOSS_RECEIPT_STATE_OUT")
 local TARGET = tonumber(os.getenv("BOSS_TARGET") or "0")
 local EXPECTED_SCENE = 0x0C + TARGET
@@ -13,6 +15,7 @@ local KEEP_ALIVE = os.getenv("BOSS_RECEIPT_KEEPALIVE") ~= "0"
 local BANKED_RUNTIME = os.getenv("BOSS_RECEIPT_BANKED_RUNTIME") == "1"
 local BREAKPOINT_COUNTS = os.getenv("BOSS_RECEIPT_BREAKPOINTS") ~= "0"
 local frame, raw_frame, done, state_saved = 0, 0, false, false
+local state_loaded = false
 local palette_settled = 0
 local scene_drift_frames = 0
 local max_scene_drift_frames = 0
@@ -48,17 +51,25 @@ end
 -- local scope begins at the declaration, so registering these callbacks above
 -- the helper silently resolved `register` as an unset global when they fired.
 if BREAKPOINT_COUNTS then pcall(function()
-    emu:setBreakpoint(function() copy_entries = copy_entries + 1 end, 0x42A7)
     emu:setBreakpoint(function()
+        if state_loaded then copy_entries = copy_entries + 1 end
+    end, 0x42A7)
+    emu:setBreakpoint(function()
+        if not state_loaded then return end
         if (register("F") & 0x80) ~= 0 then
             decision_zero = decision_zero + 1
         else
             decision_nonzero = decision_nonzero + 1
         end
     end, 0x42B0)
-    emu:setBreakpoint(function() atomic_copies = atomic_copies + 1 end, 0x42B2)
-    emu:setBreakpoint(function() pure_copies = pure_copies + 1 end, 0x4324)
     emu:setBreakpoint(function()
+        if state_loaded then atomic_copies = atomic_copies + 1 end
+    end, 0x42B2)
+    emu:setBreakpoint(function()
+        if state_loaded then pure_copies = pure_copies + 1 end
+    end, 0x4324)
+    emu:setBreakpoint(function()
+        if not state_loaded then return end
         sanitizer_calls = sanitizer_calls + 1
         if #sanitizer_examples < 8 then
             sanitizer_examples[#sanitizer_examples + 1] = string.format(
@@ -70,6 +81,7 @@ end) end
 if TARGET == 8 then
     pcall(function()
         emu:addMemoryCallback(function(address, value)
+            if not state_loaded then return end
             if #penta_9c88_writes < 24 then
                 penta_9c88_writes[#penta_9c88_writes + 1] = string.format(
                     "f%d:b%02X:pc%04X:v%02X:vbk%d", frame,
@@ -80,6 +92,7 @@ if TARGET == 8 then
     end)
     pcall(function()
         emu:addMemoryCallback(function(address, value)
+            if not state_loaded then return end
             if #penta_992f_writes < 48 then
                 penta_992f_writes[#penta_992f_writes + 1] = string.format(
                     "f%d:pc%04X:v%02X:vbk%d", frame,
@@ -261,6 +274,20 @@ local function alternating_tile_count()
     return alternating
 end
 
+local function visible_oam()
+    local rows = {}
+    for sprite = 0, 39 do
+        local base = 0xFE00 + sprite * 4
+        local y, x = emu:read8(base), emu:read8(base + 1)
+        if y > 0 and y < 160 and x > 0 and x < 168 then
+            rows[#rows + 1] = string.format(
+                "%d:%d:%d:%02X:%02X", sprite, x, y,
+                emu:read8(base + 2), emu:read8(base + 3))
+        end
+    end
+    return (#rows > 0) and table.concat(rows, ",") or "none"
+end
+
 local function finish(status, message)
     if done then return end
     done = true
@@ -300,6 +327,7 @@ local function finish(status, message)
         hex_range(0xDB80, 0x24),
         palette_hex()
     ))
+    report:write("visible_oam=" .. visible_oam() .. "\n")
     report:close()
     local marker = assert(io.open(OUT .. ".audit.done", "w"))
     marker:write(status .. "\n")
@@ -310,6 +338,22 @@ trace:write("initialized\n")
 trace:flush()
 callbacks:add("frame", function()
     if done then return end
+    if not state_loaded then
+        local ok, result = pcall(function()
+            return emu:loadStateFile(STATE_FILE)
+        end)
+        trace:write(string.format("state_load ok=%s result=%s\n", tostring(ok), tostring(result)))
+        trace:flush()
+        if not ok or result == false then
+            done = true
+            local marker = assert(io.open(OUT .. ".audit.done", "w"))
+            marker:write("error-state-load\n")
+            marker:close()
+            return
+        end
+        state_loaded = true
+        return
+    end
     raw_frame = raw_frame + 1
     -- DX arena publishers can span a frame with SVBK2/3 selected. In that
     -- interval every Dxxx game-state address below aliases cache/runtime data;

@@ -1,5 +1,19 @@
 # Project agent rules
 
+## Issue-first bug-fix workflow
+
+- Before implementing a bug fix, find an existing matching GitHub issue or
+  create one in `struktured-labs/penta-dragon-dx`. Avoid duplicate reports.
+- Record the observed behavior, expected behavior, known reproduction steps,
+  and release impact. Distinguish player reports from verified findings; do
+  not invent a cause or mark an unqualified trial as fixed.
+- After the issue exists, implement the fix and add or run appropriate
+  regression tests. Reference the issue in the fix and verification notes.
+- Keep the issue open while validation is incomplete. Close it only after
+  the fix is verified or the user explicitly directs closure.
+- Read-only investigation may precede filing when needed to identify the
+  problem or locate a duplicate, but implementation must follow filing.
+
 ## Scratch-artifact locations
 
 - Never use the system `/tmp` directory for this project.
@@ -31,3 +45,25 @@
 - After any interrupted emulator run, use the read-only process check and
   report the result before starting another. Do not launch an emulator merely
   to test the guard.
+
+## Analogue Pocket deployment
+
+- Every Pocket SD deployment must copy the verified candidate twice into
+  `Assets/gbc/common/`: once as the immutable hash-qualified filename and once
+  as `Penta Dragon DX v3.01.gbc` for convenient selection on the device.
+- Never overwrite a hash-qualified ROM. The unqualified filename is the
+  deliberate latest-candidate alias and may be updated only after the source
+  candidate has passed its required gates.
+- Flush the card and verify that both deployed files match the source ROM's
+  SHA-256 before safely unmounting it.
+
+## Codex Stage-1 Stop gate
+
+- Keep the single repo-local Stop command in `.codex/hooks.json` enabled and
+  trusted. It must run on every Stop; prose, `stop_hook_active`, and a claimed
+  test result are never bypasses.
+- A READY claim requires the exact pinned candidate, manifests, current tool
+  identities, fresh nested evidence, and exact tested-ROM path/SHA provenance.
+  Stale, unknown, or differently hashed playtests block the turn.
+- After changing the hook definition, review and trust it with `/hooks`, then
+  start a fresh Codex session so project hook discovery is guaranteed.

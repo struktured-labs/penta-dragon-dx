@@ -46,6 +46,11 @@ from arena_semantic_key import (  # noqa: E402
     SUM_B_SAMPLES,
 )
 from boss_geometry_contract import BOSSES  # noqa: E402
+from arena_palette_storage import arena_palette_table
+from boss_dispatch_execution import walk
+from build_stage1_scene0b_runtime_selfheal_r313 import NEW_RST18
+from build_stage1_unified_scene0b_r305 import NEW_FIXED_STUB, NEW_ATTR_GATEWAY
+from build_stage1_runtime_epoch_r312 import CAPTURED_STALE_DAD7
 
 
 def classify(scene: int) -> str:
@@ -61,12 +66,7 @@ def classify(scene: int) -> str:
     return "neutral"
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("rom", type=Path)
-    args = parser.parse_args()
-    rom = args.rom.resolve().read_bytes()
-
+def verify(rom: bytes) -> int:
     # The shared RST distinguishes a map-decision call from an in-copy arena
     # sanitizer call by incrementing D and testing Z. The caller therefore
     # must seed D=$FF, not $DF. A wrong discriminator still embeds a perfect
@@ -80,12 +80,21 @@ def main() -> int:
         "shared map copier does not seed the boss-decision RST with D=$FF"
     )
     vector = build_stage1_atomic_attr_stack_vector()
+    mapped_gateway = rom[0x0018:0x0020] == NEW_RST18
+    if mapped_gateway:
+        vector = NEW_RST18
+        assert rom[0x13:0x18] == NEW_FIXED_STUB, "fixed gateway differs from source"
     assert rom[0x0018:0x0020] == vector, (
         "shared boss-decision/arena-sanitizer RST vector differs from source"
     )
 
     dispatcher = build_lava_attr_scene_dispatcher()
     expected_runtime = build_lava_attr_stage7_runtime()
+    if mapped_gateway:
+        expected_runtime = bytearray(expected_runtime)
+        gateway_tail = bytearray(CAPTURED_STALE_DAD7)
+        gateway_tail[:len(NEW_ATTR_GATEWAY)] = NEW_ATTR_GATEWAY
+        expected_runtime[0xDAD7 - LAVA_ATTR_STAGE7_RUNTIME_ADDR:] = gateway_tail
     dispatcher_offset = (
         LAVA_ATTR_SCENE_DISPATCH_ADDR - LAVA_ATTR_STAGE7_RUNTIME_ADDR
     )
@@ -128,6 +137,24 @@ def main() -> int:
         ARENA_ATTR_SEMANTIC_CHANGED_ADDR,
     )
     for address, payload in zip(semantic_addresses, semantic_fragments):
+        if address == ARENA_ATTR_SEMANTIC_CHANGED_ADDR:
+            from build_penta_seam_vram_trial_r536 import HOOK, PREIMAGE, payloads
+            from arena_bank20_r455 import visible_seam_matches
+
+            # r536 relocates only the unsafe visible-seam read/write. Keep
+            # checking the scene predicate and original return tail, and
+            # independently reconstruct the entire expansion bank rather
+            # than exempting the new mapper stub or helper from ownership.
+            assert visible_seam_matches(rom), "Penta visible-seam implementation differs from source"
+            if rom[HOOK:HOOK + len(PREIMAGE)] != PREIMAGE:
+                start = HOOK - (BANK13 + address - 0x4000)
+                assert payload[start:start + len(PREIMAGE)] == PREIMAGE
+                stub, _ = payloads()
+                payload = payload[:start] + stub + payload[start + len(PREIMAGE):]
+        if mapped_gateway and address == 0x56CA:
+            # Native dirty return owned by the title-port composition.
+            assert payload[23:26] == bytes(3)
+            payload = payload[:23] + bytes.fromhex("C3 97 34") + payload[26:]
         offset = BANK13 + address - 0x4000
         assert rom[offset:offset + len(payload)] == payload, (
             f"arena semantic source fragment ${address:04X} differs from source"
@@ -169,8 +196,7 @@ def main() -> int:
     for index, name in enumerate(ARENA_ORDER):
         table = _table_from_dict(name)
         assert len(table) == 0x100 and max(table) <= 7
-        table_offset = BANK13 + ARENA_BASE_ADDR - 0x4000 + index * 0x100
-        embedded = rom[table_offset:table_offset + 0x100]
+        embedded = arena_palette_table(rom, index)
         if index == 4:
             # Ted's measured publication domain ends at tile $86. Its
             # unreachable $87-$FF suffix is the private runtime source cave;
@@ -183,6 +209,11 @@ def main() -> int:
             assert embedded == table, (
                 f"arena {index} ({name}) ROM table differs from compiled data"
             )
+        if mapped_gateway:
+            # Execute the actual mapped opcodes, not merely a Python scene
+            # classifier: bank restoration, caller stack and HL are asserted.
+            target, _ = walk(rom, 0x0C + index)
+            assert target == (0xDA60 if index == 2 else 0xDBA4)
 
     groups = {scene: classify(scene) for scene in range(0x20)}
     assert {
@@ -216,6 +247,13 @@ def main() -> int:
     )
     print("  arena LUTs: 8/8 complete pages exact; Ted $00-$86 exact")
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("rom", type=Path)
+    args = parser.parse_args()
+    return verify(args.rom.resolve().read_bytes())
 
 
 if __name__ == "__main__":

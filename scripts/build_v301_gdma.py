@@ -851,8 +851,6 @@ def create_inline_tile_copy_stage1_precomputed_attrs(
             # The Timer ISR can mutate a stacked DE save, but HL is proven
             # stack-safe. Borrow HL to save DE in adjacent fixed WRAM, keep
             # the caller's VRAM destination beneath it, then restore in place.
-            # This is seven bytes smaller than four absolute A-mediated moves
-            # and leaves the exact scene classifiers byte-neutral overall.
             0xE5,
             0x21, 0x30, 0xDF,
             0x72, 0x23, 0x73,
@@ -1185,6 +1183,8 @@ def create_inline_tile_copy_postcomputed_attrs(
     external_atomic_wrap_addr: int,
     external_post_copy_helper_addr: int,
     external_source_sanitizer_rst: int,
+    *,
+    tagged_exact_destination: bool = False,
 ) -> bytes:
     """Use the stock tile cadence, then compile and GDMA changed attributes.
 
@@ -1232,27 +1232,43 @@ def create_inline_tile_copy_postcomputed_attrs(
     assert external_source_sanitizer_rst in (
         0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF,
     )
+    emit([0x2E, 0x00])                     # L=0; H is selected map base
+    if tagged_exact_destination:
+        # Preserve the exact physical map on every normal entry. This is
+        # cycle-equal to the retained INC BC / DEC BC phase pair below and
+        # therefore does not move the first HBlank acquisition.
+        emit([0x7C, 0xE0, 0xA5])           # FFA5 = even $98/$9C (pure)
+    else:
+        emit([0x03, 0x0B])                 # retained phase alignment
     emit([
-        0x2E, 0x00,                         # L=0; H is selected map base
-        0x03, 0x0B,                         # retained phase alignment
         0x16, 0xFF,                         # shared RST decision discriminator
         0xCD,
         external_decision_helper_addr & 0xFF,
         external_decision_helper_addr >> 8,
     ])
     j_pure_setup = jr_fwd(0x28)             # unchanged/neutral -> pure
+    if tagged_exact_destination:
+        # The tagged setup omits its former DI to remain the same width. Move
+        # that DI immediately before the CALL; source/IE remains atomic.
+        emit([0xF3])
     emit([
         0xCD,
         external_atomic_setup_addr & 0xFF,
         external_atomic_setup_addr >> 8,
-        0xCB, 0xF8,                         # SET 7,B: dirty path marker
     ])
-    j_common_setup = jr_fwd(0x18)
+    if tagged_exact_destination:
+        # Keep one phase NOP before common setup. Although it has no state or
+        # control-flow role, removing these 4T moved the HBlank/main-loop phase
+        # and regressed the strict Stage-1 receipt from 653 to 640 hits.
+        emit([0x00])
+        j_common_setup = None
+    else:
+        j_common_setup = jr_fwd(0x18)
 
     patch_jr(j_pure_setup)
     mark("pure_setup")
-
-    patch_jr(j_common_setup)
+    if j_common_setup is not None:
+        patch_jr(j_common_setup)
     mark("common_setup")
     emit([0x11, 0xA0, 0xC1, 0x3E, 0x18, 0xF5])
 
@@ -1280,20 +1296,34 @@ def create_inline_tile_copy_postcomputed_attrs(
     jr_back(0x18, "tile_row")
 
     patch_jr(j_map_done)
-    # Title/prerecorded copies carry B=$05. Keep their successful compare and
-    # taken conditional jump cycle-identical to the production CALL-NZ skip;
-    # this title transition is input-phase sensitive. Other pure routes retain
-    # the selective hazard publisher, while dirty routes use B.7 to compile.
-    emit([0x78, 0xFE, 0x05])
-    j_pure_done = jr_fwd(0x28)
-    emit([0xCB, 0x78])                       # dirty path retained in B.7
-    j_compile = jr_fwd(0x20)
-    emit([
-        0xCD,
-        external_post_copy_helper_addr & 0xFF,
-        external_post_copy_helper_addr >> 8,
-    ])
-    patch_jr(j_pure_done)
+    # B is interrupt-volatile. Atomic setup already records the dirty copy's
+    # exact destination H in FFA5, and that value is consumed above before the
+    # semantic postcopy runs. Treat its still-nonzero value as the dirty latch;
+    # the banked dispatcher clears it after normalizing the stack contract.
+    emit([0xF0, 0xA5, 0x1F if tagged_exact_destination else 0xB7])
+    j_compile = jr_fwd(0x38 if tagged_exact_destination else 0x20)
+    if tagged_exact_destination:
+        # The native B=$05 shortcut is not title-exclusive: rotating-hazard
+        # animation publications use it too. Always enter the semantic owner;
+        # the private-bank gate is the only safe place to fast-return because
+        # it can require exact live gameplay scene $02 plus room $03. Keeping
+        # the fixed map-done path scene-neutral also prevents the prerecorded
+        # title demo from inheriting room-$03 attribute trails.
+        emit([
+            0xCD,
+            external_post_copy_helper_addr & 0xFF,
+            external_post_copy_helper_addr >> 8,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+        ])
+    else:
+        emit([0x78, 0xFE, 0x05])
+        j_pure_done = jr_fwd(0x28)
+        emit([
+            0xCD,
+            external_post_copy_helper_addr & 0xFF,
+            external_post_copy_helper_addr >> 8,
+        ])
+        patch_jr(j_pure_done)
     emit([0xFB, 0xC9])
 
     patch_jr(j_compile)
@@ -1330,15 +1360,31 @@ def create_inline_tile_copy_postcomputed_attrs(
     # the visible physical map, which formerly left that map's attributes stale
     # while correctly coloring its peer.
     patch_jr(j_publish_prepared)
+    if tagged_exact_destination:
+        # Only the dirty (odd-tagged) arm reaches this point.  The compiler
+        # advanced H from $D000 to $D300, so H cannot recover the VRAM page.
+        # Reload the exact odd tag, normalize it with DEC, and publish HDMA3
+        # while A still owns the normalized $98/$9C destination.  Moving the
+        # HDMA3 store here exactly pays for the extra tag-normalization bytes
+        # and restores the established r90 compiler-path timing.
+        emit([
+            0x3E, 0x03, 0xE0, 0x70,         # fused path also needs bank 3
+            0xF0, 0xA5, 0x3D, 0x67,         # odd tag -> exact H
+            0xE0, 0x53,                     # HDMA destination high
+        ])
+    else:
+        emit([
+            0x3E, 0x03, 0xE0, 0x70,         # fused path also needs bank 3
+            0xF0, 0xA5, 0x67,
+        ])
     emit([
-        0x3E, 0x03, 0xE0, 0x70,             # fused path also needs bank 3
-        0xF0, 0xA5, 0x67,
         0xAF, 0xE0, 0x54,
         0x3E, 0x01, 0xE0, 0x4F,
         0x3E, 0xD0, 0xE0, 0x51,
         0xAF, 0xE0, 0x52,
-        0x7C, 0xE0, 0x53,
     ])
+    if not tagged_exact_destination:
+        emit([0x7C, 0xE0, 0x53])
     if os.environ.get("PENTA_ARENA_ATTR_GDMA", "0") == "1":
         # Throughput experiment: one bounded 48-block general DMA. This must
         # clear the arena scroll/flicker gates before promotion because an
@@ -1371,6 +1417,19 @@ def create_inline_tile_copy_postcomputed_attrs(
     emit([
         0xAF, 0xE0, 0x4F,
         0x3C, 0xE0, 0x70,
+        # The dirty route used to skip the same completed-map semantic pass
+        # that the pure route runs above.  That left Stage-1's neutral
+        # rotating-cylinder phases on LUT palette 0 until a later movement
+        # copy happened to repair them: stationary menu close and low-health
+        # transitions therefore exposed gray endpoints/red trails.  Run the
+        # selective post-copy owner after the full attribute DMA, while the
+        # destination is still the copier's completed (not-yet-flipped) map.
+        # B.7 deliberately remains set so the Stage-1 helper consumes the
+        # dirty-route synthetic stack contract; unrelated scenes return from
+        # their fixed gate without repainting the map.
+        0xCD,
+        external_post_copy_helper_addr & 0xFF,
+        external_post_copy_helper_addr >> 8,
         0xC3,
         external_atomic_wrap_addr & 0xFF,
         external_atomic_wrap_addr >> 8,
@@ -1562,6 +1621,8 @@ def create_inline_tile_copy_stage1_double_buffered_attrs(
 
 def create_inline_tile_copy_row_precomputed_attrs(
     external_decision_helper_addr: int,
+    *,
+    current_decision_abi: bool = False,
 ) -> bytes:
     """Atomic four-tile copy with one bounded precompute per 24-tile row.
 
@@ -1609,6 +1670,7 @@ def create_inline_tile_copy_row_precomputed_attrs(
     emit([
         0x2E, 0x00,
         0xFA, 0x80, 0xD8,
+        *([0x16, 0xFF] if current_decision_abi else []),
         0xCD,
         external_decision_helper_addr & 0xFF,
         external_decision_helper_addr >> 8,

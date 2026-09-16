@@ -1,0 +1,122 @@
+{
+  "schema": "penta-stage1-scene0b-capture-contract-v3",
+  "archived_incompatible_capture": {
+    "label": "operator-corrupted-walls",
+    "path": "save_states_for_claude/rc11_corrupted-walls.ss0",
+    "sha256": "052f2a9e7a80fc9073bf3fd452a0985a007c77afd54078274ad6408ea4010f15",
+    "gbas_sha256": "5f80b932414a73e8c252331a35069a47996508c219c04e9a7b670e8706c20716",
+    "serialized_rom_crc32": "ca97c15e",
+    "serialized_model": "80",
+    "serialized_rom_identity": "50454e5441445241474f4e0000000080",
+    "serialized_boot_register": "01",
+    "state": {
+      "D880": "0B",
+      "DCDC": "0C",
+      "DCDD": "00",
+      "FFBD": "07",
+      "FFC1": "01",
+      "FFE4": "00",
+      "FFBA": "00",
+      "FFBE": "00",
+      "LCDC": "8B",
+      "SCY": "00",
+      "SCX": "08"
+    },
+    "live_route": "rejected-no-cpu-stack-normalization",
+    "incompatibility": {
+      "candidate_sha256": "b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350",
+      "saved_irq_return": "13C2",
+      "candidate_window_offset": "13C0",
+      "candidate_window_bytes": "F5F0BAB720",
+      "policy": "archive-exact-and-reject-live-resume-without-cpu-stack-normalization",
+      "live_replays": 0
+    }
+  },
+  "captures": [
+    {
+      "label": "candidate-native-closed-after-operator-low-health",
+      "path": "tmp/r536-stage1-scene0b-native-capture-current658/scene0b-native-closed-legacy-identity.ss0",
+      "sha256": "27e49369a27520851bbc71b37cd2a3646617c10ef6e0c92c0659441fa0ac974f",
+      "gbas_sha256": "2933ff59c6e3ccda29a74d492ddf4a1a9d91cb5469188c24b654c66ede5d2cd9",
+      "serialized_rom_crc32": "ca97c15e",
+      "serialized_model": "80",
+      "serialized_rom_identity": "50454e5441445241474f4e0000000080",
+      "serialized_boot_register": "01",
+      "state": {
+        "D880": "0B",
+        "DCDC": "0C",
+        "DCDD": "00",
+        "FFBD": "03",
+        "FFC1": "01",
+        "FFE4": "00",
+        "FFBA": "00",
+        "FFBE": "00",
+        "LCDC": "C3",
+        "SCY": "00",
+        "SCX": "08"
+      },
+      "live_route": "closed-open-hold-close",
+      "hazard_oracle": "scene0b-four-object",
+      "provenance": {
+        "kind": "candidate-native-select-close",
+        "receipt": "tmp/r536-stage1-scene0b-native-capture-current658/receipt.json",
+        "receipt_sha256": "6f7c276786d0567721a0b8e2ea192667f3e86f66a903490f030030662017a911"
+      }
+    },
+    {
+      "label": "operator-low-health-menu-loaded",
+      "path": "save_states_for_claude/rc11_low-health-degradation.ss0",
+      "sha256": "1ea1b02625268a64982bcf272177ce89527a5a99c0baa49e6a1e247a9d2c8b67",
+      "gbas_sha256": "6d379c9711c8d2a396523ca50a6da268651e69fc2a8768e30ce4d139d8b4fdd0",
+      "serialized_rom_crc32": "ca97c15e",
+      "serialized_model": "80",
+      "serialized_rom_identity": "50454e5441445241474f4e0000000080",
+      "serialized_boot_register": "01",
+      "state": {
+        "D880": "0B",
+        "DCDC": "0C",
+        "DCDD": "00",
+        "FFBD": "03",
+        "FFC1": "01",
+        "FFE4": "01",
+        "FFBA": "00",
+        "FFBE": "00",
+        "LCDC": "E3",
+        "SCY": "00",
+        "SCX": "08"
+      },
+      "live_route": "open-hold-close-reopen-hold-close",
+      "hazard_oracle": "scene0b-four-object",
+      "provenance": {
+        "kind": "operator-capture",
+        "receipt": null,
+        "receipt_sha256": null
+      }
+    }
+  ],
+  "live_policy": {
+    "replays_per_capture": 2,
+    "minimum_captured_state_frames": 1,
+    "minimum_menu_held_frames": 60,
+    "minimum_menu_entry_frames": 1,
+    "minimum_menu_exit_frames": 1,
+    "minimum_post_close_frames": 60,
+    "scene_values": [
+      "0B"
+    ],
+    "normalization": "rom-identity-only",
+    "normalization_writes": 0,
+    "machine_state_writes": 0,
+    "identity_retarget_gbAs_offsets": [
+      4,
+      5,
+      6,
+      7,
+      31
+    ],
+    "source_serialized_model": "80",
+    "source_identity_flag": "80",
+    "target_identity_flag": "C0",
+    "vram_injection_bytes": 0
+  }
+}

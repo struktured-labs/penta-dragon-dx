@@ -195,6 +195,27 @@ def allowed_slowdown(
     return crystal if target == CRYSTAL_DRAGON_TARGET else ordinary
 
 
+def accepted_fast_boss(raw: str) -> tuple[str, float]:
+    """Parse a narrow boss-name upper phase boundary."""
+    name, separator, ceiling_text = raw.partition("=")
+    known = {boss.name for boss in BOSSES}
+    if not separator or name not in known:
+        raise argparse.ArgumentTypeError(
+            "accepted fast boss must use a known NAME=CEILING"
+        )
+    try:
+        ceiling = float(ceiling_text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "accepted fast boss ceiling must be numeric"
+        ) from error
+    if ceiling <= 1:
+        raise argparse.ArgumentTypeError(
+            "accepted fast boss ceiling must be greater than 1"
+        )
+    return name, ceiling
+
+
 def terminate(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
         return
@@ -237,6 +258,7 @@ def capture(
     env = os.environ.copy()
     env.update(
         BOSS_CADENCE_OUT=str(prefix),
+        PENTA_STATE_FILE=str(state.resolve()),
         BOSS_CADENCE_SCENE=str(BOSSES[target].scene),
         BOSS_CADENCE_WARMUP=str(warmup),
         BOSS_CADENCE_FRAMES=str(frames),
@@ -270,7 +292,7 @@ def capture(
     )
     process = subprocess.Popen(
         [
-            str(MGBA), "--fastforward", "-t", str(state),
+            str(MGBA), "--fastforward",
             "-C", f"savegamePath={prefix.parent}",
             "-C", f"savestatePath={prefix.parent}",
             str(rom), "--script", str(PROBE),
@@ -371,6 +393,17 @@ def main() -> int:
     )
     parser.add_argument("--phase-ratio-floor", type=float, default=0.95)
     parser.add_argument("--phase-ratio-ceiling", type=float, default=1.20)
+    parser.add_argument(
+        "--accepted-fast-boss",
+        action="append",
+        type=accepted_fast_boss,
+        default=[],
+        metavar="NAME=CEILING",
+        help=(
+            "operator-approved upper phase boundary for one boss; repeatable "
+            "and never inherited by other bosses"
+        ),
+    )
     parser.add_argument("--timeout", type=float, default=90)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
@@ -385,6 +418,16 @@ def main() -> int:
         and args.phase_ratio_ceiling >= 1.0 + args.max_slowdown
     ):
         parser.error("phase ratio bounds must contain the ordinary target")
+    accepted_fast_bosses: dict[str, float] = {}
+    for name, ceiling in args.accepted_fast_boss:
+        if name in accepted_fast_bosses:
+            parser.error(f"accepted fast boss {name} was specified twice")
+        if ceiling < args.phase_ratio_ceiling:
+            parser.error(
+                f"accepted fast boss {name} ceiling cannot tighten the "
+                "global phase ceiling"
+            )
+        accepted_fast_bosses[name] = ceiling
 
     targets = args.target or list(range(9))
     rows = []
@@ -478,11 +521,14 @@ def main() -> int:
             pair["og"]["mean_gap"] / pair["dx"]["mean_gap"]
             if publications_live else None
         )
+        boss_phase_ceiling = accepted_fast_bosses.get(
+            boss.name, args.phase_ratio_ceiling
+        )
         cadence_policy = classify_cadence(
             speed_ratio,
             maximum_slowdown,
             args.phase_ratio_floor,
-            args.phase_ratio_ceiling,
+            boss_phase_ceiling,
         )
         boss_pass = publications_live and cadence_policy["phase_bound_met"]
         passed &= boss_pass
@@ -494,6 +540,10 @@ def main() -> int:
             "maximum_speed_deviation_percent": maximum_slowdown * 100.0,
             "observation_frames": observation_frames,
             "publication_liveness": publications_live,
+            "phase_ratio_ceiling": boss_phase_ceiling,
+            "accepted_fast_boss_override": (
+                boss.name in accepted_fast_bosses
+            ),
             **cadence_policy,
             "speed_ratio": speed_ratio,
             "slowdown_percent": (
@@ -525,6 +575,7 @@ def main() -> int:
         "exception_boss": BOSSES[CRYSTAL_DRAGON_TARGET].name,
         "phase_ratio_floor": args.phase_ratio_floor,
         "phase_ratio_ceiling": args.phase_ratio_ceiling,
+        "accepted_fast_bosses": accepted_fast_bosses,
         "policy_controls": policy_controls,
         "replay_policy_controls": replay_controls,
         "warmup_frames": args.warmup,

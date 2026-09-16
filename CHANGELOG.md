@@ -1,5 +1,55 @@
 # Changelog
 
+## [Unreleased] - Restart fixes
+
+- Fix #7–#10: retire stale CGB attributes and OAM at death entry, rearm the
+  title prelude, and keep title publication separate from gameplay row updates.
+  Exact candidate: `c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d`.
+- Add blank-SRAM and saved-game spike-death routes to the full serial emulator
+  matrix. Compare Game Over, returned title, both Stage 01 cards, and restarted
+  gameplay through two cycles; reject blank captures and isolate SRAM.
+- Rebuild the repaired candidate from the original cartridge using a separate
+  restart source profile. Retain exact parent/overlay identities and validate
+  two independent builds against the full matrix. Hardware approval is separate.
+- Fix #5: expose all CLI commands and route `dev-loop` through the synchronous
+  guarded launcher, preserving failures and the busy-slot exit code.
+- Keep #6 (reported intermittent Sara sprite tearing) open; not a release blocker.
+- Fix #11 publication checks: isolate historical palette drift in negative
+  controls, update the archive roster to 90, and authenticate Python aliases by
+  resolved binary while preserving exact build arguments and trace checks.
+- Fix #12 supervisor interruption cleanup: stop the exact owned matrix group
+  and token-owned emulator descendants when monitoring raises an exception.
+- Fix #13 historical r315 reconstruction: separate its archived helper from the
+  later LCD-off experiment, restore its missing menu contracts, and authenticate
+  the exact archived output without treating it as a release-qualified ROM.
+
+## [v3.01-r536] - 2026-09-10
+
+### Qualified
+
+- Promote r536 as the exact pinned release candidate: SHA-256
+  `b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350`
+  and MD5 `d178b431bdbca10d6bd739e91e0535f6`.
+- Build the candidate twice from the supported original cartridge with retained
+  source receipts and require byte-identical output before running the complete
+  87-gate emulator matrix.
+- Replace the historical distribution patch with a deterministic, ROM-free IPS
+  that reconstructs exact r536 from the supported Japanese base ROM.
+
+### Fixed
+
+- Retire stale title tiles, keep the stage card blank through its handoff, and
+  remove the final-boss VRAM read that occurred during pixel transfer.
+- Preserve Stage 1 title color, stationary menu-close presentation, hazard
+  colors, and smooth gameplay under the expanded native-publisher profile.
+- Correct the ROM-free archive README from the obsolete 33-gate claim to the
+  authoritative 87-gate serial roster, and add regression coverage for stable
+  ZIP bytes/metadata, exact entry allowlisting, and ROM/save/state exclusion.
+
+Exact-candidate checklist confirmation, operator ratification of Ted's
+documented stabilized whip/orb presentation, explicit audience palette
+approval, and a reservation-backed MiSTer sweep remain release requirements.
+
 ## [v3.01-stream-rc11] - 2026-08-19
 
 ### Qualified

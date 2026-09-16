@@ -220,7 +220,7 @@ LAVA_OVERRIDE_ADDR = 0x7E00
 # on the splash so every splash tile resolves to one palette (clean letters).
 SPLASH_TABLE_ADDR = 0x7E40
 # Per-stage molten tile IDs (probe_lava_ffba.lua histograms + docs/audit/stage2_lava.md):
-LAVA_STAGE5_IDS = [0x02, 0x03, 0x04, 0x05, 0x12, 0x13, 0x14, 0x15]  # FFBA=4 (stage 5)
+LAVA_STAGE5_IDS = list(range(0x02, 0x08)) + list(range(0x12, 0x18))  # FFBA=4 (stage 5)
 LAVA_STAGE7_IDS = [0x19, 0x1A]                                       # FFBA=6 (stage 7)
 DF23_PREV_SCENE = 0xDF0D       # WRAM byte: previous D880 value.
 # NOTE: must stay OUTSIDE bg_sweep's 0xDF10-0xDF2F scratch buffer. The old
@@ -532,7 +532,8 @@ def build_scene_detect(dungeon_addr: int, arena_base_addr: int,
 
 def build_lava_override(base_addr: int,
                         room_sweep_count_addr: int | None = None,
-                        room_attr_pending_addr: int | None = None) -> bytes:
+                        room_attr_pending_addr: int | None = None,
+                        direct_stage7: bool = False) -> bytes:
     """Repaint molten tiles in WRAM 0xCC00 to pal5 (BG5 lava) for lava stages.
 
     CALLed every frame from the teleport routine (right after scene_detect), not
@@ -546,6 +547,12 @@ def build_lava_override(base_addr: int,
         title/uninit (<0x02) early-RET, touching nothing (incl. DF02).
       - FFBA selects the molten ID list: 4 -> stage 5, 6 -> stage 7, else RET.
     Then walks a 0xFF-terminated ID list and writes pal5 to 0xCC00[id] for each.
+
+    ``direct_stage7`` is for the release prelude, which has already restored
+    the DF02 sentinel before entering this helper. Stage 7 owns exactly two
+    adjacent lava IDs, so that caller can replace the per-VBlank list setup,
+    loop, and terminator branch with two direct LUT stores. Stage 5 retains
+    the general eight-entry list path.
     The ID lists are appended to this blob; HL pointers patched to absolutes.
     """
     c = bytearray()
@@ -571,7 +578,7 @@ def build_lava_override(base_addr: int,
             0x20, 0x01,                    # JR NZ,skip ready promotion
             0x34,                          # INC [HL]: $A6 pending -> $A7 ready
         ])
-    # ---- select molten ID list by FFBA (stage) ----
+    # ---- select molten tile family by FFBA (stage) ----
     c.extend([0xF0, 0xBA])                # LDH A, [FFBA]
     c.extend([0xFE, 0x04])                # CP 4 (stage 5)
     c.extend([0xD8])                      # RET C (stages 1-4)
@@ -579,45 +586,40 @@ def build_lava_override(base_addr: int,
     c.extend([0x28, 0x00])                # JR Z, set5
     c.extend([0xFE, 0x06])                # CP 6 (stage 7)
     c.extend([0xC0])                      # RET NZ   (not a lava stage)
-    # stage 7: HL = lava7 list (pointer patched below)
-    p_hl7 = len(c) + 1
-    c.extend([0x21, 0x00, 0x00])          # LD HL, lava7
-    j_apply = len(c) + 1
-    c.extend([0x18, 0x00])                # JR apply
-    # set5: HL = lava5 list
+    # Stage 7's two adjacent IDs never need the older terminated-list path.
+    # Keeping this direct in both build profiles leaves enough room for the
+    # complete Stage-5 floor/shadow family below.
+    del direct_stage7
+    assert LAVA_STAGE7_IDS == [0x19, 0x1A]
+    c.extend([
+        0x21, 0x19, WRAM_BG_TABLE >> 8,  # HL = adjacent Stage-7 lava IDs
+        0x3E, 0x05,                      # palette 5
+        0x22, 0x77, 0xC9,                # [HL+]=A; [HL]=A; RET
+    ])
+
+    # Stage 5 uses two contiguous six-tile rows: $02-$07 and $12-$17. The
+    # final pair in each row is the diagonal/corner material surrounding
+    # pickups. Leaving those entries neutral produced blue-gray specks and
+    # ruler-straight shadow streaks across the otherwise molten floor.
     set5_pos = len(c)
     c[j_set5] = (set5_pos - j_set5 - 1) & 0xFF
-    p_hl5 = len(c) + 1
-    c.extend([0x21, 0x00, 0x00])          # LD HL, lava5
-    # apply: suppress the colorize handler's same-frame cold-boot 0xCC00 copy
+    assert LAVA_STAGE5_IDS == [
+        *range(0x02, 0x08), *range(0x12, 0x18)
+    ]
+    # Suppress the colorize handler's same-frame cold-boot 0xCC00 copy
     # (it re-copies the DUNGEON table over our pal5 writes otherwise — the same
     # race that flooded the crystal arena red). scene_detect runs before the
     # colorize cold-boot, so DF02=0x5A here makes the later copy skip. Already a
     # lava stage at this point, so this only fires in stage 5 / stage 7.
-    apply_pos = len(c)
-    c[j_apply] = (apply_pos - j_apply - 1) & 0xFF
     c.extend([0x3E, 0x5A, 0xEA, 0x02, 0xDF])  # LD A,0x5A; LD [DF02],A
-    # walk 0xFF-terminated list, write pal5 to 0xCC00[id]
-    loop_pos = len(c)
-    c.extend([0x2A])                      # LD A, [HL+]   (tile id)
-    c.extend([0xFE, 0xFF])                # CP 0xFF
-    c.extend([0xC8])                      # RET Z         (end of list)
-    c.extend([0x5F])                      # LD E, A
-    c.extend([0x16, WRAM_BG_TABLE >> 8])  # LD D, palette LUT high byte
-    c.extend([0x3E, 0x05])                # LD A, 5       (pal5 = lava)
-    c.extend([0x12])                      # LD [DE], A
-    off = loop_pos - (len(c) + 2)
-    c.extend([0x18, off & 0xFF])          # JR loop
-    # ---- data: ID lists (0xFF-terminated) ----
-    lava7_off = len(c)
-    c.extend(LAVA_STAGE7_IDS + [0xFF])
-    lava5_off = len(c)
-    c.extend(LAVA_STAGE5_IDS + [0xFF])
-    # patch HL pointers to absolute bank-13 addresses
-    a7 = base_addr + lava7_off
-    a5 = base_addr + lava5_off
-    c[p_hl7], c[p_hl7 + 1] = a7 & 0xFF, (a7 >> 8) & 0xFF
-    c[p_hl5], c[p_hl5 + 1] = a5 & 0xFF, (a5 >> 8) & 0xFF
+    c.extend([0x21, 0x02, WRAM_BG_TABLE >> 8, 0x3E, 0x05, 0x06, 0x06])
+    first_loop = len(c)
+    c.extend([0x22, 0x05])                # [HL+]=5; DEC B
+    c.extend([0x20, (first_loop - (len(c) + 2)) & 0xFF])
+    c.extend([0x2E, 0x12, 0x06, 0x06])    # second row begins at $12
+    second_loop = len(c)
+    c.extend([0x22, 0x05])
+    c.extend([0x20, (second_loop - (len(c) + 2)) & 0xFF, 0xC9])
     return bytes(c)
 
 

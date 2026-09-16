@@ -1,264 +1,170 @@
 #!/usr/bin/env python3
-"""Verify the real title cursor and the OPENING/GAME START option order.
+"""Verify the title cursor on mGBA's CGB renderer and native input path.
 
-The retired probe hard-coded the teleport ROM and cropped copyright text,
-which made whitespace symmetry look like a letter-shaped cursor. This gate
-uses the release candidate, checks the exact 8x7 right-pointing marker through
-PyBoy's rendered pixel pipeline, and proves that DOWN moves it from the default
-OPENING START row to GAME START without leaving the title scene.
+The former PyBoy-only gate was a false negative for the colorized title: its
+renderer omitted a cursor that mGBA visibly drew. This verifier instead uses
+the checked-in single-flight mGBA wrapper, authenticates selector-tile blink
+ownership at both menu rows, drives DOWN then UP, and requires a contrasting
+renderer capture for every selected position.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
 
 from PIL import Image
-from pyboy import PyBoy
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
-DEFAULT_OUTPUT = Path("/tmp/penta-title-cursor-gate")
-
-D880 = 0xD880
-FFC1 = 0xFFC1
-TITLE_SCENE = 0x01
-
-CURSOR_X = 24
-CURSOR_WIDTH = 8
-CURSOR_HEIGHT = 7
-OPENING_Y = 65
-GAME_Y = 81
-
-# Native 8x7 right-pointing marker visible beside the title choices:
-#   ##......
-#   ####....
-#   ######..
-#   ########
-#   ######..
-#   ####....
-#   ##......
-EXPECTED_MARKER = (
-    "##......",
-    "####....",
-    "######..",
-    "########",
-    "######..",
-    "####....",
-    "##......",
-)
-EMPTY = tuple("." * CURSOR_WIDTH for _ in range(CURSOR_HEIGHT))
+PROBE = ROOT / "scripts" / "diagnostics" / "probe_title_cursor_mgba.lua"
+SINGLEFLIGHT = ROOT / "scripts" / "mgba-qt-singleflight"
+PROCESS_CHECK = ROOT / "scripts" / "check_emulator_processes.sh"
+DEFAULT_ROM = ROOT / "rom" / "working" / "penta_dragon_dx_FIXED.gb"
+DEFAULT_OUTPUT = ROOT / "tmp" / "penta-title-cursor-gate"
+LOCK_BUSY = 75
+SCHEMA = "penta-title-cursor-mgba-v2"
+PHASES = (("opening", 65), ("game", 81), ("restored", 65))
 
 
-def native_marker_phase(rows: tuple[str, ...]) -> bool:
-    """Accept the stock game's raster-visible blink transition.
-
-    The original ROM can expose one frame with only the top or bottom
-    contiguous portion of the marker visible while it blinks.  Each visible
-    row must still be the exact native row, and the visible rows may have only
-    one empty/non-empty boundary.
-    """
-
-    visible: list[bool] = []
-    for row, expected in zip(rows, EXPECTED_MARKER, strict=True):
-        if row == expected:
-            visible.append(True)
-        elif row == "." * CURSOR_WIDTH:
-            visible.append(False)
-        else:
-            return False
-    transitions = sum(a != b for a, b in zip(visible, visible[1:]))
-    return transitions <= 1
+class GateFailure(RuntimeError):
+    pass
 
 
-def dark(pixel: tuple[int, ...]) -> bool:
-    return max(pixel[:3]) < 128
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise GateFailure(message)
 
 
-def marker_rows(image: Image.Image, y_start: int) -> tuple[str, ...]:
-    rgb = image.convert("RGB")
-    return tuple(
-        "".join(
-            "#" if dark(rgb.getpixel((x, y))) else "."
-            for x in range(CURSOR_X, CURSOR_X + CURSOR_WIDTH)
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def checked_output(path: Path) -> Path:
+    output = path.resolve()
+    scratch = (ROOT / "tmp").resolve()
+    bulky = Path("/mnt/data/tmp").resolve()
+    allowed = ((output != scratch and output.is_relative_to(scratch))
+               or (bulky.exists() and output != bulky
+                   and output.is_relative_to(bulky)))
+    require(allowed, "output must be below repository tmp/ or /mnt/data/tmp/")
+    if output.exists():
+        require(output.is_dir(), "output is not a directory")
+        require(not any(output.iterdir()), "refusing to reuse non-empty output")
+    else:
+        output.mkdir(parents=True)
+    return output
+
+
+def parse_report(path: Path) -> dict[str, str]:
+    require(path.is_file(), "missing mGBA cursor report")
+    fields: dict[str, str] = {}
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        require("=" in line, f"report:{number}: malformed line")
+        key, value = line.split("=", 1)
+        require(key not in fields, f"report: duplicate key {key}")
+        fields[key] = value
+    expected = {"status", "message", "frames"}
+    for phase, _ in PHASES:
+        expected.update({f"{phase}_expected_hits", f"{phase}_wrong_hits",
+                         f"{phase}_context_failures", f"{phase}_screenshot"})
+    require(set(fields) == expected,
+            f"report keys differ: {sorted(set(fields) ^ expected)}")
+    return fields
+
+
+def contrasting_pixels(path: Path, y: int) -> int:
+    require(path.is_file(), f"missing renderer capture: {path.name}")
+    with Image.open(path) as source:
+        image = source.convert("RGB")
+        require(image.size == (160, 144),
+                f"{path.name}: renderer size is {image.size}")
+        colours: dict[tuple[int, int, int], int] = {}
+        for scan_y in range(0, image.height, 4):
+            for x in range(0, image.width, 4):
+                value = image.getpixel((x, scan_y))
+                colours[value] = colours.get(value, 0) + 1
+        field = max(colours, key=colours.get)
+        return sum(
+            sum(abs(channel - base) for channel, base in zip(
+                image.getpixel((x, row)), field, strict=True)) > 48
+            for row in range(y, y + 7)
+            for x in range(24, 32)
         )
-        for y in range(y_start, y_start + CURSOR_HEIGHT)
-    )
-
-
-def pulse(pyboy: PyBoy, button: str) -> None:
-    pyboy.button_press(button)
-    pyboy.tick(3, True)
-    pyboy.button_release(button)
-    # Let the release edge finish drawing before judging the stationary cursor.
-    # The first render immediately after DOWN is a legitimate one-frame move
-    # transition; the following three complete blink periods must retain the
-    # stock marker's exact row shapes, including its raster-visible partial
-    # draw/erase frame.
-    pyboy.tick(2, True)
-
-
-def observe_cursor(
-    pyboy: PyBoy,
-    output: Path,
-    stem: str,
-    expected_row: str,
-    frames: int = 180,
-) -> dict:
-    expected_marker_frames: list[int] = []
-    wrong_marker_frames: list[int] = []
-    unexpected_pattern_frames: list[int] = []
-    unexpected_patterns: list[dict[str, object]] = []
-    context_failures: list[str] = []
-    marker_image_saved = False
-    first_image_saved = False
-
-    for frame in range(frames):
-        image = pyboy.screen.image.copy()
-        opening = marker_rows(image, OPENING_Y)
-        game = marker_rows(image, GAME_Y)
-        if not first_image_saved:
-            image.save(output / f"{stem}.first.png")
-            first_image_saved = True
-
-        expected = opening if expected_row == "opening" else game
-        wrong = game if expected_row == "opening" else opening
-        if expected == EXPECTED_MARKER:
-            expected_marker_frames.append(frame)
-            if not marker_image_saved:
-                image.save(output / f"{stem}.marker.png")
-                marker_image_saved = True
-        if wrong != EMPTY:
-            wrong_marker_frames.append(frame)
-        if not native_marker_phase(opening) or not native_marker_phase(game):
-            unexpected_pattern_frames.append(frame)
-            unexpected_patterns.append(
-                {
-                    "frame": frame,
-                    "opening": opening,
-                    "game": game,
-                }
-            )
-            image.save(output / f"{stem}.unexpected-f{frame:03d}.png")
-
-        scene = pyboy.memory[D880]
-        gameplay = pyboy.memory[FFC1]
-        if scene != TITLE_SCENE or gameplay != 0:
-            context_failures.append(
-                f"f{frame}:D880={scene:02X}/FFC1={gameplay}"
-            )
-        if frame + 1 < frames:
-            pyboy.tick(1, True)
-
-    return {
-        "expected_row": expected_row,
-        "frames": frames,
-        "expected_marker_frames": expected_marker_frames,
-        "wrong_marker_frames": wrong_marker_frames,
-        "unexpected_pattern_frames": unexpected_pattern_frames,
-        "unexpected_patterns": unexpected_patterns,
-        "context_failures": context_failures,
-    }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom", nargs="?", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--timeout", type=float, default=60.0)
     args = parser.parse_args()
 
-    rom = args.rom.resolve()
-    output = args.output.resolve()
-    if not rom.is_file():
-        parser.error(f"ROM not found: {rom}")
-    output.mkdir(parents=True, exist_ok=True)
-
-    pyboy = PyBoy(
-        str(rom), window="null", cgb=True,
-        sound_emulated=False, log_level=5,
-    )
-    pyboy.set_emulation_speed(0)
-    failures: list[str] = []
+    receipt_path: Path | None = None
     try:
-        pyboy.tick(300, True)
-        initial = observe_cursor(
-            pyboy, output, "default-opening", "opening"
+        rom = args.rom.resolve()
+        require(rom.is_file(), f"ROM not found: {rom}")
+        output = checked_output(args.output)
+        receipt_path = output / "receipt.json"
+        stem = output / "title-cursor"
+        env = os.environ.copy()
+        env.update({"PENTA_TITLE_CURSOR_OUT": str(stem),
+                    "QT_QPA_PLATFORM": "offscreen", "SDL_AUDIODRIVER": "dummy"})
+        result = subprocess.run(
+            [str(SINGLEFLIGHT), "--fastforward", "--script", str(PROBE), str(rom)],
+            cwd=ROOT, env=env, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, timeout=args.timeout, check=False,
         )
-
-        pulse(pyboy, "down")
-        down = observe_cursor(
-            pyboy, output, "down-game-start", "game"
-        )
-
-        pulse(pyboy, "up")
-        restored = observe_cursor(
-            pyboy, output, "up-opening-restored", "opening"
-        )
-    finally:
-        pyboy.stop(save=False)
-
-    states = {
-        "default": initial,
-        "down": down,
-        "restored": restored,
-    }
-
-    for name, state in states.items():
-        if state["context_failures"]:
-            failures.append(
-                f"{name}: left title context at "
-                f"{', '.join(state['context_failures'])}"
-            )
-        if not state["expected_marker_frames"]:
-            failures.append(
-                f"{name}: cursor never appeared on {state['expected_row']}"
-            )
-        if state["wrong_marker_frames"]:
-            failures.append(
-                f"{name}: cursor appeared on the wrong row at frames "
-                f"{state['wrong_marker_frames']}"
-            )
-        if state["unexpected_pattern_frames"]:
-            failures.append(
-                f"{name}: non-native cursor pixels at frames "
-                f"{state['unexpected_pattern_frames']}"
-            )
-
-    report = {
-        "status": "failed" if failures else "ok",
-        "rom": str(rom),
-        "cursor_box": {
-            "x": CURSOR_X,
-            "width": CURSOR_WIDTH,
-            "height": CURSOR_HEIGHT,
-            "opening_y": OPENING_Y,
-            "game_y": GAME_Y,
-        },
-        "expected_marker": EXPECTED_MARKER,
-        "states": states,
-        "failures": failures,
-    }
-    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-
-    for name, state in states.items():
-        print(
-            f"{name:8s}: expected={state['expected_row']} "
-            f"visible={len(state['expected_marker_frames'])}/{state['frames']} "
-            f"wrong={len(state['wrong_marker_frames'])} "
-            f"other={len(state['unexpected_pattern_frames'])} "
-            f"context_bad={len(state['context_failures'])}"
-        )
-    if failures:
-        for failure in failures:
-            print(f"FAIL: {failure}")
+        (output / "emulator.log").write_text(result.stdout)
+        require(result.returncode != LOCK_BUSY,
+                "mGBA single-flight lock is busy (exit 75)")
+        terminal_marker = stem.with_suffix(".done")
+        terminal_ok = (terminal_marker.is_file()
+                       and terminal_marker.read_text() == "ok\n")
+        # Qt/mGBA can fault during teardown after this owned probe has written
+        # its terminal report and captures.  Accept only that known teardown
+        # status and only with the explicit, content-verified terminal marker;
+        # no timeout, missing artifact, or other return code can qualify.
+        require(result.returncode == 0 or (result.returncode == -11 and terminal_ok),
+                f"mGBA exited {result.returncode}; see emulator.log")
+        fields = parse_report(stem.with_suffix(".report"))
+        require(fields["status"] == "ok", fields["message"])
+        receipt: dict[str, object] = {
+            "schema": SCHEMA, "rom": str(rom), "rom_sha256": digest(rom),
+            "probe": str(PROBE), "probe_sha256": digest(PROBE), "phases": {},
+        }
+        for phase, y in PHASES:
+            expected = int(fields[f"{phase}_expected_hits"])
+            wrong = int(fields[f"{phase}_wrong_hits"])
+            context = int(fields[f"{phase}_context_failures"])
+            screenshot = Path(fields[f"{phase}_screenshot"])
+            require(expected > 0, f"{phase}: selector tile never blinked")
+            require(wrong == 0, f"{phase}: selector tile appeared on wrong row")
+            require(context == 0, f"{phase}: left the title context")
+            contrast = contrasting_pixels(screenshot, y)
+            require(contrast >= 12,
+                    f"{phase}: renderer cursor contrast is only {contrast} pixels")
+            receipt["phases"][phase] = {
+                "selector_tile_hits": expected, "wrong_row_hits": wrong,
+                "context_failures": context, "renderer_contrast_pixels": contrast,
+                "png": str(screenshot), "png_sha256": digest(screenshot),
+            }
+        subprocess.run([str(PROCESS_CHECK), "--require-none"], cwd=ROOT,
+                       check=True, timeout=10.0)
+        receipt["status"] = "passed"
+        receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+        print(f"PASS: native mGBA title cursor route; receipt: {receipt_path}")
+        return 0
+    except (GateFailure, subprocess.TimeoutExpired, ValueError) as error:
+        if receipt_path is not None:
+            receipt_path.write_text(json.dumps({"schema": SCHEMA, "status": "failed",
+                                                 "error": str(error)}, indent=2) + "\n")
+        print(f"FAIL: {error}")
         return 1
-    print(
-        "PASS: the native right-pointing cursor defaults to OPENING START; "
-        "DOWN moves it to GAME START and UP restores it."
-    )
-    return 0
 
 
 if __name__ == "__main__":

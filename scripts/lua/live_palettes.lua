@@ -11,7 +11,15 @@ local SMOKE_OUT = os.getenv("LIVE_PALETTE_SMOKE_OUT")
 local VISUAL_AUDIT_OUT = os.getenv("LIVE_PALETTE_VISUAL_AUDIT_OUT")
 local SCENE_AUDIT_OUT = os.getenv("LIVE_PALETTE_SCENE_AUDIT_OUT")
 local SPECIAL_AUDIT_OUT = os.getenv("LIVE_PALETTE_SPECIAL_AUDIT_OUT")
-local STATE_ROOT = ROOT .. "/save_states_for_claude"
+local STATE_ROOT = os.getenv("LIVE_PALETTE_STATE_DIR") or
+    (ROOT .. "/save_states_for_claude")
+local function load_state(path)
+    local ok, result = pcall(function() return emu:loadStateFile(path) end)
+    return ok and result ~= false, result
+end
+local function game_read(address)
+    return emu.memory.wram:read8(address - 0xC000)
+end
 local STAGE_STATE_DIR = os.getenv("LIVE_PALETTE_STAGE_STATE_DIR") or
     (ROOT .. "/tmp/palette_session/states")
 local BOSS_STATE_DIR = os.getenv("LIVE_PALETTE_BOSS_STATE_DIR") or
@@ -258,12 +266,12 @@ local function story_art_guard(scene)
     local spec = STORY_ART_SCENES[scene]
     if not spec then return false, nil end
     local committed = (
-        emu:read8(0xD880) == spec.d880
+        game_read(0xD880) == spec.d880
         and emu:read8(0xFFC1) == 0
-        and emu:read8(0xDCE8) == spec.sequence
-        and emu:read8(0xDCEA) == 0x01
-        and emu:read8(0xDCF0) == spec.art
-        and ((emu:read8(0xDD07) + 1) & 0xFF) == spec.art
+        and game_read(0xDCE8) == spec.sequence
+        and game_read(0xDCEA) == 0x01
+        and game_read(0xDCF0) == spec.art
+        and ((game_read(0xDD07) + 1) & 0xFF) == spec.art
     )
     return committed, spec
 end
@@ -303,11 +311,11 @@ local function ending_tail_guard(scene)
     local spec = ENDING_TAIL_SCENES[scene]
     if not spec then return false, nil end
     local committed = (
-        emu:read8(0xD880) == spec.d880
+        game_read(0xD880) == spec.d880
         and emu:read8(0xFFC1) == 0
         and emu:read8(0xFFE4) == 1
-        and emu:read8(0xD889) == spec.d889
-        and emu:read8(0xDCE2) == spec.dce2
+        and game_read(0xD889) == spec.d889
+        and game_read(0xDCE2) == spec.dce2
         and emu:read8(0xFFF9) == spec.fff9
     )
     return committed, spec
@@ -407,9 +415,7 @@ callbacks:add("frame", function()
         end
         local spec = SPECIAL_AUDIT_SCENES[special_index]
         if special_wait == 0 then
-            special_ok = pcall(function()
-                return emu:loadStateFile(SCENE_FILES[spec.scene])
-            end)
+            special_ok = load_state(SCENE_FILES[spec.scene])
             emu:setKeys(0)
             special_wait = 30
         else
@@ -452,7 +458,7 @@ callbacks:add("frame", function()
         local scene = SCENE_ORDER[audit_index]
         if audit_wait == 0 then
             local state_path = SCENE_FILES[scene]
-            audit_ok = pcall(function() return emu:loadStateFile(state_path) end)
+            audit_ok = load_state(state_path)
             emu:setKeys(0)
             audit_wait = 30
         else
@@ -473,14 +479,14 @@ callbacks:add("frame", function()
                     "story_top=%d story_dialogue=%d d889=%02X " ..
                     "dce2=%02X fff9=%02X tail_preview=%s " ..
                     "tail_cells=%d tail_palette=%d\n",
-                    scene, tostring(audit_ok), emu:read8(0xD880),
+                    scene, tostring(audit_ok), game_read(0xD880),
                     emu:read8(0xFFC1), emu:read8(0xFFBF),
                     emu:read8(0xFFC0), emu:read8(0xFFD0),
                     emu:read8(0xFFBA), emu:read8(0xFFE4),
-                    emu:read8(0xDCE8), emu:read8(0xDCEA),
-                    emu:read8(0xDCF0), emu:read8(0xDD07),
+                    game_read(0xDCE8), game_read(0xDCEA),
+                    game_read(0xDCF0), game_read(0xDD07),
                     tostring(story_preview), top_target, dialogue_zero,
-                    emu:read8(0xD889), emu:read8(0xDCE2),
+                    game_read(0xD889), game_read(0xDCE2),
                     emu:read8(0xFFF9), tostring(tail_preview), tail_cells,
                     tail_palette
                 ))
@@ -504,7 +510,7 @@ callbacks:add("frame", function()
             autostart_armed = false
             os.remove("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_autostart")
             log(string.format("f%d: autostart finished, FFC1=%d D880=0x%02X",
-                f, emu:read8(0xFFC1), emu:read8(0xD880)))
+                f, emu:read8(0xFFC1), game_read(0xD880)))
         end
     end
 
@@ -543,9 +549,7 @@ callbacks:add("frame", function()
                 ))
                 if scene then
                     local state_path = SCENE_FILES[scene]
-                    local ok, result = pcall(function()
-                        return emu:loadStateFile(state_path)
-                    end)
+                    local ok, result = load_state(state_path)
                     if ok then loaded_scene = scene end
                     log(string.format(
                         "f%d: loadStateFile scene=%s ok=%s result=%s",
@@ -589,7 +593,7 @@ callbacks:add("frame", function()
                 local report = assert(io.open(VISUAL_AUDIT_OUT, "w"))
                 report:write(string.format(
                     "frame=%d scene=%s d880=%02X ffc1=%d bg3=%s\n",
-                    f, loaded_scene, emu:read8(0xD880),
+                    f, loaded_scene, game_read(0xD880),
                     emu:read8(0xFFC1), read_palette(false, 3)
                 ))
                 report:close()
@@ -611,7 +615,7 @@ callbacks:add("frame", function()
         out:write(string.format(
             "frame=%d scene=%s d880=%02X ffc1=%d ffbf=%02X " ..
             "bg3=%s obj4=%s obj6=%s\n",
-            f, loaded_scene, emu:read8(0xD880), emu:read8(0xFFC1),
+            f, loaded_scene, game_read(0xD880), emu:read8(0xFFC1),
             emu:read8(0xFFBF), read_palette(false, 3),
             read_palette(true, 4), read_palette(true, 6)
         ))

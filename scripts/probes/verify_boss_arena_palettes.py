@@ -23,6 +23,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "diagnostics"))
 from boss_geometry_contract import BOSSES, NAMES as BOSS_NAMES  # noqa: E402
+from arena_palette_storage import arena_palette_table
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,13 +45,7 @@ def fields(path: Path) -> dict[str, str]:
 
 
 def expected_table(rom: bytes, target: int) -> bytes:
-    offset = (
-        PALETTE_ROM_BANK * ROM_BANK_SIZE
-        + ARENA_TABLE_BASE
-        + target * BG_TABLE_SIZE
-        - ROM_BANK_SIZE
-    )
-    return rom[offset:offset + BG_TABLE_SIZE]
+    return arena_palette_table(rom, target)
 
 
 def palette_words(raw: bytes) -> tuple[int, ...]:
@@ -88,6 +83,7 @@ def audit_state(
     environment = os.environ.copy()
     environment.update(
         BOSS_RECEIPT_OUT=str(prefix),
+        PENTA_STATE_FILE=str(state.resolve()),
         # The current-ROM generator already performs the scene transition.
         # Rearming it after loading an exact state can restart arena setup and
         # creates synthetic exits, especially for Shalamar.
@@ -115,8 +111,6 @@ def audit_state(
         [
             mgba,
             "--fastforward",
-            "-t",
-            str(state),
             "-C",
             f"savegamePath={prefix.parent}",
             "-C",

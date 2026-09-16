@@ -67,7 +67,11 @@ def parse_probe_metrics(text: str) -> dict:
 
 
 def run_d887(rom_path: str, frames: int) -> dict:
-    with tempfile.TemporaryDirectory(prefix="penta-phantom-") as temp:
+    scratch_root = PROJECT_ROOT / "tmp"
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-phantom-", dir=scratch_root
+    ) as temp:
         out = Path(temp) / "result.txt"
         env = os.environ.copy()
         env["STATE_PATH"] = str(out)
@@ -199,7 +203,8 @@ def main():
         f"clears={metrics.get('clear_pulses', '?')}, "
         f"chained={metrics.get('chained_commands', '?')}, "
         f"unpaired={metrics.get('unpaired_commands', '?')}, "
-        f"max_nonzero_run={metrics.get('max_nonzero_run', '?')}"
+        f"max_nonzero_run={metrics.get('max_nonzero_run', '?')}, "
+        f"dma_unreadable={metrics.get('dma_unreadable_samples', '?')}"
     )
     values = metrics.get("command_values", {})
     if values:
@@ -223,6 +228,7 @@ def main():
             "unpaired_commands",
             "max_nonzero_run",
             "command_values",
+            "dma_unreadable_samples",
         )
     )
     structurally_clean = (

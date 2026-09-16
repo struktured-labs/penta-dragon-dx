@@ -1,34 +1,82 @@
 # Penta Dragon DX
 
+## MiSTer browser palette lab (experimental)
+
+Edit colors on Blackmage while playing on Rivalmage: **Apply & Resume** saves
+a checkpoint, uploads a palette-only candidate, reloads GBC, and restores the
+state. **Undo & Resume** returns to the previous ROM/checkpoint. The browser
+uses descriptive labels and explains shared palettes—for example, **BG5:
+Rotating spike bodies & power pickups** (not the protruding teeth).
+
+Run `python3 scripts/mister_palette_bridge.py`, then open
+<http://127.0.0.1:8078>. This first version requires the pinned r536 ROM,
+reserves savestate slot 4, and supports primary palettes only. Generated
+ROMs/states stay out of Git; release ROMs and YAML are not overwritten.
+See [setup, limitations, and hardware evidence](docs/mister_palette_lab.md).
+
+This is a tooling milestone, **not a game-release readiness claim**. Reported
+The Game Over/title/new-game repair passes emulator regression; its final
+hardware replay is still pending.
+
 An in-progress Game Boy Color conversion of *Penta Dragon* (Japan).
 
 Penta Dragon DX adds scene-aware color to the original game while preserving
 its movement, music, maps, cutscenes, title demo, and boss fights. The project
-is approaching its first public release; the remaining work is mostly visual
-palette tuning with a live audience.
+is approaching its first public release; exact-candidate sign-off, Ted's
+documented presentation decision, audience palette review, and hardware
+testing remain.
 
 [![Seven-stage palette overview](artifacts/stage-collage/penta-dragon-dx-stages-current.png)](artifacts/stage-collage/index.html)
 
 ## Current status
 
-**v3.01 stream candidate — emulator-qualified; palette vote and hardware pass
-pending.**
+**v3.01 restart-fix candidate — 90/90 emulator checks passed;
+final human/Ted-presentation, audience-palette, and hardware sign-off pending.**
 
 - Title footer: `DX V3.01 STRUK LABS`
-- Current Stage-1 repair candidate: SHA-256
-  `484cd678bd6724f7ab9c128a985a0a50db1c523ad406103a8f57bd84784f4611`.
-  Its menu, wall-edge, entrance, hazard-color, deterministic-replay, and 95%
-  speed gates pass; the exact receipt bundle also passed independent review.
+- Current pinned candidate: SHA-256
+  `c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d`.
+- The 2026-09-16 publication run passed all **90 integration gates** and
+  produced two byte-identical original-cartridge builds. The full unit sweep
+  passed **1,195 tests**. The checked-in
+  [verification receipt](docs/release/verification/latest.json) binds the
+  repaired candidate to the qualified source and retained emulator evidence.
+- Issues #7–#10: repaired Game Over attribute cleanup, title color reinitialization,
+  both Stage 01 cards, and restarted gameplay. Three restart routes run two
+  death/restart cycles each, including blank-SRAM and saved-game paths. The
+  spike tests walk into hazards and then force HP to zero to make death timing
+  deterministic; they are not movement-only collision proofs.
+- Build the repaired candidate from the original cartridge with
+  `python3 scripts/build_restart_candidate.py --out-dir tmp/restart-build`.
+  Qualify two fresh builds with
+  `python3 scripts/diagnostics/run_deterministic_suite.py --restart-source`.
+  Output directories must be fresh. Use the project's configured mGBA runtime.
+  See [restart investigation and evidence](docs/audit/gameover_restart_investigation.md).
+- In headed mGBA play of the previous r535 preview on 2026-09-10, the tester
+  reported that the red/green
+  bleed after closing the item menu appeared fixed and confirmed that the
+  title screen keeps its color. Initial-loading behavior still needs human
+  confirmation. That reviewed ROM's SHA-256 was
+  `fe14b0e3c392b3d822208684636e1017cb093613d28e6ca477999535df164576`.
+- Focused automated checks passed for stationary menu closure, title color,
+  stage-card stability, attract-to-game start, and opening-to-Stage-1 handoff.
 - Stage 1, pickups, rotating hazards, title reel, bosses, and story scenes are
   colorized.
-- Qualified: Ted's arena colorization and flicker containment. Stream-day
-  review will choose between its stabilized whip/orb pose and the original's
-  harsher pseudo-transparency cadence.
-- Speed checks cover all seven stages and nine bosses. Matched-work timing puts
-  Ted 1.94% slower; three stage routes remain about 3% slower, and Crystal
-  Dragon about 3.9% slower. Six other arena loops are faster than the original,
-  while their deterministic semantic-animation checks still pass. Every
-  exception is visible in the top-level release ledger.
+- An r536 diagnostic repair fixes a final-boss VRAM read made during pixel
+  transfer. All nine boss geometry contracts pass with freshly generated
+  states, and final-boss publication cadence passes the unchanged phase bound
+  (1.1810 versus a 1.20 ceiling). The tighter speed target is still missed.
+  A supplemental 3,600-frame final-boss replay has zero palette mismatches.
+- The parent r536 candidate passed all **87 checks in a fresh, source-bound
+  deterministic emulator suite**, all **49 r535/r536 unit tests**, and an
+  expanded **199-test release/provenance contract sweep**. Two fresh
+  original-cartridge source rebuilds produce byte-identical ROMs.
+- A headed playtest of exact r536 was reported as “silky smooth.” Explicit
+  confirmation of the title/loading/menu-close checklist remains pending; an
+  informal play session is not relabeled as a complete playtest receipt.
+- Ted's stabilized whip/orb presentation still requires the documented
+  operator decision against the hash-pinned side-by-side clip in
+  [known deviations](docs/release/known_deviations.md).
 - Audience palette selection and the reservation-backed MiSTer pass are still
   required before release.
 
@@ -49,9 +97,9 @@ stages and the Stage 4/6 palette comparisons.
 
 ## Shalamar animation reference
 
-These five captures show Shalamar's major animation poses. The current release
-candidate has since passed the all-boss geometry and material checks; exact
-color choices remain adjustable during the palette stream.
+These five reference captures show Shalamar's major animation poses. They are
+historical examples, not qualification evidence for the current preview;
+exact color choices remain adjustable during the palette stream.
 
 <table>
   <tr>
@@ -88,13 +136,22 @@ main files are:
 You need your own supported Japanese ROM at `rom/Penta Dragon (J).gb`.
 Its MD5 must be `df43e0adfdc74b2829c7e95e91c71a28`.
 
+The pinned r536 release candidate is built directly from the supported
+original cartridge by `scripts/build_r536_candidate.py`. It is not the output
+of the legacy `build_v302_title_fix.py` command. Its construction and test
+history are documented in the
+[repair audit](docs/audit/stage4_cache_key_r534.md).
+
+For a local checkout with the exact pinned candidate already built:
+
 ```bash
-python3 scripts/build_v302_title_fix.py
-scripts/launch_mgba.sh rom/working/penta_dragon_dx_FIXED.gb
+scripts/launch_mgba.sh tmp/r536-penta-seam-vram-current636/candidate.gb
 ```
 
 The launcher is deliberate: it prevents multiple mGBA processes from piling
-up and uses the working display configuration for headed testing.
+up, requires an explicit ROM, records its SHA-256, and uses the working display
+configuration for headed testing. A successful launch is not a passing
+playtest receipt.
 
 ## Tune palettes live
 
@@ -125,20 +182,32 @@ The release suite builds the ROM twice, requires byte-identical output, and
 runs every emulator gate serially:
 
 ```bash
+LD_LIBRARY_PATH="$PWD/tmp/mgba-cgb-latches-r454/build" \
+TMPDIR="$PWD/tmp" PYTHONDONTWRITEBYTECODE=1 \
 python3 scripts/diagnostics/run_deterministic_suite.py \
-  --expanded-ted \
-  --menu-icon-colors
+  --r536-source --output tmp/r536-deterministic-FRESH-ATTEMPT
 ```
 
-The current candidate cleared **78/78** gates, including cold game start,
-Stage 1 terrain and pickups, later-stage movement soaks, low-health flicker,
-title-demo actors, all nine bosses, all seven stage comparisons, menus, and
-story scenes. The receipt also binds two byte-identical 512 KiB builds to the
-tested source and ROM hash, includes a phase-shifted 0.00% timing null, and
-reports accepted deviations at the top level rather than hiding them inside
-passing gates.
+The r536 source profile's fresh 87-gate emulator regression run completed on
+2026-09-14 with **87 passed, zero failed, zero blocked**. The source
+fingerprint, two independent source builds, distribution IPS, and exact
+tested-ROM hash stayed bound throughout the run.
+All nine boss geometry contracts, publication cadence, title/menu, stage,
+ending, and live-palette checks pass. All 49 r535/r536 unit tests and the
+expanded 199-test release/provenance contract sweep pass too.
 
-- [Latest hash-bound receipt](docs/release/verification/latest.json)
+Earlier failed manifests remain unchanged: r535 recorded 77 passed, 3 failed,
+and 7 blocked; the first r536 run recorded 86 passed and one outdated static
+expectation. The final run was fresh after correcting that verifier to check
+the replacement seam implementation exactly, with mutation controls.
+
+The exact-candidate checklist, Ted presentation ratification, audience palette
+selection, and reservation-backed MiSTer sweep remain required. The emulator
+pass is not a complete release pass. See the
+[repair audit](docs/audit/stage4_cache_key_r534.md) for exact artifacts and
+negative controls.
+
+- [Published deterministic-suite receipt](docs/release/verification/latest.json)
 - [Release and packaging rules](docs/release/README.md)
 - [Technical documentation index](docs/INDEX.md)
 - [Changelog](CHANGELOG.md)
@@ -149,9 +218,11 @@ This repository contains source code, palette data, verification tools, and a
 ROM-free IPS patch. It does not contain the original or modified game ROM,
 save files, or emulator states.
 
-Apply `rom/penta_dragon_dx.ips` to a clean Japanese *Penta Dragon* ROM whose
-MD5 is `df43e0adfdc74b2829c7e95e91c71a28`. The patched 512 KiB ROM must have
-SHA-256 `484cd678bd6724f7ab9c128a985a0a50db1c523ad406103a8f57bd84784f4611`.
+The checked-in IPS reconstructs exact r536. Apply
+`rom/penta_dragon_dx.ips` to a clean Japanese *Penta Dragon* ROM whose MD5 is
+`df43e0adfdc74b2829c7e95e91c71a28`. The patched 512 KiB ROM must have MD5
+`d178b431bdbca10d6bd739e91e0535f6` and SHA-256
+`b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350`.
 It can then be played in a Game Boy Color emulator such as mGBA or copied to
 `Assets/gbc/common/` on an Analogue Pocket SD card.
 

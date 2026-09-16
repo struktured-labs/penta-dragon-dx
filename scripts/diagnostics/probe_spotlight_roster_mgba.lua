@@ -9,9 +9,12 @@ local CAPTURE_COUNT = tonumber(os.getenv("SPOTLIGHT_ROSTER_COUNT") or "38")
 local SNAPSHOT = OUT .. ".pre-banner.ss0"
 
 local frame, target, saved, seeded, done = 0, 0, false, false, false
-local centered_frame, centered_oam = nil, nil
+local centered_frame, centered_oam, centered_path, centered_all_oam =
+  nil, nil, nil, nil
 local report = assert(io.open(OUT .. ".tsv", "w"))
-report:write("identity\tframe\tscreenshot\thardware_oam\n")
+report:write(
+  "identity\tactor_frame\tactor_screenshot\thardware_oam" ..
+  "\tall_visible_oam\tlabel_frame\tlabel_screenshot\n")
 
 local function game_scene()
   local old_svbk = emu:read8(0xFF70)
@@ -56,6 +59,20 @@ local function encode(entries)
   return table.concat(values, ",")
 end
 
+local function all_visible_oam()
+  local entries = {}
+  for slot = 0, 39 do
+    local base = 0xFE00 + slot * 4
+    local y, x = emu:read8(base), emu:read8(base + 1)
+    if y > 0 and y < 160 and x > 0 and x < 168 then
+      entries[#entries + 1] = string.format(
+        "%d:%d:%d:%02X:%02X", slot, y, x,
+        emu:read8(base + 2), emu:read8(base + 3))
+    end
+  end
+  return table.concat(entries, ",")
+end
+
 local function finish(status, message)
   if done then return end
   done = true
@@ -73,13 +90,16 @@ local function finish(status, message)
 end
 
 local function publish(entries)
-  local path = string.format("%s.id%02d.png", OUT, target)
-  emu:screenshot(path)
+  local label_path = string.format("%s.id%02d.label.png", OUT, target)
+  emu:screenshot(label_path)
   report:write(string.format(
-    "%d\t%d\t%s\t%s\n", target, frame, path, encode(entries)))
+    "%d\t%d\t%s\t%s\t%s\t%d\t%s\n",
+    target, centered_frame, centered_path, encode(entries), centered_all_oam,
+    frame, label_path))
   report:flush()
   target = target + 1
-  centered_frame, centered_oam, seeded = nil, nil, false
+  centered_frame, centered_oam, centered_path, centered_all_oam, seeded =
+    nil, nil, nil, nil, false
   if target >= CAPTURE_COUNT then
     finish("ok", "all-native-spotlight-identities-captured")
     return
@@ -110,15 +130,16 @@ callbacks:add("frame", function()
     if entries and centered(entries) then
       if not centered_frame then
         centered_frame, centered_oam = frame, entries
-        -- Keep a fallback frame for the final no-label roster entry.
-        emu:screenshot(string.format("%s.id%02d.png", OUT, target))
+        centered_all_oam = all_visible_oam()
+        centered_path = string.format("%s.id%02d.actor.png", OUT, target)
+        emu:screenshot(centered_path)
       end
       -- The native label appears about 250 frames after the actor centers.
       -- Identity 37 has no visible label and leaves sooner, so its centered
       -- body is the strongest available visual receipt (matching the legacy
       -- PyBoy gate's explicit first-sample fallback).
     end
-    if centered_frame and (target == 37 or frame - centered_frame >= 250) then
+    if centered_frame and frame - centered_frame >= 250 then
       publish(entries or centered_oam)
       return
     end

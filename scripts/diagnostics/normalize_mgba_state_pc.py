@@ -17,6 +17,18 @@ import zlib
 
 
 GB_STATE_SIZE = 0x11800
+GB_STATE_MAGIC = 0x00400003
+GB_STATE_ROM_CRC = 0x0004
+GB_STATE_MODEL = 0x0008
+GB_STATE_TITLE = 0x0010
+GB_STATE_TITLE_SIZE = 16
+GB_STATE_IO = 0x0300
+GB_REG_BANK = 0x50
+GB_MODEL_CGB = 0x80
+ROM_TITLE = 0x0134
+ROM_TITLE_SIZE = 16
+CGB_COMPATIBLE_FLAG = 0x80
+CGB_ONLY_FLAG = 0xC0
 CPU_SP = 0x0028
 CPU_PC = 0x002A
 CPU_EXECUTION_STATE = 0x0039
@@ -97,6 +109,74 @@ def state_write(value: str) -> tuple[int, int]:
     return address, byte
 
 
+def retarget_rom_identity(
+    source: Path, destination: Path, rom: Path,
+) -> None:
+    """Retarget only mGBA's ROM identity metadata for an $80->$C0 ROM.
+
+    mGBA serializes the cartridge bytes $0134-$0143 as a 16-byte identity.
+    The final byte is therefore the CGB flag as well as part of the loader's
+    title comparison.  A CGB-only candidate cannot load an otherwise exact
+    CGB-compatible capture by changing the CRC alone.  This helper permits
+    only that reviewed identity transition; it never changes machine state.
+    """
+    chunks = png_chunks(source.read_bytes())
+    indices = [
+        index for index, (kind, _) in enumerate(chunks) if kind == b"gbAs"
+    ]
+    if len(indices) != 1:
+        raise ValueError(f"expected one gbAs chunk, found {len(indices)}")
+    index = indices[0]
+    try:
+        raw = bytearray(zlib.decompress(chunks[index][1]))
+    except zlib.error as error:
+        raise ValueError("malformed compressed gbAs payload") from error
+    if len(raw) != GB_STATE_SIZE:
+        raise ValueError(f"unexpected Game Boy state size 0x{len(raw):X}")
+    if int.from_bytes(raw[:4], "little") != GB_STATE_MAGIC:
+        raise ValueError("identity retarget requires an exact mGBA v3 state")
+    if raw[GB_STATE_MODEL] != GB_MODEL_CGB:
+        raise ValueError("identity retarget requires a serialized CGB model")
+    if raw[GB_STATE_IO + GB_REG_BANK] == 0xFF:
+        raise ValueError("identity retarget requires a post-BIOS state")
+
+    rom_bytes = rom.read_bytes()
+    target_identity = rom_bytes[ROM_TITLE:ROM_TITLE + ROM_TITLE_SIZE]
+    if len(target_identity) != ROM_TITLE_SIZE:
+        raise ValueError("identity-retarget ROM is too small for its header")
+    source_identity = bytes(raw[
+        GB_STATE_TITLE:GB_STATE_TITLE + GB_STATE_TITLE_SIZE
+    ])
+    if source_identity[:15] != target_identity[:15]:
+        raise ValueError("source and target ROM title bytes 0..14 differ")
+    if not (
+        source_identity[15] == CGB_COMPATIBLE_FLAG
+        and target_identity[15] == CGB_ONLY_FLAG
+    ):
+        raise ValueError("identity retarget requires the exact $80->$C0 flag")
+
+    before = bytes(raw)
+    raw[GB_STATE_ROM_CRC:GB_STATE_ROM_CRC + 4] = (
+        zlib.crc32(rom_bytes) & 0xFFFFFFFF
+    ).to_bytes(4, "little")
+    raw[GB_STATE_TITLE + 15] = CGB_ONLY_FLAG
+    differences = {
+        offset for offset, values in enumerate(zip(before, raw, strict=True))
+        if values[0] != values[1]
+    }
+    allowed = {
+        GB_STATE_ROM_CRC, GB_STATE_ROM_CRC + 1,
+        GB_STATE_ROM_CRC + 2, GB_STATE_ROM_CRC + 3,
+        GB_STATE_TITLE + 15,
+    }
+    if not differences <= allowed or GB_STATE_TITLE + 15 not in differences:
+        raise ValueError("identity retarget changed non-identity state bytes")
+
+    chunks[index] = (b"gbAs", zlib.compress(bytes(raw), level=9))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    write_png(destination, chunks)
+
+
 def normalize(
     source: Path,
     destination: Path,
@@ -133,11 +213,8 @@ def normalize(
             raw[state_offset(address)] = value
         if arena_table is not None:
             rom_bytes = rom.read_bytes()
-            source = (
-                13 * 0x4000
-                + (0x7200 + arena_table * 0x100 - 0x4000)
-            )
-            table = rom_bytes[source:source + 0x100]
+            from arena_palette_storage import arena_palette_table
+            table = arena_palette_table(rom_bytes, arena_table)
             # Ted's live arena IDs end at $86; the candidate deliberately
             # reclaims the otherwise-unused $87-$FF LUT tail for banked sparse
             # publisher code. Validate every reachable semantic entry without

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 from pathlib import Path
 import re
@@ -21,7 +22,7 @@ def parse_meta(path: Path) -> dict[str, int]:
     values: dict[str, int] = {}
     hex_keys = {
         "expected_scene", "D880", "FFC1", "FF91", "DF02", "DF0D", "FFBA",
-        "LCDC", "SCX", "SCY", "active_map",
+        "LCDC", "STAT", "HDMA5", "PC", "SP", "SCX", "SCY", "active_map",
     }
     for key, raw in re.findall(r"([A-Za-z0-9_]+)=([0-9A-Fa-f]+)", first_line):
         values[key] = int(raw, 16 if key in hex_keys else 10)
@@ -89,6 +90,7 @@ def main() -> int:
     )
     parser.add_argument("--timeout", type=float, default=7.0)
     parser.add_argument("--require-semantic-pickups", action="store_true")
+    parser.add_argument("--keep-dir", type=Path)
     parser.add_argument(
         "--stages", default="2,3,4,5,6,7",
         help="comma-separated stage numbers to capture (default: 2..7)",
@@ -131,12 +133,21 @@ def main() -> int:
         },
     }
     lava_tiles = {
-        4: {0x02, 0x03, 0x04, 0x05, 0x12, 0x13, 0x14, 0x15},
+        4: set(range(0x02, 0x08)) | set(range(0x12, 0x18)),
         6: {0x19, 0x1A},
     }
 
     semantic_seen = 0
-    with tempfile.TemporaryDirectory(prefix="penta-stage-integrity-") as temp:
+    scratch = ROOT / "tmp"
+    scratch.mkdir(parents=True, exist_ok=True)
+    if args.keep_dir:
+        args.keep_dir.mkdir(parents=True, exist_ok=True)
+        temporary = contextlib.nullcontext(str(args.keep_dir.resolve()))
+    else:
+        temporary = tempfile.TemporaryDirectory(
+            prefix="penta-stage-integrity-", dir=scratch
+        )
+    with temporary as temp:
         temp_path = Path(temp)
         for target, stage_semantic in semantic_by_target.items():
             if target + 1 not in stages:

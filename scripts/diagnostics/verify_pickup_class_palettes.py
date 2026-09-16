@@ -27,6 +27,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_v301_gdma import _bg_table  # noqa: E402
+from diagnostics.verify_stage1_tilemap_copy import (  # noqa: E402
+    COMPILED_TOOTH_BANK_TILES,
+)
 
 
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
@@ -172,6 +175,24 @@ EXPECTED_TABLE = bytes(_bg_table())
 EXPECTED_TABLE_HISTOGRAM = dict(sorted(Counter(EXPECTED_TABLE).items()))
 
 
+def reviewed_stage1_table(table: bytes) -> bool:
+    """Accept the base LUT or its one reviewed tooth-bank variant only."""
+    if len(table) != len(EXPECTED_TABLE):
+        return False
+    for tile, (actual, expected) in enumerate(zip(table, EXPECTED_TABLE)):
+        if tile in COMPILED_TOOTH_BANK_TILES:
+            if actual not in (expected, expected | 0x08):
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
+def semantic_stage1_table(table: bytes) -> bytes:
+    """Palette-class view; bank/flip bits are not palette assignments."""
+    return bytes(value & 0x07 for value in table)
+
+
 def digest(path: Path, algorithm: str = "sha256") -> str:
     value = hashlib.new(algorithm)
     with path.open("rb") as handle:
@@ -311,6 +332,8 @@ def main() -> int:
 
     table = rom[BG_TABLE_OFFSET:BG_TABLE_OFFSET + 256]
     table_histogram = dict(sorted(Counter(table).items()))
+    semantic_table = semantic_stage1_table(table)
+    semantic_table_histogram = dict(sorted(Counter(semantic_table).items()))
     expected_tiles: dict[int, int] = {}
     for pickup in PICKUPS:
         for tile in pickup.tiles:
@@ -323,14 +346,14 @@ def main() -> int:
 
     checks = {
         "73 unique pickup tile IDs": len(expected_tiles) == 73,
-        "complete Stage 1 table equals its YAML compilation": (
-            table == EXPECTED_TABLE
+        "complete Stage 1 table is a reviewed palette/bank layout": (
+            reviewed_stage1_table(table)
         ),
-        "exact Stage 1 table histogram": (
-            table_histogram == EXPECTED_TABLE_HISTOGRAM
+        "exact Stage 1 palette-class histogram": (
+            semantic_table_histogram == EXPECTED_TABLE_HISTOGRAM
         ),
         "every pickup tile maps to its semantic class": all(
-            table[tile] == palette
+            semantic_table[tile] == palette
             for tile, palette in expected_tiles.items()
         ),
         "all five pickup palette classes are present": (
@@ -383,6 +406,20 @@ def main() -> int:
     checks["five class color rows are byte-distinct"] = (
         len(set(pickup_rows.values())) == 5
     )
+    # Health and rare-item art use shade 2 for the stock cast shadow / square
+    # pedestal.  It must stay achromatic while shade 1 carries the class hue;
+    # otherwise the backing reads as a second red/purple pickup in saturated
+    # later-stage floors.
+    checks["health and rare pickup shadows are neutral"] = all(
+        max(bgr555_to_rgb(pickup_rows[palette][2]))
+        - min(bgr555_to_rgb(pickup_rows[palette][2])) <= 4
+        for palette in (1, 2)
+    )
+    checks["health and rare pickup faces remain chromatic"] = all(
+        max(bgr555_to_rgb(pickup_rows[palette][1]))
+        - min(bgr555_to_rgb(pickup_rows[palette][1])) >= 96
+        for palette in (1, 2)
+    )
 
     contact_sheet = output / "pickup-class-palettes.png"
     create_contact_sheet(entries, contact_sheet)
@@ -395,6 +432,9 @@ def main() -> int:
         "rom_sha256": digest(rom_path),
         "stage1_table_histogram": {
             str(key): value for key, value in table_histogram.items()
+        },
+        "stage1_palette_class_histogram": {
+            str(key): value for key, value in semantic_table_histogram.items()
         },
         "pickup_palette_rows": {
             str(key): [f"{word:04X}" for word in value]

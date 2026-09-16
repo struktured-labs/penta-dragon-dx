@@ -22,11 +22,13 @@ class Stage1HazardConfig:
     ring_tiles: frozenset[int]
     body_tiles: frozenset[int]
     connector_tiles: frozenset[int]
+    terminal_tiles: frozenset[int]
     support_tiles: frozenset[int]
     tooth_palette: int
     ring_palette: int
     body_palette: int
     connector_palette: int
+    terminal_palette: int
     support_palette: int
     semantic_base_tiles: Mapping[int, int]
     environment_remap: tuple[int, int, int, int]
@@ -35,6 +37,7 @@ class Stage1HazardConfig:
     tooth_row_spans: Mapping[int, Mapping[int, tuple[int, int]]]
     body_row_spans: Mapping[int, Mapping[int, tuple[int, int]]]
     connector_row_spans: Mapping[int, Mapping[int, tuple[int, int]]]
+    terminal_row_spans: Mapping[int, Mapping[int, tuple[int, int]]]
 
     @property
     def art_tiles(self) -> frozenset[int]:
@@ -47,7 +50,7 @@ class Stage1HazardConfig:
 
     @property
     def family_tiles(self) -> frozenset[int]:
-        return self.art_tiles | self.support_tiles
+        return self.art_tiles | self.terminal_tiles | self.support_tiles
 
 
 def _category_tiles(category: dict, size: int = 256) -> frozenset[int]:
@@ -100,6 +103,7 @@ def load_stage1_hazard_config(
     tooth_tiles, tooth_palette = role("tooth")
     fire_tiles, fire_palette = role("fire_body")
     connector_tiles, connector_palette = role("wall_connector")
+    terminal_tiles, terminal_palette = role("terminal_caps")
     support_tiles, support_palette = role("support")
     ring_tiles = frozenset(int(tile) for tile in raw["ring_tiles"])
     body_tiles = frozenset(int(tile) for tile in raw["body_tiles"])
@@ -117,17 +121,20 @@ def load_stage1_hazard_config(
     tooth_spans = _row_spans(raw["tooth_row_spans"])
     body_spans = _row_spans(raw["body_row_spans"])
     connector_spans = _row_spans(raw["connector_row_spans"])
+    terminal_spans = _row_spans(raw["terminal_row_spans"])
     config = Stage1HazardConfig(
         source_offset=int(raw["source_offset"]),
         tooth_tiles=tooth_tiles,
         ring_tiles=ring_tiles,
         body_tiles=body_tiles,
         connector_tiles=connector_tiles,
+        terminal_tiles=terminal_tiles,
         support_tiles=support_tiles,
         tooth_palette=tooth_palette,
         ring_palette=fire_palette,
         body_palette=fire_palette,
         connector_palette=connector_palette,
+        terminal_palette=terminal_palette,
         support_palette=support_palette,
         semantic_base_tiles=semantic,
         environment_remap=tuple(int(item) for item in raw["environment_remap"]),
@@ -136,11 +143,16 @@ def load_stage1_hazard_config(
         tooth_row_spans=tooth_spans,
         body_row_spans=body_spans,
         connector_row_spans=connector_spans,
+        terminal_row_spans=terminal_spans,
     )
     if config.family_tiles != frozenset(range(0x60, 0x80)):
         raise ValueError("rotating-spike roles must partition tiles 60-7F")
-    if config.art_tiles & config.support_tiles:
-        raise ValueError("art and support tile roles overlap")
+    if config.art_tiles & (config.terminal_tiles | config.support_tiles):
+        raise ValueError("art and non-art tile roles overlap")
+    if config.terminal_tiles & config.support_tiles:
+        raise ValueError("terminal and support tile roles overlap")
+    if config.terminal_palette != config.body_palette:
+        raise ValueError("terminal caps must use the fire-body palette")
     if set(config.semantic_base_tiles) != config.tooth_tiles | config.ring_tiles:
         raise ValueError("semantic baselines must cover every tooth and ring")
     if set(config.ring_regions) != config.ring_tiles:
@@ -151,6 +163,10 @@ def load_stage1_hazard_config(
         raise ValueError("body silhouettes must cover every fire-body tile")
     if set(config.connector_row_spans) != config.connector_tiles:
         raise ValueError("connector silhouettes must cover every connector tile")
+    if set(config.terminal_row_spans) != {0x6B, 0x7B}:
+        raise ValueError("free-tip silhouettes must cover exactly tiles 6B/7B")
+    if not set(config.terminal_row_spans) < config.terminal_tiles:
+        raise ValueError("free-tip silhouettes must be terminal-cap tiles")
     for mapping in (config.environment_remap, config.hazard_remap):
         if len(mapping) != 4 or any(not 0 <= value <= 3 for value in mapping):
             raise ValueError(f"invalid 2bpp remap {mapping}")
@@ -286,6 +302,37 @@ def compile_stage1_hazard_variants(
         if len(raw) != 16 or len(baseline) != 16:
             raise ValueError("Stage 1 tile source falls outside the ROM")
         variants[tile] = remap_hazard_tile(config, tile, raw, baseline)
+    return variants
+
+
+def compile_stage1_hazard_terminal_variants(
+    source_rom: bytes,
+    config: Stage1HazardConfig | None = None,
+) -> dict[int, bytes]:
+    """Compile free-tip caps without painting native floor pixels yellow.
+
+    The terminal cells use BG5 so their tip and wall collar can render
+    white/gold/red/black.  Stock tiles 6B/7B also contain shade-1 floor pixels
+    outside the diagonal black cap outline; BG5 would turn those pixels gold.
+    Preserve the reviewed cap span byte-for-byte and collapse only pixels left
+    of that outline to neutral white (index 0).
+    """
+    config = config or load_stage1_hazard_config()
+    variants: dict[int, bytes] = {}
+    for tile, rows in sorted(config.terminal_row_spans.items()):
+        start = config.source_offset + tile * 16
+        raw = source_rom[start:start + 16]
+        if len(raw) != 16:
+            raise ValueError("Stage 1 terminal tile source falls outside the ROM")
+        pixels = decode_tile(raw)
+        result = pixels.copy()
+        for y in range(8):
+            span = rows.get(y)
+            if span is None:
+                raise ValueError(f"terminal tile {tile:02X} lacks row {y}")
+            for x in range(span[0]):
+                result[y * 8 + x] = 0
+        variants[tile] = encode_tile(result)
     return variants
 
 

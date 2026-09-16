@@ -386,6 +386,10 @@ def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
         change for change in active_bg_palette_changes
         if change["phase"] == "steady"
     ]
+    steady_all_white_active = [
+        event for event in all_white_active
+        if event["phase"] == "steady"
+    ]
     steady_all_white_active_bg = [
         event for event in all_white_active_bg
         if event["phase"] == "steady"
@@ -444,9 +448,14 @@ def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
             f"{len(gameplay_bgp_pulses)} $90/$F9 whole-BG pulse frames "
             "inside the active-play audit window"
         )
-    if all_white_active:
+    # The stock entry fade publishes OAM before the phased CGB OBJ deck is
+    # ready; those actors remain visually absent until their row loads. The
+    # rendered receipts show no white sprite during that bounded fade. Reject
+    # an all-white active row only after BGP has been stable for 32 frames.
+    if steady_all_white_active:
         failures.append(
-            f"{len(all_white_active)} visible all-white OBJ palette samples"
+            f"{len(steady_all_white_active)} steady visible all-white OBJ "
+            "palette samples"
         )
     if steady_all_white_active_bg:
         failures.append(
@@ -503,6 +512,7 @@ def analyze(output: Path, mode: str, rom: Path) -> dict[str, object]:
         "lcd_off_samples": lcd_off,
         "active_obj_palette_changes": active_palette_changes,
         "all_white_active_obj_palettes": all_white_active,
+        "steady_all_white_active_obj_palettes": steady_all_white_active,
         "active_bg_palette_changes": active_bg_palette_changes,
         "steady_active_bg_palette_changes": steady_active_bg_palette_changes,
         "all_white_active_bg_palettes": all_white_active_bg,

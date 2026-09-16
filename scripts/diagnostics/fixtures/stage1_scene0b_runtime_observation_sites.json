@@ -1,0 +1,198 @@
+{
+  "schema": "penta-stage1-scene0b-runtime-observation-sites-v7",
+  "rom_size": 524288,
+  "candidate_sha256": "909d7ee16bbf5080fd9992567bbe784e6df3234a08f9bde07ff7a10b2f729abb",
+  "runtime_epoch": {
+    "address": 57169,
+    "legacy_value": 168,
+    "candidate_value": 169
+  },
+  "resident_runtime": {
+    "address": 56023,
+    "length": 41,
+    "captured_legacy_sha256": "9d6f623a4797317c30eb649bbb32ebc5f6bec303239cfd623e99257f187e2d81",
+    "candidate_sha256": "04cdd8d7432477821a21098acfb95b322aef0dff3562e812ac365f0130159aef"
+  },
+  "cache_records": {
+    "DF53": ["semantic_key", "phase_key_DC00", "hazard_key"],
+    "DF57": ["semantic_key", "phase_key_DC00", "hazard_key"]
+  },
+  "semantic_key": "SCY ^ DC02 ^ C21B ^ C2B8",
+  "publication_tags": {"99": "9800", "9D": "9C00"},
+  "sites": {
+    "fixed_rst18_route": {
+      "bank": 0, "address": 24, "offset": 24,
+      "bytes": "7A3CCA1300C380DB", "breakpoint": 26,
+      "breakpoint_bank": null, "software_bank_mirror": null,
+      "kind": "rst18Route001A"
+    },
+    "runtime_epoch_gate13_a": {
+      "bank": 13, "address": 27408, "offset": 224016,
+      "bytes": "FA51DFFEA9C4BF7C", "breakpoint": 27408,
+      "breakpoint_bank": 13, "software_bank_mirror": null,
+      "kind": "epochGate13"
+    },
+    "runtime_epoch_gate13_b": {
+      "bank": 13, "address": 27417, "offset": 224025,
+      "bytes": "FA51DFFEA9C4BF7C", "breakpoint": 27417,
+      "breakpoint_bank": 13, "software_bank_mirror": null,
+      "kind": "epochGate13"
+    },
+    "runtime_epoch_gate13_c": {
+      "bank": 13, "address": 27520, "offset": 224128,
+      "bytes": "FA51DFFEA9C4BF7C", "breakpoint": 27520,
+      "breakpoint_bank": 13, "software_bank_mirror": null,
+      "kind": "epochGate13"
+    },
+    "runtime_epoch_gate16_a": {
+      "bank": 16, "address": 27408, "offset": 273168,
+      "bytes": "FA51DFFEA9C4BF7C", "breakpoint": 27408,
+      "breakpoint_bank": 16, "software_bank_mirror": null,
+      "kind": "epochGate16"
+    },
+    "runtime_epoch_gate16_b": {
+      "bank": 16, "address": 27417, "offset": 273177,
+      "bytes": "FA51DFFEA9C4BF7C", "breakpoint": 27417,
+      "breakpoint_bank": 16, "software_bank_mirror": null,
+      "kind": "epochGate16"
+    },
+    "runtime_epoch_gate16_c": {
+      "bank": 16, "address": 27520, "offset": 273280,
+      "bytes": "FA51DFFEA9C4BF7C", "breakpoint": 27520,
+      "breakpoint_bank": 16, "software_bank_mirror": null,
+      "kind": "epochGate16"
+    },
+    "runtime_installer13_entry": {
+      "bank": 13, "address": 31935, "offset": 228543,
+      "bytes": "C5D5E521007B1100DA015D00CDB30921", "breakpoint": 31935,
+      "breakpoint_bank": 13, "software_bank_mirror": null,
+      "kind": "installer13"
+    },
+    "runtime_installer16_entry": {
+      "bank": 16, "address": 31935, "offset": 277695,
+      "bytes": "C5D5E521007B1100DA015D00CDB30921", "breakpoint": 31935,
+      "breakpoint_bank": 16, "software_bank_mirror": null,
+      "kind": "installer16"
+    },
+    "runtime_epoch13_publication": {
+      "bank": 13, "address": 21841, "offset": 218449,
+      "bytes": "CD16553EA9EA51DFE1D1C1C9", "breakpoint": 21849,
+      "breakpoint_bank": 13, "software_bank_mirror": null,
+      "kind": "epochPublish13"
+    },
+    "runtime_epoch16_publication": {
+      "bank": 16, "address": 21841, "offset": 267601,
+      "bytes": "CD16553EA9EA51DFE1D1C1C9", "breakpoint": 21849,
+      "breakpoint_bank": 16, "software_bank_mirror": null,
+      "kind": "epochPublish16"
+    },
+    "runtime_gateway_DAD7": {
+      "bank": 13, "address": 31894, "offset": 228502,
+      "bytes": "FA80D8E6F7FE02C413003E15CD6100C30041E1D1C1F5FA80D8FE0828021800F3F1F1F13E16C3470800",
+      "breakpoint": 56023, "breakpoint_bank": null,
+      "software_bank_mirror": null, "kind": "runtimeDAD7"
+    },
+    "runtime_selfheal_entry": {
+      "bank": 31, "address": 27882, "offset": 519402,
+      "bytes": "FE93206F237EFE342074FA80D8FE0B2055F070E607FE01204DFADEDAFEC42010FADFDAFE132009FAE0DAFE0020021836F0B7FE022030FADEDAFEC22029FADFDA",
+      "breakpoint": 27882, "breakpoint_bank": 31,
+      "software_bank_mirror": 31, "kind": "selfhealEntry6CEA"
+    },
+    "runtime_selfheal_repair": {
+      "bank": 31, "address": 27957, "offset": 519477,
+      "bytes": "F33ECDEADEDA3E13EADFDA3E00EAE0DA3EFFEA53DFEA57DFC36D6DF80236D723",
+      "breakpoint": 27957, "breakpoint_bank": 31,
+      "software_bank_mirror": 31, "kind": "selfhealRepair6D35"
+    },
+    "runtime_selfheal_start": {
+      "bank": 31, "address": 27981, "offset": 519501,
+      "bytes": "C36D6DF80236D72336DAE13E01C36100FE142007237EFEA3",
+      "breakpoint": 27981, "breakpoint_bank": 31,
+      "software_bank_mirror": 31, "kind": "selfhealStart6D4D"
+    },
+    "runtime_transaction_armed": {
+      "bank": 31, "address": 28099, "offset": 519619,
+      "bytes": "0836142336A3E8FEC3506DFBC3506DFA80D8FE0BC2306EF0",
+      "breakpoint": 28107, "breakpoint_bank": 31,
+      "software_bank_mirror": 31, "kind": "transactionArmed6DCB"
+    },
+    "runtime_display_flip_effect": {
+      "bank": 31, "address": 28189, "offset": 519709,
+      "bytes": "3E8B18023E83E0403EC4EADEDAE13E01C36100F8007EF802",
+      "breakpoint": 28197, "breakpoint_bank": 31,
+      "software_bank_mirror": 31, "kind": "displayFlip6E25"
+    },
+    "runtime_commit_effect": {
+      "bank": 31, "address": 28194, "offset": 519714,
+      "bytes": "83E0403EC4EADEDAE13E01C36100F8007EF80277F8017EF8",
+      "breakpoint": 28202, "breakpoint_bank": 31,
+      "software_bank_mirror": 31, "kind": "commitEffect6E2A"
+    },
+    "current_menu_mux_entry": {
+      "bank": 31, "address": 27845, "offset": 519365,
+      "bytes": "F070E607FE012015FA80D8FE0B200EF0B7FE0220083EFFEA53DFEA57DF",
+      "breakpoint": 27845, "breakpoint_bank": 31,
+      "software_bank_mirror": 31, "kind": "menuMux6CC5"
+    },
+    "current_menu_cache_effect": {
+      "bank": 31, "address": 27864, "offset": 519384,
+      "bytes": "20083EFFEA53DFEA57DFE1F1AFE0E4C39A09",
+      "breakpoint": 27874, "breakpoint_bank": 31,
+      "software_bank_mirror": 31, "kind": "menuEffect6CE2"
+    },
+    "stage1_split_key_consumer": {
+      "bank": 21, "address": 16640, "offset": 344320,
+      "bytes": "16DF7CEECB5F1A4FF04247FA02DCA847FA1BC2A847",
+      "breakpoint": 16640, "breakpoint_bank": 21,
+      "software_bank_mirror": 21, "kind": "consumer4100"
+    },
+    "native_attr_compiler_entry": {
+      "bank": 1, "address": 17148, "offset": 17148,
+      "bytes": "F0E0FE032822F311A0C12100D03E1ECD",
+      "breakpoint": 17154, "breakpoint_bank": 1,
+      "software_bank_mirror": 1, "kind": "compiler4302"
+    },
+    "native_attr_publication_effect": {
+      "bank": 1, "address": 17222, "offset": 17222,
+      "bytes": "E055F055CB7F28FAAFE04F3CE070CDF1DBC3DFDB",
+      "breakpoint": 17236, "breakpoint_bank": 1,
+      "software_bank_mirror": 1, "kind": "publication4354"
+    },
+    "fixed_postcopy_handoff": {
+      "bank": 0, "address": 4322, "offset": 4322,
+      "bytes": "3E13C347083E01B7", "breakpoint": 4322,
+      "breakpoint_bank": 0, "software_bank_mirror": 1,
+      "kind": "postcopy10E2"
+    },
+    "hazard_dispatcher": {
+      "bank": 19, "address": 27854, "offset": 322766,
+      "bytes": "F001E6FE67C3A76B", "breakpoint": 27854,
+      "breakpoint_bank": 19, "software_bank_mirror": 19,
+      "kind": "hazardDispatch6CCE"
+    },
+    "hazard_geometry_helper": {
+      "bank": 19, "address": 27559, "offset": 322471,
+      "bytes": "C1FA80D847F0B7FE022038FAFDDCB7CA506C78FE0A280C",
+      "breakpoint": 27559, "breakpoint_bank": 19,
+      "software_bank_mirror": 19, "kind": "hazardHelper6BA7"
+    },
+    "hazard_geometry_front": {
+      "bank": 19, "address": 25015, "offset": 319927,
+      "bytes": "11A0C10618C5D5E51ACD886CDA8F6113",
+      "breakpoint": 25015, "breakpoint_bank": 19,
+      "software_bank_mirror": 19, "kind": "hazardFront61B7"
+    },
+    "hazard_semantic_writer": {
+      "bank": 20, "address": 17152, "offset": 328448,
+      "bytes": "F040CB7F284A3E01E04F79E601F5CB39",
+      "breakpoint": 17152, "breakpoint_bank": 20,
+      "software_bank_mirror": 20, "kind": "hazardWrite4300"
+    },
+    "hazard_room01_semantic_writer": {
+      "bank": 20, "address": 17664, "offset": 328960,
+      "bytes": "F040CB7F284A3E01E04F79E601F5CB39",
+      "breakpoint": 17664, "breakpoint_bank": 20,
+      "software_bank_mirror": 20, "kind": "hazardWrite4500"
+    }
+  }
+}

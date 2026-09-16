@@ -2,6 +2,8 @@
 -- The Python owner launches this only through mgba-qt-singleflight.
 
 local OUT = assert(os.getenv("BOSS_CADENCE_OUT"), "BOSS_CADENCE_OUT required")
+local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
+  "PENTA_STATE_FILE required")
 local EXPECTED_SCENE = tonumber(os.getenv("BOSS_CADENCE_SCENE") or "15")
 local WARMUP = tonumber(os.getenv("BOSS_CADENCE_WARMUP") or "60")
 local FRAMES = tonumber(os.getenv("BOSS_CADENCE_FRAMES") or "600")
@@ -14,6 +16,7 @@ local trace = assert(io.open(OUT .. ".trace", "w"))
 local sources = assert(io.open(OUT .. ".sources.bin", "wb"))
 local state_features = assert(io.open(OUT .. ".state.bin", "wb"))
 local frame, copies, scene_frames, finished = 0, 0, 0, false
+local state_loaded = false
 local scene_drift_frames = 0
 local parked_frames = 0
 -- Native $3111 expands one logical metatile into a 2x2 tile block.  These
@@ -151,6 +154,17 @@ end)
 
 callbacks:add("frame", function()
   if finished then return end
+  if not state_loaded then
+    local ok, result = pcall(function()
+      return emu:loadStateFile(STATE_FILE)
+    end)
+    if not ok or result == false then
+      finish("state-load-error")
+      return
+    end
+    state_loaded = true
+    return
+  end
   frame = frame + 1
   emu:setKeys(0)
   -- D000-DFFF is banked CGB WRAM. Ted's bounded attribute compiler can span

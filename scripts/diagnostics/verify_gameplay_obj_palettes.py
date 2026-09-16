@@ -15,7 +15,9 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from build_v301_teleport import build_obj_pal_table
-from diagnostics.normalize_mgba_state_pc import normalize
+from diagnostics.normalize_mgba_state_pc import normalize, retarget_rom_identity
+from diagnostics.gameplay_anchor_dma import prepare
+from diagnostics.generate_stream_boss_states import run_until_marker
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +57,9 @@ def run_state(
     result = output / f"{state.stem}.txt"
     screenshot = output / f"{state.stem}.png"
     stdout = output / f"{state.stem}.stdout.txt"
+    state = prepare(mgba, rom, state, output / 'anchors' / state.stem, timeout)
+    marker = result.with_suffix('.done')
+    marker.unlink(missing_ok=True)
     environment = os.environ.copy()
     environment.update(
         {
@@ -63,10 +68,10 @@ def run_state(
             "GAMEPLAY_OBJ_OUT": str(result),
             "GAMEPLAY_OBJ_SCREENSHOT": str(screenshot),
             "GAMEPLAY_OBJ_LUT": str(output / "obj_palette_lut.bin"),
+            "GAMEPLAY_OBJ_DONE": str(marker),
         }
     )
-    with stdout.open("w") as stream:
-        completed = subprocess.run(
+    run_until_marker(
             [
                 mgba,
                 "--fastforward",
@@ -76,17 +81,13 @@ def run_state(
                 str(PROBE),
                 str(rom),
             ],
-            cwd=ROOT,
-            env=environment,
-            stdout=stream,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-            check=False,
-        )
+            environment, ROOT, marker, timeout,
+    )
+    if marker.read_text() != 'complete':
+        raise RuntimeError('gameplay capture incomplete')
     if not result.exists():
         raise RuntimeError(
-            f"{state.name}: no result (mGBA status {completed.returncode}); "
-            f"see {stdout}"
+            f"{state.name}: no result; see {marker.with_suffix('.log')}"
         )
     if not screenshot.exists():
         raise RuntimeError(f"{state.name}: no screenshot; see {stdout}")
@@ -139,7 +140,8 @@ def main() -> int:
         output = args.output.resolve()
         output.mkdir(parents=True, exist_ok=True)
     else:
-        temporary = tempfile.TemporaryDirectory(prefix="penta-gameplay-obj-")
+        scratch=ROOT/'tmp';scratch.mkdir(exist_ok=True)
+        temporary = tempfile.TemporaryDirectory(prefix="penta-gameplay-obj-",dir=scratch)
         output = Path(temporary.name)
     try:
         (output / "obj_palette_lut.bin").write_bytes(build_obj_pal_table())
@@ -155,34 +157,15 @@ def main() -> int:
                 failures.append(str(exc))
                 continue
             retried_current_init = False
-            if int(result.get("mismatches", "-1")) > 0:
-                # Old anchors serialize both the D900 LUT/DAxx helper and live
-                # hardware-OAM attributes.  A sentinel can therefore look
-                # current while the saved sprite attributes still predate the
-                # candidate.  Retarget a failing anchor once and force one
-                # clean candidate initialization; naturally valid fixtures
-                # remain byte-for-byte untouched.
-                normalized = output / f"{state.stem}.current.ss0"
-                normalize(
-                    state,
-                    normalized,
-                    0x016C,
-                    [(0xDF51, 0x00)],
-                    rom,
-                    bank=1,
-                )
-                try:
-                    result = run_state(
-                        args.mgba, rom, normalized, output, args.timeout
-                    )
-                    retried_current_init = True
-                except Exception as exc:
-                    failures.append(str(exc))
-                    continue
+            retried_current_init = True  # every anchor uses the safe setup
             checked = int(result.get("checked", "0"))
             mismatches = int(result.get("mismatches", "-1"))
             sampled = int(result.get("sampled_frames", "0"))
             bad_state = int(result.get("bad_state_frames", "-1"))
+            if int(result.get('distinct_pcs','0')) < 2:
+                failures.append(f'{state.name}: gameplay did not advance')
+            if int(result.get('lut_mismatches','-1')) != 0:
+                failures.append(f'{state.name}: candidate OBJ LUT did not initialize')
             total_checked += checked
             total_mismatches += max(mismatches, 0)
             if sampled > 0 and checked > 0:

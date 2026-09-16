@@ -24,6 +24,7 @@ end
 
 local lut = read_blob(LUT_PATH)
 local pickup_ids = read_blob(PICKUP_PATH)
+local room01_walls = read_blob(assert(os.getenv("ATTRACT_PICKUP_ROOM01_WALL_LUT")))
 local frame = 0
 local target_started = false
 local target_start = -1
@@ -47,11 +48,15 @@ local background_mismatch_cell_trace = {}
 local first_pickup_frame = -1
 local first_mismatch = ""
 local first_background_mismatch = ""
+local persistent_background_mismatch_captured = false
+local late_mismatch_captures = 0
+local last_late_mismatch = -1000
 local pickup_tiles = {}
 local captures = {}
 local capture_specs = {}
 local pickup_frame_trace = {}
 local capture_budget = 0
+local last_pickup_capture = -1000
 local late_capture_thresholds = {600, 1200, 1800}
 local late_capture_index = 1
 local finished = false
@@ -59,6 +64,37 @@ local trace_layouts =
   tonumber(os.getenv("ATTRACT_PICKUP_TRACE_LAYOUTS") or "0") ~= 0
 local layout_records, layout_seen, layout_events = {}, {}, {}
 local debug_destination = 0
+local pending_owners, page_owners = {}, {}
+local owner_publications, owner_invalid_events = 0, 0
+local blank_entry_frames, owner_missing_frames = 0, 0
+-- Match the independently reviewed north-route physical-page contract:
+-- capture FFE5 at native copy entry, publish only at the authenticated LCDC
+-- store. Logical FFBD can advance while the outgoing page is still visible.
+assert(emu:setBreakpoint(function()
+  if emu:read8(0xFFBA) ~= 0 then return end
+  local high = (emu:readRegister('HL') >> 8) & 255
+  if high ~= 0x98 and high ~= 0x9C then
+    owner_invalid_events = owner_invalid_events + 1
+    return
+  end
+  pending_owners[high << 8] = emu:read8(0xFFE5)
+end, 0x42A7, 1) > 0)
+assert(emu:setBreakpoint(function()
+  if emu:read8(0xFFBA) ~= 0 then return end
+  local lcdc = emu:readRegister('A') & 255
+  local core = lcdc & 0x9F
+  if core ~= 0x83 and core ~= 0x8B then
+    owner_invalid_events = owner_invalid_events + 1
+    return
+  end
+  local base = (lcdc & 8) ~= 0 and 0x9C00 or 0x9800
+  if pending_owners[base] ~= nil then
+    page_owners[base] = pending_owners[base]
+    pending_owners[base] = nil
+    owner_publications = owner_publications + 1
+  end
+end, assert(tonumber(os.getenv('ATTRACT_PUBLICATION_PC'), 16)),
+     assert(tonumber(os.getenv('ATTRACT_PUBLICATION_BANK'), 16))) > 0)
 
 local function snapshot_range(first, last)
   local values = {}
@@ -144,6 +180,23 @@ local function inspect_visible()
   local scx = emu:read8(0xFF43)
   local base = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
   local old_vbk = emu:read8(0xFF4F)
+  -- Native entry intentionally displays white before the first room map.
+  -- CGB ignores BGP, so prove all four BG0 colors are literal white instead
+  -- of assuming a monochrome fade register also hides colored tile data.
+  local white_entry = false
+  if page_owners[base] == nil and owner_publications > 0 then
+    owner_missing_frames = owner_missing_frames + 1
+  end
+  if page_owners[base] == nil and owner_publications == 0 then
+    local index = emu:read8(0xFF68)
+    white_entry = true
+    for i = 0, 7 do
+      emu:write8(0xFF68, i)
+      if emu:read8(0xFF69) ~= (i % 2 == 0 and 0xFF or 0x7F) then white_entry = false end
+    end
+    emu:write8(0xFF68, index)
+    if white_entry then blank_entry_frames = blank_entry_frames + 1 end
+  end
   local cells = {}
   local background_cells = {}
   local sub_x = scx & 7
@@ -183,6 +236,14 @@ local function inspect_visible()
     local attr = emu:read8(base + cell.offset)
     local actual = attr & 0x07
     local expected = byte(lut, cell.tile) & 0x07
+    -- Room 01 deliberately recolors four wall roles via its mutable LUT.
+    -- The reviewed fixture, not observed candidate attributes, owns this
+    -- expectation. Pickup tiles never overlap these contextual wall roles.
+    local wall_expected = byte(room01_walls, cell.tile)
+    if page_owners[base] == 1 and wall_expected ~= 0xFF then
+      expected = wall_expected
+    end
+    if white_entry then expected = 0 end
     visible_background_cells = visible_background_cells + 1
     if actual ~= expected then
       background_palette_mismatches = background_palette_mismatches + 1
@@ -216,9 +277,26 @@ local function inspect_visible()
     if #background_mismatch_trace < 128 then
       background_mismatch_trace[#background_mismatch_trace + 1] =
         string.format(
-          "%d,%d,%02X,%04X,%02X,%02X,%02X,%02X",
+          "%d,%d,%02X,%04X,%02X,%02X,%02X,%02X,lcdc=%02X,page9800=%02X,page9c00=%02X",
           frame, frame_background_mismatches, emu:read8(0xFFBD), base,
-          emu:read8(0xDF4E), emu:read8(0xDF7C), scx, scy)
+          emu:read8(0xDF4E), emu:read8(0xDF7C), scx, scy, lcdc,
+          emu.memory.wram:read8(0x1F53), emu.memory.wram:read8(0x1F57))
+    end
+    -- The entry handoff is allowed four hidden frames, but any later
+    -- mismatch is a rendered regression (for example the purple four-cell
+    -- splash seen near the end of prerecorded Stage 1).  Capture the first
+    -- such frame independently of the entry receipt so a late failure always
+    -- has visual evidence.
+    if target_start >= 0 and frame >= target_start + 4
+        and not persistent_background_mismatch_captured then
+      add_capture("persistent-background-mismatch", cells)
+      persistent_background_mismatch_captured = true
+    end
+    if frame >= target_start + 600 and late_mismatch_captures < 3
+        and frame >= last_late_mismatch + 300 then
+      add_capture("late-background-mismatch", cells)
+      late_mismatch_captures = late_mismatch_captures + 1
+      last_late_mismatch = frame
     end
   end
   for _, cell in ipairs(cells) do
@@ -255,7 +333,11 @@ local function inspect_visible()
 
   if #cells > 0 and first_pickup_frame < 0 then
     first_pickup_frame = frame
-    capture_budget = 6
+    -- Tile IDs are reused while Stage 1 streams art. Six adjacent entry
+    -- frames can therefore all describe one transition-era false visual
+    -- match. Spread twice as many receipts across the natural demo so the
+    -- rendered-pickup proof samples distinct rooms/phases.
+    capture_budget = 12
   end
   if #cells > 0 and #pickup_frame_trace < 512 then
     pickup_frame_trace[#pickup_frame_trace + 1] = string.format(
@@ -265,9 +347,11 @@ local function inspect_visible()
       emu:read8(0xFFB7), emu:read8(0xFFBA), emu:read8(0xD880),
       emu:read8(0xFFC1))
   end
-  if capture_budget > 0 then
+  if capture_budget > 0 and #cells > 0
+      and frame - last_pickup_capture >= 60 then
     add_capture("pickup", cells)
     capture_budget = capture_budget - 1
+    last_pickup_capture = frame
   end
   -- A native room transition can consume the exact threshold frame while the
   -- scene byte is transient.  Capture on the first inspectable frame at or
@@ -291,6 +375,10 @@ local function finish(status)
   report:write("status=" .. status .. "\n")
   report:write(string.format("frames=%d\n", frame))
   report:write(string.format("target_start=%d\n", target_start))
+  report:write(string.format("owner_publications=%d\n", owner_publications))
+  report:write(string.format("owner_invalid_events=%d\n", owner_invalid_events))
+  report:write(string.format("owner_missing_frames=%d\n", owner_missing_frames))
+  report:write(string.format("blank_entry_frames=%d\n", blank_entry_frames))
   report:write(string.format("target_frames=%d\n", target_frames))
   report:write(string.format(
     "target_transient_frames=%d\n", target_transient_frames))

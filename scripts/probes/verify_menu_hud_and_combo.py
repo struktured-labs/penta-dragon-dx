@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import yaml
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LUA_PROBE = Path(__file__).with_name("menu_hud_and_combo.lua")
@@ -17,6 +19,19 @@ PRELUDE_ROM_OFFSET = BANK13 + (0x6E80 - 0x4000)
 PRELUDE_LIMIT = BANK13 + (0x6F30 - 0x4000)
 TELEPORT_SIGNATURE = bytes.fromhex("F0 93 E6 0C FE 0C")
 STACK_REDIRECT_SIGNATURE = bytes.fromhex("F8 16")
+
+
+def expected_title_palette() -> str:
+    document = yaml.safe_load(
+        (PROJECT_ROOT / "palettes/penta_palettes_v097.yaml").read_text()
+    )
+    name = document["title_bg_palette"]
+    colors = document["bg_palettes"][name]["colors"]
+    encoded = bytearray()
+    for color in colors:
+        value = int(color, 16) & 0x7FFF
+        encoded.extend((value & 0xFF, value >> 8))
+    return encoded.hex().upper()
 
 
 def parse_result(path: Path) -> dict[str, str]:
@@ -29,7 +44,11 @@ def parse_result(path: Path) -> dict[str, str]:
 
 
 def run_case(rom: Path, mode: str) -> dict[str, str]:
-    with tempfile.TemporaryDirectory(prefix=f"penta_{mode}_") as temp_dir:
+    scratch = PROJECT_ROOT / "tmp"
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=f"penta_{mode}_", dir=scratch
+    ) as temp_dir:
         temp = Path(temp_dir)
         result_path = temp / "result.txt"
         screenshot_path = temp / "screen.png"
@@ -77,19 +96,31 @@ def main() -> None:
     failures = list(static_failures)
     if title.get("reached") != "600":
         failures.append(f"title probe stopped at {title.get('reached')}")
-    if title.get("contaminated_cells") != "0":
+    if title.get("unsafe_cells") != "0":
         failures.append(
-            f"title has {title.get('contaminated_cells')} nonzero palette attrs"
+            f"title has {title.get('unsafe_cells')} unsafe palette attrs"
         )
-    if title.get("palette0") != "FF7F947E4A3D0000":
+    if int(title.get("contaminated_cells", "0")) == 0:
+        failures.append("title has no intentional Nightfall palette roles")
+    if title.get("palette0") != expected_title_palette():
         failures.append(f"title palette 0 is {title.get('palette0')}")
     if menu.get("reached") != "1245":
         failures.append(f"menu probe stopped at {menu.get('reached')}")
     if menu.get("window_enabled") != "1":
         failures.append("item-menu window was not enabled")
-    if menu.get("contaminated_cells") != "0":
+    expected_hud_entries = "".join(
+        f"r4c{column}:tileFC/attr01,"
+        for column in range(3, 18)
+    )
+    if menu.get("contaminated_cells") != "15":
         failures.append(
-            f"HUD has {menu.get('contaminated_cells')} nonzero palette attrs"
+            "HUD color row has "
+            f"{menu.get('contaminated_cells')} cells instead of 15"
+        )
+    if menu.get("contaminated_entries") != expected_hud_entries:
+        failures.append(
+            "HUD color row is not the exact r4c3..17 tile FC/attr 1 contract: "
+            f"{menu.get('contaminated_entries')!r}"
         )
     if combo.get("reached") != "1300":
         failures.append(f"combo probe stopped at {combo.get('reached')}")
@@ -116,7 +147,10 @@ def main() -> None:
         for failure in failures:
             print(f"  - {failure}")
         raise SystemExit(1)
-    print("PASS: title/HUD attrs are clean and SELECT+START is release-safe.")
+    print(
+        "PASS: title attrs are safe and role-bearing, the HUD color row is exact, and "
+        "SELECT+START is release-safe."
+    )
 
 
 if __name__ == "__main__":

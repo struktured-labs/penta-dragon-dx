@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
+import yaml
 
 from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +39,16 @@ def parse_report(path: Path) -> dict[str, str]:
 def parse_oam(raw: str) -> list[tuple[int, int, int, int]]:
     return [
         tuple(int(value, 16 if offset >= 2 else 10) for offset, value in enumerate(item.split(":")))
+        for item in raw.split(",") if item
+    ]
+
+
+def parse_all_oam(raw: str) -> list[tuple[int, int, int, int, int]]:
+    return [
+        tuple(
+            int(value, 16 if offset >= 3 else 10)
+            for offset, value in enumerate(item.split(":"))
+        )
         for item in raw.split(",") if item
     ]
 
@@ -89,21 +100,36 @@ def run_roster(
     rows: list[dict[str, object]] = []
     trace = Path(str(stem) + ".tsv")
     for line in trace.read_text().splitlines()[1:]:
-        identity, frame, screenshot_raw, oam = line.split("\t")
-        screenshot = Path(screenshot_raw)
+        (
+            identity, actor_frame, actor_screenshot_raw, oam,
+            all_oam, label_frame, label_screenshot_raw,
+        ) = line.split("\t")
+        screenshot = Path(actor_screenshot_raw)
+        label_screenshot = Path(label_screenshot_raw)
         sprites = parse_oam(oam)
-        if not screenshot.is_file() or len(sprites) != 4:
+        visible_oam = parse_all_oam(all_oam)
+        if (
+            not screenshot.is_file()
+            or not label_screenshot.is_file()
+            or len(sprites) != 4
+        ):
             raise RuntimeError(f"identity {int(identity):02d} has an invalid visual receipt")
-        with Image.open(screenshot) as image:
+        with Image.open(label_screenshot) as image:
             name_region = image.convert("RGB").crop((50, 80, 150, 104))
             name_pixels = sum(
                 min(pixel) >= 160 and max(pixel) - min(pixel) <= 80
                 for pixel in name_region.getdata()
             )
         rows.append({
-            "identity": int(identity), "frame": int(frame), "sprites": sprites,
+            "identity": int(identity), "frame": int(actor_frame),
+            "label_frame": int(label_frame), "sprites": sprites,
+            "visible_oam": visible_oam,
             "name_pixels": name_pixels, "screenshot": screenshot,
             "screenshot_sha256": hashlib.sha256(screenshot.read_bytes()).hexdigest(),
+            "label_screenshot": label_screenshot,
+            "label_screenshot_sha256": hashlib.sha256(
+                label_screenshot.read_bytes()
+            ).hexdigest(),
         })
     if [row["identity"] for row in rows] != list(range(SPOTLIGHT_ROSTER_SIZE)):
         raise RuntimeError("roster capture did not return identities 0..37 in order")
@@ -111,23 +137,25 @@ def run_roster(
 
 
 def create_contact_sheet(actors: list[dict[str, object]], output: Path) -> None:
-    columns = 6
+    columns = 3
     label_height = 14
-    cell_width, cell_height = 160, 144 + label_height
+    cell_width, cell_height = 320, 144 + label_height
     rows = (len(actors) + columns - 1) // columns
     sheet = Image.new("RGB", (columns * cell_width, rows * cell_height), "white")
     draw = ImageDraw.Draw(sheet)
     for index, actor in enumerate(actors):
         screenshot = Image.open(str(actor["screenshot"])).convert("RGB")
+        label = Image.open(str(actor["label_screenshot"])).convert("RGB")
         x = index % columns * cell_width
         y = index // columns * cell_height
         sheet.paste(screenshot, (x, y + label_height))
+        sheet.paste(label, (x + 160, y + label_height))
         draw.text(
             (x + 2, y + 2),
             (
                 f"id {int(actor['identity']):02d} "
                 f"res {int(actor['resource_id']):02X} "
-                f"OBJ{int(actor['expected_palette_slot'])}"
+                f"OBJ{int(actor['expected_palette_slot'])} · actor | label"
             ),
             fill="black",
         )
@@ -155,6 +183,13 @@ def main() -> int:
     output.mkdir(parents=True)
 
     _packed, palette_slots, yaml_resources = compile_spotlight_palette_map()
+    spotlight_document = yaml.safe_load(
+        (ROOT / "palettes/spotlight_palette_map.yaml").read_text()
+    )
+    spotlight_rows = {
+        int(row["identity"]): row
+        for row in spotlight_document.get("roster", [])
+    }
     rom_bytes = rom.read_bytes()
     rom_resources = list(
         rom_bytes[
@@ -187,7 +222,8 @@ def main() -> int:
         canonical = [
             (
                 run["sprites"], run["name_pixels"],
-                run["screenshot_sha256"],
+                run["visible_oam"],
+                run["screenshot_sha256"], run["label_screenshot_sha256"],
             )
             for run in runs
         ]
@@ -204,6 +240,11 @@ def main() -> int:
             f"_obj{expected}_f{frame}.png"
         )
         shutil.copy2(runs[0]["screenshot"], path)
+        label_path = output / (
+            f"id{target:02d}_res{rom_resources[target]:02X}"
+            f"_obj{expected}_label.png"
+        )
+        shutil.copy2(runs[0]["label_screenshot"], label_path)
         captured.append(
             {
                 "identity": target,
@@ -212,9 +253,16 @@ def main() -> int:
                 "expected_palette_slot": expected,
                 "hardware_palette_slots": actual,
                 "hardware_oam": sprites,
+                "all_visible_hardware_oam": runs[0]["visible_oam"],
                 "name_glyph_pixels": name_pixels,
                 "screenshot_sha256": runs[0]["screenshot_sha256"],
                 "screenshot": str(path),
+                "label_frame": int(runs[0]["label_frame"]),
+                "label_screenshot_sha256": runs[0]["label_screenshot_sha256"],
+                "label_screenshot": str(label_path),
+                "stock_presentation": str(
+                    spotlight_rows[target].get("stock_presentation", "")
+                ),
                 "deterministic_replays": args.replays,
             }
         )

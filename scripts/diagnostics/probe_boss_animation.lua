@@ -2,6 +2,8 @@
 -- The Python owner launches this only through mgba-qt-singleflight.
 
 local OUT = assert(os.getenv("BOSS_ANIMATION_OUT"), "BOSS_ANIMATION_OUT required")
+local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
+    "PENTA_STATE_FILE required")
 local EXPECTED_SCENE = tonumber(os.getenv("BOSS_ANIMATION_SCENE") or "15")
 local FRAMES = tonumber(os.getenv("BOSS_ANIMATION_FRAMES") or "3600")
 local STEP = tonumber(os.getenv("BOSS_ANIMATION_STEP") or "2")
@@ -10,6 +12,7 @@ local SOURCE_TRACE = os.getenv("BOSS_ANIMATION_SOURCE_TRACE") == "1"
 local STOCK_ROM = os.getenv("BOSS_ANIMATION_STOCK_ROM") == "1"
 local FLUSH_FRAMES = 20
 local frame, captured, finished = 0, 0, false
+local state_loaded = false
 local wrong_scene_frames = 0
 local trace = assert(io.open(OUT .. ".trace", "w"))
 local sources = SOURCE_TRACE and assert(io.open(OUT .. ".sources.bin", "wb")) or nil
@@ -19,6 +22,7 @@ local publications = SOURCE_TRACE
 if SOURCE_TRACE then
     pcall(function()
         emu:setBreakpoint(function()
+            if not state_loaded then return end
             if emu:read8(0xD880) == EXPECTED_SCENE then
                 trace:write(string.format(
                     "publication frame=%d dc0b=%02X\n",
@@ -255,6 +259,14 @@ end
 
 callbacks:add("frame", function()
     if finished then return end
+    if not state_loaded then
+        local ok, result = pcall(function()
+            return emu:loadStateFile(STATE_FILE)
+        end)
+        assert(ok and result ~= false, "failed to load requested boss state")
+        state_loaded = true
+        return
+    end
     frame = frame + 1
     emu:setKeys(0)
 

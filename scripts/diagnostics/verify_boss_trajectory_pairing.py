@@ -54,6 +54,11 @@ MGBA = ROOT / "scripts" / "mgba-qt-singleflight"
 PROBE = Path(__file__).with_name("probe_boss_trajectory_pairing.lua")
 DEFAULT_ORIGINAL = ROOT / "rom/Penta Dragon (J).gb"
 MIN_MATCHED_TRANSITIONS = 3
+# Penta's OG/DX arena fixtures begin almost one full phase-vector cycle apart.
+# A 2,400-frame window contains the first common transition only at its final
+# sample; 4,800 frames exposes the following 493 deterministic transitions and
+# makes the magnitude measurable instead of merely direction-only.
+MIN_OBSERVATION_FRAMES_BY_TARGET = {8: 4800}
 
 ITER_LINE = re.compile(
     r"iter=(?P<iter>\d+) frame=(?P<frame>\d+) scene_frame=(?P<scene_frame>\d+) "
@@ -120,6 +125,7 @@ def capture(
     env = os.environ.copy()
     env.update(
         TRAJ_OUT=str(prefix),
+        PENTA_STATE_FILE=str(state.resolve()),
         TRAJ_SCENE=str(BOSSES[target].scene),
         TRAJ_WARMUP=str(warmup),
         TRAJ_FRAMES=str(frames),
@@ -140,7 +146,7 @@ def capture(
     )
     process = subprocess.Popen(
         [
-            str(MGBA), "--fastforward", "-t", str(state),
+            str(MGBA), "--fastforward",
             "-C", f"savegamePath={runtime_dir}",
             "-C", f"savestatePath={runtime_dir}",
             str(rom), "--script", str(PROBE),
@@ -403,9 +409,13 @@ def main() -> int:
 
     for target in targets:
         name = BOSSES[target].name
+        observation_frames = max(
+            args.frames, MIN_OBSERVATION_FRAMES_BY_TARGET.get(target, 0)
+        )
         row: dict[str, object] = {
             "boss": name,
             "scene": f"{BOSSES[target].scene:02X}",
+            "observation_frames": observation_frames,
         }
         try:
             sides: dict[str, dict[str, object]] = {}
@@ -431,7 +441,7 @@ def main() -> int:
                             / args.output.stem / name / f"{side}-{replay}",
                         target,
                         side_warmup,
-                        args.frames,
+                        observation_frames,
                         args.timeout,
                     )
                     for replay in ("a", "b")
@@ -499,6 +509,9 @@ def main() -> int:
         "warmup_frames": args.warmup,
         "dx_warmup_frames": args.dx_warmup,
         "observation_frames": args.frames,
+        "minimum_observation_frames_by_target": (
+            MIN_OBSERVATION_FRAMES_BY_TARGET
+        ),
         "min_matched_transitions": MIN_MATCHED_TRANSITIONS,
         "original_rom_sha256": sha256(original),
         "dx_rom_sha256": sha256(dx_rom),

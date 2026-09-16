@@ -11,6 +11,7 @@ import shutil
 import subprocess
 from pathlib import Path
 import sys
+import time
 
 from PIL import Image
 
@@ -62,6 +63,9 @@ def run_entry(
     result_path = output / f"{entry}.txt"
     screenshot_path = output / f"{entry}.png"
     stdout_path = output / f"{entry}.stdout.txt"
+    done_path = output / f"{entry}.txt.done"
+    for stale in (result_path, screenshot_path, done_path):
+        stale.unlink(missing_ok=True)
     environment = os.environ.copy()
     environment.update(
         {
@@ -69,14 +73,17 @@ def run_entry(
             "FINAL_SCENE_OUT": str(result_path),
             "FINAL_SCENE_SCREENSHOT": str(screenshot_path),
             "FINAL_SCENE_MAX_FRAMES": str(max_frames),
-            "FINAL_SCENE_ART_ID": "4" if entry == "pre-final" else "5",
+            # The stack-balanced post-final entry lands on Lisa's art 6.
+            # Asking it to hold the earlier dragon art 5 kept injecting A and
+            # could never produce a stable screenshot of this route.
+            "FINAL_SCENE_ART_ID": "4" if entry == "pre-final" else "6",
             "FINAL_SCENE_ATTR_MASKS": attribute_masks,
             "QT_QPA_PLATFORM": "offscreen",
             "SDL_AUDIODRIVER": "dummy",
         }
     )
     with stdout_path.open("w") as stdout:
-        subprocess.run(
+        process = subprocess.Popen(
             [
                 mgba,
                 "--fastforward",
@@ -88,9 +95,29 @@ def run_entry(
             env=environment,
             stdout=stdout,
             stderr=subprocess.STDOUT,
-            timeout=45,
-            check=False,
         )
+        deadline = time.monotonic() + 45
+        stable_size = None
+        stable_polls = 0
+        try:
+            while time.monotonic() < deadline:
+                if done_path.is_file() and screenshot_path.is_file():
+                    size = screenshot_path.stat().st_size
+                    stable_polls = stable_polls + 1 if size == stable_size else 0
+                    stable_size = size
+                    if size > 0 and stable_polls >= 2:
+                        break
+                if process.poll() is not None:
+                    break
+                time.sleep(0.025)
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
     if not result_path.exists():
         raise RuntimeError(
             f"{entry}: mGBA produced no result; see {stdout_path}"
@@ -99,6 +126,10 @@ def run_entry(
     if not screenshot_path.exists():
         raise RuntimeError(
             f"{entry}: mGBA produced no screenshot; see {stdout_path}"
+        )
+    if not done_path.exists():
+        raise RuntimeError(
+            f"{entry}: mGBA produced no completion marker; see {stdout_path}"
         )
     with Image.open(screenshot_path) as image:
         if image.size != (160, 144):
@@ -122,7 +153,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("/tmp/penta-final-cutscene-mgba-gate"),
+        default=PROJECT_ROOT / "tmp/penta-final-cutscene-mgba-gate",
     )
     parser.add_argument(
         "--entry",

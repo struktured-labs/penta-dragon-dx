@@ -94,16 +94,24 @@ bg_table:
         to neutral white/black, avoiding the old five-pixel gray collar.
       tiles: [0x60, 0x70]
 
+    - name: hazard_spike_terminal_caps
+      palette: 5
+      description: |
+        The exact four cap cells at the free and wall ends of the first
+        right-wall cylinder. Pocket and rendered-frame review proved that
+        leaving these cells in the generic support class creates gray end
+        patches around an otherwise red/gold shaft. The wall-side cells retain
+        native art. Free-tip cells 6B/7B use the reviewed diagonal silhouette
+        below so native floor-shade pixels outside the black outline cannot
+        turn into detached yellow artifacts under BG5.
+      tiles: [0x6B, 0x6F, 0x7B, 0x7F]
+
     - name: hazard_spike_support
       palette: 6
       description: |
-        Remaining 60-7F rail, support, and shadow cells. These retain stock
-        art and the stable wall-compatible metallic ramp until a future
-        animation capture proves a more specific material role.
-      tiles: [
-        0x63, 0x6A, 0x6B, 0x6F,
-        0x73, 0x7A, 0x7B, 0x7F
-      ]
+        The four remaining 60-7F cast-shadow/support cells. These retain
+        stock art and the stable wall-compatible metallic ramp.
+      tiles: [0x63, 0x6A, 0x73, 0x7A]
 
     - name: pickup_health_restore
       palette: 1
@@ -201,12 +209,20 @@ stage1_hazard_art:
       tooth: hazard_spike_teeth
       fire_body: hazard_spike_fire_body
       wall_connector: hazard_spike_wall_connector
+      terminal_caps: hazard_spike_terminal_caps
       support: hazard_spike_support
     ring_tiles: [0x6C, 0x6D, 0x7C, 0x7D]
     body_tiles: [0x61, 0x62, 0x6E, 0x71, 0x72, 0x7E]
     connector_row_spans:
       0x60: {0: [5, 8], 1: [4, 8], 2: [3, 8], 3: [3, 8], 4: [2, 8], 5: [2, 8], 6: [2, 8], 7: [2, 8]}
       0x70: {0: [2, 8], 1: [2, 8], 2: [2, 8], 3: [2, 8], 4: [3, 8], 5: [3, 8], 6: [4, 8], 7: [4, 8]}
+    # 6B/7B are the two halves of the free cap. Pixels left of these
+    # diagonals belong to the Dungeon floor pattern, not the hazard. Because
+    # the terminal cell selects BG5, those outside pixels must be neutralized
+    # to index 0 or the native shade-1 pattern becomes a detached yellow trail.
+    terminal_row_spans:
+      0x6B: {0: [7, 8], 1: [6, 8], 2: [5, 8], 3: [4, 8], 4: [3, 8], 5: [2, 8], 6: [1, 8], 7: [0, 8]}
+      0x7B: {0: [0, 8], 1: [1, 8], 2: [2, 8], 3: [3, 8], 4: [4, 8], 5: [5, 8], 6: [6, 8], 7: [7, 8]}
     semantic_base_tiles:
       0x64: 0x01
       0x65: 0x02
@@ -224,11 +240,16 @@ stage1_hazard_art:
       0x79: 0x03
       0x7C: 0x7E
       0x7D: 0x7E
-    environment_remap: [0, 1, 1, 3]
+    # BG7 index 2 is reserved for gold. Map the Dungeon's native shade 2 to
+    # index 3, whose Stage-1-only color is the same dark lavender, so opaque
+    # floor/shadow pixels around teeth reproduce their semantic baselines.
+    # Native black shares that fourth slot; tooth outlines therefore use dark
+    # lavender rather than reintroducing pale square cells.
+    environment_remap: [0, 1, 3, 3]
     # Retained as the reviewed moving-art classification ramp for ring/body
     # tooling. Tooth fills are owned exclusively by tooth_row_spans; pixels
-    # outside those black-outline spans always use environment_remap so a
-    # moving cast shadow can never become a detached gold fleck.
+    # outside those spans always use environment_remap so a moving cast shadow
+    # can never become a detached gold fleck.
     hazard_remap: [2, 2, 2, 3]
     ring_regions:
       0x6C: [0, 4, 8, 8]

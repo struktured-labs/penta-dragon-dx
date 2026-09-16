@@ -1,11 +1,18 @@
 -- Cold-boot Stage 1, play continuously, and prove that every visible tile's
 -- palette attribute matches the ROM's Stage 1 tile table or an exact semantic
--- pickup override derived from the packed room source.
+-- pickup identity derived from the actual rendered tilemap. The older
+-- metatile-coordinate prediction shared the stale sparse writer's bad origin
+-- and could therefore certify the same detached 2x2 artifact it was meant to
+-- reject.
 --
 -- Environment:
 --   STAGE1_BLEED_OUT       output directory
 --   STAGE1_BLEED_FRAMES    actual gameplay frames (default 1200)
 --   STAGE1_BLEED_MODE      right, patrol, vertical, or box (default box)
+--   STAGE1_BLEED_STATE     optional settled Stage-1 diagnostic fixture
+--   STAGE1_BLEED_RUNTIME   exact candidate 41-byte DAD7 helper image
+--   STAGE1_BLEED_PICKUP_STATE_OUT optional current-ROM state saved while a
+--                                 correctly colored pickup is visible
 
 local OUT = assert(os.getenv("STAGE1_BLEED_OUT"))
 local LUT_PATH = assert(os.getenv("STAGE1_BLEED_LUT"))
@@ -13,14 +20,43 @@ local lut_file = assert(io.open(LUT_PATH, "rb"))
 local lut = assert(lut_file:read("*a"))
 lut_file:close()
 assert(#lut == 256)
+local pickup_tiles = {}
+for value in string.gmatch(
+    assert(os.getenv("STAGE1_BLEED_PICKUP_TILES")), "[^,]+") do
+  pickup_tiles[tonumber(value, 16)] = true
+end
 local LIMIT = tonumber(os.getenv("STAGE1_BLEED_FRAMES") or "1200")
 local INPUT_MODE = os.getenv("STAGE1_BLEED_MODE") or "box"
+-- Optional read-only diagnostic snapshots; no restored state or gameplay writes.
+local trace_states = {}
+for value in string.gmatch(os.getenv("STAGE1_BLEED_TRACE_STATES") or "", "[^,]+") do
+  local n = assert(tonumber(value), "invalid diagnostic state frame")
+  assert(n >= 0 and n == math.floor(n), "invalid diagnostic state frame")
+  trace_states[n] = true
+end
+local STATE_FILE = os.getenv("STAGE1_BLEED_STATE")
+local RUNTIME_PATH = os.getenv("STAGE1_BLEED_RUNTIME")
+local PICKUP_STATE_OUT = os.getenv("STAGE1_BLEED_PICKUP_STATE_OUT")
+local PICKUP_STATE_SCREENSHOT = os.getenv(
+    "STAGE1_BLEED_PICKUP_STATE_SCREENSHOT")
+local runtime_image = nil
+if STATE_FILE then
+  local runtime_file = assert(io.open(assert(RUNTIME_PATH), "rb"))
+  runtime_image = assert(runtime_file:read("*a"))
+  runtime_file:close()
+  assert(#runtime_image == 41)
+end
 local RESULT = OUT .. "/probe.txt"
 local DONE = OUT .. "/DONE"
 
 local KEY_A, KEY_START = 0x01, 0x08
 local KEY_RIGHT, KEY_LEFT = 0x10, 0x20
 local KEY_UP, KEY_DOWN = 0x40, 0x80
+-- The r534 gameplay loop advances movement about 22 percent more often than
+-- the older 120-frame route did. A 100-frame leg keeps the natural box inside
+-- the same reviewed wall-edge viewport envelope instead of stepping over the
+-- short-lived $30 corner exposure.
+local BOX_LEG_FRAMES = 100
 local EXPECTED_SCENE = 0x02
 local CAPTURE_FRAMES = {
   [120] = true,
@@ -31,14 +67,23 @@ local CAPTURE_FRAMES = {
   [1200] = true,
 }
 
-local frame, phase = 0, "title"
+local frame, phase = 0, STATE_FILE and "state_load" or "title"
+local state_loaded = false
 local seeded, confirmed, finished = false, false, false
 local stable_frames, play_frames = 0, 0
+-- Once the loading latch has observed a stable Stage-1 scene, the gameplay
+-- latch (FFC1) is the authoritative ownership signal.  The scene byte can
+-- transiently read 00 for a couple of callbacks while the native publisher is
+-- between writes; those callbacks are still Stage-1-owned and must count
+-- toward a short pickup fixture's coverage.
+local stage_latch_owned = false
 local sampled_frames, checked_cells = 0, 0
 local pal1_cells, unexpected_cells, unsafe_cells = 0, 0, 0
 local unexpected_semantic_pickup_cells, unexpected_floor_cells = 0, 0
+local contextual_mismatch_pairs = {}
 local runtime_lut_mismatch_frames, runtime_lut_mismatch_cells = 0, 0
 local runtime_lut_mismatch_max = 0
+local runtime_lut_mismatch_pairs = {}
 local runtime_lut_dma_unreadable_frames = 0
 local first_runtime_lut_dma_unreadable = ""
 local first_runtime_lut_mismatch_frame = -1
@@ -49,6 +94,8 @@ local first_unexpected_floor_frame = -1
 local first_unexpected_floor_details = ""
 local scene_frames, active_frames = 0, 0
 local compiler_unreadable_scene_frames = 0
+local scene_histogram = {}
+local first_non_stage_scene_frame, first_non_stage_scene = -1, -1
 local previous_scx, previous_scy = -1, -1
 local scroll_changes, scx_changes, scy_changes = 0, 0, 0
 local previous_source_signature, source_signature_changes = -1, 0
@@ -68,12 +115,17 @@ local layout_records, layout_seen = {}, {}
 local debug_destination = 0
 local packed_signatures
 local pickup_rect_history, oam_rect_history = {}, {}
-local PICKUP_METATILE_PALETTES = {
-  4, 4, 4, 4, 4, 5, 5, 5,
-  1, 1, 1, 3, 3, 4, 4, 4,
-  0, 0, 2, 5, 2, 2, 5, 2,
-}
 local last_semantic_pickup_cells = {}
+local pickup_state_saved = false
+
+local function is_stage1_scene(scene)
+  -- Live Gargoyle combat publishes $0A while retaining Stage-1 streaming,
+  -- pickups, walls, and hazards. Treat it as Stage 1 exactly as the ROM's
+  -- attribute decider does instead of silently ending coverage at miniboss.
+  -- Low-health scene $0B is a deliberate Stage-1 alias selected by DD06;
+  -- its bit pattern is not covered by the ordinary $F7 mask.
+  return (scene & 0xF7) == EXPECTED_SCENE or scene == 0x0B
+end
 
 local function read_register(name)
   local readers = {
@@ -89,10 +141,32 @@ local function read_register(name)
   return -1
 end
 
-local function compiler_scene_unreadable(pc)
+local function private_scene_unreadable(pc)
+  -- D880 is only the Stage-1 scene byte while SVBK selects WRAM bank 1.
+  -- The room compiler temporarily owns bank 3, as does r535/r536's exact
+  -- menu-close tail at bank 31:$7400-$7421.  A frame callback landing in
+  -- either bounded routine must not interpret bank-3 D880 as a scene change.
   return (emu:read8(0xFF70) & 0x07) == 0x03
     and ((pc >= 0x42A7 and pc <= 0x436D)
-      or (pc >= 0xD400 and pc <= 0xD478))
+      or (pc >= 0xD400 and pc <= 0xD478)
+      or (pc >= 0x7400 and pc <= 0x7421))
+end
+
+if os.getenv("STAGE1_BLEED_TRACE_WRITERS") == "1" then
+  local trace = assert(io.open(OUT .. "/attribute-writers.tsv", "w"))
+  for _, address in ipairs({0x9948, 0x9949, 0x9D48, 0x9D49, 0xFF55,
+                            0xC298, 0xC299, 0xDF53, 0xDF57}) do
+    local watched = address
+    assert(emu:setWatchpoint(function(info)
+      if play_frames < 4190 or play_frames > 4235 then return end
+      trace:write(string.format("%d\t%04X\t%04X\t%02X\t%d\t%d\t%02X\t%02X\t%04X\t%04X\n",
+        play_frames, watched, read_register("PC"), emu:read8(0xFF99),
+        emu:read8(0xFF4F) & 1, emu:read8(0xFF70) & 7,
+        info.oldValue & 255, info.newValue & 255,
+        read_register("HL"), read_register("DE")))
+      trace:flush()
+    end, watched, C.WATCHPOINT_TYPE.WRITE) > 0)
+  end
 end
 
 local function semantic_pickup_cells()
@@ -105,23 +179,17 @@ local function semantic_pickup_cells()
     if source == 0xFFFF then return last_semantic_pickup_cells end
     return cells
   end
-  for row = 0, 9 do
-    for column = 0, 10 do
-      local metatile = emu:read8(source + row * 16 + column)
-      if metatile >= 0xD7 then metatile = metatile - 0xB1 end
-      local index = metatile - 0x26
-      if index >= 0 and index < #PICKUP_METATILE_PALETTES then
-        local palette = PICKUP_METATILE_PALETTES[index + 1]
-        if palette ~= 0 then
-          local offset = row * 64 + column * 2
-          cells[offset] = palette
-          cells[offset + 1] = palette
-          cells[offset + 32] = palette
-          cells[offset + 33] = palette
-        end
-      end
+  local old_vbk = emu:read8(0xFF4F)
+  local lcdc = emu:read8(0xFF40)
+  local base = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
+  emu:write8(0xFF4F, 0)
+  for offset = 0, 0x3FF do
+    local tile = emu:read8(base + offset)
+    if pickup_tiles[tile] then
+      cells[offset] = string.byte(lut, tile + 1) & 0x07
     end
   end
+  emu:write8(0xFF4F, old_vbk)
   last_semantic_pickup_cells = cells
   return cells
 end
@@ -240,8 +308,7 @@ local function scan_visible()
       emu:write8(0xFF4F, 1)
       local attr = emu:read8(address)
       local palette = attr & 0x07
-      local expected = pickup_cells[address - base]
-          or (string.byte(lut, tile + 1) & 0x07)
+      local expected = string.byte(lut, tile + 1) & 0x07
       hist[palette + 1] = hist[palette + 1] + 1
       checked_cells = checked_cells + 1
       if palette == 1 then
@@ -257,6 +324,9 @@ local function scan_visible()
               unexpected_semantic_pickup_cells + 1
         else
           unexpected_floor_cells = unexpected_floor_cells + 1
+          local pair_key = string.format("%02X/%d/%d", tile, palette, expected)
+          contextual_mismatch_pairs[pair_key] =
+              (contextual_mismatch_pairs[pair_key] or 0) + 1
           if first_unexpected_floor_frame < 0 then
             first_unexpected_floor_frame = play_frames
             first_unexpected_floor_details = string.format(
@@ -294,6 +364,7 @@ end
 local function scan_runtime_lut()
   local mismatches = 0
   local details = {}
+  local frame_pairs = {}
   local ff_reads = 0
   for tile = 0, 255 do
     local raw = emu:read8(0xC600 + tile)
@@ -302,6 +373,8 @@ local function scan_runtime_lut()
     local expected = string.byte(lut, tile + 1) & 0x07
     if actual ~= expected then
       mismatches = mismatches + 1
+      local pair_key = string.format("%02X/%d/%d", tile, actual, expected)
+      frame_pairs[pair_key] = (frame_pairs[pair_key] or 0) + 1
       if #details < 32 then
         details[#details + 1] = string.format(
           "t%02X,p%d,e%d", tile, actual, expected)
@@ -327,6 +400,10 @@ local function scan_runtime_lut()
           dma_source)
       end
       return
+    end
+    for key, count in pairs(frame_pairs) do
+      runtime_lut_mismatch_pairs[key] =
+          (runtime_lut_mismatch_pairs[key] or 0) + count
     end
     runtime_lut_mismatch_frames = runtime_lut_mismatch_frames + 1
     runtime_lut_mismatch_cells = runtime_lut_mismatch_cells + mismatches
@@ -412,17 +489,31 @@ end
 local function finish()
   if finished then return end
   finished = true
+  local contextual_pairs = {}
+  for key, count in pairs(contextual_mismatch_pairs) do
+    contextual_pairs[#contextual_pairs + 1] = key .. ":" .. tostring(count)
+  end
+  table.sort(contextual_pairs)
+  local runtime_pairs = {}
+  for key, count in pairs(runtime_lut_mismatch_pairs) do
+    runtime_pairs[#runtime_pairs + 1] = key .. ":" .. tostring(count)
+  end
+  table.sort(runtime_pairs)
   local handle = assert(io.open(RESULT, "w"))
   handle:write(string.format("frames=%d\n", play_frames))
   handle:write(string.format("sampled_frames=%d\n", sampled_frames))
   handle:write(string.format("checked_cells=%d\n", checked_cells))
   handle:write(string.format("pal1_cells=%d\n", pal1_cells))
+  handle:write(string.format(
+    "pickup_state_saved=%d\n", pickup_state_saved and 1 or 0))
   handle:write(string.format("unexpected_cells=%d\n", unexpected_cells))
   handle:write(string.format(
     "unexpected_semantic_pickup_cells=%d\n",
     unexpected_semantic_pickup_cells))
   handle:write(string.format(
     "unexpected_floor_cells=%d\n", unexpected_floor_cells))
+  handle:write(
+    "contextual_mismatch_pairs=" .. table.concat(contextual_pairs, ",") .. "\n")
   handle:write(string.format("unsafe_cells=%d\n", unsafe_cells))
   handle:write(string.format(
     "runtime_lut_mismatch_frames=%d\n", runtime_lut_mismatch_frames))
@@ -430,6 +521,8 @@ local function finish()
     "runtime_lut_mismatch_cells=%d\n", runtime_lut_mismatch_cells))
   handle:write(string.format(
     "runtime_lut_mismatch_max=%d\n", runtime_lut_mismatch_max))
+  handle:write(
+    "runtime_lut_mismatch_pairs=" .. table.concat(runtime_pairs, ",") .. "\n")
   handle:write(string.format(
     "runtime_lut_dma_unreadable_frames=%d\n",
     runtime_lut_dma_unreadable_frames))
@@ -451,6 +544,19 @@ local function finish()
     "first_unexpected_floor_details=" ..
     first_unexpected_floor_details .. "\n")
   handle:write(string.format("scene_frames=%d\n", scene_frames))
+  local scene_histogram_rows = {}
+  for value = 0, 255 do
+    if scene_histogram[value] then
+      scene_histogram_rows[#scene_histogram_rows + 1] =
+        string.format("%02X:%d", value, scene_histogram[value])
+    end
+  end
+  handle:write(
+    "scene_histogram=" .. table.concat(scene_histogram_rows, ",") .. "\n")
+  handle:write(string.format(
+    "first_non_stage_scene_frame=%d\n", first_non_stage_scene_frame))
+  handle:write(string.format(
+    "first_non_stage_scene=%d\n", first_non_stage_scene))
   handle:write(string.format(
     "compiler_unreadable_scene_frames=%d\n",
     compiler_unreadable_scene_frames))
@@ -468,7 +574,9 @@ local function finish()
   handle:write(string.format("final_svbk=%d\n", emu:read8(0xFF70)))
   handle:write(string.format(
     "final_compiler_unreadable=%d\n",
-    compiler_scene_unreadable(final_pc) and 1 or 0))
+    -- Keep the v6 field name for receipt compatibility; it now covers the
+    -- second exact private-WRAM owner documented by private_scene_unreadable.
+    private_scene_unreadable(final_pc) and 1 or 0))
   handle:write(string.format("debug_copy_hits=%d\n", debug_copy_hits))
   handle:write(string.format("debug_atomic_hits=%d\n", debug_atomic_hits))
   handle:write(string.format("debug_pure_hits=%d\n", debug_pure_hits))
@@ -568,6 +676,26 @@ end
 
 callbacks:add("frame", function()
   if finished then return end
+  if STATE_FILE and not state_loaded then
+    local ok, result = pcall(function()
+      return emu:loadStateFile(STATE_FILE)
+    end)
+    assert(ok and result ~= false, "failed to load Stage-1 diagnostic fixture")
+    -- Savestates serialize DA00-DAFF. Install only the candidate's exact
+    -- Stage-1 decision helper; invalidating the broad cold sentinel is not
+    -- sufficient in a stationary fixture because no owner is required to
+    -- revisit the one-time installer before the measurement starts.
+    for offset = 0, #runtime_image - 1 do
+      emu:write8(0xDAD7 + offset, string.byte(runtime_image, offset + 1))
+    end
+    emu:write8(0xDF53, 0xFF)
+    emu:write8(0xDF57, 0xFF)
+    state_loaded = true
+    seeded, confirmed = true, true
+    phase = "loading"
+    frame = 0
+    return
+  end
   frame = frame + 1
   if not seeded and frame >= 100 then seed_sram(); seeded = true end
 
@@ -583,7 +711,7 @@ callbacks:add("frame", function()
     if frame >= 341 and frame < 347 then keys = keys | KEY_START end
     if frame >= 391 and frame < 397 then keys = keys | KEY_A end
     emu:setKeys(keys)
-    if emu:read8(0xD880) == EXPECTED_SCENE
+    if is_stage1_scene(emu:read8(0xD880))
         and emu:read8(0xFFC1) == 1 then
       confirmed = true
       phase = "loading"
@@ -600,11 +728,12 @@ callbacks:add("frame", function()
   if phase == "loading" then
     emu:write8(0xFFBA, 0)
     emu:setKeys(0)
-    if emu:read8(0xD880) == EXPECTED_SCENE
+    if is_stage1_scene(emu:read8(0xD880))
         and emu:read8(0xFFC1) == 1 then
       stable_frames = stable_frames + 1
       if stable_frames >= 120 then
         phase = "play"
+        stage_latch_owned = true
         previous_scx = emu:read8(0xFF43)
         previous_scy = emu:read8(0xFF42)
       end
@@ -618,8 +747,15 @@ callbacks:add("frame", function()
   play_frames = play_frames + 1
   local scene_pc = read_register("PC")
   local scene = emu:read8(0xD880)
-  local compiler_unreadable = compiler_scene_unreadable(scene_pc)
-  if scene == EXPECTED_SCENE or compiler_unreadable then
+  scene_histogram[scene] = (scene_histogram[scene] or 0) + 1
+  local compiler_unreadable = private_scene_unreadable(scene_pc)
+  if not is_stage1_scene(scene) and first_non_stage_scene_frame < 0 then
+    first_non_stage_scene_frame = play_frames
+    first_non_stage_scene = scene
+  end
+  if is_stage1_scene(scene) or compiler_unreadable
+      or (stage_latch_owned and scene == 0x00
+          and emu:read8(0xFFC1) == 1) then
     scene_frames = scene_frames + 1
   end
   if compiler_unreadable then
@@ -629,12 +765,24 @@ callbacks:add("frame", function()
   if emu:read8(0xFFC1) == 1 then active_frames = active_frames + 1 end
 
   local movement
-  if INPUT_MODE == "patrol" then
-    movement = ((play_frames % 240) < 120) and KEY_RIGHT or KEY_LEFT
-  elseif INPUT_MODE == "vertical" then
-    movement = ((play_frames % 240) < 120) and KEY_DOWN or KEY_UP
-  elseif INPUT_MODE == "box" then
-    local leg = math.floor((play_frames % 480) / 120)
+  if trace_states[play_frames] then
+    assert(emu:saveStateFile(string.format("%s/diagnostic-%04d.ss0", OUT, play_frames)) ~= false)
+  end
+  local route_mode, route_frame = INPUT_MODE, play_frames
+  if INPUT_MODE == "vertical-box" then
+    if play_frames < 3600 then
+      route_mode = "vertical"
+    else
+      route_mode, route_frame = "box", play_frames - 3600
+    end
+  end
+  if route_mode == "patrol" then
+    movement = ((route_frame % 240) < 120) and KEY_RIGHT or KEY_LEFT
+  elseif route_mode == "vertical" then
+    movement = ((route_frame % 240) < 120) and KEY_DOWN or KEY_UP
+  elseif route_mode == "box" then
+    local leg = math.floor(
+      (route_frame % (4 * BOX_LEG_FRAMES)) / BOX_LEG_FRAMES)
     if leg == 0 then movement = KEY_RIGHT
     elseif leg == 1 then movement = KEY_DOWN
     elseif leg == 2 then movement = KEY_LEFT
@@ -695,6 +843,21 @@ callbacks:add("frame", function()
   end
   local current_pickups = active_pickup_rects()
   local current_oam = active_oam_rects()
+  if PICKUP_STATE_OUT and not pickup_state_saved
+      and frame_pal1 > 0 and frame_unexpected == 0 and frame_unsafe == 0
+      and current_pickups ~= ""
+      and emu:read8(0xFF55) == 0xFF
+      and (emu:read8(0xFF4F) & 0x01) == 0
+      and (emu:read8(0xFF70) & 0x07) == 1 then
+    local ok, result = pcall(function()
+      return emu:saveStateFile(PICKUP_STATE_OUT)
+    end)
+    assert(ok and result ~= false, "failed to save current-ROM pickup state")
+    if PICKUP_STATE_SCREENSHOT then
+      emu:screenshot(PICKUP_STATE_SCREENSHOT)
+    end
+    pickup_state_saved = true
+  end
   local past_pickups = recent_rectangles(
     pickup_rect_history, current_pickups)
   local past_oam = recent_rectangles(oam_rect_history, current_oam)

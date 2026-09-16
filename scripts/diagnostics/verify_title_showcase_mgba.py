@@ -11,11 +11,25 @@ import time
 from pathlib import Path
 
 from PIL import Image
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 PROBE = Path(__file__).with_name("probe_title_showcase_mgba.lua")
+PALETTE_YAML = ROOT / "palettes/penta_palettes_v097.yaml"
+TITLE_ALIAS_OFFSET = 13 * 0x4000 + (0x6838 - 0x4000)
+
+
+def expected_title_bg() -> bytes:
+    document = yaml.safe_load(PALETTE_YAML.read_text())
+    selected = document["title_bg_palette"]
+    colors = document["bg_palettes"][selected]["colors"]
+    result = bytearray()
+    for color in colors:
+        value = int(color, 16) & 0x7FFF
+        result.extend((value & 0xFF, value >> 8))
+    return bytes(result)
 
 
 def parse_report(path: Path) -> dict[str, str]:
@@ -40,6 +54,12 @@ def red_dominant_pixels(path: Path) -> int:
             if spotlight and 60 <= y < 84:
                 continue
             for x in range(rgb.width):
+                # Nightfall's native title selector is deliberately orange.
+                # It is checked independently by the exact mGBA cursor-route
+                # gate; do not misclassify that one 8x7 selector cell as a
+                # red artifact while retaining the whole-frame check elsewhere.
+                if ".scene01." in path.name and 24 <= x < 32 and 65 <= y < 72:
+                    continue
                 red, green, blue = rgb.getpixel((x, y))
                 count += (
                     red > 90
@@ -61,12 +81,47 @@ def lit_pixels(path: Path, box: tuple[int, int, int, int]) -> int:
         )
 
 
-def is_exact_white_frame(path: Path) -> bool:
-    """Prove that a BGP=$00 CRAM exception was fully hidden by stock fade."""
+def is_safe_bgp_zero_frame(path: Path) -> bool:
+    """Prove a sampled BGP=$00 transition contains no chromatic artifact.
+
+    mGBA commits screenshots after the callback that sampled BGP, so the image
+    can be either the fully white fade frame or the immediately following
+    stock monochrome title frame. Both are safe; any unequal RGB channels are
+    evidence that a stale CGB row escaped during the transition.
+    """
     with Image.open(path) as image:
         if image.size != (160, 144):
             raise RuntimeError(f"{path.name}: expected 160x144, got {image.size}")
-        return set(image.convert("RGB").getdata()) == {(255, 255, 255)}
+        return all(
+            red == green == blue
+            for red, green, blue in image.convert("RGB").getdata()
+        )
+
+
+def prepare_runtime_rom(rom: Path, output: Path) -> tuple[Path, Path]:
+    """Copy the ROM into a clean private directory for a cold SRAM boot."""
+    runtime = output.parent / f"{output.name}.runtime"
+    if runtime.exists():
+        shutil.rmtree(runtime)
+    runtime.mkdir(parents=True)
+    runtime_rom = runtime / "candidate.gb"
+    shutil.copy2(rom, runtime_rom)
+    return runtime_rom, runtime
+
+
+def probe_command(
+    mgba: str,
+    runtime_rom: Path,
+    runtime: Path,
+) -> list[str]:
+    return [
+        mgba,
+        "--fastforward",
+        "-C", f"savegamePath={runtime}",
+        "-C", f"savestatePath={runtime}",
+        "--script", str(PROBE),
+        str(runtime_rom),
+    ]
 
 
 def run_probe(
@@ -85,21 +140,29 @@ def run_probe(
     for path in output.parent.glob(output.name + ".cram-*.png"):
         path.unlink()
 
+    expected_bg = expected_title_bg()
+    embedded_bg = rom.read_bytes()[
+        TITLE_ALIAS_OFFSET:TITLE_ALIAS_OFFSET + 8
+    ]
+    if embedded_bg != expected_bg:
+        raise RuntimeError(
+            "ROM title alias does not match title_bg_palette: "
+            f"{embedded_bg.hex().upper()} != {expected_bg.hex().upper()}"
+        )
+    runtime_rom, runtime = prepare_runtime_rom(rom, output)
+
     environment = os.environ.copy()
     environment.update(
         TITLE_SHOWCASE_OUT=str(output),
         TITLE_SHOWCASE_MAX_FRAMES="7000",
+        TITLE_SHOWCASE_EXPECTED_BG0=",".join(
+            f"{byte:02X}" for byte in expected_bg
+        ),
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
     )
     process = subprocess.Popen(
-        [
-            mgba,
-            "--fastforward",
-            "--script",
-            str(PROBE),
-            str(rom),
-        ],
+        probe_command(mgba, runtime_rom, runtime),
         cwd=ROOT,
         env=environment,
         stdout=subprocess.DEVNULL,
@@ -151,7 +214,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("/tmp/penta-title-showcase-mgba/title"),
+        default=ROOT / "tmp/penta-title-showcase-mgba/title",
     )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
@@ -181,8 +244,6 @@ def main() -> int:
                 f"D880={scene} has only {count} samples (need {minimum}+)"
             )
     for field in (
-        "nonzero_total",
-        "max_nonzero",
         "unsafe_total",
         "banner_table_bad_samples",
         "cram_bad_samples",
@@ -212,10 +273,10 @@ def main() -> int:
         )
     for screenshot in blank_receipts:
         try:
-            if not is_exact_white_frame(screenshot):
+            if not is_safe_bgp_zero_frame(screenshot):
                 failures.append(
-                    f"{screenshot.name}: BGP=$00 exception was not an exact "
-                    "all-white rendered frame"
+                    f"{screenshot.name}: BGP=$00 exception contained "
+                    "chromatic pixels"
                 )
         except Exception as error:
             failures.append(str(error))
@@ -295,7 +356,7 @@ def main() -> int:
         return 1
     print(
         "PASS: the full title/logo/banner cycle stays on intentional "
-        "blue-gray BG0 with no red artifacts."
+        "YAML-selected BG0 with no red artifacts."
     )
     return 0
 

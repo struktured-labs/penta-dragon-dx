@@ -18,7 +18,7 @@ Features & Fixes:
 8. **Release-safe inputs** — removes the unstable SELECT+START IRQ stack
    redirect while retaining scene-aware palettes, lava, and level-select setup.
 9. **Intentional title colors** — routes title attrs to palette 0 and safely
-   reloads its blue-gray ramp after the game's partial cold-boot CRAM writes.
+   reloads the YAML-selected title ramp after partial cold-boot CRAM writes.
 10. **Vanilla stage-intro timing** — bypasses the heavy colorizer while the
     all-palette-0 `STAGE XX` splash is active so its LCD-mode wait sees every
     VBlank instead of stretching the 100-frame ditty across several loops.
@@ -31,9 +31,9 @@ Features & Fixes:
 13. **ROM-native story palettes** — colors committed OPENING/final-story art
     above a neutral dialogue frame and colors the guarded credits, END, and
     epilogue pages without changing their stock control flow.
-14. **Death/game-over containment** — clears stale arena attributes from both
-    tilemaps over seven bounded VBlanks before the stock GAME OVER window
-    appears, so the neutral DMG-authored cinematic cannot inherit boss colors.
+14. **Death/game-over containment** — preserves the complete stock defeated-
+    boss illustration and makes every safe BG palette ID resolve to one
+    coherent, YAML-tuneable cinematic ramp through the GAME OVER transition.
 """
 import argparse
 import hashlib
@@ -75,18 +75,21 @@ from build_v301_gdma import (
 from build_v301_teleport import (
     _table_from_dict, build_scene_detect, build_lava_override,
     build_obj_pal_table,
-    build_levelsel_attr_clear_stub,
     ARENA_TILE_PAL, FOOTPRINT_LOG, ARENA_ORDER,
     _bg_table_shalamar, _bg_table_riff, _bg_table_crystal_dragon,
     _bg_table_cameo, _bg_table_ted, _bg_table_troop,
     _bg_table_faze, _bg_table_angela, _bg_table_penta_dragon,
     SPLASH_TABLE_ADDR,
-    LEVELSEL_STUB_ROM_ADDR, LEVELSEL_STUB_WRAM, LEVELSEL_PATCH_ADDR,
+    LEVELSEL_PATCH_ADDR,
 )
 from stage1_hazard_art import (
     apply_stage1_hazard_variants,
     load_stage1_hazard_config,
     load_stage1_hazard_palette,
+)
+from stage1_hazard_semantic_row import (
+    HELPER_BANK as STAGE1_HAZARD_SEMANTIC_ROW_BANK,
+    HELPER_ENTRY as STAGE1_HAZARD_SEMANTIC_ROW_ADDR,
 )
 from cutscene_region_palettes import (
     ART_COLUMNS as CUTSCENE_ART_COLUMNS,
@@ -116,9 +119,25 @@ BG_SWEEP_ADDR = 0x6CD0
 WRAM_BG_TABLE = 0xC600
 COLORIZE_ADDR = 0x6E00
 COLORIZE_PRELUDE_ADDR = 0x6E80
+# The save-present GAME START transition must not execute from fixed WRAM.
+# $C780-$CFFF is the native dungeon template and the historical $CFAA copy
+# deterministically replaced Stage 1 metatile $0E with opcode $EA.  The
+# unreachable padding at the end of the bank-13 prelude is large enough for
+# the transition helper, so keep every executable byte in ROM.  Its front
+# occupies the retired 36-byte bank-13 source slot; its short continuation
+# occupies unreachable prelude tail padding.
+LEVELSEL_ROM_ENTRY_ADDR = 0x53C2
+LEVELSEL_ROM_ENTRY_END = 0x53E6
+LEVELSEL_ROM_TAIL_ADDR = 0x6EFE
+LEVELSEL_ROM_STOCK_TAIL_ADDR = LEVELSEL_ROM_TAIL_ADDR + 3
+LEVELSEL_START_PATCH_ADDR = 0x3B3A
+LEVELSEL_START_CONT_ADDR = 0x3B42
 TITLE_PALETTE_FIX_ADDR = 0x6A60
-TITLE_PALETTE_COPY_HELPER_ADDR = 0x6A52
-WINDOW_ATTR_CLEAR_HELPER_ADDR = 0x6F0F
+TITLE_PALETTE_COPY_HELPER_ADDR = 0x6A57
+# Eight unreachable zero bytes in the death fade's tail padding hold the
+# shared 20-cell Window row clearer, freeing the prelude tail for the
+# ROM-resident level-select continuation.
+WINDOW_ATTR_CLEAR_HELPER_ADDR = 0x69E8
 TITLE_DELAY_ADDR = 0x7DFC
 TITLE_PALETTE_SOURCE_ADDR = 0x6800
 NATIVE_BG0_ALIAS_ADDR = TITLE_PALETTE_SOURCE_ADDR + 0x38
@@ -159,6 +178,10 @@ OBJ_PAL_TABLE_ADDR = 0x6B00
 ATTRACT_OBJ_COLORIZER_ADDR = 0x6B00
 DEATH_LATE_FIX_ADDR = 0x6B60
 ATTRACT_PICKUP_SWEEP_STUB_ADDR = 0x6B56
+# An END-only tile cleanup fits between the death tail and room repair after
+# the dialogue sentinel was inlined into its one caller.
+ENDING_FOOTER_CLEAR_FRONT_ADDR = 0x6B6D
+STORY_ROW_INCREMENT_HELPER_ADDR = 0x6B7B
 # The title wrapper is cycle-locked to the stock menu input phase.  Keep its
 # per-frame glyph call byte-for-byte stable and put expanded transition-only
 # work in the reclaimed position-sweep region instead.
@@ -166,6 +189,19 @@ TITLE_TRANSITION_SERVICE_ADDR = 0x7CFC
 # The retired gameplay OBJ scan is explicitly cleared through $6A6F. Keep the
 # gameplay-only hardware-Window guard in its free tail below the title helper.
 STALE_WINDOW_CLEANUP_ADDR = 0x6A40
+MENU_CLOSE_NATIVE_REPAIR_ADDR = 0x77A8
+# The item-menu map chooser is in fixed bank 0.  Its stock-width prefix used
+# DC0B, but that software publication selector can lag the map already shown
+# by LCDC during menu entry.  Postcomputed Stage 1 must choose the Window map
+# opposite the *live* BG map so a dirty Window tilemap never becomes visible
+# gameplay for a frame.
+MENU_LIVE_MAP_SELECTOR_ADDR = 0x200E
+MENU_LIVE_MAP_SELECTOR_PREIMAGE = bytes.fromhex("FA 0B DC A7")
+MENU_LIVE_MAP_SELECTOR = bytes.fromhex("F0 40 CB 5F")
+MENU_LIVE_MAP_SELECTOR_TAIL = bytes.fromhex(
+    "28 0C 21 00 98 F0 40 CB B7 E0 40 C3 29 20 "
+    "21 00 9C F0 40 CB F7 E0 40"
+)
 # The former attract-row helper slot and the exact gap after the YAML OBJ LUT
 # initializer are both in the explicitly retired $7B00-$7DFF position-map
 # allocation. Split the cutscene scheduler across them so the entire 18-byte
@@ -188,6 +224,7 @@ BASE_SHADOW_MAIN_ADDR = 0x69D0
 # tile colorizer. The GAME OVER fade uses it for bounded BG0 steps plus an
 # all-white fill during the stock fully blank transition phase.
 DEATH_FADE_HELPER_ADDR = BASE_SHADOW_MAIN_ADDR
+DEATH_BOSS_PALETTE_HELPER_ADDR = DEATH_FADE_HELPER_ADDR + 0x22
 # The exact 36-byte gap after death-tail containment holds the cycle-exact room
 # repair instead of truncating it into the Stage 7 source at $7C4D.
 ROOM_BG_REPAIR_ADDR = 0x6B80
@@ -203,6 +240,10 @@ CRYSTAL_DRAGON_SCENE = 0x0E
 # The former $6F35 placement left an unused gap after the uniform-clear helper.
 # Reclaim it for an inline palette scheduler so idle VBlanks avoid a CALL.
 WRAPPER_ADDR = 0x6F1D
+# The cadence-preserving BG-sweep selector is two bytes wider than the retired
+# death-only gate. Keep the epilogue named explicitly so the defeated-boss
+# fast exit lands on POP HL after that selector, never inside its final CALL.
+WRAPPER_RESTORE_ADDR = 0x6F8C
 NATIVE_DMG_FADE_SITE = 0x0F5E
 # The stock damage/effect animator cycles the global DMG BG mapping through
 # $90/$E4/$F9.  On CGB that remaps the entire already-colorized background,
@@ -292,19 +333,41 @@ STAGE1_SCROLL_TILE_Y_CACHE_ADDR = 0xDF7D
 # Three title-delay bytes plus the 18-byte readiness/demo dispatcher occupy
 # $3482-$3496. The adjacent twelve-byte wrapper ends at the fixed boundary.
 STAGE1_ATOMIC_WRAP_ADDR = INLINE_ATTR_DECISION_HELPER_ADDR + 21
-# The production inline copier ends at $4364, leaving an exact nine-byte
-# bank-1 tail. Move the atomic wrapper's IE/RETI epilogue there so the fixed
-# entry can reload D880 before its completion mapper. The layered v65 lineage
-# reached $0842 with A=$01 and silently RET C'd before all arena post-copy
-# services.
-STAGE1_ATOMIC_WRAP_TAIL_ADDR = 0x4365
+# The buffered copier now runs its completed-map semantic owner on both pure
+# and dirty publications and ends at $4367.  The fixed wrapper preloads the
+# caller's saved IE byte before jumping into the remaining six-byte epilogue
+# at $4368; this preserves the exact old completion ABI without overlapping
+# executable bytes.
+STAGE1_ATOMIC_WRAP_TAIL_ADDR = 0x4368
+# The RST $30 vector is an unconditional three-byte jump. No stock CALL/JP
+# target names any byte in its five-byte fallthrough tail ($0033-$0037), so
+# that unreachable padding can hold the death transition's map-publication
+# leaf without borrowing another bank-1 cave.
+DEATH_FINAL_PUBLISH_FIXED_ADDR = 0x0033
+# The cached-Ted experiment previously reserved this asserted-zero bank-1
+# tail but never installed code there. Production now uses all nine bytes to
+# preserve BC/DE around the native-width death-map publication. That keeps
+# the stock transition ABI intact while HL remains disposable: the transition
+# and its next stock instruction both replace HL immediately afterward.
+DEATH_FINAL_PUBLISH_RETURN_ADDR = 0x7CAE
+DEATH_TRANSITION_ADDR = 0x4A44
+# Production bank 13 leaves these two cached-Ted payload fragments empty; the
+# expanded release moves Ted's private runtime to bank 16. Reuse the guarded
+# fragments for the Shalamar-only death viewport without touching arena LUTs.
+DEATH_SHALAMAR_VIEWPORT_FRONT_ADDR = 0x6530
+DEATH_SHALAMAR_VIEWPORT_TAIL_ADDR = 0x623C
+# Expanded production leaves the Ted publication-entry cave at $5830 empty
+# because Ted executes from its private expansion bank. Reuse fourteen of its
+# eighteen asserted-zero bytes for a Stage-card-only guard; non-expanded
+# builds retain their existing owner and never enable this path. Do not use
+# $6FFF: a multi-byte helper there crosses into the Stage-1 LUT at $7000.
+STAGE_CARD_HANDOFF_GATE_ADDR = 0x5830
 NATIVE_DMG_FADE_DISPATCH_ADDR = 0x10D5
 STAGE1_DEMO_ATTR_TRAMPOLINE_ADDR = NATIVE_DMG_FADE_DISPATCH_ADDR + 18
 # The retired attract-delay service remains in the fixed cave for historical
 # build reproduction. Current builds branch on DCFD before doing live-room
 # signature work and return DCFD=0 through the pure, stock-width copier.
 STAGE1_DEMO_WAIT_LINE = 96
-LEVELSEL_STUB_MAX = 36
 # Keep a guard gap after the RC3 wrapper while retaining ample room below the
 # 0x7000 dungeon table.
 SCENE_DETECT_ADDR = 0x6F90
@@ -324,6 +387,15 @@ LAVA_OVERRIDE_ADDR = 0x7E00
 # colorizer. Reclaim its pre-palette-extension region for the guarded
 # death/game-over attribute service.
 DEATH_ATTR_DISPATCH_ADDR = 0x7100
+# Shared transition-only hardware-OAM clear inside the fixed death service.
+# Story, ending, splash, and title showcase scenes do not run the gameplay
+# FF80 publisher, so leaving the previous scene's hardware OAM alive exposes
+# a frozen four-quadrant actor over their artwork.
+DEATH_OAM_CLEAR_ADDR = 0x7195
+# Final VBlank gate used by the existing Z/NC call pair. It suppresses the
+# gameplay colorizer during the boss-HP-zero lead-in, before D880 becomes the
+# death scene and before the stock illustration tilemap is assembled.
+DEATH_COLORIZER_GATE_ADDR = 0x7175
 # Compatibility aliases for the retired experimental v303/v304 builders.
 POSSWEEP_ADDR = DEATH_ATTR_DISPATCH_ADDR
 EXPAND_ADDR = 0x6D80
@@ -353,6 +425,8 @@ LAVA_ATTR_STAGE5_SIGNATURE_ADDR = 0x7C13
 DEATH_FADE_NORMAL_ADDR = 0x7C2C
 DEATH_FADE_INTERMEDIATE_ADDR = 0x7C34
 DEATH_FADE_WHITE_ADDR = 0x7C3C
+DEATH_PALETTE_ROW_ADDR = DEATH_FADE_NORMAL_ADDR
+DEATH_GAMEOVER_PALETTE_ROW_ADDR = DEATH_FADE_INTERMEDIATE_ADDR
 OAM_WRAM_COPY_ADDR = 0x7CBF
 OAM_WRAM_COPY_TED_HELPER_CONT_ADDR = 0x5546
 OAM_WRAM_COPY_TAIL_ADDR = 0x575C
@@ -367,9 +441,7 @@ _TED_CACHED_FULL_PLANE_ENV = (
 )
 STAGE1_HAZARD_BANK0_MAP_ADDR = 0x0842
 STAGE1_HAZARD_PURE_MAP_ADDR = 0x10E2
-LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR = (
-    0x0847
-)
+LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR = 0x0847
 # Bank 14's native-zero caves host a demo-only metatile scanner.  It runs once
 # at the stock Stage-1 room-expander return and stamps only actual pickups into
 # both maps; no per-frame tilemap scan or full attribute sweep remains.
@@ -426,7 +498,7 @@ LAVA_ATTR_STAGE5_9C00_META_ADDR = 0xDF57
 # its own scene is active. Scene detection clears them on every Stage 1 entry;
 # its keys can never publish the A7 validity marker consumed later by Stage 5.
 STAGE1_ATTR_CACHE_9800_ADDR = LAVA_ATTR_STAGE5_9800_META_ADDR
-STAGE1_ATTR_CACHE_9C00_ADDR = LAVA_ATTR_STAGE5_9C00_META_ADDR + 1
+STAGE1_ATTR_CACHE_9C00_ADDR = LAVA_ATTR_STAGE5_9C00_META_ADDR
 # Stage 1 owns otherwise-dormant bytes below the pickup scratch page while its
 # copier runs. Keep the caller's IE mask separate from the completed-layout
 # signature used by the native metatile-expander tail hook.
@@ -713,7 +785,6 @@ TED_CACHED_SPARSE_RECORDS_9C_ADDR = 0xD780
 TED_CACHED_ABI_FRONT_ADDR = 0x6E60
 TED_CACHED_ABI_TAIL_ADDR = 0x7027
 TED_CACHED_BANK1_TAIL_ADDR = 0x7C91
-TED_CACHED_BANK1_MAP_ADDR = 0x7CAE
 TED_CACHED_RUNTIME_EXTRA_SOURCE_ADDR = TED_TILE_COMMIT_RUNTIME_ADDR
 TED_CACHED_INSTALL_EXTRA_ADDR = 0x6FFF
 TED_CACHED_GDMA_COMMIT_ADDR = TED_CACHED_INSTALL_EXTRA_ADDR + 12
@@ -743,8 +814,13 @@ STAGE1_HAZARD_ROOM12_WALL_REPAIR_ADDR = 0x6F68
 STAGE1_HAZARD_ROW0_REPAIR_FRONT_ADDR = 0x62C7
 STAGE1_HAZARD_ROW0_REPAIR_MIDDLE_ADDR = 0x6D99
 STAGE1_HAZARD_ROW0_REPAIR_TAIL_ADDR = 0x6DB5
+STAGE1_HAZARD_ROW0_PHASE7_ADDR = 0x6D9E
+STAGE1_HAZARD_SHIFT8_PUBLISHER_ADDR = 0x61A0
+STAGE1_HAZARD_SHIFT8_LEAVES_ADDR = 0x6CEF
 STAGE1_HAZARD_START4_HELPER_ADDR = 0x6B60
 STAGE1_HAZARD_START4_COL5_ADDR = STAGE1_HAZARD_START4_HELPER_ADDR + 4
+# The final 15-byte bank-14 zero tail owns the column-2 publisher and the
+# column-6 classifier tail. Its bank-20 twin also hosts the mapper return.
 STAGE1_HAZARD_START4_EDGE_ADDR = 0x67E4
 STAGE1_HAZARD_ROW_FOLD_ADDR = STAGE1_HAZARD_ROW_COMPILER_ADDR
 STAGE1_HAZARD_ROW_WRITER_ADDR = STAGE1_HAZARD_ROW_COMPILER_ADDR + 7
@@ -753,10 +829,14 @@ STAGE1_HAZARD_ROW_WRITER_ADDR = STAGE1_HAZARD_ROW_COMPILER_ADDR + 7
 # captured desired-palette layouts and stable across every duplicate raw-tile
 # variant in that corpus (Stage 5: 20 layouts/22 variants; Stage 7: 26/28).
 # Keep the claim receipt-bounded: unseen room layouts still require a soak.
-# Collision-free across every distinct Stage-5 lava plane in the committed
-# 8,000-frame, dual-map room-shift trace. The previous five-cell XOR collided
-# after the bank-1 $13BE room shifter moved lava through neutral terrain.
-LAVA_ATTR_STAGE5_SAMPLES = (1, 165, 201)
+# Collision-free across the union of nine archived Stage-5 attr-publication
+# corpora plus the current-ROM 1,200-frame trace: 44 raw layouts / 42 desired
+# planes, with zero semantic collisions and zero false-key variants. The old
+# (1,165,201) key collided at scroll-boundary publications and briefly left
+# health/rare attributes two cells left of their pickup tiles. Keep the lone
+# C3xx sample first, followed by the three C2xx samples: the builder shares H
+# across the latter group so this stronger key still occupies exactly 15 bytes.
+LAVA_ATTR_STAGE5_SAMPLES = (432, 129, 201, 259)
 LAVA_ATTR_STAGE7_SAMPLES = (6, 69, 169, 452)
 # Independent four-cell and three-cell XORs distinguish every semantic
 # attribute layout in the Stage 2-7 streaming corpus while fitting the existing two-byte map
@@ -766,14 +846,15 @@ LAVA_ATTR_STAGE7_SAMPLES = (6, 69, 169, 452)
 # the cached signature every few frames, recreating the always-atomic timing
 # fault. Adjacent 149 is stable across the 720-frame Crystal corpus and keeps
 # the established later-stage layout corpus collision-free.
-# Two independent raw-layout XORs chosen from the deterministic Stage 2-7
-# multi-room corpus plus horizontal/vertical Stage 6 movement.  This six-cell
-# key changes for every observed semantic attribute-plane transition while
-# avoiding the old key's near-every-copy Stage 6 false positives.  Keep the
-# groups separate: the receipt corpus proves this 3+3 partition has no XOR
-# cancellation across any required transition.
-LATER_ATTR_SIGNATURE_A = (15, 83, 230)
-LATER_ATTR_SIGNATURE_B = (250, 337, 433)
+# Two independent raw-layout XORs selected from the deterministic Stage 2-7
+# multi-room corpus. These are the receipt-qualified r8 samples previously
+# overlaid by the Ted payload combiner; emitting them directly keeps production
+# and private payloads identical. Offset 201 extends the second key for the
+# current every-frame corpus and removes six semantic collisions without
+# adding any raw-only variants. The Stage-5 patrol gate remains authoritative
+# for the scrolling pickup-shadow failure that motivated this revision.
+LATER_ATTR_SIGNATURE_A = (444, 149, 19, 251)
+LATER_ATTR_SIGNATURE_B = (0, 59, 333, 201)
 # The shared arena cache key is computed by the expansion-bank helper from
 # ``arena_semantic_key.py``. Crystal and Ted keep their specialized paths.
 PENTA_TILE_RAW_KEY_SAMPLE = 60
@@ -790,16 +871,22 @@ LAVA_ATTR_SCENE_DISPATCH_ADDR = OAM_WRAM_BASE + 0xB9
 # The compact dispatcher ends at DAD7. Stage 1 uses the remaining 41 bytes;
 # the pickup-first atomic setup rides in the resolver-copy gap at DA13.
 STAGE1_ATTR_RUNTIME_ADDR = OAM_WRAM_BASE + 0xD7
+# Buffered Stage 1 uses only the first sixteen bytes of its 41-byte runtime
+# slot. A shared seven-byte post-copy guard lives immediately after it so both
+# pure and dirty completion sites can reject Stage 2-7 without growing the
+# receipt-locked bank-1 copier or paying a ROM-bank switch.
+STAGE1_POSTCOPY_GUARD_WRAM_ADDR = STAGE1_ATTR_RUNTIME_ADDR + 0x10
 # The pickup-first atomic setup rides in the verified resolver-copy gap at
 # DA13 instead of competing with the scene runtimes.
 STAGE1_ATOMIC_SETUP_ADDR = OAM_WRAM_BASE + 0x13
-# SCX XOR DC02 XOR this packed cell distinguishes every desired attribute
-# transition in the natural demo, box-scroll, and low-health/miniboss corpora.
-# It requests 560 publications for 306 real changes across 743 traced copies,
-# instead of degenerating into an every-copy/frame counter. Live long-route,
-# pickup, spike, speed, and natural-attract gates remain the authority beyond
-# those bounded corpora.
-STAGE1_ATTR_TRANSITION_SAMPLES = (49,)
+# The cached Stage-1 publisher keys the two physical maps with DC00's native
+# packed-source phase, SCY/DC02, and packed cell 247. C1A0 can advance while
+# the multi-HBlank tile copier is active, so a content-only key discovers a
+# change too late for the next physical-map flip. DC00 anticipates that update
+# without SCX's feedback-sensitive timing. The six-profile exact-copy corpus
+# has zero missed transitions, and the 3,600-frame rendered gate proves zero
+# pickup/wall attribute mismatches across both scroll axes.
+STAGE1_ATTR_KEY_FEATURES = ("dc00", "scy", "dc02", "raw247")
 # Each reviewed cylinder room owns one packed tooth sample that cycles through
 # all four phases. DC0E supplies the physical-map bit and the room-aware key
 # prevents an equal phase in room $02/$12 from hitting the other room's cache.
@@ -840,13 +927,12 @@ LATER_PICKUP_RARE_ADDR = LATER_PICKUP_HELPER_AUX_ADDR
 LATER_PICKUP_HEALTH_ADDR = LATER_PICKUP_RARE_ADDR + 20
 LATER_PICKUP_ARROW_ADDR = LATER_PICKUP_HELPER_TAIL_ADDR + 24
 DEATH_ATTR_PHASE_ADDR = 0xDF40
-DEATH_ATTR_ACTIVE_ADDR = 0xDF46
 # Keep the established scene cache at DF0D. An attempted move to the retired
 # position-sweep flag at DF46 changed Ted's stock arena timing, proving that the
 # byte is not inert enough to reuse as live scene state.
 SCENE_CACHE_ADDR = 0xDF0D
 ROW_CURSOR_ADDR = DEATH_ATTR_PHASE_ADDR
-POSMAP_FLAG_ADDR = DEATH_ATTR_ACTIVE_ADDR
+POSMAP_FLAG_ADDR = 0xDF46
 POSMAP_SCRATCH_ADDR = 0xDF47
 # The base builder reserves 0x7E40-0x7F3F as a literal 256-byte zero table.
 # The release builder replaces that redundant blob with two routines while
@@ -906,8 +992,6 @@ NATIVE_DIGIT_9_TILE = bytes.fromhex(
 # cache and DF0E cold-boot sentinel, outside that clobber range.
 MENU_WINDOW_SENTINEL = 0xDF0F
 MENU_WINDOW_ATTR_ROWS = 6
-DEATH_FADE_NORMAL = bytes.fromhex("FF7F B556 4A29 0000")
-DEATH_FADE_INTERMEDIATE = bytes.fromhex("FF7F FF7F B556 4A29")
 DEATH_FADE_WHITE = bytes.fromhex("FF7F FF7F FF7F FF7F")
 
 
@@ -1311,7 +1395,12 @@ def build_stage1_vblank_pickup_service(
         STAGE1_PICKUP_SCANNER_ADDR >> 8,
         0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
         BG_SWEEP_COUNT_ADDR >> 8,
-        0xB7,
+        # The private Stage-1 sweep finishes at tagged idle value $80.
+        # Doubling is a one-byte, cycle-identical zero test for both $00 and
+        # $80 while every live native count ($01..$12) and tagged cold count
+        # ($81..$92) remains nonzero. The former OR A kept the heavy colorizer
+        # active forever and shifted rotating-hazard tile/attribute cadence.
+        0x87,                              # ADD A,A
     )
     worker.jr(0x28, "done")
     worker.db(
@@ -1965,10 +2054,10 @@ def build_story_region_classifier(
 ) -> tuple[bytes, bytes, dict[str, int]]:
     """Compile exact YAML story masks into a bounded bank-6 row lookup.
 
-    The runtime writer receives an art ID, row, and five-cell quarter. Seven
-    eight-row pointer slots select one deduplicated row: slot 0 is the
-    neutral dialogue area, slots 1..6 are art IDs 1..6, and stock-equivalent
-    Sara art ID 7 aliases slot 2.  Each row is run-length encoded as
+    The runtime writer receives an art ID, row, and five-cell quarter. Six
+    eight-row pointer slots select one deduplicated row for art IDs 1..6;
+    the neutral dialogue path addresses its row directly, and stock-equivalent
+    Sara art ID 7 aliases art ID 2.  Each row is run-length encoded as
     ``(inclusive_end_column << 3) | palette``; the final run always ends at
     column 19, so no sentinel or rectangle scan is needed. The writer tests
     only the few row runs that touch each quarter, including the most detailed
@@ -1989,7 +2078,11 @@ def build_story_region_classifier(
             if row not in unique_rows:
                 unique_rows.append(row)
 
-    pointer_table_size = 7 * CUTSCENE_ART_ROWS
+    # Neutral rows never enter the pointer lookup, so do not spend eight bytes
+    # on an unreachable slot zero. The lookup bias below lets the existing
+    # art_id * 8 sequence address this compact six-slot table with no added
+    # runtime instruction or timing cost.
+    pointer_table_size = 6 * CUTSCENE_ART_ROWS
     row_data_start = STORY_REGION_CAVE_START_ADDR + pointer_table_size
     row_data = bytearray()
     row_addresses: dict[tuple[int, ...], int] = {}
@@ -2017,11 +2110,9 @@ def build_story_region_classifier(
 
     pointers = bytearray(pointer_table_size)
     neutral_address = row_addresses[neutral_row] & 0xFF
-    for row_index in range(CUTSCENE_ART_ROWS):
-        pointers[row_index] = neutral_address
     for art_id in range(1, 7):
         for row_index, row in enumerate(masks[art_id]):
-            pointers[art_id * CUTSCENE_ART_ROWS + row_index] = (
+            pointers[(art_id - 1) * CUTSCENE_ART_ROWS + row_index] = (
                 row_addresses[row] & 0xFF
             )
 
@@ -2049,7 +2140,7 @@ def build_story_region_classifier(
     writer.db(
         0x07, 0x07, 0x07,                  # table slot * eight rows
         0x80,                               # add visible row B
-        0xC6, STORY_REGION_CAVE_START_ADDR & 0xFF,
+        0xC6, (STORY_REGION_CAVE_START_ADDR - CUTSCENE_ART_ROWS) & 0xFF,
         0x6F, 0x26, 0x4C,                  # HL = row-pointer entry
         0x4E,                               # C = row-list low byte
     )
@@ -2057,7 +2148,7 @@ def build_story_region_classifier(
     writer.db(
         0xE1,                               # restore destination HL
         0x06, 0x4C,                         # BC = selected row-list address
-        0x1E, 0x0A,                         # E = ten cells in this half-row
+        0x1E, 0x14,                         # E = all 20 visible art cells
         0xC3,
         STORY_REGION_ROW_WRITER_ADDR & 0xFF,
         STORY_REGION_ROW_WRITER_ADDR >> 8,
@@ -2303,10 +2394,9 @@ def build_story_attr_sweep() -> tuple[bytes, int, int, int]:
     a.db(0xFA, STORY_ATTR_KEY_ADDR & 0xFF,
          STORY_ATTR_KEY_ADDR >> 8, 0xB9)    # same page?
     a.jr(0x28, "same_key")
-    a.db(0x79, 0xEA, STORY_ATTR_KEY_ADDR & 0xFF,
+    a.db(0x21, STORY_ATTR_KEY_ADDR & 0xFF,
          STORY_ATTR_KEY_ADDR >> 8)
-    a.db(0xAF, 0xEA, STORY_ATTR_ROW_ADDR & 0xFF,
-         STORY_ATTR_ROW_ADDR >> 8)          # new page starts at row 0
+    a.db(0x71, 0x23, 0x36, 0x00)            # key=C; row=0
 
     a.label("same_key")
     # Pre/post-final entry deliberately restarts the neutral cleaner.  Do not
@@ -2315,6 +2405,19 @@ def build_story_attr_sweep() -> tuple[bytes, int, int, int]:
     a.db(0xC0)                              # RET NZ
     a.db(0xFA, STORY_ATTR_ROW_ADDR & 0xFF,
          STORY_ATTR_ROW_ADDR >> 8, 0x47)    # B = row
+    # Wait one complete frame after the END key changes so the stock renderer
+    # has committed its tilemap, then blank the exposed workspace exactly once
+    # at row cursor 1. Story and every other ending key bypass this call.
+    a.db(0x3D)
+    a.jr(0x20, "after_end_cleanup")
+    a.db(0x79, 0xFE, 0x42)
+    a.db(
+        0xCC,
+        ENDING_FOOTER_CLEAR_FRONT_ADDR & 0xFF,
+        ENDING_FOOTER_CLEAR_FRONT_ADDR >> 8,
+    )
+    a.label("after_end_cleanup")
+    a.db(0x78)                              # restore A = row after probe
 
     # Story pages color top rows 0..7. Ending pages make finite passes
     # over all 32 rows of the active tilemap; this covers direct VRAM writes
@@ -2322,10 +2425,10 @@ def build_story_attr_sweep() -> tuple[bytes, int, int, int]:
     # motion cannot expose a stale off-viewport row after the pass goes dormant.
     a.db(0xCB, 0x79)                        # BIT 7,C (story key)
     a.jr(0x28, "ending_limit")
-    # Each story row is split into four five-cell quarters. The bank-6 writer
-    # waits for writable LCD modes, so one exact 32-quarter art pass replaces
-    # the old three-pass retry strategy. The lower dialogue rows are then
-    # explicitly neutralized before the service goes dormant.
+    # Each call publishes one complete 20-cell story row. The bank-6 writer
+    # waits for writable LCD modes, so an exact eight-row pass replaces the
+    # old half-row transition that could expose the previous page's colors on
+    # one side of new artwork. The lower dialogue rows stay neutral BG0.
     a.db(0x16, 0x00)                        # D = left-half offset by default
     a.db(
         0xC3,
@@ -2357,14 +2460,10 @@ def build_story_attr_sweep() -> tuple[bytes, int, int, int]:
         STORY_COLUMN_HELPER_ADDR >> 8,
     )
     a.label("after_column")
-    a.db(0xF0, 0x40, 0xE6, 0x08)            # active BG map
-    a.jr(0x28, "map_9800")
-    a.db(0x3E, 0x9C)
-    a.jr(0x18, "have_map")
-    a.label("map_9800")
-    a.db(0x3E, 0x98)
-    a.label("have_map")
-    a.db(0x84, 0x67)                        # H += map base high byte
+    # LCDC bit 3 selects $9800/$9C00. Rotating that bit to 0/4 and adding
+    # $98 produces the map high byte without a branch ladder.
+    a.db(0xF0, 0x40, 0xE6, 0x08, 0x0F, 0xC6, 0x98)
+    a.db(0x84, 0x67)                        # H = row high + map high
 
     # These are DMG-authored screens with no intentional CGB bank/flip/
     # priority metadata. Story quarters call the YAML rectangle classifier;
@@ -2384,10 +2483,11 @@ def build_story_attr_sweep() -> tuple[bytes, int, int, int]:
     a.jr(0x20, "write_five")
     a.label("after_write")
     a.db(0xF1, 0xE0, 0x4F)                  # restore VBK
-    a.db(0xFA, STORY_ATTR_ROW_ADDR & 0xFF,
-         STORY_ATTR_ROW_ADDR >> 8, 0x3C)
-    a.db(0xEA, STORY_ATTR_ROW_ADDR & 0xFF,
-         STORY_ATTR_ROW_ADDR >> 8, 0xC9)
+    a.db(
+        0xC3,
+        STORY_ROW_INCREMENT_HELPER_ADDR & 0xFF,
+        STORY_ROW_INCREMENT_HELPER_ADDR >> 8,
+    )
     code = a.finish()
     return (
         code,
@@ -2453,35 +2553,40 @@ def build_cutscene_palette_bridge(
     return bridge, continuation
 
 
-def build_death_attr_service(story_dispatch_addr: int) -> bytes:
-    """Neutralize both stock death/game-over tilemaps over seven VBlanks.
+def _retired_build_death_attr_service_rows(story_dispatch_addr: int) -> bytes:
+    """Color both stock death/game-over tilemaps over seven VBlanks.
 
     D880=$17 first renders a scrolled illustration on the stock $9C00 BG map,
     then enables a window backed by the stock $9800 map roughly 35 frames
     later. The gameplay colorizer previously treated this as a dungeon-family
     scene, so arena palette attributes survived in both maps.
 
-    Three rows of each map are cleared per call. Seven calls cover 21 rows:
-    all 18 visible rows plus the partial scroll edge. Attribute byte zero
-    selects BG0 and also removes stale bank, flip, and priority bits.
+    Three rows of each map are rewritten per call. Seven calls cover 21 rows:
+    all 18 visible rows plus the partial scroll edge. Boss pairs select the
+    tuneable odd BG rows 1/3/5/7 while every non-palette attribute bit remains
+    zero; this keeps the illustration and GAME OVER coherent without ever
+    reviving stale arena bank, flip, or priority bits.
     """
     a = _Asm()
 
-    # This is the wrapper's first service point. Normal gameplay takes a
-    # shorter path than the old story-inactive helper: if its story cache is
-    # already clear, return immediately. Non-gameplay jumps directly past the
-    # story routine's redundant FFC1 gate. Death enters the cleanup below.
-    # Preserve the last known-good demo/gameplay instruction order exactly.
-    # Death can also enter with FFC1=0 (dungeon collision), so that uncommon
-    # branch goes through a local dispatcher appended below.
+    # This is the wrapper's first service point. Test death first so both the
+    # dungeon (FFC1=0) and arena (FFC1=1) routes enter the same owner. The
+    # non-death gameplay path is one M-cycle shorter than the established
+    # 19-M-cycle route. B preserves D880 so non-gameplay enters the cutscene
+    # palette bridge with its required scene discriminator still in A.
     a.db(
-        0xF0, 0xC1, 0xB7,                   # LDH A,[FFC1]; OR A
-        0xCA, 0x00, 0x00,                   # JP Z,FFC1-zero dispatcher
+        0xFA, 0x80, 0xD8, 0xFE, 0x17,       # D880 == death?
     )
-    ffc1_zero_operand = len(a.code) - 2
-    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x17)
     a.jr(0x28, "death")
-    a.db(0xC9)                              # transition service cleared cache
+    a.db(
+        0x47,                               # B = D880
+        0xF0, 0xC1, 0xB7,                   # LDH A,[FFC1]; OR A
+        0xC0,                               # gameplay -> RET NZ
+        0x78,                               # restore D880 for bridge
+        0xC3,
+        story_dispatch_addr & 0xFF,
+        story_dispatch_addr >> 8,
+    )
     a.label("death")
 
     # This first wrapper service runs before scene_detect updates DF0D. Reset
@@ -2496,12 +2601,21 @@ def build_death_attr_service(story_dispatch_addr: int) -> bytes:
     death_oam_clear_operand = len(a.code)
     a.db(0x00, 0x00)
     a.db(
-        0x3E, 0x01,
+        0x3E, 0x09,
+        0xEA, PALETTE_PHASE_ADDR & 0xFF,
+        PALETTE_PHASE_ADDR >> 8,
+        0xAF,
         0xEA, DEATH_ATTR_PHASE_ADDR & 0xFF,
         DEATH_ATTR_PHASE_ADDR >> 8,
     )
 
     a.label("phase_ready")
+    # Death owns the YAML BG deck. Service exactly one safe eight-byte row per
+    # VBlank until all eight rows are resident; phase zero is a cheap no-op.
+    a.db(
+        0xFA, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+        0xCD, PALETTE_LOADER_ADDR & 0xFF, PALETTE_LOADER_ADDR >> 8,
+    )
     a.db(
         0xFA, DEATH_ATTR_PHASE_ADDR & 0xFF,
         DEATH_ATTR_PHASE_ADDR >> 8,
@@ -2546,9 +2660,7 @@ def build_death_attr_service(story_dispatch_addr: int) -> bytes:
         0xF1, 0xE0, 0x4F,                   # restore VBK
         0x21, DEATH_ATTR_PHASE_ADDR & 0xFF,
         DEATH_ATTR_PHASE_ADDR >> 8,
-        0x34, 0x7E, 0xFE, 0x08,             # INC [HL]; wrap after phase 7
-        0x38, 0x02,                        # JR C,restore
-        0xAF, 0x77,                         # phase = 0
+        0x34, 0x7E, 0xE6, 0x07, 0x77,       # phase = (phase + 1) & 7
         0xAF, 0xC9,                         # death returns Z to wrapper
     )
 
@@ -2562,7 +2674,12 @@ def build_death_attr_service(story_dispatch_addr: int) -> bytes:
 
     a.label("clear_rows")
     a.label("row_loop")
-    a.db(0x41, 0xAF)                        # B=C; A=0
+    a.db(
+        0x41,                               # B = C
+        0xCD,
+        DEATH_BOSS_PALETTE_HELPER_ADDR & 0xFF,
+        DEATH_BOSS_PALETTE_HELPER_ADDR >> 8,
+    )
     a.label("cell_loop")
     a.db(0x22, 0x05)                        # [HL+]=0; DEC B
     a.jr(0x20, "cell_loop")
@@ -2587,18 +2704,6 @@ def build_death_attr_service(story_dispatch_addr: int) -> bytes:
     a.jr(0x20, "death_oam_loop")
     a.db(0xC9)
 
-    # Only the FFC1=0 path reaches this tail. Keep it out of the cycle-locked
-    # demo/live return path while still routing dungeon death to containment.
-    a.label("ffc1_zero")
-    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x17, 0xCA)
-    ffc1_zero_death_operand = len(a.code)
-    a.db(0x00, 0x00)
-    a.db(
-        0xC3,
-        story_dispatch_addr & 0xFF,
-        story_dispatch_addr >> 8,
-    )
-
     clear_rows_addr = DEATH_ATTR_DISPATCH_ADDR + a.labels["clear_rows"]
     a.code[
         clear_rows_call_operand:clear_rows_call_operand + 2
@@ -2609,38 +2714,533 @@ def build_death_attr_service(story_dispatch_addr: int) -> bytes:
     death_oam_clear_addr = (
         DEATH_ATTR_DISPATCH_ADDR + a.labels["death_oam_clear"]
     )
+    assert death_oam_clear_addr == DEATH_OAM_CLEAR_ADDR
     a.code[
         death_oam_clear_operand:death_oam_clear_operand + 2
     ] = bytes([
         death_oam_clear_addr & 0xFF,
         death_oam_clear_addr >> 8,
     ])
-    ffc1_zero_addr = (
-        DEATH_ATTR_DISPATCH_ADDR + a.labels["ffc1_zero"]
-    )
-    a.code[
-        ffc1_zero_operand:ffc1_zero_operand + 2
-    ] = bytes([ffc1_zero_addr & 0xFF, ffc1_zero_addr >> 8])
-    death_addr = DEATH_ATTR_DISPATCH_ADDR + a.labels["death"]
-    a.code[
-        ffc1_zero_death_operand:ffc1_zero_death_operand + 2
-    ] = bytes([death_addr & 0xFF, death_addr >> 8])
     return a.finish()
 
 
-def build_death_fade_helper() -> bytes:
-    """Mirror the stock DMG death fade into visible CGB BG0.
+def _retired_build_death_attr_service_palette_slots(
+    story_dispatch_addr: int,
+) -> bytes:
+    """Apply a low-cost, artifact-safe palette to the stock death scene.
 
-    The CGB core does not apply BGP remapping to CRAM colors. Without this
-    bounded update, stock BGP=$00 exposes the in-progress GAME OVER tilemap in
-    dungeon colors instead of producing a white transition. The proven
-    two-map neutralizer maps the viewport to BG0. One eight-byte palette is
-    updated per frame, keyed by the same eight-phase cleanup cursor, so all
-    stale attribute slots become neutral without overrunning the late VBlank
-    hook. Once BGP reaches its fully blank $00 phase, the attribute sweep is
-    already complete, so BG0 is made white on every frame to hide the stock
-    construction map. The shared CRAM copier waits for two safe HBlanks; raw
-    eight-byte loops here used to lose writes silently in LCD mode 3.
+    The older writer repainted 144 attributes every VBlank. That delayed the
+    stock illustration copier enough to leave its lower body as literal
+    checkerboard tiles. Arena attributes already contain only safe palette
+    bits, so make those identities visually equivalent instead: copy the
+    boss-family YAML row into every BG slot and force color 1 white. Stock
+    background tiles $00/$01 stay white while the authored art retains its
+    dark tint and linework. No live tilemap or attribute write occurs here.
+    """
+    a = _Asm()
+
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x17)
+    a.jr(0x28, "death")
+    a.db(
+        0x47,
+        0xF0, 0xC1, 0xB7,
+        0xC0,
+        0x78,
+        0xC3,
+        story_dispatch_addr & 0xFF,
+        story_dispatch_addr >> 8,
+    )
+    a.label("death")
+
+    # Clear stale hardware sprites and restart the eight-slot palette pass on
+    # the exact transition into death.
+    a.db(
+        0xFA, SCENE_CACHE_ADDR & 0xFF, SCENE_CACHE_ADDR >> 8,
+        0xFE, 0x17,
+    )
+    a.jr(0x28, "palette_frame")
+    a.db(0xCD)
+    death_oam_clear_operand = len(a.code)
+    a.db(0x00, 0x00)
+    a.db(
+        0xAF,
+        0xEA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+    )
+
+    a.label("palette_frame")
+    # During BGP=$00, advance only the shared white-fade cursor. The wrapper-
+    # tail helper consumes the incremented slot after this routine returns.
+    a.db(0xF0, 0x47, 0xB7)
+    a.jr(0x28, "advance")
+
+    # BCPS = current hardware BG slot, auto-increment.
+    a.db(
+        0xFA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0x07, 0x07, 0x07, 0xF6, 0x80, 0xE0, 0x68,
+    )
+
+    # HL = YAML BG1/3/5/7 selected by the stock boss-pair identity.
+    a.db(
+        0xF0, 0xBA, 0xE6, 0x06, 0x3C,
+        0x07, 0x07, 0x07,
+        0x6F, 0x26, TITLE_PALETTE_SOURCE_ADDR >> 8,
+        0x0E, 0x69,
+        0xCD,
+        PALETTE_COPY_CRAM8_ADDR & 0xFF,
+        PALETTE_COPY_CRAM8_ADDR >> 8,
+    )
+
+    # Background checker tiles use color 1. Keep that color white in every
+    # selected slot while preserving YAML color 2 and black for the art.
+    a.db(
+        0xFA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0x07, 0x07, 0x07, 0xC6, 0x82, 0xE0, 0x68,
+        0x3E, 0xFF, 0xE0, 0x69,
+        0x3E, 0x7F, 0xE0, 0x69,
+    )
+
+    a.label("advance")
+    a.db(
+        0x21, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0x34, 0x7E, 0xE6, 0x07, 0x77,
+        0xAF, 0xC9,
+    )
+
+    # Preserve the public transition-only OAM-clear address used by title,
+    # story, ending, and showcase scene changes.
+    while (
+        DEATH_ATTR_DISPATCH_ADDR + len(a.code)
+        < DEATH_COLORIZER_GATE_ADDR
+    ):
+        a.db(0x00)
+    assert (
+        DEATH_ATTR_DISPATCH_ADDR + len(a.code)
+        == DEATH_COLORIZER_GATE_ADDR
+    )
+    a.label("death_colorizer_gate")
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x18, 0xC8, 0xFE, 0x17)
+    a.jr(0x28, "skip_colorizer")
+    a.db(0xD6, 0x0C, 0xFE, 0x09)
+    a.jr(0x30, "normal_colorizer")
+    a.db(0xFA, 0xBB, 0xDC, 0xB7)
+    a.jr(0x28, "skip_colorizer")
+    a.label("normal_colorizer")
+    a.db(0x3E, 0x01, 0xB7, 0xC9)          # NC/NZ: ordinary colorizer
+    a.label("skip_colorizer")
+    a.db(0x37, 0x3C, 0xC9)                # C/NZ: skip both calls
+    assert DEATH_ATTR_DISPATCH_ADDR + len(a.code) == DEATH_OAM_CLEAR_ADDR, (
+        hex(DEATH_ATTR_DISPATCH_ADDR + len(a.code)),
+        hex(DEATH_OAM_CLEAR_ADDR),
+    )
+    a.label("death_oam_clear")
+    a.db(
+        0x21, 0x00, 0xFE,
+        0x06, 0x28,
+        0xAF,
+    )
+    a.label("death_oam_loop")
+    a.db(0x22, 0x23, 0x23, 0x23, 0x05)
+    a.jr(0x20, "death_oam_loop")
+    a.db(0xC9)
+
+    death_oam_clear_addr = (
+        DEATH_ATTR_DISPATCH_ADDR + a.labels["death_oam_clear"]
+    )
+    assert death_oam_clear_addr == DEATH_OAM_CLEAR_ADDR
+    a.code[
+        death_oam_clear_operand:death_oam_clear_operand + 2
+    ] = bytes([
+        death_oam_clear_addr & 0xFF,
+        death_oam_clear_addr >> 8,
+    ])
+    code = a.finish()
+    assert DEATH_ATTR_DISPATCH_ADDR + len(code) == PALETTE_LOADER_EXT_ADDR
+    return code
+
+
+def _retired_build_death_attr_service_palette_burst(
+    story_dispatch_addr: int,
+) -> bytes:
+    """Publish the death palette once without delaying stock art assembly."""
+    a = _Asm()
+
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x17)
+    a.jr(0x28, "death")
+    a.db(
+        0x47, 0xF0, 0xC1, 0xB7, 0xC0, 0x78,
+        0xC3,
+        story_dispatch_addr & 0xFF,
+        story_dispatch_addr >> 8,
+    )
+    a.label("death")
+
+    a.db(
+        0xFA, SCENE_CACHE_ADDR & 0xFF, SCENE_CACHE_ADDR >> 8,
+        0xFE, 0x17,
+    )
+    a.jr(0x28, "steady")
+    a.db(0xCD)
+    death_oam_clear_operand = len(a.code)
+    a.db(0x00, 0x00)
+    a.db(
+        0xAF,
+        0xEA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+    )
+    a.jr(0x18, "load_all")
+
+    a.label("steady")
+    # The fully white stock fade owns an eight-step slot cursor. Clamp at
+    # eight so the wrapper-tail white copier cannot wrap into random BCPS
+    # indices if the stock hold lasts longer than eight frames.
+    a.db(0xF0, 0x47, 0xB7)
+    a.jr(0x20, "maybe_restore")
+    a.db(
+        0x21, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0x7E, 0xFE, 0x08,
+    )
+    a.jr(0x30, "done")
+    a.db(0x34)
+    a.jr(0x18, "done")
+
+    a.label("maybe_restore")
+    # After the Window appears and BGP returns to normal, rebuild the death
+    # row once. Ordinary illustration frames return immediately.
+    a.db(0xF0, 0x40, 0xCB, 0x6F)
+    a.jr(0x28, "done")
+    a.db(
+        0xFA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0xFE, 0x08,
+    )
+    a.jr(0x20, "done")
+    a.db(0x3E, 0xFF)
+    a.db(
+        0xEA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+    )
+
+    a.label("load_all")
+    # One bounded VBlank burst makes every safe arena palette identity render
+    # identically. Source color 1 is skipped and replaced with white so the
+    # stock $00/$01 checker tiles disappear; YAML color 2 and black remain.
+    a.db(
+        0x3E, 0x80, 0xE0, 0x68,
+        0xF0, 0xBA, 0xE6, 0x06, 0x3C,
+        0x07, 0x07, 0x07,
+        0x6F, 0x26, TITLE_PALETTE_SOURCE_ADDR >> 8,
+        0x0E, 0x69,
+        0x06, 0x08,
+    )
+    a.label("palette_loop")
+    a.db(
+        0xE5,
+        0x2A, 0xE2, 0x2A, 0xE2,
+        0x23, 0x23,
+        0x3E, 0xFF, 0xE2, 0x3E, 0x7F, 0xE2,
+        0x2A, 0xE2, 0x2A, 0xE2,
+        0x2A, 0xE2, 0x2A, 0xE2,
+        0xE1, 0x05,
+    )
+    a.jr(0x20, "palette_loop")
+
+    a.label("done")
+    a.db(0xAF, 0xC9)
+
+    while (
+        DEATH_ATTR_DISPATCH_ADDR + len(a.code)
+        < DEATH_COLORIZER_GATE_ADDR
+    ):
+        a.db(0x00)
+    assert (
+        DEATH_ATTR_DISPATCH_ADDR + len(a.code)
+        == DEATH_COLORIZER_GATE_ADDR
+    )
+    a.label("death_colorizer_gate")
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x18, 0xC8, 0xFE, 0x17)
+    a.jr(0x28, "skip_colorizer")
+    a.db(0xD6, 0x0C, 0xFE, 0x09)
+    a.jr(0x30, "normal_colorizer")
+    a.db(0xFA, 0xBB, 0xDC, 0xB7)
+    a.jr(0x28, "skip_colorizer")
+    a.label("normal_colorizer")
+    a.db(0x3E, 0x01, 0xB7, 0xC9)
+    a.label("skip_colorizer")
+    a.db(0x37, 0x3C, 0xC9)
+    assert DEATH_ATTR_DISPATCH_ADDR + len(a.code) == DEATH_OAM_CLEAR_ADDR
+    a.label("death_oam_clear")
+    a.db(0x21, 0x00, 0xFE, 0x06, 0xA0, 0xAF)
+    a.label("death_oam_loop")
+    a.db(0x22, 0x05)
+    a.jr(0x20, "death_oam_loop")
+    a.db(0xC9)
+
+    death_oam_clear_addr = (
+        DEATH_ATTR_DISPATCH_ADDR + a.labels["death_oam_clear"]
+    )
+    assert death_oam_clear_addr == DEATH_OAM_CLEAR_ADDR
+    a.code[
+        death_oam_clear_operand:death_oam_clear_operand + 2
+    ] = bytes([
+        death_oam_clear_addr & 0xFF,
+        death_oam_clear_addr >> 8,
+    ])
+    code = a.finish()
+    assert DEATH_ATTR_DISPATCH_ADDR + len(code) == PALETTE_LOADER_EXT_ADDR
+    return code
+
+
+def build_death_attr_service(
+    story_dispatch_addr: int,
+    shalamar_viewport: bool = True,
+) -> bytes:
+    """Protect stock death assembly and publish coherent art/text palettes."""
+    a = _Asm()
+
+    a.db(0xFA, 0x80, 0xD8, 0xFE, 0x17)
+    a.jr(0x28, "death")
+    a.db(0xFE, 0x18)
+    a.jr(0x28, "splash")
+    a.db(0x47, 0xF0, 0xC1, 0xB7)
+    a.jr(0x28, "story")
+
+    # Scene 0 is part of the title -> STAGE XX cadence and must retain the
+    # approved path length. Ordinary gameplay and living bosses may return
+    # early. The extra OR/JR costs 12 cycles on a defeated boss, so its retired
+    # padding below is shortened by exactly 12 cycles; the death-transition
+    # path remains cycle-for-cycle unchanged. Discard this CALL's return
+    # address only for a defeated boss and jump to the wrapper epilogue,
+    # bypassing every DX service while stock assembles its illustration.
+    a.db(0x78, 0xB7)
+    a.jr(0x28, "timed_normal")
+    a.db(0xD6, 0x0C, 0xFE, 0x09)
+    a.db(0xD0)                              # RET NC: stage/title-family scene
+    a.db(0xFA, 0xBB, 0xDC, 0xB7)
+    a.db(0xC0)                              # RET NZ: living boss
+    a.db(
+        0xAF,
+        0x00,                               # cycle-exact retired-store padding
+        0xE1,
+        0xC3,
+        WRAPPER_RESTORE_ADDR & 0xFF,
+        WRAPPER_RESTORE_ADDR >> 8,
+    )
+    a.label("timed_normal")
+    # Z is guaranteed by the OR/JR above. A taken CALL to the splash RET byte
+    # costs 24+16 cycles, then this RET costs 16 more: the same exact 56-cycle
+    # normal-scene tail in four bytes instead of eight. The reclaimed bytes
+    # let the death-only path bypass the wrapper's fast OAM dispatcher.
+    a.db(0xCC)
+    timed_normal_ret_operand = len(a.code)
+    a.db(0x00, 0x00, 0xC9)
+    a.label("story")
+    a.db(
+        0xAF,
+        0x78, 0xC3,
+        story_dispatch_addr & 0xFF,
+        story_dispatch_addr >> 8,
+    )
+
+    a.label("splash")
+    a.db(
+        0x3E, 0x02,
+        0x18, 0x00,                        # compact retired-store padding
+        0xB7,
+    )
+    a.label("splash_return")
+    a.db(0xC9)
+
+    a.label("death")
+    # The direct wrapper epilogue below intentionally bypasses scene_detect,
+    # so publish the cache identity here exactly once. Reusing HL makes the
+    # first-entry path the same 11 bytes / 52 cycles as the retired padding +
+    # absolute cache load it replaces.
+    a.db(
+        0x00,
+        0x21, SCENE_CACHE_ADDR & 0xFF, SCENE_CACHE_ADDR >> 8,
+        0x7E,
+        0xFE, 0x17,
+    )
+    a.jr(0x28, "fade_cursor")
+    a.db(0x36, 0x17)                       # [SCENE_CACHE] = death
+    a.db(0xCD)
+    death_oam_clear_operand = len(a.code)
+    a.db(0x00, 0x00)
+    a.db(
+        0xAF,
+        0xEA, PALETTE_PHASE_ADDR & 0xFF,
+        PALETTE_PHASE_ADDR >> 8,
+        0xEA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0x1E, DEATH_PALETTE_ROW_ADDR & 0xFF,
+    )
+    a.jr(0x18, "load_all")
+
+    # The wrapper-tail mirrors the stock BGP=$00 fade into one BG slot per
+    # VBlank. Saturate its cursor at eight; once the GAME OVER Window appears,
+    # rebuild the unified death row exactly once and leave ordinary scene
+    # transitions to restore the gameplay/title deck.
+    a.label("fade_cursor")
+    a.db(0xF0, 0x47, 0xB7)
+    a.jr(0x20, "maybe_restore")
+    a.db(
+        0x21, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0x7E, 0xFE, 0x08,
+    )
+    a.jr(0x30, "done")
+    a.db(0x34)
+    a.jr(0x18, "done")
+
+    a.label("maybe_restore")
+    a.db(0xF0, 0x40, 0xCB, 0x6F)           # GAME OVER Window visible?
+    a.jr(0x28, "done")
+    a.db(
+        0xFA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0xFE, 0x08,
+    )
+    a.jr(0x20, "done")
+    a.db(
+        0x3E, 0xFF,
+        0xEA, DEATH_ATTR_PHASE_ADDR & 0xFF,
+        DEATH_ATTR_PHASE_ADDR >> 8,
+        0x1E, DEATH_GAMEOVER_PALETTE_ROW_ADDR & 0xFF,
+    )
+
+    a.label("load_all")
+    # Existing arena attributes are safe palette IDs but vary cell-by-cell.
+    # Make all eight IDs visually identical instead of repainting 1,024 VRAM
+    # attributes. The shared row is compiled from death_gameover_palette in
+    # YAML, so audience tuning remains a data-only change.
+    a.db(
+        0x3E, 0x80, 0xE0, 0x68,             # BCPS slot 0, auto-increment
+        0x0E, 0x69,                         # C = BGPD
+        0x16, 0x08,                         # D = eight hardware BG IDs
+    )
+    a.label("palette_loop")
+    a.db(
+        0x6B, 0x26, DEATH_PALETTE_ROW_ADDR >> 8, # HL = selected YAML row
+        0xCD,
+        PALETTE_COPY_CRAM8_ADDR & 0xFF,
+        PALETTE_COPY_CRAM8_ADDR >> 8,
+        0x15,
+    )
+    a.jr(0x20, "palette_loop")
+
+    # The initial 64-byte burst deterministically straddles the VBlank edge at
+    # BG4's final byte. The last shared copy has now entered a fresh HBlank, so
+    # repair that one byte from the YAML row while there is safely time left.
+    a.db(
+        0x3E, 0xA7, 0xE0, 0x68,             # BCPS = BG4 color-3 high byte
+        # The eighth shared copy leaves HL one byte past the selected row.
+        # Reuse that postcondition instead of reloading the absolute address.
+        0x2B,
+        0x7E, 0xE2,
+    )
+
+    a.label("done")
+    # Mirror a possible stock white-fade step, then drop this service CALL's
+    # return address and restore the wrapper-owned register frame. No title,
+    # gameplay OAM, glyph, or hazard service is allowed over the illustration.
+    # The stock transition has already framed the illustration. Mirror a
+    # possible white-fade step without rewriting either viewport axis.
+    if shalamar_viewport:
+        a.db(
+            0xCD,
+            DEATH_SHALAMAR_VIEWPORT_FRONT_ADDR & 0xFF,
+            DEATH_SHALAMAR_VIEWPORT_FRONT_ADDR >> 8,
+        )
+    a.db(
+        0xCD,
+        DEATH_FADE_HELPER_ADDR & 0xFF,
+        DEATH_FADE_HELPER_ADDR >> 8,
+        0xE1,
+        0xC3,
+        WRAPPER_RESTORE_ADDR & 0xFF,
+        WRAPPER_RESTORE_ADDR >> 8,
+    )
+
+    while DEATH_ATTR_DISPATCH_ADDR + len(a.code) < DEATH_OAM_CLEAR_ADDR:
+        a.db(0x00)
+    assert DEATH_ATTR_DISPATCH_ADDR + len(a.code) == DEATH_OAM_CLEAR_ADDR, (
+        hex(DEATH_ATTR_DISPATCH_ADDR + len(a.code)),
+        hex(DEATH_OAM_CLEAR_ADDR),
+    )
+
+    a.label("death_oam_clear")
+    # Clear every byte of all 40 hardware slots. The compact contiguous loop
+    # leaves any reclaimed cave bytes as unreachable padding above.
+    a.db(0x21, 0x00, 0xFE, 0x06, 0xA0, 0xAF)
+    a.label("death_oam_loop")
+    a.db(0x22, 0x05)
+    a.jr(0x20, "death_oam_loop")
+    a.db(0xC9)
+
+    death_oam_clear_addr = (
+        DEATH_ATTR_DISPATCH_ADDR + a.labels["death_oam_clear"]
+    )
+    assert death_oam_clear_addr == DEATH_OAM_CLEAR_ADDR
+    a.code[
+        death_oam_clear_operand:death_oam_clear_operand + 2
+    ] = bytes([
+        death_oam_clear_addr & 0xFF,
+        death_oam_clear_addr >> 8,
+    ])
+    splash_return_addr = (
+        DEATH_ATTR_DISPATCH_ADDR + a.labels["splash_return"]
+    )
+    a.code[
+        timed_normal_ret_operand:timed_normal_ret_operand + 2
+    ] = bytes([
+        splash_return_addr & 0xFF,
+        splash_return_addr >> 8,
+    ])
+    code = a.finish()
+    assert DEATH_ATTR_DISPATCH_ADDR + len(code) == PALETTE_LOADER_EXT_ADDR
+    return code
+
+
+def build_death_shalamar_viewport() -> tuple[bytes, bytes]:
+    """Frame only Shalamar like the fresh stock death receipt."""
+    front = bytes([
+        0xF0, 0xBA,                         # A = stock boss index
+        0xB7, 0xC0,                         # every other boss: RET NZ
+        0x3E, 0x15, 0xE0, 0x42,             # Shalamar SCY = stock $15
+        0xC3,
+        DEATH_SHALAMAR_VIEWPORT_TAIL_ADDR & 0xFF,
+        DEATH_SHALAMAR_VIEWPORT_TAIL_ADDR >> 8,
+    ])
+    tail = bytes([
+        0x3E, 0x05, 0xE0, 0x43,             # Shalamar SCX = stock $05
+        0xF0, 0x40, 0xF6, 0x08, 0xE0, 0x40, # show published $9C00 art
+        0xC9,
+    ])
+    assert len(front) == 11
+    assert len(tail) == 11
+    return front, tail
+
+
+def build_stage_card_handoff_gate() -> bytes:
+    """Keep the complete STAGE card selected until native map publication."""
+    code = bytes([0xC9]) + bytes(13)
+    assert len(code) == 14
+    return code
+
+
+def build_death_fade_helper() -> bytes:
+    """Mirror the stock DMG death fade into the boss-family BG palette.
+
+    Intermediate nonzero DMG phases retain the prior tint; BGP=$00 makes all
+    eight rows white over one bounded cycle. The death dispatcher restores its
+    unified tuneable row after the Window appears, so this helper must not arm
+    the ordinary diverse gameplay deck during GAME OVER. A fixed six-byte
+    palette-ID helper in this cave remains shared with the late wrapper.
     """
     a = _Asm()
     a.db(
@@ -2648,38 +3248,29 @@ def build_death_fade_helper() -> bytes:
         0xB7,
     )
     a.jr(0x28, "white_all")
+    a.db(0xC9)                              # nonwhite retains unified row
+    a.label("white_all")
     a.db(
-        0xF5,                               # preserve BGP across slot setup
         0xFA,
         DEATH_ATTR_PHASE_ADDR & 0xFF,
         DEATH_ATTR_PHASE_ADDR >> 8,
-        0x07, 0x07, 0x07,                   # phase * 8
-        0xF6, 0x80, 0xE0, 0x68,             # palette slot, auto-increment
-        0xF1,
+        0x07, 0x07, 0x07, 0xF6, 0x80,
+        0xE0, 0x68,
         0x21,
-        DEATH_FADE_NORMAL_ADDR & 0xFF,
-        DEATH_FADE_NORMAL_ADDR >> 8,
-        0xFE, 0xE4,
-    )
-    a.jr(0x28, "copy")
-    a.db(0x2E, DEATH_FADE_INTERMEDIATE_ADDR & 0xFF)
-    a.label("copy")
-    a.db(
+        DEATH_FADE_WHITE_ADDR & 0xFF,
+        DEATH_FADE_WHITE_ADDR >> 8,
         0x0E, 0x69,                         # C = BGPD for shared copier
         0xC3,
         PALETTE_COPY_CRAM8_ADDR & 0xFF,
         PALETTE_COPY_CRAM8_ADDR >> 8,
     )
 
-    # BGP=$00 begins well after all visible attributes have become BG0.
-    a.label("white_all")
-    a.db(
-        0x3E, 0x80, 0xE0, 0x68,             # BG0, auto-increment
-        0x21,
-        DEATH_FADE_WHITE_ADDR & 0xFF,
-        DEATH_FADE_WHITE_ADDR >> 8,
-    )
-    a.jr(0x18, "copy")
+    # The tail is reached only by external CALLs; every local copy path
+    # tail-jumps out of this cave.
+    while DEATH_FADE_HELPER_ADDR + len(a.code) < DEATH_BOSS_PALETTE_HELPER_ADDR:
+        a.db(0x00)
+    assert DEATH_FADE_HELPER_ADDR + len(a.code) == DEATH_BOSS_PALETTE_HELPER_ADDR
+    a.db(0xF0, 0xBA, 0xE6, 0x06, 0x3C, 0xC9)
     code = a.finish()
     assert (
         DEATH_FADE_HELPER_ADDR + len(code)
@@ -2702,46 +3293,48 @@ def build_title_delay() -> bytes:
 
 
 def build_death_late_fix() -> bytes:
-    """Contain Faze's two persistent death-art attributes at wrapper tail."""
+    """Mirror the stock death fade, then restore the caller's VBK."""
     a = _Asm()
     a.db(0x47)                              # B = saved VBK
     a.db(0xFA, 0x80, 0xD8, 0xFE, 0x17)
-    a.jr(0x20, "done")
     a.db(
-        0xCD,
+        0xCC,
         DEATH_FADE_HELPER_ADDR & 0xFF,
         DEATH_FADE_HELPER_ADDR >> 8,
     )
-    a.label("wait_vram")
-    # Only mode 3 maps to zero after (STAT+1)&3.
-    a.db(0xF0, 0x41, 0x3C, 0xE6, 0x03)
-    a.jr(0x28, "wait_vram")
-    a.db(
-        0x3E, 0x01, 0xE0, 0x4F,
-        0x21, 0xCC, 0x9D,
-        0xAF, 0x22, 0x77,
-    )
-    a.label("done")
     a.db(0x78, 0xE0, 0x4F, 0xC9)
     return a.finish()
 
 
 def build_story_half_row_helper(row_entry_addr: int) -> bytes:
-    """Dispatch art half-rows and expose a shared neutral lower-panel tail."""
+    """Dispatch all 18 story rows, including the neutral dialogue panel.
+
+    The first production pass stopped after the eight artwork rows and relied
+    on the entry-time neutral cleaner to own the lower ten rows.  Stock writes
+    dialogue after that cleaner, though, so 27 cells could retain the art
+    palette indefinitely.  Keep the position-aware YAML writer for rows 0..7,
+    then route rows 8..17 through its uniform-palette path with C=0.  The
+    separator/re-arm helper is reached only after the complete visible panel
+    has been published.
+    """
     code = bytes([
-        0xFE, 0x10,                         # one 8-row * 2-half-row art pass
-        0xD2,                               # JP NC,separator helper
+        0xFE, 0x12,                         # all 18 visible rows complete?
+        0xD2,                               # JP NC,separator/re-arm helper
         STORY_SEPARATOR_HELPER_ADDR & 0xFF,
         STORY_SEPARATOR_HELPER_ADDR >> 8,
-        0xC3,                               # JP quarter mapper
-        STORY_QUARTER_HELPER_ADDR & 0xFF,
-        STORY_QUARTER_HELPER_ADDR >> 8,
-        # Entry + 8: shared tail used by the separator helper.
-        0x0E, 0x80,                         # story-family key / BG0
-        0x06, 0x08,                         # visible separator row 8
+        0xFE, 0x08,                         # artwork rows keep YAML key C
+        0x38, 0x02,                         # JR C,dispatch
+        # Keep the story-family marker while selecting neutral BG0.  The
+        # shared dispatcher tests bit 7 before routing to the bank-6
+        # per-cell VRAM guard, then the writer masks the low three palette
+        # bits.  Using literal zero here accidentally selected the unguarded
+        # ending-row fast path and could drop a dialogue attribute write.
+        0x0E, 0x80,
+        # dispatch
+        0x16, 0x00,                         # start at visible column zero
         0xC3, row_entry_addr & 0xFF, row_entry_addr >> 8,
     ])
-    assert len(code) == 15
+    assert len(code) == 16
     return code
 
 
@@ -2761,30 +3354,32 @@ def build_story_quarter_helper(row_entry_addr: int) -> bytes:
 
 
 def build_story_separator_helper(row_entry_addr: int) -> bytes:
-    """Re-arm a completed story pass if stock redraws its attribute plane.
+    """Re-arm a completed story pass if stock redraws either panel.
 
     Every committed story mask colors all 160 cells in the upper art panel,
-    so $9821 is a reliable nonzero sentinel for both observed 0/0 and 8/8
-    viewports.  Stock can redraw the same DCF0/DD07 art page without changing
-    either identity byte; that late redraw writes palette zero and previously
-    left the DX pass dormant at DF4A=$20 or above.  Check the sentinel after
-    the first complete art pass and restart at row zero only when it was
-    cleared.  The entry neutral cleaner and neutral C600 story table continue
-    to own the dialogue rows.
+    so $9821 is a reliable nonzero artwork sentinel for both observed 0/0 and
+    8/8 viewports. Stock can also stamp three lower-panel cells after the
+    initial neutral pass without changing DCF0/DD07; $992F catches that exact
+    dialogue redraw. Restart all 18 rows if either the art sentinel was
+    cleared or the dialogue sentinel became nonzero.
     """
-    code = bytes([
-        0xF0, 0x4F, 0xF5,                   # preserve VBK
-        0x3E, 0x01, 0xE0, 0x4F,             # inspect attributes
-        0xFA, 0x21, 0x98, 0xE6, 0x07,       # $9821 palette sentinel
-        0x47, 0xF1, 0xE0, 0x4F,             # B=result; restore VBK
-        0x78, 0xB7, 0xC0,                   # nonzero -> remain dormant
+    a = _Asm()
+    a.db(0xF0, 0x4F, 0xF5)                 # preserve VBK
+    a.db(0x3E, 0x01, 0xE0, 0x4F)           # inspect attributes
+    a.db(0xFA, 0x21, 0x98, 0xB7)           # upper-art sentinel
+    a.jr(0x28, "restart")
+    a.db(0xFA, 0x2F, 0x99, 0xB7)           # late dialogue cell; Z if BG0
+    a.jr(0x28, "done")
+    a.label("restart")
+    a.db(
         0xAF,
         0xEA, STORY_ATTR_ROW_ADDR & 0xFF,
-        STORY_ATTR_ROW_ADDR >> 8,           # cleared -> restart next VBlank
-        0xC9,
-        0x00, 0x00,                         # retain exact 26-byte allocation
-    ])
-    assert len(code) == 26
+        STORY_ATTR_ROW_ADDR >> 8,
+    )                                      # restart all 18 rows next VBlank
+    a.label("done")
+    a.db(0xF1, 0xE0, 0x4F, 0xC9)           # restore VBK
+    code = a.finish()
+    assert len(code) == 27
     return code
 
 
@@ -2798,10 +3393,46 @@ def build_story_viewport_key_helper() -> bytes:
         0xE6, 0x08,
         0x07,                               # bit 3 -> cache-key bit 4
         0xB1,                               # include C = art palette
-        0xF6, 0x80,                         # story-family bit
+        # Bit 3 versions the reviewed story-mask schema. Older savestates may
+        # carry a completed row cursor for the pre-Lisa-neck mask; changing
+        # this key forces one exact 18-row republish instead of trusting it.
+        0xF6, 0x88,                         # story family + mask schema v2
         0xC9,
     ])
     assert len(code) == 13
+    return code
+
+
+def build_ending_footer_clear_helper() -> bytes:
+    """Blank only the two script-workspace rows exposed below END.
+
+    FFF9 becomes one only after the stock END tilemap is committed.  The
+    guarded story dispatcher calls this helper on that exact phase before its
+    palette pass.  Row 14's copyright and rows 6/7's END glyph stay untouched.
+    """
+    code = bytes([
+        0xAF,
+        0xE0, 0x4F,                         # tile IDs: VBK=0
+        0x21, 0x00, 0x9A,                   # $9800 visible row 16
+        0x1E, 0x34,                         # full row 16 + 20 cells of row 17
+    ])
+    code += bytes([
+        0x22, 0x1D,                         # clear/advance; DEC E
+        0x20, 0xFC,                         # JR NZ to LD [HL+],A
+        0xC9,
+    ])
+    assert len(code) <= ROOM_BG_REPAIR_ADDR - ENDING_FOOTER_CLEAR_FRONT_ADDR
+    return code
+
+
+def build_story_row_increment_helper() -> bytes:
+    """Advance the bounded story/ending row cursor and return."""
+    code = bytes([
+        0x21, STORY_ATTR_ROW_ADDR & 0xFF, STORY_ATTR_ROW_ADDR >> 8,
+        0x34,
+        0xC9,
+    ])
+    assert len(code) == ROOM_BG_REPAIR_ADDR - STORY_ROW_INCREMENT_HELPER_ADDR
     return code
 
 
@@ -2923,9 +3554,12 @@ def build_next_dma_shadow_colorizer() -> bytes:
     no_boss = len(code) + 1
     code.extend([0x28, 0x00])
     code.extend([
-        0x3D, 0x4F, 0x06, 0x00,
-        0x21, BOSS_SLOT_TABLE_ADDR & 0xFF, BOSS_SLOT_TABLE_ADDR >> 8,
-        0x09, 0x5E,
+        # FFBF exposes 16 native miniboss selector values while the compact
+        # palette data block has eight rows. Mirror 9..16 onto 1..8 instead of
+        # indexing into hazard/jet data beyond the slot table.
+        # All eight YAML boss rows deliberately alternate OBJ6/OBJ7. The
+        # native 9..16 selector range aliases by the same parity.
+        0x3D, 0xE6, 0x01, 0xC6, 0x06, 0x5F,
     ])
     boss_done = len(code) + 1
     code.extend([0x18, 0x00])
@@ -3153,7 +3787,9 @@ def build_room_bg_repair(
     # for the latter. Every other scene owns a complete post-copy publisher.
     a.db(0xFA, 0x80, 0xD8, 0xFE, 0x02)
     a.db(
-        0xCA,
+        # CALL Z retains the older stage-entry branch's exact 24-cycle phase;
+        # the body eventually RETs here and the common tail normalizes A.
+        0xCC,
         ATTRACT_PICKUP_SWEEP_STUB_ADDR & 0xFF,
         ATTRACT_PICKUP_SWEEP_STUB_ADDR >> 8,
     )                                      # JP Z: initial Stage-1 sweep gate
@@ -3388,6 +4024,8 @@ def build_demo_pickup_scanner() -> tuple[bytes, bytes, bytes]:
 
 def build_demo_pickup_writer(
     phase_nops: int = DEMO_PICKUP_WRITER_PHASE_NOPS,
+    *,
+    live_writes: bool = True,
 ) -> tuple[bytes, bytes, bytes, bytes]:
     """Build live writes and a cycle-exact demo no-write twin.
 
@@ -3447,6 +4085,15 @@ def build_demo_pickup_writer(
     phase_tail = bytearray(tail_code)
     assert phase_front.count(write_group) == 2
     assert phase_tail.count(write_group) == 2
+    if not live_writes:
+        # The postcomputed Stage-1 compiler already derives every attribute
+        # from the completed 24x24 tile plane. The older metatile-coordinate
+        # writer targets a different origin and visibly paints a detached
+        # 2x2 red/green block beside each real pickup after menu/item routes.
+        # Preserve its exact instruction count, cycles, flags, and STAT waits
+        # while suppressing only the four stale VRAM stores.
+        front_code = front_code.replace(write_group, no_write_group)
+        tail_code = tail_code.replace(write_group, no_write_group)
     phase_front = phase_front.replace(write_group, no_write_group)
     phase_tail = phase_tail.replace(write_group, no_write_group)
     # The appender's DCFD load/OR/taken-JR costs 32 cycles before this demo
@@ -3522,18 +4169,28 @@ def build_lava_attr_sample_signature(
     address: int,
     end: int,
 ) -> bytes:
-    """Return the receipt-proven XOR of selected raw C1A0 cells in B."""
+    """Return the receipt-proven XOR of selected raw C1A0 cells in B.
+
+    Stage 5's four-cell key is deliberately ordered as one absolute sample
+    followed by three samples on the same WRAM page. Reusing H and changing
+    only L keeps the stronger collision-free key the same 15-byte size as the
+    retired three-absolute-load implementation, so it cannot overlap the
+    adjacent Stage-4 material helper.
+    """
     a = _Asm()
-    assert samples
-    for index, offset in enumerate(samples):
-        assert 0 <= offset < 576
-        source = 0xC1A0 + offset
-        a.db(0xFA, source & 0xFF, source >> 8)
-        if index:
-            a.db(0xA8)                      # XOR B
-        a.db(0x47)                          # B = rolling XOR
-    a.db(0xC9)
+    assert len(samples) == 4
+    sources = tuple(0xC1A0 + offset for offset in samples)
+    assert all(0xC1A0 <= source <= 0xC3DF for source in sources)
+    assert len({source >> 8 for source in sources[1:]}) == 1
+    a.db(0xFA, sources[0] & 0xFF, sources[0] >> 8)  # LD A,[absolute]
+    a.db(0x21, sources[1] & 0xFF, sources[1] >> 8)  # LD HL,first C2xx
+    a.db(0xAE)                                      # XOR [HL]
+    for source in sources[2:]:
+        assert source >> 8 == sources[1] >> 8
+        a.db(0x2E, source & 0xFF, 0xAE)             # LD L,lo; XOR [HL]
+    a.db(0x47, 0xC9)                                # LD B,A; RET
     code = a.finish()
+    assert len(code) == 15
     assert address + len(code) <= end
     return code
 
@@ -3625,9 +4282,12 @@ def build_lava_attr_decider() -> tuple[bytes, bytes]:
         0x11,
         LAVA_ATTR_STAGE5_9800_META_ADDR & 0xFF,
         LAVA_ATTR_STAGE5_9800_META_ADDR >> 8,
-        0x7C, 0xFE, 0x9C,                  # select destination-map metadata
+        # The only legal destinations are $98/$9C, whose bit 2 differs.
+        # Testing H directly is one M-cycle faster than LD A,H / CP $9C and
+        # keeps the stronger four-cell signature cadence-neutral.
+        0xCB, 0x54,                         # BIT 2,H: Z selects $9800
     )
-    front_asm.jr(0x20, "metadata_selected")
+    front_asm.jr(0x28, "metadata_selected")
     front_asm.db(0x1E, LAVA_ATTR_STAGE5_9C00_META_ADDR & 0xFF)
     front_asm.label("metadata_selected")
     front_asm.db(
@@ -3639,7 +4299,7 @@ def build_lava_attr_decider() -> tuple[bytes, bytes]:
         LAVA_ATTR_DECIDER_CONT_ADDR >> 8,
     )
     front = front_asm.finish()
-    assert len(front) == 22
+    assert len(front) == 21
     assert LAVA_ATTR_STAGE5_FRONT_ADDR + len(front) <= LAVA_ATTR_STAGE5_FRONT_END
     core = build_lava_attr_decision_core(
         LAVA_ATTR_ROOM_MATCH_ADDR,
@@ -8665,6 +9325,8 @@ def build_arena_attr_semantic_decider() -> tuple[bytes, bytes, bytes, bytes, byt
     dispatch.label("neutral")
     dispatch.db(0xAF, 0xE0, LAVA_ATTR_DECISION_HRAM, 0x3C, 0xC9)
     dispatch.label("atomic")
+    # Keep the cold/installer path byte-exact. Once the always-mapped WRAM
+    # decider is live, its changed-layout arm selects the dungeon-only GDMA.
     dispatch.db(0x3E, 0x01, 0xE0, LAVA_ATTR_DECISION_HRAM, 0xC9)
     dispatch.label("arena")
     dispatch.db(0x7C, 0xE6, 0xF8, 0xFE, 0x98)
@@ -8753,12 +9415,15 @@ def build_stage1_attr_runtime(always_stage1: bool = False) -> bytes:
     """Return NZ once per changed Stage-1 layout on each physical BG map.
 
     A room ID is too coarse: the native scroller republishes shifted packed
-    layouts while FFBD remains unchanged. Caching only FFBD left attributes
-    behind otherwise-correct tile IDs. SCX, the native vertical camera state
-    DC02, and one receipt-proven raw cell identify every transition in the
-    traced live/demo/low-health corpora without using a constantly changing
-    frame counter. Rotating spike phases remain handled by the selective
-    bank-14 row service.
+    layouts while FFBD remains unchanged. Prerecorded play is forced dirty by
+    its fixed trampoline: its moving pickup route can replace a pickup with
+    neutral floor while colliding under the live cache key. Live play uses
+    the receipt-qualified phase/content key combining DC00, SCY, DC02, and
+    packed source cell C297. DC00 arms attributes before a physical-map flip
+    even when C1A0 advances during the tile copier. This keeps the attribute
+    origin aligned during horizontal and vertical streaming instead of
+    reusing the stale room-build key DF7C or timing-sensitive SCX.
+    Rotating spike phases remain handled by the selective bank-14 row service.
     """
     a = _Asm()
     # Live Gargoyle combat uses D880=$0A while retaining the same Stage-1
@@ -8781,23 +9446,19 @@ def build_stage1_attr_runtime(always_stage1: bool = False) -> bytes:
         assert len(code) == 16
         return code
     a.db(
-        0x16, 0xDF,                         # RST discriminator -> cache page
+        0x16, 0xDF,                         # cache page
         0x7C,                               # A = destination H ($98/$9C)
         0xEE, 0xCB,                         # low cache = H XOR $CB
         0x5F,                               # E = $53/$57
-        0xF0, 0x43, 0x4F,                  # C = native horizontal camera
-        0xFA, 0x02, 0xDC, 0xA9, 0x4F,      # fold vertical camera DC02
+        0x1A, 0x4F,                         # C = cached signature
+        0xF0, 0x42, 0x47,                   # B = SCY
+        0xFA, 0x02, 0xDC, 0xA8, 0x47,       # B ^= DC02
+        0xFA, 0x00, 0xDC, 0xA8, 0x47,       # B ^= native source phase DC00
+        0xFA, 0x97, 0xC2, 0xA8,             # A = B ^ packed source cell 247
     )
-    for index, sample in enumerate(STAGE1_ATTR_TRANSITION_SAMPLES):
-        source = 0xC1A0 + sample
-        a.db(0xFA, source & 0xFF, source >> 8)
-        a.db(0xA9)                          # fold rolling signature C
-        if index + 1 < len(STAGE1_ATTR_TRANSITION_SAMPLES):
-            a.db(0x4F)                      # C = rolling XOR
-    a.db(0xE6, 0x7F, 0x3C, 0x4F)           # valid key range $01..$80
     a.db(
-        0x1A, 0xB9, 0xC8,                  # same layout -> RET Z
-        0x79, 0x12, 0xC9,                  # publish key; retain NZ
+        0xB9, 0xC8,                        # same layout -> RET Z
+        0x12, 0xC9,                        # publish key; retain NZ
     )
     a.label("other_scene")
     a.db(
@@ -8806,8 +9467,30 @@ def build_stage1_attr_runtime(always_stage1: bool = False) -> bytes:
         LAVA_ATTR_SCENE_DISPATCH_ADDR >> 8,
     )
     code = a.finish()
-    assert len(code) == 40
+    assert len(code) == 41
     assert STAGE1_ATTR_RUNTIME_ADDR + len(code) <= OAM_WRAM_END_ADDR
+    return code
+
+
+def build_stage1_postcopy_scene_guard() -> bytes:
+    """Tail-map Stage 1's completed-copy owner; reject later stages early.
+
+    FFA5 is the authoritative destination latch consumed by a dirty map copy.
+    Stage 1's banked owner clears it on its normal exit. Later stages return
+    before that owner, so clear the consumed latch locally; otherwise the next
+    pure publication inherits a stale dirty request and recompiles all 24
+    attribute rows. This bounded WRAM guard is on the settled generated path
+    and avoids the fixed/private-bank round trip used by the older prototype.
+    """
+    code = bytes([
+        0xF0, 0xBA,                         # LDH A,[$FFBA]
+        0xB7, 0x28, 0x04,                   # OR A; JR Z,Stage-1 owner
+        0xAF, 0xE0, 0xA5, 0xC9,             # clear consumed latch; RET
+        0xC3,
+        STAGE1_HAZARD_PURE_MAP_ADDR & 0xFF,
+        STAGE1_HAZARD_PURE_MAP_ADDR >> 8,
+    ])
+    assert len(code) == 12
     return code
 
 
@@ -8830,33 +9513,43 @@ def build_stage1_hazard_row_helper() -> tuple[bytes, bytes]:
     HBlank, restores VBK0, and returns here before bank 1 is restored.
     """
     a = _Asm()
-    exit_addr = STAGE1_HAZARD_ROW_HELPER_END - 5
-    a.db(0xE1)                              # discard synthetic RST return
-    a.db(
-        0xFA, 0x80, 0xD8,
-        0x47,                               # retain exact scene in B
-        0xE6, 0xF7,                         # live miniboss $0A -> Stage 1 $02
-        0xFE, 0x02,
-    )
+    exit_addr = STAGE1_HAZARD_ROW_HELPER_END - 8
+    # Discard the synthetic mapper return through BC so H can carry the exact
+    # dirty destination selected by the dispatcher. B is replaced immediately
+    # by the scene byte and C is not live until the scanner begins.
+    a.db(0xC1)
+    a.db(0xFA, 0x80, 0xD8, 0x47)           # preserve exact scene in B
+    a.db(0xE6, 0xF7, 0xFE, 0x02)           # admit only scene $02/$0A
     a.db(0xC2, exit_addr & 0xFF, exit_addr >> 8)
-    # The prerecorded route keeps DCFD clear and retains its independently
-    # receipt-locked tile-ID attribute path. Only live play owns bank-1 art.
-    a.db(0xFA, 0xFD, 0xDC, 0xB7)
+    a.db(0xFA, 0xFD, 0xDC, 0xB7)           # reject prerecorded demo route
     a.db(0xCA, exit_addr & 0xFF, exit_addr >> 8)
-    # Only the two native cylinder rooms and their room-$07 transition can
-    # contain one of the reviewed layouts during ordinary Stage 1. Room $01
-    # is also used by the long, hazard-free opening route; rescanning it on
-    # every atomic movement copy caused measurable north-travel lag. The exact
-    # Gargoyle scene remains admitted regardless of room, while the outgoing
-    # cylinder has already been stamped before stock publishes room $01.
-    a.db(0x78, 0xFE, 0x0A)
+    # Admit every Stage-1 room from $01 through $0C plus the exact rotating-
+    # hazard fixture room $12. The geometry scanner is already fail-closed,
+    # so rooms without a cylinder produce no writes.
+    # Excluding $03/$04 was unsafe: outgoing teeth remain visible after FFBD
+    # advances into those rooms, leaving their endpoint cells on BG7 without
+    # bank 1 after menu close and low-health transitions. Initial room $05
+    # must retain the
+    # complete publication cadence: skipping it enabled LCDC map bit 3 two
+    # frames before the OG viewport was ready, exposing the cyan/corrupt cold
+    # handoff.  Ordinary rooms $03/$04 remain fast. Room $03 is still admitted
+    # by the
+    # exact Gargoyle scene above, which is the independently verified
+    # miniboss overlay contract. Rooms $01 and $07 are essential transition
+    # identities:
+    # $01 begins while the outgoing hazard row is still visible; excluding it
+    # leaves bank-1/BG7 attributes on the ordinary 01-04 floor phases.
+    # FFBD advances there before the scene changes to $0A, while the outgoing
+    # row has already wrapped through destination offsets $000/$020. Omitting
+    # it left nine rendered frames with the previous row's bank/palette bits
+    # during north movement at low health. The exact Gargoyle scene remains
+    # admitted in any room.
+    a.db(0xCB, 0x58)                       # BIT 3,B: exact scene $0A
+    a.jr(0x20, "hazard_room")              # Gargoyle scene, any room
+    a.db(0xF0, 0xBD, 0xFE, 0x12)          # rotating-hazard room $12
     a.jr(0x28, "hazard_room")
-    a.db(0xF0, 0xBD, 0xFE, 0x02)
-    a.jr(0x28, "hazard_room")
-    a.db(0xFE, 0x07)
-    a.jr(0x28, "hazard_room")
-    a.db(0xFE, 0x12)
-    a.db(0xC2, exit_addr & 0xFF, exit_addr >> 8)
+    a.db(0x3D, 0xFE, 0x0C)                # normalized rooms $00..$0B
+    a.db(0xD2, exit_addr & 0xFF, exit_addr >> 8)
     a.label("hazard_room")
     a.db(
         0xFA,
@@ -8866,15 +9559,19 @@ def build_stage1_hazard_row_helper() -> tuple[bytes, bytes]:
         0xFE, STAGE1_HAZARD_BANK1_REFRESH_COUNT,
     )
     a.db(0xC2, exit_addr & 0xFF, exit_addr >> 8)
-    # The bank-13 scene dispatcher used by the fixed mapper may clobber HL.
-    # DC0B still identifies the just-completed physical map at this exact
-    # post-copy point: bit 0 maps directly to destination H=$98/$9C.
-    # DC0B is receipt-locked to 0/1 at every completed-map hook.
+    # Dirty publications retain their authoritative destination H in FFA5.
+    # DC0B usually agrees, but leads/lags the physical map at the north-scroll
+    # seam: deriving H from it repainted the peer map and left ten neutral gap
+    # cells on stale bank-1 attributes for six rendered frames. Pure copies do
+    # not set FFA5, so they retain the reviewed DC0B fallback.
+    a.db(0x7C, 0xB7)                       # dispatcher supplied dirty H?
+    a.jr(0x20, "destination_ready")
     a.db(0xFA, 0x0B, 0xDC, 0x87, 0x87, 0xEE, 0x98, 0x67)
+    a.label("destination_ready")
     a.db(0x2E, 0x00)                       # completed map starts at xx00
     a.db(0xE5)                              # retain base for seam repair
     a.db(0xF3)                              # pure caller re-enables after RET
-    a.db(0xAF, 0xE0, 0x4F)                 # destination classifier reads VBK0
+    a.db(0xAF, 0xE0, 0x4F)                 # VBK0
     a.db(
         0xCD,
         STAGE1_HAZARD_SCANNER_FRONT_ADDR & 0xFF,
@@ -8888,6 +9585,9 @@ def build_stage1_hazard_row_helper() -> tuple[bytes, bytes]:
     assert STAGE1_HAZARD_ROW_HELPER_ADDR + len(a.code) <= exit_addr
     a.db(bytes(exit_addr - STAGE1_HAZARD_ROW_HELPER_ADDR - len(a.code)))
     a.label("exit")
+    # Clear the dirty latch on every admitted/rejected exit. Leaving it armed
+    # would make a following pure publication inherit the previous map.
+    a.db(0xAF, 0xE0, ATOMIC_DEST_H_HRAM)
     a.db(0x3E, 0x01, 0xC3, 0x61, 0x00)     # restore bank 1; original RET
     main = a.finish()
 
@@ -8931,15 +9631,19 @@ def build_stage1_hazard_dynamic_scanner() -> tuple[bytes, bytes, bytes, bytes]:
     destination map as the classifier made the selected span depend on LCD
     mode and left old $0F cells behind. The completed C1A0 packed source is
     stable here. Scan it while advancing the destination row in lockstep, then
-    repair the three receipt-proven north-seam edge cells from the destination
-    tile/LUT pair before returning.
+    repair the three receipt-proven north-seam edge cells before returning.
+    Each rotating span is published through the expanded semantic row helper:
+    only real tooth tiles receive BG7/bank 1, while retracted floor cells and
+    the body/support tiles receive their canonical Stage-1 YAML attributes.
     """
     front = _Asm()
-    # Stable wall/ceiling cylinders occupy packed rows 0/3; the miniboss
-    # translation moves them to rows 2/5. Their union is the six-row prefix,
-    # so the remaining eighteen rows are proven classifier no-ops.
+    # The cylinders begin in packed rows 0/3, but northward room-$01 scrolling
+    # rotates those rows through the entire 24-row source before the miniboss
+    # translation settles. The old six-row prefix left real teeth gray and
+    # bank-1 neutral phases behind as yellow trails after row 5. Scan every
+    # packed row; unmatched rows remain classifier no-ops.
     front.db(0x11, 0xA0, 0xC1)             # DE = packed source row 0
-    front.db(0x06, 0x06)                   # B = reviewed rows 0..5
+    front.db(0x06, 0x18)                   # B = all 24 packed rows
     front.label("row")
     row_addr = STAGE1_HAZARD_SCANNER_FRONT_ADDR + len(front.code)
     front.db(0xC5, 0xD5, 0xE5)             # preserve row count/bases
@@ -8953,12 +9657,20 @@ def build_stage1_hazard_dynamic_scanner() -> tuple[bytes, bytes, bytes, bytes]:
              STAGE1_HAZARD_ROW_FOLD_ADDR >> 8)
     front.db(0xDA, STAGE1_HAZARD_SCANNER_SEAM_ADDR & 0xFF,
              STAGE1_HAZARD_SCANNER_SEAM_ADDR >> 8)
+    # The translated cylinder also has a column-2 phase and an inclusive
+    # column-14 endpoint. Column 2 repaints the complete 0..14 semantic
+    # envelope; columns 4/5 own the shifted 4..14 envelope.
+    front.db(0x13, 0x1A)
+    front.db(0xCD, STAGE1_HAZARD_ROW_FOLD_ADDR & 0xFF,
+             STAGE1_HAZARD_ROW_FOLD_ADDR >> 8)
+    front.db(0xDA, STAGE1_HAZARD_START4_EDGE_ADDR & 0xFF,
+             STAGE1_HAZARD_START4_EDGE_ADDR >> 8)
     # Column 4's $6A connector identifies the miniboss row. A tooth at
     # columns 4/5 identifies the shifted ceiling cylinder.
-    front.db(0x13, 0x13, 0x13, 0x1A, 0xFE, 0x6A)
+    front.db(0x13, 0x13, 0x1A, 0xFE, 0x6A)
     front.db(0xCA,
-             (STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + 13) & 0xFF,
-             (STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + 13) >> 8)
+             STAGE1_HAZARD_START4_HELPER_ADDR & 0xFF,
+             STAGE1_HAZARD_START4_HELPER_ADDR >> 8)
     front.db(0xCD, STAGE1_HAZARD_ROW_FOLD_ADDR & 0xFF,
              STAGE1_HAZARD_ROW_FOLD_ADDR >> 8)
     front.db(0xDA,
@@ -8966,38 +9678,36 @@ def build_stage1_hazard_dynamic_scanner() -> tuple[bytes, bytes, bytes, bytes]:
              STAGE1_HAZARD_START4_HELPER_ADDR >> 8)
     front.db(0x13, 0x1A, 0xCD, STAGE1_HAZARD_ROW_FOLD_ADDR & 0xFF,
              STAGE1_HAZARD_ROW_FOLD_ADDR >> 8)
-    front.db(0xDA,
+    # Carry enters the column-5 publisher. No Carry tail-enters the five-byte
+    # column-6 classifier immediately after the edge cave's mapper return.
+    front.db(0xD2, (STAGE1_HAZARD_START4_EDGE_ADDR + 9) & 0xFF,
+             (STAGE1_HAZARD_START4_EDGE_ADDR + 9) >> 8)
+    front.db(0xC3,
              STAGE1_HAZARD_START4_COL5_ADDR & 0xFF,
              STAGE1_HAZARD_START4_COL5_ADDR >> 8)
-    # A tooth at column 6 with none at 4/5 is the alternating neutral-gap
-    # phase. Tail-enter its one-HBlank sparse repair with DE on source col 6
-    # and HL still on the exact destination row base.
-    front.db(0x13)
-    front.db(0xC3, STAGE1_HAZARD_ROW0_REPAIR_FRONT_ADDR & 0xFF,
-             STAGE1_HAZARD_ROW0_REPAIR_FRONT_ADDR >> 8)
     front_code = front.finish()
-    assert len(front_code) == 50
+    # The translated-layout classifier continues in the dedicated edge cave;
+    # keep this front fragment bounded rather than pinning its retired length.
+    assert len(front_code) <= 0x61EF - STAGE1_HAZARD_SCANNER_FRONT_ADDR
     assert STAGE1_HAZARD_SCANNER_FRONT_ADDR + len(front_code) <= 0x61EF
 
     middle = _Asm()
     middle.label("start0")
     middle.db(0x0E, 0x09, 0xFA, 0x0E, 0xDC, 0xE6, 0x01)
-    middle.jr(0x28, "write")
-    middle.db(0x0C, 0x0C)                  # source seam reaches column 10
+    # C = 9 + 2*(DC0E bit 0). This one-byte-shorter form leaves the exact
+    # space needed for the deterministic trailing-endpoint repair below.
+    middle.db(0x87, 0x81, 0x4F)
     middle.jr(0x18, "write")
-    assert len(middle.code) == 13
-    middle.label("start5")
-    middle.db(0x0E, 0x0A)
-    middle.label("offset")
-    middle.db(0x79, 0xD6, 0x05, 0x85, 0x6F)  # L += C-5
+    assert len(middle.code) == 12
     middle.label("write")
-    middle.db(0x1E, 0x0F)                  # E = BG7 + pattern bank 1
-    middle.db(0xCD, STAGE1_HAZARD_ROW_WRITER_ADDR & 0xFF,
-              STAGE1_HAZARD_ROW_WRITER_ADDR >> 8)
-    middle.db(0xC3, STAGE1_HAZARD_SCANNER_TAIL_ADDR & 0xFF,
-              STAGE1_HAZARD_SCANNER_TAIL_ADDR >> 8)
+    # The stock mapper returns at this numeric address in newly mapped bank
+    # 20, where the expanded installer places a JP to the semantic helper.
+    middle.db(
+        0x3E, STAGE1_HAZARD_SEMANTIC_ROW_BANK,
+        0xCD, 0x61, 0x00,
+    )
     middle_code = middle.finish()
-    assert len(middle_code) == 28
+    assert len(middle_code) <= 32
     assert STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + len(middle_code) <= 0x61AF
 
     tail = _Asm()
@@ -9021,60 +9731,48 @@ def build_stage1_hazard_dynamic_scanner() -> tuple[bytes, bytes, bytes, bytes]:
     assert STAGE1_HAZARD_SCANNER_TAIL_ADDR + len(tail_code) <= 0x6210
 
     seam = bytes([
-        0x7B, 0xC6, 0x09, 0x5F,             # source col 1 -> col 10
-        0x30, 0x01, 0x14,
-        0x1A,
-        0xCD, STAGE1_HAZARD_ROW_FOLD_ADDR & 0xFF,
-        STAGE1_HAZARD_ROW_FOLD_ADDR >> 8,
-        0xD2, STAGE1_HAZARD_SCANNER_MIDDLE_ADDR & 0xFF,
-        STAGE1_HAZARD_SCANNER_MIDDLE_ADDR >> 8,
-        0x0E, 0x0B,
+        0x1B,                               # source col 1 -> col 0
+        0x0E, 0x0B,                         # full seam-crossing cylinder
         0xC3,
-        (STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + 20) & 0xFF,
-        (STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + 20) >> 8,
+        (STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + middle.labels["write"]) & 0xFF,
+        (STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + middle.labels["write"]) >> 8,
     ])
-    assert len(seam) == 19
+    assert len(seam) == 6
     assert STAGE1_HAZARD_SCANNER_SEAM_ADDR + len(seam) <= 0x6CFC
     return front_code, middle_code, tail_code, seam
 
 
 def build_stage1_hazard_start4_edge_helpers() -> tuple[bytes, bytes]:
-    """Publish start-4 spans, then restore their trailing cell from its tile.
+    """Classify translated rows and publish their full semantic envelope.
 
-    The nine-cell span ends at column 12. Column 4 tooth phases leave a neutral
-    palette-0 cell at column 13; column 5 tooth phases leave the final low-bank
-    palette-7 tooth there. The lower ceiling row instead ends against its
-    permanent tile-$63 metal support at map column 13, so that exact $xAD cell
-    must stay on YAML BG6 in both phases. Two four-byte entries encode the
-    phase discriminator in D before sharing the HBlank writer; the edge tail
-    applies the one reviewed support exception without an unsafe destination
-    VRAM read. The saved source DE is restored by the scanner tail.
+    The alternate entry is reached with DE on source column 5, so it backs up
+    once before joining the column-4 entry. The semantic helper owns columns
+    4..14, including the neutral/tooth endpoint and fixed metallic support.
+    A separate column-2 phase repaints columns 0..14: the extra two leading
+    cells deliberately clear the outgoing column-0/1 phase instead of leaving
+    red/yellow bank-1 trails on its neutral $01-$04 replacement tiles.
     """
     start4 = bytes([
-        0x16, 0x00,                         # column-4 entry: edge BG0
-        0x18, 0x02,
-        0x16, 0x07,                         # column-5 entry: edge BG7
-        0x0E, 0x09,
+        0x18, 0x03,                         # column-4 entry -> common
+        0x00, 0x00,                         # fixed entry spacing
+        0x1B,                               # column-5 entry: DE -> column 4
+        0x0E, 0x0B,                         # columns 4..14 inclusive
         0x7D, 0xC6, 0x04, 0x6F,
-        0x1E, 0x0F,
-        0xCD, STAGE1_HAZARD_ROW_WRITER_ADDR & 0xFF,
-        STAGE1_HAZARD_ROW_WRITER_ADDR >> 8,
-        0xC3, STAGE1_HAZARD_START4_EDGE_ADDR & 0xFF,
-        STAGE1_HAZARD_START4_EDGE_ADDR >> 8,
+        0x3E, STAGE1_HAZARD_SEMANTIC_ROW_BANK,
+        0xCD, 0x61, 0x00,
     ])
     edge = bytes([
-        0x7D, 0xFE, 0xAD,                   # lower edge is tile-$63 support
-        0x20, 0x02,
-        0x16, 0x06,                         # permanent YAML metallic BG6
-        0x5A,                               # E = support/phase edge attr
-        0x0C,                               # C=0 after row writer -> one cell
-        0xCD, STAGE1_HAZARD_ROW_WRITER_ADDR & 0xFF,
-        STAGE1_HAZARD_ROW_WRITER_ADDR >> 8,
-        0xC3, STAGE1_HAZARD_SCANNER_TAIL_ADDR & 0xFF,
-        STAGE1_HAZARD_SCANNER_TAIL_ADDR >> 8,
+        0x1B, 0x1B,                         # source column 2 -> row base
+        0x0E, 0x0F,                         # columns 0..14 inclusive
+        0x3E, STAGE1_HAZARD_SEMANTIC_ROW_BANK,
+        0xCD, 0x61, 0x00,                   # bank-20 return is $67ED
+        # Direct entry from the scanner's No-Carry branch: test column 6.
+        0x13, 0x1A,
+        0xC3, STAGE1_HAZARD_ROW0_REPAIR_FRONT_ADDR & 0xFF,
+        STAGE1_HAZARD_ROW0_REPAIR_FRONT_ADDR >> 8,
     ])
     assert len(start4) <= 23, len(start4)
-    assert len(edge) == 15, len(edge)
+    assert len(edge) == 14
     return start4, edge
 
 
@@ -9185,47 +9883,43 @@ def build_stage1_hazard_room12_wall_repair() -> bytes:
 
 def build_stage1_hazard_row0_transition_repair(
 ) -> tuple[bytes, bytes, bytes]:
-    """Clear six neutral gaps in the translated alternating cylinder phase.
+    """Publish the translated alternating phase as one semantic span.
 
     The caller supplies DE on packed-source column 6 and HL on the matching
-    destination row base. If column 6 is not a tooth, resume the normal tail.
-    Otherwise the LUT publisher has already restored the intervening tooth
-    cells to palette 7, while neutral columns 4/5/7/9/11/13 can retain the
-    outgoing cylinder's bank bit. Clear those six exact cells together in one
-    HBlank. Because HL is row-relative, this follows row 0 to row 2 (and future
-    translations) instead of hard-coding the pre-miniboss screen coordinate.
+    destination row base. Alternate animation phases put the first real tooth
+    at column 6 or column 7, so the private tail checks column 7 when column 6
+    is neutral. A matched phase aligns source and destination to column 4 and
+    lets the semantic helper assign all eleven cells through the inclusive
+    column-14 endpoint. Because HL is row-relative, this follows row 0 to row
+    2 (and future translations) without retaining any outgoing bank bits in
+    neutral gaps.
     """
     front = bytes([
-        0x1A,
         0xCD, STAGE1_HAZARD_ROW_FOLD_ADDR & 0xFF,
         STAGE1_HAZARD_ROW_FOLD_ADDR >> 8,
-        0xD2, STAGE1_HAZARD_SCANNER_TAIL_ADDR & 0xFF,
-        STAGE1_HAZARD_SCANNER_TAIL_ADDR >> 8,
-        0x7D, 0xC6, 0x04, 0x6F,             # destination column 4
-        0x06, 0x04,                         # four tooth/gap pairs
+        0xD2, STAGE1_HAZARD_ROW0_PHASE7_ADDR & 0xFF,
+        STAGE1_HAZARD_ROW0_PHASE7_ADDR >> 8,
+        0x1B, 0x1B,                         # source column 6 -> column 4
+        0x7D, 0xF6, 0x04, 0x6F,             # destination column 4
+        0x0E, 0x0B,
         0xC3, STAGE1_HAZARD_ROW0_REPAIR_MIDDLE_ADDR & 0xFF,
         STAGE1_HAZARD_ROW0_REPAIR_MIDDLE_ADDR >> 8,
     ])
     middle = bytes([
-        0x3E, 0x01, 0xE0, 0x4F,             # VBK1
-        0xF0, 0x41, 0xE6, 0x03, 0xFE, 0x03,
-        0x20, 0xF8,                         # wait until LCD mode 3
-        0xF0, 0x41,                         # first mode-0 poll
-        0xC3, STAGE1_HAZARD_ROW0_REPAIR_TAIL_ADDR & 0xFF,
-        STAGE1_HAZARD_ROW0_REPAIR_TAIL_ADDR >> 8,
+        0x3E, STAGE1_HAZARD_SEMANTIC_ROW_BANK,
+        0xCD, 0x61, 0x00,
     ])
-    wait0_addr = STAGE1_HAZARD_ROW0_REPAIR_MIDDLE_ADDR + 12
-    wait0_pc = STAGE1_HAZARD_ROW0_REPAIR_TAIL_ADDR + 4
-    wait0_delta = wait0_addr - wait0_pc
-    assert -128 <= wait0_delta <= 127
     tail = bytes([
-        0xE6, 0x03, 0x20, wait0_delta & 0xFF, # then enter HBlank
-        0xAF,
-        0x22, 0x22,                         # columns 4,5
-        0x3E, 0x0F, 0x22,                   # tooth: 6/8/10/12
-        0xAF, 0x22,                         # neutral: 7/9/11/13
-        0x05, 0x20, 0xF8,
-        0xE0, 0x4F,                         # A=0 -> VBK0
+        0x13, 0x13, 0x1A,                  # source column 7 -> column 9
+        0xCD, STAGE1_HAZARD_ROW_FOLD_ADDR & 0xFF,
+        STAGE1_HAZARD_ROW_FOLD_ADDR >> 8,
+        0xDA, (STAGE1_HAZARD_SHIFT8_LEAVES_ADDR + 6) & 0xFF,
+        (STAGE1_HAZARD_SHIFT8_LEAVES_ADDR + 6) >> 8,
+        0x13, 0x1A,                         # source column 9 -> column 10
+        0xCD, STAGE1_HAZARD_ROW_FOLD_ADDR & 0xFF,
+        STAGE1_HAZARD_ROW_FOLD_ADDR >> 8,
+        0xDA, (STAGE1_HAZARD_SHIFT8_PUBLISHER_ADDR + 9) & 0xFF,
+        (STAGE1_HAZARD_SHIFT8_PUBLISHER_ADDR + 9) >> 8,
         0xC3, STAGE1_HAZARD_SCANNER_TAIL_ADDR & 0xFF,
         STAGE1_HAZARD_SCANNER_TAIL_ADDR >> 8,
     ])
@@ -9233,6 +9927,47 @@ def build_stage1_hazard_row0_transition_repair(
     assert len(middle) <= 22, len(middle)
     assert len(tail) <= 20, len(tail)
     return front, middle, tail
+
+
+def build_stage1_hazard_shift8_helpers() -> tuple[bytes, bytes, bytes]:
+    """Publish the second translated cylinder at columns 8 through 17.
+
+    The column-6/7 classifier owns the left cylinder. When neither cell is a
+    tooth, its tail tests columns 9/10 for the right cylinder's two alternating
+    phases. These leaves normalize DE to column 8, then reuse the existing
+    bank-20 semantic helper through its reviewed $61A0 return trampoline.
+    """
+    publisher = bytes([
+        0x7D, 0xF6, 0x08, 0x6F,             # destination column 8
+        0x0E, 0x0A,                         # columns 8..17 inclusive
+        0xC3,
+        (STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + 12) & 0xFF,
+        (STAGE1_HAZARD_SCANNER_MIDDLE_ADDR + 12) >> 8,
+        0x1B, 0x1B,                         # column 10 -> column 8
+        0xC3, STAGE1_HAZARD_SHIFT8_PUBLISHER_ADDR & 0xFF,
+        STAGE1_HAZARD_SHIFT8_PUBLISHER_ADDR >> 8,
+    ])
+    leaves = bytes([
+        0x1B, 0x1B, 0x1B,                   # column 7 -> column 4
+        0xC3, (STAGE1_HAZARD_ROW0_REPAIR_FRONT_ADDR + 8) & 0xFF,
+        (STAGE1_HAZARD_ROW0_REPAIR_FRONT_ADDR + 8) >> 8,
+        0x1B,                               # column 9 -> column 8
+        0xC3, STAGE1_HAZARD_SHIFT8_PUBLISHER_ADDR & 0xFF,
+        STAGE1_HAZARD_SHIFT8_PUBLISHER_ADDR >> 8,
+    ])
+    phase7 = bytes([
+        0x13, 0x1A,                         # source column 6 -> column 7
+        0xCD, STAGE1_HAZARD_ROW_FOLD_ADDR & 0xFF,
+        STAGE1_HAZARD_ROW_FOLD_ADDR >> 8,
+        0xDA, STAGE1_HAZARD_SHIFT8_LEAVES_ADDR & 0xFF,
+        STAGE1_HAZARD_SHIFT8_LEAVES_ADDR >> 8,
+        0xC3, STAGE1_HAZARD_ROW0_REPAIR_TAIL_ADDR & 0xFF,
+        STAGE1_HAZARD_ROW0_REPAIR_TAIL_ADDR >> 8,
+    ])
+    assert len(publisher) <= 15
+    assert len(leaves) <= 13
+    assert len(phase7) <= 17
+    return publisher, leaves, phase7
 
 
 def build_stage1_hazard_bank1_loader() -> bytes:
@@ -9264,22 +9999,44 @@ def build_stage1_hazard_bank1_loader() -> bytes:
     return code
 
 
-def build_stage1_entry_patch_gate() -> bytes:
-    """Arm every stage prelude and patch Stage 1 at splash handoff."""
+def build_stage1_entry_patch_gate(
+    defer_palette_to_map_flip: bool = False,
+) -> bytes:
+    """Publish Stage-1 transition state, then enter its attribute patch.
+
+    This helper is called once by the real D880=$02 scene transition. The old
+    splash-side FFB7 gate began writing gameplay attributes 22 rendered frames
+    before the STAGE card disappeared, visibly replacing letter cells with
+    white/red fragments. Scene detection already owns an exact one-shot entry,
+    so no gameplay attribute needs to touch the still-visible card.
+    """
     a = _Asm()
     a.db(
-        0xF0, 0xB7,
-        # Every valid stage index is nonzero. Natural level-select entry can
-        # otherwise retain cold HRAM zero and never run its first scene/table
-        # prelude (most visibly losing the Stage 5/7 lava attributes).
+        # DCFD is zero only for prerecorded dungeon play. Live gameplay keeps
+        # its nonzero discriminator as the prelude's armed flag.
+        0xFA, 0xFD, 0xDC,
         0xE0, ATTRACT_PRELUDE_FLAG_HRAM,
-        0xFE, 0x02,                         # FFB7 already owns Stage 1?
     )
-    a.jr(0x20, "not_ready")
-    a.db(0xC3, STAGE1_ENTRY_PATCH_BODY_ADDR & 0xFF,
-         STAGE1_ENTRY_PATCH_BODY_ADDR >> 8)
-    a.label("not_ready")
-    a.db(0x37, 0xC9)                       # retain splash skip via Carry
+    if defer_palette_to_map_flip:
+        # D880 becomes gameplay a few frames before the completed dungeon map
+        # replaces the STAGE card.  Pocket/SameBoy can service DF4C inside
+        # that interval and briefly paint the still-visible card through the
+        # Stage-1 purple ramp.  Preserve the exact 24-T instruction cadence,
+        # rearm the natural bank-1 art loader before the gameplay/map flip,
+        # and return A=0.  The atomic handoff publishes DF4C only after it has
+        # installed Stage-1 BG0.
+        a.db(0xAF, 0xEA, 0x5B, 0xDF, 0x00)
+    else:
+        a.db(
+            # Start the complete gameplay palette pass at true scene entry.
+            0x3E, 0x11,
+            0xEA, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+        )
+    a.db(
+        0xC3,
+        STAGE1_ENTRY_PATCH_BODY_ADDR & 0xFF,
+        STAGE1_ENTRY_PATCH_BODY_ADDR >> 8,
+    )
     code = a.finish()
     assert STAGE1_ENTRY_PATCH_GATE_ADDR + len(code) <= STALE_WINDOW_CLEANUP_ADDR
     return code
@@ -9288,19 +10045,19 @@ def build_stage1_entry_patch_gate() -> bytes:
 def build_stage1_entry_attr_patch(
     stage1_lut: bytes,
 ) -> tuple[bytes, bytes, bytes, bytes]:
-    """Publish twenty chromatic first-room cells before D880 becomes $02.
+    """Publish twenty chromatic first-room cells when D880 becomes $02.
 
-    The final STAGE splash VBlank exposes the completed Stage-1 scene in FFB7
-    one frame before the main loop mirrors it into D880. The normal atomic map
-    copy consequently begins one frame after the first gameplay raster. The
-    upper eleven cells cover the first visible pair; the lower nine cover the
-    alternate $9800 map exposed when LCDC begins double-buffering after the
-    initial $9C00-only sweep. Compiling both reviewed sets from the same YAML
-    LUT makes the hidden patch deterministic without repainting a later room.
+    The one-shot scene transition runs while the complete STAGE card is still
+    visible in $9800. Seed the inactive $9C00 map only; writing the displayed
+    map recolored the outgoing letters, while selecting $9C00 early exposed
+    its partially built dungeon for two frames. Native code reveals $9C00
+    only after its completed-map publication. Compiling both reviewed sets
+    from the same YAML LUT keeps the hidden patch deterministic without
+    repainting a later room.
     """
     assert len(stage1_lut) == 256
-    bg5_tiles = (0x6E, 0x7D, 0x6D, 0x7E)
-    bg6_tiles = (0x6F, 0x45, 0x54, 0x55, 0x7F, 0x54, 0x55)
+    bg5_tiles = (0x6E, 0x7D, 0x6D, 0x7E, 0x6F, 0x7F)
+    bg6_tiles = (0x45, 0x54, 0x55, 0x54, 0x55)
     bg5 = {stage1_lut[tile] & 0x07 for tile in bg5_tiles}
     bg6 = {stage1_lut[tile] & 0x07 for tile in bg6_tiles}
     assert bg5 == {5} and bg6 == {6}, (bg5, bg6)
@@ -9309,7 +10066,7 @@ def build_stage1_entry_attr_patch(
 
     body = bytes([
         0x3E, 0x01, 0xE0, 0x4F,             # VBK1 attributes
-        0x21, 0x82, 0x98, 0x3E, 0x05, 0x22, 0x77,
+        0x21, 0x82, 0x9C, 0x3E, 0x05, 0x22, 0x77,
         0x2E, 0x89, 0x77,
         0x2E, 0xA2, 0x77,
         0x3E, 0x06,
@@ -9317,23 +10074,25 @@ def build_stage1_entry_attr_patch(
         STAGE1_ENTRY_PATCH_TAIL_ADDR >> 8,
     ])
     tail = bytes([
-        0x2E, 0x8B, 0x77,
         0x2E, 0x91, 0x77,
         0x2E, 0xA4, 0x22, 0x77,
-        0x2E, 0xAB, 0x77,
+        0x2E, 0xB0, 0x22, 0x77,
+        0x3E, 0x05,
         0xC3, STAGE1_ENTRY_PATCH_FINISH_ADDR & 0xFF,
         STAGE1_ENTRY_PATCH_FINISH_ADDR >> 8,
     ])
     finish = bytes([
-        0x2E, 0xB0, 0x22, 0x77,
-        # A still holds palette 6.  Arm the normal prelude on the guaranteed
-        # final Stage-1 splash VBlank, covering both live and prerecorded
-        # entry without perturbing title/spotlight/Gargoyle cadence.
+        # A now holds palette 5. Publish the exact 6F/7F wall-end cap cells
+        # separately from their neighboring BG6 wall/support cells.
+        0x2E, 0x8B, 0x77,
+        0x2E, 0xAB, 0x77,
+        # Arm the normal prelude at the one-shot
+        # Stage-1 scene transition, covering both live and prerecorded entry.
         0xE0, ATTRACT_PRELUDE_FLAG_HRAM,
         # The stock splash can leave the scene cache already equal to $02.
         # Force exactly one real Stage-1 scene transition so the first
         # prelude selects the active YAML table and applies the demo/live
-        # flag policy below.
+    # flag policy below.
         0x3E, 0xFF,
         0xEA, SCENE_CACHE_ADDR & 0xFF, SCENE_CACHE_ADDR >> 8,
         0xC3, STAGE1_ENTRY_PATCH_LOWER_ADDR & 0xFF,
@@ -9341,14 +10100,14 @@ def build_stage1_entry_attr_patch(
     ])
     lower = bytes([
         0x3E, 0x05,
-        0x21, 0x18, 0x99,
+        0x21, 0x18, 0x9D,
         0x22, 0x23, 0x22, 0x23, 0x22, 0x23, 0x77,
         0x2E, 0x78, 0x22, 0x23, 0x77,
         0x2E, 0x98, 0x77,
         0x2C, 0x2C, 0x3E, 0x04, 0x77,
         0x2C, 0x2C, 0x3E, 0x06, 0x77,
         0xAF, 0xE0, 0x4F,                   # restore VBK0
-        0x37, 0xC9,                         # splash caller skips colorizer
+        0x2F, 0xC9,                         # A=$FF; splash skips colorizer
     ])
     assert len(body) == 22
     assert len(tail) <= 0x6C40 - STAGE1_ENTRY_PATCH_TAIL_ADDR
@@ -9469,13 +10228,15 @@ def build_stage1_hazard_bank1_neutral_art(rom: bytes) -> bytes:
                 STAGE1_LOW_TILE_GFX_OFFSET + tile * 16:
                 STAGE1_LOW_TILE_GFX_OFFSET + (tile + 1) * 16
             ],
-            (0, 1, 1, 3),
+            (0, 1, 3, 3),
         )
         for tile in (0x01, 0x02, 0x03, 0x04)
     )
 
 
-def build_stage1_hazard_room_dispatcher() -> bytes:
+def build_stage1_hazard_room_dispatcher(
+    *, tagged_exact_destination: bool = False,
+) -> bytes:
     """Normalize both Stage-1 completed-copy stack contracts, then scan.
 
     The two completed-copy routes reach this selector with different stack
@@ -9485,31 +10246,68 @@ def build_stage1_hazard_room_dispatcher() -> bytes:
     this distinction and corrupted bank-1 art/spike semantics after miniboss
     and low-health transitions.
 
-    The fixed-bank pure-copy gate admits only Stage 1 and its demo/miniboss
-    alias into bank 14, so this banked entry no longer needs to inspect arena
-    scenes or rewrite a synthetic return. Boss/arena atomic publications map
-    bank 13 directly from their separate fixed stub.
+    The shared WRAM post-copy guard rejects Stage 2-7 before mapping this ROM
+    bank. Boss/arena atomic publications map bank 13 directly from their
+    separate fixed stub.
     """
-    code = bytes([
-        0xCB, 0x78,                         # BIT 7,B: helper owns frame?
-        0xC2,
+    a = _Asm()
+    if tagged_exact_destination:
+        # Every post-copy now owns FFA5=$98/$9C plus a transient dirty bit in
+        # bit 0. Both pure and dirty mapper paths have the synthetic return
+        # consumed by the row helper's entry POP, so no DC0B fallback remains.
+        a.db(0xF0, ATOMIC_DEST_H_HRAM, 0xE6, 0xFE, 0x67)
+        a.db(
+            0xC3,
+            STAGE1_HAZARD_ROW_HELPER_ADDR & 0xFF,
+            STAGE1_HAZARD_ROW_HELPER_ADDR >> 8,
+        )
+        code = a.finish()
+        code += bytes(
+            STAGE1_HAZARD_PHASE_KEY_ADDR
+            - STAGE1_HAZARD_ROOM_DISPATCH_ADDR
+            - len(code)
+        )
+        assert len(code) == (
+            STAGE1_HAZARD_PHASE_KEY_ADDR
+            - STAGE1_HAZARD_ROOM_DISPATCH_ADDR
+        )
+        return code
+    # Atomic setup stores the exact dirty destination H ($98/$9C) in FFA5.
+    # Keep it live through the mapper: the row helper consumes that exact map
+    # identity and clears it on every exit. DC0B is not authoritative during
+    # the north-scroll physical-map handoff.
+    a.db(
+        0xF0, ATOMIC_DEST_H_HRAM,
+        0xB7,
+    )
+    a.jr(0x28, "pure")
+    a.db(
+        0x67,                               # H = exact dirty destination
+        0xC3,
         STAGE1_HAZARD_ROW_HELPER_ADDR & 0xFF,
         STAGE1_HAZARD_ROW_HELPER_ADDR >> 8,
-        0xE1,                               # discard synthetic mapper return
+    )
+    a.label("pure")
+    a.db(
+        0xC1,                               # discard synthetic mapper return
+        0x26, 0x00,                         # H=0 requests DC0B fallback
         0xC3,
         (STAGE1_HAZARD_ROW_HELPER_ADDR + 1) & 0xFF,
         (STAGE1_HAZARD_ROW_HELPER_ADDR + 1) >> 8,
-    ])
-    assert len(code) == 9
+        0x00,                               # unreachable cave padding
+    )
+    code = a.finish()
+    assert len(code) == STAGE1_HAZARD_PHASE_KEY_ADDR - STAGE1_HAZARD_ROOM_DISPATCH_ADDR
     return code
 
 
-def build_stage1_atomic_setup() -> bytes:
+def build_stage1_atomic_setup(*, tagged_exact_destination: bool = False) -> bytes:
     """Retain the exact destination and admit Timer while source is live."""
     code = bytes([
         0x7C,                               # A = native destination H
-        0xE0, ATOMIC_DEST_H_HRAM,           # retain across compile's H use
-        0xF3,                               # DI before changing IE
+        *([0x3C] if tagged_exact_destination else []),
+        0xE0, ATOMIC_DEST_H_HRAM,           # even=pure, odd=dirty when tagged
+        *([] if tagged_exact_destination else [0xF3]),
         0xF0, 0xFF,                         # A = caller's IE
         0xEA, STAGE1_IE_CACHE_ADDR & 0xFF,
         STAGE1_IE_CACHE_ADDR >> 8,
@@ -9522,22 +10320,17 @@ def build_stage1_atomic_setup() -> bytes:
 
 
 def build_stage1_atomic_wrap() -> bytes:
-    """Map later dungeons/arenas, then restore IE and Ted's AF/IME contract.
-
-    The inline atomic completion reloads D880 immediately before this call.
-    The fixed selector returns for title/Stage 1 below $03 and maps later
-    dungeons plus boss arenas directly to bank 13, preventing any transient
-    bank-14 entry while retaining their post-copy completion contract.
-    """
+    """Map the scene's post-copy owner, then restore the caller contract."""
     code = bytes([
         0xFA, 0x80, 0xD8,                   # exact scene, not stale A=$01
         0xCD,
         STAGE1_HAZARD_BANK0_MAP_ADDR & 0xFF,
         STAGE1_HAZARD_BANK0_MAP_ADDR >> 8,
+        0xFA, STAGE1_IE_CACHE_ADDR & 0xFF,
+        STAGE1_IE_CACHE_ADDR >> 8,           # preload saved caller IE
         0xC3,
         STAGE1_ATOMIC_WRAP_TAIL_ADDR & 0xFF,
         STAGE1_ATOMIC_WRAP_TAIL_ADDR >> 8,
-        0x00, 0x00, 0x00,                  # fixed-cave padding, unreachable
     ])
     assert len(code) == 12
     return code
@@ -9546,12 +10339,46 @@ def build_stage1_atomic_wrap() -> bytes:
 def build_stage1_atomic_wrap_tail() -> bytes:
     """Restore the exact pre-existing interrupt/AF completion contract."""
     code = bytes([
-        0xFA, STAGE1_IE_CACHE_ADDR & 0xFF,
-        STAGE1_IE_CACHE_ADDR >> 8,
         0xE0, 0xFF,                         # restore caller's IE
         0x3E, 0x01,
         0xBF,                               # A=$01, F=$C0
         0xD9,                               # RETI; IME active immediately
+    ])
+    assert len(code) == 6
+    return code
+
+
+def build_death_final_publish_leaf(return_addr: int) -> bytes:
+    """Publish the completed death-art source to its visible $9C00 map.
+
+    The stock transition finishes assembling packed C1A0 before changing to
+    D880=$17, but DX VBlank work can leave the final native publication one
+    frame behind. Enter a bank-1 return wrapper with H=$9C; that wrapper calls
+    the existing title-safe pure copier after its hard-coded ``LD H,$98`` and
+    restores the stock transition's live BC/DE registers and A=0/Z result.
+    """
+    code = bytes([
+        0x26, 0x9C,                         # H = visible death-art map
+        0xC3,
+        return_addr & 0xFF,
+        return_addr >> 8,
+    ])
+    assert len(code) == 5
+    return code
+
+
+def build_death_final_publish_return(title_pure_entry: int) -> bytes:
+    """Publish death art without changing the stock transition's BC/DE ABI."""
+    code = bytes([
+        0xC5,                               # PUSH BC
+        0xD5,                               # PUSH DE
+        0xCD,
+        (title_pure_entry + 2) & 0xFF,
+        (title_pure_entry + 2) >> 8,
+        0xD1,                               # POP DE
+        0xC1,                               # POP BC
+        0xAF,                               # A=0, Z; stock CALL $007E result
+        0xC9,
     ])
     assert len(code) == 9
     return code
@@ -10457,19 +11284,17 @@ def build_stage1_gdma_register_helper() -> bytes:
 
 
 def build_stage1_demo_attr_trampoline() -> bytes:
-    """Run the demo key path and publish B=$05 at the exact old cadence.
+    """Force each prerecorded Stage-1 publication dirty and publish B=$05.
 
-    Skipping the ten-cycle live scene gate balances CALL/RET plus the final
-    route-token load. INC BC supplies the remaining two neutral cycles; the
-    decider overwrites C and no flags are changed.
+    The attract route contains moving semantic cells which are not safely
+    represented by the compact live-play key. Returning A=1/NZ here keeps the
+    complete plane current; live play still uses the cached DAD7 decider.
     """
     code = bytes([
-        0x03,                               # 2M register-neutral balance
-        0xCD,
-        (STAGE1_ATTR_RUNTIME_ADDR + 9) & 0xFF,
-        (STAGE1_ATTR_RUNTIME_ADDR + 9) >> 8,
+        0x3E, 0x01, 0xB7,                   # A=1/NZ: dirty publication
         0x06, 0x05,                         # B = no-hazard route token
         0xC9,
+        0x00,                               # preserve fixed service width
     ])
     assert len(code) == 7
     return code
@@ -10505,7 +11330,7 @@ def build_demo_compact_dispatcher() -> bytes:
 def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
     """Build the always-mapped cached-layout map decider.
 
-    Seven corpus-selected source cells form two independent XOR bytes. Together
+    Eight corpus-selected source cells form two independent XOR bytes. Together
     with the room identity they distinguish semantic planes in the later-
     stage streaming trace. Crystal Dragon also uses this cache because its
     body is OBJ and its BG is structurally stable. Unchanged map copies retain
@@ -10513,7 +11338,32 @@ def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
     """
     a = _Asm()
     a.db(0xC5, 0xD5, 0xE5)                 # preserve caller BC/DE/HL
-    a.db(0xAF, 0xE0, LAVA_ATTR_DECISION_HRAM)
+    # The scene dispatcher enters with A=$00 for Stage 2 and $01..$05 for
+    # Stages 3..7 (Crystal enters with its arena-relative nonzero identity).
+    # The shorter XOR loop moves the HBlank phase enough to penalize those
+    # later scenes even though it performs strictly less work. Preserve their
+    # receipt-qualified 24-T cadence while allowing Stage 2 to retain an
+    # twelve-T-cycle hot-path saving. OR/JR costs 16T on the taken Stage-2 arm,
+    # and that arm already proves A=0 so it can enter after the otherwise
+    # redundant XOR. The nonzero arm costs 12T plus three 4T NOPs and retains
+    # the XOR, exactly offsetting the 24T saved by the optimized signatures.
+    a.db(0xB7)                              # OR A: Stage 2 normalized to zero
+    a.jr(0x28, "signature_zero")
+    phase_bit = int(_os.environ.get("PENTA_LATER_SIGNATURE_PHASE_BIT", "-1"))
+    if phase_bit >= 0:
+        # Four-byte diagnostic pad: +4T when the selected stage bit is clear,
+        # +8T when set. JR NZ,+0 deliberately has an identical destination.
+        assert phase_bit <= 7
+        a.db(0xCB, 0x47 + 8 * phase_bit, 0x20, 0x00)
+    else:
+        phase_nops = int(
+            _os.environ.get("PENTA_LATER_SIGNATURE_PHASE_NOPS", "3")
+        )
+        assert 0 <= phase_nops <= 4
+        a.db(*([0x00] * phase_nops))        # preserve Stage 3-7/Crystal phase
+    a.db(0xAF)                              # non-Stage-2 arm still clears A
+    a.label("signature_zero")
+    a.db(0xE0, LAVA_ATTR_DECISION_HRAM)
 
     def emit_metadata_select(label: str) -> None:
         # $98 XOR $CB = $53; $9C XOR $CB = $57.
@@ -10525,12 +11375,20 @@ def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
         (0x47, LATER_ATTR_SIGNATURE_A),     # LD B,A
         (0x4F, LATER_ATTR_SIGNATURE_B),     # LD C,A
     ):
-        for index, offset in enumerate(samples):
+        # Keep the accumulator live across the complete XOR.  The old form
+        # copied every partial result into B/C, reloaded the next absolute
+        # byte, then XORed that register back into A.  HL is caller-saved by
+        # the wrapper above, so `LD HL,nn; XOR [HL]` computes the identical
+        # key while saving 12 T-cycles and three ROM/WRAM bytes per signature.
+        # Across the two four-sample keys this removes 24 T-cycles from every
+        # later-stage map-copy decision without changing cache semantics.
+        assert samples
+        first_source = 0xC1A0 + samples[0]
+        a.db(0xFA, first_source & 0xFF, first_source >> 8)  # LD A,[nn]
+        for offset in samples[1:]:
             source = 0xC1A0 + offset
-            a.db(0xFA, source & 0xFF, source >> 8)
-            if index:
-                a.db(0xA8 if register_opcode == 0x47 else 0xA9)
-            a.db(register_opcode)
+            a.db(0x21, source & 0xFF, source >> 8, 0xAE)   # HL=nn; XOR [HL]
+        a.db(register_opcode)
 
     a.db(0x1A, 0xB8)                       # cached signature A CP B
     a.jr(0x20, "changed")
@@ -10539,6 +11397,7 @@ def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
     a.db(0x13, 0x1A, 0x6F)                 # L = cached room
     a.db(0xF0, 0xBD, 0xBD)                 # current room CP L
     a.jr(0x20, "changed_two")
+    a.label("restore")
     a.db(0xE1, 0xD1, 0xC1, 0xC9)           # unchanged -> pure tile copy
 
     a.label("changed_two")
@@ -10551,8 +11410,10 @@ def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
         0x79, 0x12, 0x13,                  # signature B
         0xF0, 0xBD, 0x12,                  # room
         0x3E, 0x01, 0xE0, LAVA_ATTR_DECISION_HRAM,
-        0xE1, 0xD1, 0xC1, 0xC9,
     )
+    # Share the register-restore tail to keep the hot runtime compact without
+    # moving the adjacent receipt-locked scene dispatcher.
+    a.jr(0x18, "restore")
     code = a.finish()
     assert (
         LAVA_ATTR_STAGE7_RUNTIME_ADDR + len(code)
@@ -10568,14 +11429,28 @@ def build_lava_attr_stage7_runtime(always_stage1: bool = False) -> bytes:
         == STAGE1_ATTR_RUNTIME_ADDR
     )
     stage1_runtime = build_stage1_attr_runtime(always_stage1=always_stage1)
+    postcopy_guard = (
+        build_stage1_postcopy_scene_guard() if always_stage1 else bytes()
+    )
+    if always_stage1:
+        assert len(stage1_runtime) == 0x10
+        assert (
+            STAGE1_ATTR_RUNTIME_ADDR + len(stage1_runtime)
+            == STAGE1_POSTCOPY_GUARD_WRAM_ADDR
+        )
     padding_to_end = bytes(
-        OAM_WRAM_END_ADDR - (STAGE1_ATTR_RUNTIME_ADDR + len(stage1_runtime))
+        OAM_WRAM_END_ADDR - (
+            STAGE1_ATTR_RUNTIME_ADDR
+            + len(stage1_runtime)
+            + len(postcopy_guard)
+        )
     )
     blob = (
         code
         + padding_before_dispatch
         + dispatcher
         + stage1_runtime
+        + postcopy_guard
         + padding_to_end
     )
     assert LAVA_ATTR_STAGE7_RUNTIME_ADDR + len(blob) == OAM_WRAM_END_ADDR
@@ -10639,8 +11514,10 @@ def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     The WRAM payload is initialized on the title path before gameplay. Arena
     setup later clears the DF51 bookkeeping sentinel immediately before its
     first map copy without clearing the payload itself, so that sentinel must
-    not suppress the arena's atomic decision. The four-byte delay slot is
-    retained to preserve the proven caller phase.
+    not suppress the arena's atomic decision. The four-byte cinematic gate
+    lets FFE4=$01 callers take the native-width path without starting another
+    attribute compile while the stock death source reaches its final phase.
+    The transition then publishes that completed source exactly once.
 
     The caller presets D=$FF. The readiness path preserves B because neutral
     scenes take the pure copier without reinitializing it; the WRAM helper
@@ -10650,7 +11527,7 @@ def build_inline_attr_decision_helper(atomic_row_addr: int) -> bytes:
     # The title entry calls three bytes before the gameplay decision. This
     # exact 28T delay preserves A=0/Z and the established title copier phase.
     a.db(0x18, 0x00, 0xC9)
-    a.db(0x18, 0x00, 0x00, 0x00)
+    a.db(0xF0, 0xE4, 0x3D, 0xC8)          # cinematic -> RET Z; live -> NZ
     # Demo takes the fixed cycle-equal trampoline below. Live publishes FFBD
     # in B, calls the C-keyed decider through the now-retired RST $18 vector,
     # then returns with the decider's flags intact.
@@ -10740,6 +11617,9 @@ def build_oam_boss_lut_service() -> bytes:
     """
     a = _Asm()
     a.db(
+        # Keep the cache/no-boss prefix cycle-for-cycle identical to RC11.
+        # Title, opening, and ordinary gameplay are timing-sensitive even
+        # though this service only does real work when FFBF changes.
         0xF0, 0xBF, 0x47,                   # B = FFBF boss identity
         0x3C, 0x4F,                         # C = cache key FFBF+1
         0xFA,
@@ -10754,11 +11634,11 @@ def build_oam_boss_lut_service() -> bytes:
     )
     a.jr(0x28, "base_palette")
     a.db(
-        0x3D,                               # zero-based boss index
-        0xC6, BOSS_SLOT_TABLE_ADDR & 0xFF,
-        0x6F,
-        0x26, BOSS_SLOT_TABLE_ADDR >> 8,
-        0x7E,                               # boss OBJ slot 6/7
+        # Same seven bytes and 32 cycles as the former slot-table lookup.
+        # The taken zero-offset jump is deliberate timing padding. Parity
+        # makes selector 9..16 safely alias the eight existing YAML rows.
+        0x3D, 0xE6, 0x01, 0xC6, 0x06,
+        0x18, 0x00,                         # 12T padding; A = OBJ6/7
         0x21, 0x30, OAM_PALETTE_LUT_WRAM >> 8,
         0x06, 0x50,                         # all pages $30-$7F
     )
@@ -10813,12 +11693,7 @@ def _emit_semantic_attr_merge(a: _Asm, *, mirror_alternate: bool) -> None:
         a.db(0x47)                          # B = alternate tile
         a.db(0xF0, 0xBF, 0xB7)
         a.jr(0x28, "alternate_regular")
-        a.db(
-            0xE5, 0x3D, 0xC6,
-            BOSS_SLOT_TABLE_ADDR & 0xFF,
-            0x6F, 0x26, BOSS_SLOT_TABLE_ADDR >> 8,
-            0x7E, 0xE1,
-        )
+        a.db(0x3D, 0xE6, 0x01, 0xC6, 0x06)
         a.jr(0x18, "alternate_apply")
         a.label("alternate_regular")
         a.db(0x78, 0xCB, 0x37, 0xE6, 0x0F, 0xFE, 0x08)
@@ -10937,7 +11812,7 @@ def build_oam_wram_tail_wrapper(helper_addr: int, final_a_opcode: int) -> bytes:
     ])
 
 
-def build_oam_wram_copy() -> bytes:
+def build_oam_wram_copy(always_stage1: bool = False) -> bytes:
     """Copy compact hot helpers into the verified-unused DA00-DAFF page.
 
     Resolver and central-emitter code are packed instead of copying their ROM
@@ -10952,7 +11827,12 @@ def build_oam_wram_copy() -> bytes:
         OAM_PALETTE_RESOLVER_ADDR + len(resolver) + len(stage1_setup)
         == OAM_CENTRAL_EMITTER_ADDR
     )
-    stage7 = build_lava_attr_stage7_runtime()
+    # Stage 1's rotating hazard writer changes tile IDs independently of room
+    # movement. A one-sample layout cache can therefore select a tile-only
+    # copy for one physical map while its matching attributes still describe
+    # the prior phase. Keep Stage 1 atomic on every actual map copy; later
+    # dungeons and arenas retain their separate signature caches below.
+    stage7 = build_lava_attr_stage7_runtime(always_stage1=always_stage1)
     if _os.environ.get("PENTA_TED_NATIVE_POSTCOPY", "0") == "1" and (
         _os.environ.get("PENTA_TED_CACHED_FULL_PLANE", "0") != "1"
     ):
@@ -11126,7 +12006,22 @@ def build_oam_wram_copy_tail(
         0xE1, 0xD1, 0xC1,
         0xC9,
     ])
-    continuation = final
+    continuation = b""
+    if _os.environ.get("PENTA_STAGE_CARD_PALETTE_HANDOFF", "0") == "1":
+        # The exact Stage-card handoff relocates the cached profile's existing
+        # twelve-byte Stage-1 scene guard from $DBE5 to $DBF1. Its post-combine
+        # installer owns bank13:$5830-$583B as the source; copy only that
+        # explicitly bounded fragment rather than extending the live $56FA
+        # source record.
+        continuation += bytes([
+            0x11, 0xF1, 0xDB,              # LD DE,$DBF1
+            0x21,
+            STAGE_CARD_HANDOFF_GATE_ADDR & 0xFF,
+            STAGE_CARD_HANDOFF_GATE_ADDR >> 8,
+            0x0E, 0x0C,
+            0xCD, 0xB3, 0x09,
+        ])
+    continuation += final
     front = semantic_prefix + bytes([
         0xC3, OAM_WRAM_COPY_TED_HELPER_CONT_ADDR & 0xFF,
         OAM_WRAM_COPY_TED_HELPER_CONT_ADDR >> 8,
@@ -11205,10 +12100,34 @@ def build_title_transition_service() -> bytes:
     )
     a.jr(0x28, "title")
     a.db(0x3D)                              # gameplay $02 -> zero
-    a.jr(0x28, "gameplay")
-    a.db(0xFE, 0x1A)                        # banner $1C - 2
-    a.db(0xCC, 0x80, 0xFF)                  # banner transition OAM clear
+    clean_stage_handoff = (
+        _os.environ.get("PENTA_STAGE_CARD_CLEAN_HANDOFF", "0") == "1"
+        and _os.environ.get("PENTA_TED_EXPANDED_PRODUCTION", "0") == "1"
+    )
+    a.jr(0x28, "gameplay_handoff" if clean_stage_handoff else "gameplay")
+    # A is new scene - 2. Every non-gameplay cinematic family begins at $15.
+    # Clear hardware OAM once on entry because these scenes deliberately skip
+    # the gameplay FF80 publisher; otherwise the last four-quadrant actor is
+    # frozen over the story/ending Window. Spotlight immediately rebuilds its
+    # native actor on the following frame.
+    a.db(0xFE, 0x13)                        # scene >= $15?
+    a.db(0xD4, DEATH_OAM_CLEAR_ADDR & 0xFF,
+         DEATH_OAM_CLEAR_ADDR >> 8)         # CALL NC, transition OAM clear
     a.jr(0x18, "store_count")
+
+    # The gameplay branch below moved its setup into the Stage-1 attribute
+    # helper. Its five reclaimed bytes call the handoff policy leaf. Production
+    # now keeps the complete STAGE card selected while the one-shot attribute
+    # seed targets inactive $9C00; stock reveals that map only when complete.
+    if clean_stage_handoff:
+        a.label("gameplay_handoff")
+        # A is exactly zero here. Arm the one-shot map-flip handoff inline,
+        # preserving the five-byte transition-service allocation and freeing
+        # bank13:$5830 as the cold-copy source for its WRAM extension.
+        a.db(0x3C, 0xE0, 0xE1)             # INC A; LDH [$FFE1],A
+        a.jr(0x18, "gameplay")
+    else:
+        a.db(0x00, 0x00, 0x00, 0x00, 0x00)
 
     a.label("title")
     a.db(
@@ -11219,20 +12138,14 @@ def build_title_transition_service() -> bytes:
     a.jr(0x18, "store_count")
 
     a.label("gameplay")
-    # Arm the complete gameplay palette pass immediately on Stage 1 entry.
-    # The fade-aware scheduler waits for native BGP=$E4, but no longer loses
-    # up to seven idle-probe frames before beginning the bounded 17 phases.
-    # Tag the cold attribute sweep here, after native FFBD rearm and at the
-    # exact scene transition; the earlier splash-side tag was overwritten by
-    # this service's ordinary $12 publication before it could be consumed.
+    # Publish the first-room attributes only now, at the real D880=$02 scene
+    # transition. The old splash-side call corrupted visible STAGE letters for
+    # 22 frames. The helper also arms the gameplay prelude and palette deck.
     a.db(
-        # DCFD is zero only for prerecorded dungeon play. Its first prelude
-        # has now selected the table; keep later demo VBlanks at stock cadence.
-        # Live gameplay retains its nonzero discriminator as the armed flag.
-        0xFA, 0xFD, 0xDC,
-        0xE0, ATTRACT_PRELUDE_FLAG_HRAM,
-        0x3E, 0x11,
-        0xEA, PALETTE_PHASE_ADDR & 0xFF, PALETTE_PHASE_ADDR >> 8,
+        0xCD,
+        STAGE1_ENTRY_PATCH_GATE_ADDR & 0xFF,
+        STAGE1_ENTRY_PATCH_GATE_ADDR >> 8,
+        0x26, BG_SWEEP_COUNT_ADDR >> 8,     # restore store_count's DF page
         0x1E, 0x7F,                         # third bank-1 upload marker
     )
 
@@ -11288,20 +12201,61 @@ def build_crystal_palette_rearm() -> bytes:
     return code
 
 
-def build_stale_window_cleanup() -> bytes:
+def build_stale_window_cleanup(buffered_stage1_attrs: bool = True) -> bytes:
     """Hide a stale item-menu Window before it can cover dungeon gameplay.
 
     Stock marks both item-menu entry paths with FFE4=1 and clears it on their
-    normal exits.  Only the live Stage 1 scene ($02) is receipt-covered here;
-    later dungeon-family scenes use the Window for legitimate transitions and
-    remain outside this guard.
+    normal exits.  The postcomputed Stage-1 decider needs an impossible $FF
+    cache sentinel so a real zero signature cannot suppress its eager repaint;
+    later dungeon-family scenes retain the established zero invalidation.
     """
-    return bytes.fromhex(
-        "F0 E4 B7 C0 "    # FFE4!=0: legitimate item menu
-        "FA 80 D8 FE 02 C0 " # only live Stage 1 scene $02
-        "F0 40 CB AF "    # clear the already-confirmed Window bit
-        "E0 40 AF C9"     # publish; return A=0/Z for window-off path
+    if not buffered_stage1_attrs:
+        return bytes.fromhex(
+            "F0 E4 B7 C0 "
+            "FA 80 D8 D6 02 C0 "
+            "EA 53 DF EA 57 DF "
+            "F0 40 CB AF E0 40 C9"
+        )
+    code = bytes.fromhex(
+        "F0 E4 B7 C8 "          # closed/other Window: preserve Z return
+        "FA 80 D8 D6 02 FE 07 " # admit only dungeon scenes $02..$08
+        "3D D0 "                # scene $02 -> A=$FF; later scenes -> A=0
+        "87 9F "                # retain $FF only for Stage 1, else zero
+        "EA 53 DF EA 57 DF "    # invalidate both physical-map signatures
+        "3D C9"                 # NZ: continue menu Window maintenance
     )
+    assert len(code) == 23
+    return code
+
+
+def install_menu_live_map_selector(rom: bytearray) -> None:
+    """Choose the item-menu Window map opposite the BG map live in LCDC."""
+    start = MENU_LIVE_MAP_SELECTOR_ADDR
+    tail_start = start + len(MENU_LIVE_MAP_SELECTOR_PREIMAGE)
+    expected = MENU_LIVE_MAP_SELECTOR_PREIMAGE + MENU_LIVE_MAP_SELECTOR_TAIL
+    assert rom[start:start + len(expected)] == expected, (
+        "item-menu map-selector preimage/tail changed"
+    )
+    rom[start:tail_start] = MENU_LIVE_MAP_SELECTOR
+    assert rom[tail_start:tail_start + len(MENU_LIVE_MAP_SELECTOR_TAIL)] == (
+        MENU_LIVE_MAP_SELECTOR_TAIL
+    ), "item-menu map-selector tail changed"
+
+
+def build_menu_close_native_repair() -> bytes:
+    """Restore the native menu-close tail and hidden-map publication order.
+
+    A former forced ``CALL $42A0`` republished $9C00 immediately on close.
+    When $9C00 was already selected by LCDC, the semantic hazard helper wrote
+    42 attributes into the visible map over several HBlanks. Pocket exposed
+    those partial updates as yellow trails and red/green wall artifacts even
+    though the completed map was byte-exact. The native tail clears the menu
+    marker and lets the ordinary double-buffered VBlank path publish to the
+    hidden map before the next flip.
+    """
+    code = bytes([0xAF, 0xE0, 0xE4, 0xC9])
+    assert len(code) == 4
+    return code
 
 
 def build_title_palette_copy_helper() -> bytes:
@@ -11397,14 +12351,90 @@ def build_vram_glyph_copy(
     return code
 
 
+def build_window_attr_clear_helper() -> bytes:
+    """Clear one 20-cell Window attribute row, preserving the caller's B."""
+    code = bytes([
+        0x0E, 0x14, 0xAF,                   # C=20, A=exact attr 0
+        0x22, 0x0D, 0x20, 0xFC,             # [HL+]=0; loop
+        0xC9,
+    ])
+    assert len(code) == 8
+    return code
+
+
+def build_levelsel_rom_transition() -> tuple[bytes, bytes]:
+    """Run the save-present attribute clear entirely from bank-13 ROM.
+
+    The historical implementation copied this routine to $CFAA.  That range
+    is not scratch: it is inside the stock $C780-$CFFF dungeon template, and
+    the copied opcodes later became compressed Stage 1 metatiles. Enter here
+    after the untouched CALL $007E, clear attributes only when DCFD says the
+    level selector will be used, then rebuild the stock stack-reset contract
+    and continue in bank 1.
+
+    The final two pushed addresses make the bank switcher's RET enter $408E;
+    the native routine's eventual RET then reaches $3B42 after the displaced
+    DI/stack-reset/EI sequence has been reproduced by the continuation.
+    No WRAM contains executable transition code and no dungeon byte is read or
+    written by this helper.
+    """
+    front = bytearray([
+        # A new game bypasses the level selector and needs no VRAM clear.
+        0xFA, 0xFD, 0xDC, 0xB7,             # LD A,[$DCFD]; OR A
+        0xCA, LEVELSEL_ROM_STOCK_TAIL_ADDR & 0xFF,
+        LEVELSEL_ROM_STOCK_TAIL_ADDR >> 8,  # JP Z,stock_tail
+    ])
+
+    # Save LCDC, turn the LCD off during the existing transition, and clear
+    # both BG attribute maps in VBK=1. B remains the saved LCDC throughout.
+    front.extend([
+        0xF0, 0x40, 0x47,                   # LDH A,[$FF40]; LD B,A
+        0xAF, 0xE0, 0x40,                   # XOR A; LDH [$FF40],A
+        0x3E, 0x01, 0xE0, 0x4F,             # VBK=1
+        0x21, 0x00, 0x98,                   # HL=$9800
+    ])
+    clear_loop = len(front)
+    front.extend([
+        0xAF, 0x22, 0x7C, 0xFE, 0xA0,       # zero [HL+], stop at $A000
+    ])
+    front.extend([
+        0x20, (clear_loop - (len(front) + 2)) & 0xFF,
+    ])
+    front.extend([
+        0xEA, LEVELSEL_ACTIVE_ADDR & 0xFF, LEVELSEL_ACTIVE_ADDR >> 8,
+        0xE0, 0x4F,                         # $A0 bit 0 = 0, therefore VBK=0
+        0xC3, LEVELSEL_ROM_TAIL_ADDR & 0xFF,
+        LEVELSEL_ROM_TAIL_ADDR >> 8,
+    ])
+    assert len(front) <= LEVELSEL_ROM_ENTRY_END - LEVELSEL_ROM_ENTRY_ADDR
+
+    tail = bytearray([
+        0x78, 0xE0, 0x40,                   # restore saved LCDC
+        0xF3,                               # DI (stock $3B3D)
+        0x31, 0xFF, 0xDF,                   # LD SP,$DFFF
+        0x01, LEVELSEL_START_CONT_ADDR & 0xFF,
+        LEVELSEL_START_CONT_ADDR >> 8,      # BC=$3B42 (native continuation)
+        0xC5,                               # PUSH BC
+        0x01, 0x8E, 0x40,                   # BC=bank1:$408E
+        0xC5,                               # PUSH BC
+        0x3E, 0x01,                         # A=bank 1
+        0xFB,                               # EI; takes effect after JP
+        0xC3, 0x61, 0x00,                   # JP bank switch; RET -> $408E
+    ])
+    assert LEVELSEL_ROM_STOCK_TAIL_ADDR == LEVELSEL_ROM_TAIL_ADDR + 3
+    assert LEVELSEL_ROM_TAIL_ADDR + len(tail) <= WRAPPER_ADDR
+    return bytes(front), bytes(tail)
+
+
 def build_colorize_prelude() -> bytes:
     """Build the safe per-VBlank setup that replaces the teleport monolith.
 
     The old routine bundled useful scene/palette setup with a SELECT+START
     stack redirect out of the VBlank IRQ. The redirect was timing- and wrapper-
     layout-sensitive and could freeze the game. This prelude keeps only the
-    release features: scene table selection, lava overrides, the level-select
-    WRAM stub copy, and bounded item-menu window attribute maintenance.
+    release features: scene table selection, lava overrides, and bounded
+    item-menu window attribute maintenance. The level-select transition now
+    executes directly from bank-13 ROM and never borrows dungeon WRAM.
     """
     c = bytearray()
 
@@ -11450,33 +12480,14 @@ def build_colorize_prelude() -> bytes:
 
     # The path into not_later preserves Carry only for D880<2 (title and
     # save-present level select); every gameplay/attract route arrives NC.
-    # Use that existing flag instead of reading another live WRAM byte. Menu
-    # frames retain the historical CFAA validation/copy verbatim. Gameplay
-    # skips terrain-owned CFAA and pays an equal 32T padding path. A final 16T
-    # padding pair plus a tail JP to lava replaces CALL+RET and the prelude RET,
-    # balancing both fast routes and the rare menu repair cycle-for-cycle with
-    # the prior release while keeping CFAA untouched during active play.
+    # The old menu path spent 36T validating the WRAM stub at $CFAA. Spend the
+    # same nine NOPs now that the helper is ROM-resident. Together with JR NC,
+    # menu and gameplay retain their receipt-locked 44T cadence while neither
+    # path touches the native dungeon template.
     j_live_cfaa = len(c) + 1
     c.extend([0x30, 0x00])                # JR NC,live_cfaa
-    levelsel_stub = build_levelsel_attr_clear_stub()
-    assert len(levelsel_stub) == LEVELSEL_STUB_MAX
-    c.extend([
-        0xFA, LEVELSEL_STUB_WRAM & 0xFF, LEVELSEL_STUB_WRAM >> 8,
-        0xFE, levelsel_stub[0],
-    ])
-    j_stub_ready = len(c) + 1
-    c.extend([0x28, 0x00])                # JR Z,window_maintenance
-    c.extend([
-        0x21, LEVELSEL_STUB_ROM_ADDR & 0xFF, LEVELSEL_STUB_ROM_ADDR >> 8,
-        0x11, LEVELSEL_STUB_WRAM & 0xFF, LEVELSEL_STUB_WRAM >> 8,
-    ])
-    c.extend([0x06, LEVELSEL_STUB_MAX])
-    copy_loop = len(c)
-    c.extend([0x2A, 0x12, 0x13, 0x05])    # ROM -> title-owned CFAA
-    c.extend([0x20, (copy_loop - (len(c) + 2)) & 0xFF])
-    c.extend([0x3E, 0x5A, 0xEA, 0x0E, 0xDF])
+    c.extend(bytes(9))                    # 36T, no WRAM access
     window_maintenance = len(c)
-    c[j_stub_ready] = (window_maintenance - j_stub_ready - 1) & 0xFF
 
     # The item menu is a hardware window at WY=96. The game rewrites its tile
     # IDs but leaves VBK=1 untouched, so the window inherits dungeon item/wall
@@ -11560,23 +12571,19 @@ def build_colorize_prelude() -> bytes:
         (window_maintenance - (len(c) + 2)) & 0xFF,
     ])
 
-    # Shared bounded row primitive. It is placed after the public RET so the
-    # prelude's normal return cannot fall through into it.
-    clear_20_addr = WINDOW_ATTR_CLEAR_HELPER_ADDR
-    assert COLORIZE_PRELUDE_ADDR + len(c) <= clear_20_addr
-    c.extend(bytes(clear_20_addr - (COLORIZE_PRELUDE_ADDR + len(c))))
+    # Calls use the shared bounded row primitive in the unreachable death-fade
+    # padding. Keeping that eight-byte leaf out of this tail makes room for the
+    # level-select ROM continuation without changing any live VBlank path.
     for call_operand in clear_calls:
-        c[call_operand] = clear_20_addr & 0xFF
-        c[call_operand + 1] = (clear_20_addr >> 8) & 0xFF
-    c.extend([0x0E, 0x14, 0xAF])            # C=20, A=exact attr 0
-    clear_cell = len(c)
-    c.extend([0x22, 0x0D])                  # LD [HL+],A; DEC C
-    c.extend([0x20, (clear_cell - (len(c) + 2)) & 0xFF])
-    c.extend([0xC9])
-    assert (
-        COLORIZE_PRELUDE_ADDR + len(c)
-        == WINDOW_ATTR_CLEAR_HELPER_ADDR + 8
-    )
+        c[call_operand] = WINDOW_ATTR_CLEAR_HELPER_ADDR & 0xFF
+        c[call_operand + 1] = (WINDOW_ATTR_CLEAR_HELPER_ADDR >> 8) & 0xFF
+
+    # Normal execution cannot fall through: the live tail above jumps back to
+    # window_maintenance, while the ordinary path tail-jumps to the arena
+    # semantic publisher. The remaining bytes are therefore a ROM code cave.
+    assert COLORIZE_PRELUDE_ADDR + len(c) == LEVELSEL_ROM_TAIL_ADDR
+    _, levelsel_tail = build_levelsel_rom_transition()
+    c.extend(levelsel_tail)
     return bytes(c)
 
 
@@ -11618,8 +12625,8 @@ def build_title_palette_fix(story_dispatch_addr: int) -> bytes:
     # the CGB boot-white BG0/BG7 immediately instead of waiting for BGP=$E4;
     # that old wait exposed two receipt-confirmed white title frames.
     c.extend([0x3E, 0x80, 0xE0, 0x68])    # BCPS index 0, auto-increment
-    # Stage 1 reserves BG0[1] for pickup gold. The title must retain its
-    # untouched blue-gray ramp, already stored in the boot-safe BG7 alias.
+    # Stage 1 reserves BG0[1] for pickup gold. The title instead retains its
+    # YAML-selected artifact-safe ramp, stored in the boot-safe BG7 alias.
     c.extend([
         0x21, NATIVE_BG0_ALIAS_ADDR & 0xFF,
         NATIVE_BG0_ALIAS_ADDR >> 8,
@@ -11707,6 +12714,14 @@ def build_conditional_palette_phased() -> bytes:
         0xF0, 0xD4,                         # idle: stock VBlank tick
         0xE6, 0x07,                         # probe once per eight frames
         0xC0,
+        # The STAGE XX card deliberately uses the title/card BG0 row. Do not
+        # arm the gameplay deck while its text is still visible: loading BG0
+        # during phase 11 produced a deterministic cyan -> purple/gray flash.
+        # Pending transition markers are normalized by the branch above; this
+        # gate owns only the otherwise-idle scene-hash probe.
+        0xFA, 0x80, 0xD8,
+        0xFE, 0x18,
+        0xC8,
         0xCD,
         OAM_BOSS_LUT_SERVICE_ADDR & 0xFF,
         OAM_BOSS_LUT_SERVICE_ADDR >> 8,
@@ -11715,27 +12730,24 @@ def build_conditional_palette_phased() -> bytes:
         0xF0, 0xBF, 0x47,                  # B = FFBF
         0xF0, 0xC0, 0xA8, 0x47,            # B ^= FFC0
         0xF0, 0xD0, 0xA8, 0x47,            # B ^= FFD0
-        # FFBA starts ordinary stage/boss passes early. Crystal's scene-local
-        # material pass is armed synchronously by the scene-change service:
-        # the native boss fade stops this idle probe's FFD4 clock, and D880
-        # also exposes transient $FF map-handoff sentinels in live arenas.
-        0xF0, 0xBA, 0xA8, 0x3C, 0x47,      # B = (B ^ FFBA) + 1
+        # FFB7 is the persistent scene publisher behind D880.  The former
+        # FFBA term could collide between settled Stage 1 and a later boss,
+        # leaving the Stage-1-only spike BG7 row visible in that arena.  FFB7
+        # distinguishes every dungeon/arena without adding a single cycle.
+        # Crystal's scene-local material pass is still armed synchronously by
+        # the scene-change service because the native fade can stop FFD4.
+        0xF0, 0xB7, 0xA8, 0x3C, 0x47,      # B = (B ^ FFB7) + 1
         0xFA, 0x00, 0xDF, 0xB8,            # compare cached DF00
+        0xC8,                               # unchanged idle hash -> RET
     ])
-    j_same = len(c) + 1
-    c.extend([0x28, 0x00])                  # JR Z,service_pending
     c.extend([
         0x78, 0xEA, 0x00, 0xDF,            # cache the new hash
         0x3E, 0x11,
         0xEA, PALETTE_PHASE_ADDR & 0xFF,
         PALETTE_PHASE_ADDR >> 8,            # boss pre-pass, then phase 1
-    ])
-    service_pending = len(c)
-    c[j_same] = (service_pending - j_same - 1) & 0xFF
-    c.extend([
-        0xFA, PALETTE_PHASE_ADDR & 0xFF,
-        PALETTE_PHASE_ADDR >> 8,
-        0xB7, 0xC8,                         # no pending work -> RET Z
+        # This point is reachable only from the idle phase-zero path. A
+        # changed hash just armed phase 17, so enter the loader directly. The
+        # compact tail pays exactly for the six-byte splash ownership gate.
         0xC3, PALETTE_LOADER_ADDR & 0xFF,
         PALETTE_LOADER_ADDR >> 8,
     ])
@@ -11750,6 +12762,7 @@ def build_phased_palette_loader(
     crystal_obj_slots: tuple[int, ...] = (4, 5, 6, 7),
     crystal_obj_source_addr: int = 0x6898,
     crystal_scene: int = CRYSTAL_DRAGON_SCENE,
+    stage1_bg5: bytes | None = None,
 ) -> tuple[bytes, bytes, bytes, bytes]:
     """Build a one-palette-per-VBlank loader with no mode-3 CRAM writes.
 
@@ -11820,10 +12833,11 @@ def build_phased_palette_loader(
     main.db(0xF0, 0xBF, 0xB7)
     main.jr(0x28, "obj_normal")
     main.db(
-        0x3D, 0x4F, 0x06, 0x00,
-        0x21, BOSS_SLOT_TABLE_ADDR & 0xFF,
-        BOSS_SLOT_TABLE_ADDR >> 8,
-        0x09, 0x7E, 0xBB,                  # CP E
+        # Preserve the former ten-byte/48-cycle table lookup for selectors
+        # 1..8 while extending its alternating slot rule to 9..16.
+        0x3D, 0xE6, 0x01, 0xC6, 0x06,
+        0x18, 0x00, 0x18, 0x00,            # 24T exact timing padding
+        0xBB,                               # CP E
     )
     main.jr(0x28, "obj_advance")
 
@@ -11888,10 +12902,9 @@ def build_phased_palette_loader(
     main.label("load_boss")
     main.db(0xF0, 0xBF, 0xB7, 0xC8)        # no active boss -> RET Z
     main.db(
-        0x3D, 0x5F, 0x4F, 0x06, 0x00,     # E/C = boss index
-        0x21, BOSS_SLOT_TABLE_ADDR & 0xFF,
-        BOSS_SLOT_TABLE_ADDR >> 8,
-        0x09, 0x7E,
+        0x3D, 0xE6, 0x07, 0x5F,            # E = aliased palette row
+        0xE6, 0x01, 0xC6, 0x06,            # destination OBJ slot
+        0x03, 0x0B,                         # INC/DEC BC: 16T exact padding
         0x87, 0x87, 0x87, 0xF6, 0x80,     # destination OBJ slot
         0xF5,
         0x7B, 0x07, 0x07, 0x07,
@@ -11962,8 +12975,27 @@ def build_phased_palette_loader(
     # Preserve the receipt-proven 28-cycle non-slot padding exactly. Later
     # dungeons repair BG0 after the slot-0 loader phase in the prelude.
     ext.label("bg_source_pad")
-    ext.db(0xF0, 0x44)                     # LDH A,[LY] (12 cycles)
-    ext.absolute(0xC3, "bg_source_ready")  # JP (16 cycles)
+    if stage1_bg5 is None:
+        ext.db(0xF0, 0x44)                 # LDH A,[LY] (12 cycles)
+        ext.absolute(0xC3, "bg_source_ready")
+    else:
+        if len(stage1_bg5) != 8:
+            raise ValueError("Stage-1 BG5 must contain exactly eight bytes")
+        # Experimental transition-only selector. Keep the extension exactly
+        # 96 bytes and leave the idle scheduler entirely unchanged. This is
+        # NOT cycle-identical to the former padding; qualify before release.
+        ext.absolute(0xC3, "stage1_bg5_select")
+        ext.db(0x00, 0x00)                # unreachable size padding
+        main.label("stage1_bg5_select")
+        main.db(0x7B, 0xFE, 0x05)        # A=slot; BG5 only
+        main.jr(0x20, "stage1_bg5_return")
+        main.db(0xFA, 0x80, 0xD8, 0xE6, 0xF7, 0xFE, 0x02)
+        main.jr(0x20, "stage1_bg5_return")
+        main.absolute(0x21, "stage1_bg5_data")  # LD HL,local row
+        main.label("stage1_bg5_return")
+        main.absolute(0xC3, "bg_source_ready")
+        main.label("stage1_bg5_data")
+        main.db(*stage1_bg5)
 
     # CGB palette data is inaccessible only in LCD mode 3. The game's VBlank
     # hook can arrive after mode 1 has already ended, so each four-byte half
@@ -12028,6 +13060,26 @@ def build_phased_palette_loader(
     )
 
 
+def load_stage1_bg5_experiment(path: Path) -> bytes | None:
+    """Opt-in scene-local body/pickup row; default builds remain unchanged."""
+    document = yaml.safe_load(Path(path).read_text())
+    row = document.get("stage1_hazard_palettes", {}).get("RotatingSpikeBody", {})
+    if row.get("enabled", False) is not True:
+        return None
+    colors = row.get("colors")
+    if row.get("slot") != 5 or not isinstance(colors, list) or len(colors) != 4:
+        raise ValueError("RotatingSpikeBody requires slot 5 and four BGR555 colors")
+    result = bytearray()
+    for color in colors:
+        if not isinstance(color, str) or len(color) != 4:
+            raise ValueError("RotatingSpikeBody colors must be four-digit BGR555 strings")
+        value = int(color, 16)
+        if not 0 <= value <= 0x7FFF:
+            raise ValueError("RotatingSpikeBody color exceeds BGR555")
+        result.extend(value.to_bytes(2, "little"))
+    return bytes(result)
+
+
 def load_later_stage_bg0_sources(path: Path) -> tuple[bytes, list[str]]:
     """Compile the Stage 2-7 YAML identities to palette-source low bytes."""
     document = yaml.safe_load(Path(path).read_text())
@@ -12043,6 +13095,59 @@ def load_later_stage_bg0_sources(path: Path) -> tuple[bytes, list[str]]:
         "later-stage BG0 assignments must name an existing bg_palettes row"
     )
     return bytes(slots[name] * 8 for name in selected), selected
+
+
+def load_title_bg_palette(
+    path: Path,
+    tuned_bg_data: bytes,
+) -> tuple[bytes, str]:
+    """Compile the artifact-safe title BG0/BG7 row selected by YAML."""
+    document = yaml.safe_load(Path(path).read_text())
+    bg_palettes = document.get("bg_palettes", {})
+    selected = str(document.get("title_bg_palette", ""))
+    assert selected in bg_palettes, (
+        "title_bg_palette must name an existing bg_palettes row"
+    )
+    slot = list(bg_palettes).index(selected)
+    start = slot * 8
+    return tuned_bg_data[start:start + 8], selected
+
+
+def load_death_gameover_palette(path: Path) -> bytes:
+    """Compile the coherent defeated-boss illustration palette row."""
+    document = yaml.safe_load(Path(path).read_text())
+    entry = document.get("death_gameover_palette", {})
+    colors = entry.get("colors", ())
+    assert len(colors) == 4, (
+        "death_gameover_palette.colors must contain exactly four BGR555 words"
+    )
+    result = bytearray()
+    for color in colors:
+        value = int(str(color), 16)
+        assert 0 <= value <= 0x7FFF, (
+            f"invalid death_gameover_palette BGR555 color: {color!r}"
+        )
+        result.extend(value.to_bytes(2, "little"))
+    return bytes(result)
+
+
+def load_death_gameover_text_palette(path: Path) -> bytes:
+    """Compile the independent neutral GAME OVER palette row."""
+    document = yaml.safe_load(Path(path).read_text())
+    entry = document.get("death_gameover_palette", {})
+    colors = entry.get("gameover_colors", ())
+    assert len(colors) == 4, (
+        "death_gameover_palette.gameover_colors must contain exactly four "
+        "BGR555 words"
+    )
+    result = bytearray()
+    for color in colors:
+        value = int(str(color), 16)
+        assert 0 <= value <= 0x7FFF, (
+            f"invalid GAME OVER BGR555 color: {color!r}"
+        )
+        result.extend(value.to_bytes(2, "little"))
+    return bytes(result)
 
 
 def load_crystal_obj_palette_override(
@@ -12285,10 +13390,18 @@ def apply_stage1_reserved_pickup_gold(
     index 1 onto index 2.  Changing only BG0[1] can therefore make pickups
     gold without painting a single ordinary terrain pixel gold.
     """
-    pickup_tiles = {
-        tile for tile, palette in enumerate(BG_TABLE_BYTES)
-        if 1 <= palette <= 5
-    }
+    # Palette slots 1..5 are no longer pickup-exclusive: later material work
+    # deliberately assigns some ordinary Stage-1 terrain to those rows. Keep
+    # the art-only fallback bound to the audited native pickup signatures,
+    # independent of current YAML palette choices.
+    pickup_bases = (
+        0x84, 0x88, 0x8A, 0x8C, 0x8E,
+        0xA0, 0xA2, 0xA4, 0xA6, 0xA8, 0xAA, 0xAC, 0xAE,
+        0xC6, 0xC8, 0xCA, 0xCC, 0xCE,
+    )
+    pickup_tiles = {0x96}
+    for base in pickup_bases:
+        pickup_tiles.update((base, base + 1, base + 0x10, base + 0x11))
     assert len(pickup_tiles) == 73
     pickup_mapping = (0, 1, 1, 3)
     terrain_mapping = (0, 2, 2, 3)
@@ -12298,11 +13411,8 @@ def apply_stage1_reserved_pickup_gold(
             if tile < 0x80
             else STAGE1_HIGH_TILE_GFX_OFFSET + tile * 16
         )
-        original = vanilla_rom[source:source + 16]
+        original = rom[source:source + 16]
         assert len(original) == 16
-        assert rom[source:source + 16] == original, (
-            f"Stage-1 tile source {tile:02X} changed before art remap"
-        )
         mapping = pickup_mapping if tile in pickup_tiles else terrain_mapping
         remapped = _remap_2bpp_indices(original, mapping)
         indices = _tile_indices(remapped)
@@ -12334,6 +13444,7 @@ def main(
     minimal_prelude: bool = False,
     disable_lava_override: bool = False,
     buffered_stage1_attrs: bool = False,
+    cached_stage1_attrs: bool = False,
     compact_tile_copy: bool = False,
     demo_compact_tile_copy: bool = False,
     semantic_stage1_prototype: bool = False,
@@ -12341,7 +13452,21 @@ def main(
     reserved_pickup_gold: bool = False,
     disable_stage1_hazard_source_hook: bool = False,
     demo_pickup_writer_phase_nops: int = DEMO_PICKUP_WRITER_PHASE_NOPS,
+    stage1_tagged_destination: bool = False,
+    stage7_dual_plane_r265: bool = False,
 ):
+    postcomputed_stage1_attrs = (
+        buffered_stage1_attrs or cached_stage1_attrs
+    )
+    if stage1_tagged_destination and not postcomputed_stage1_attrs:
+        raise ValueError(
+            "stage1_tagged_destination requires buffered or cached "
+            "Stage-1 attributes"
+        )
+    clean_stage_handoff = (
+        _os.environ.get("PENTA_STAGE_CARD_CLEAN_HANDOFF", "0") == "1"
+        and _os.environ.get("PENTA_TED_EXPANDED_PRODUCTION", "0") == "1"
+    )
     death_late_fix_addr = DEATH_LATE_FIX_ADDR
     palette_yaml = Path(palette_yaml)
     output_path = Path(output_path)
@@ -12358,6 +13483,10 @@ def main(
     rom = bytearray(base_output.read_bytes())
     vanilla = Path("rom/Penta Dragon (J).gb").read_bytes()
     tuned_palettes = load_palettes_from_yaml(palette_yaml)
+    death_gameover_palette = load_death_gameover_palette(palette_yaml)
+    death_gameover_text_palette = load_death_gameover_text_palette(
+        palette_yaml
+    )
     cutscene_panels = load_cutscene_region_palettes(palette_yaml)
     later_stage_bg0_sources, later_stage_bg0_names = (
         load_later_stage_bg0_sources(palette_yaml)
@@ -12390,11 +13519,19 @@ def main(
     palette_source_off = BANK13 + (TITLE_PALETTE_SOURCE_ADDR - 0x4000)
     expected_bg0 = tuned_palettes["bg_data"][0:8]
     expected_bg7 = tuned_palettes["bg_data"][56:64]
+    expected_title_bg, title_bg_name = load_title_bg_palette(
+        palette_yaml,
+        tuned_palettes["bg_data"],
+    )
     hazard_config = load_stage1_hazard_config()
     hazard_slot, hazard_bg7 = load_stage1_hazard_palette(palette_yaml)
     assert hazard_slot == hazard_config.tooth_palette == 7
     assert rom[palette_source_off:palette_source_off + 8] == expected_bg0
     assert rom[palette_source_off + 56:palette_source_off + 64] == expected_bg0
+    rom[
+        palette_source_off + 56:palette_source_off + 64
+    ] = expected_title_bg
+    print(f"  title BG0/BG7 identity: {title_bg_name}")
     tuned_bg7_off = BANK13 + (TUNED_BG7_SOURCE_ADDR - 0x4000)
     assert rom[tuned_bg7_off:tuned_bg7_off + 8] == bytes(8)
     rom[tuned_bg7_off:tuned_bg7_off + 8] = expected_bg7
@@ -12440,6 +13577,7 @@ def main(
         crystal_obj_slots=crystal_obj_slots,
         crystal_obj_source_addr=crystal_obj_source_addr,
         crystal_scene=crystal_scene,
+        stage1_bg5=load_stage1_bg5_experiment(palette_yaml),
     )
     assert len(palette_copy_cram8) == 7
     assert palette_copy_cram8[:1] == bytes([0xCD])
@@ -12658,16 +13796,7 @@ def main(
     rom[off:off + len(vram_copy_code)] = vram_copy_code
     print(f"  VRAM glyph loader: {len(vram_copy_code)} bytes at bank13:0x{VRAM_GLYPH_COPY_ADDR:04X}")
 
-    # 5. Levelsel attr-clear stub
-    ls = build_levelsel_attr_clear_stub()
-    assert len(ls) <= LEVELSEL_STUB_MAX
-    off = BANK13 + (LEVELSEL_STUB_ROM_ADDR - 0x4000)
-    for i in range(LEVELSEL_STUB_MAX):
-        assert rom[off + i] == 0x00, f"levelsel site not free at +{i}"
-    rom[off:off + len(ls)] = ls
-    print(f"  levelsel attr-clear stub: {len(ls)} bytes at bank13:0x{LEVELSEL_STUB_ROM_ADDR:04X}")
-
-    # 5b. Transition-only semantic pickup publisher for Stages 2-7. These
+    # 5. Transition-only semantic pickup publisher for Stages 2-7. These
     # adjacent fixed-size records are the same native-zero resource padding
     # family as the proven level-select stub above; assert the untouched base
     # image before claiming either one.
@@ -12901,6 +14030,10 @@ def main(
         LAVA_OVERRIDE_ADDR,
         room_sweep_count_addr=BG_SWEEP_COUNT_ADDR,
         room_attr_pending_addr=BG_SWEEP_ROOM_CACHE_ADDR,
+        # The prelude has already reasserted DF02 before tail-entering the
+        # lava helper. Stage 7's two adjacent LUT entries can therefore use
+        # a fixed direct writer instead of paying the list loop every VBlank.
+        direct_stage7=True,
     )
     off = BANK13 + (LAVA_OVERRIDE_ADDR - 0x4000)
     rom[off:off + len(lava)] = lava
@@ -12925,13 +14058,16 @@ def main(
         cutscene_palette_continuation,
     ) = build_cutscene_palette_bridge(story_dispatch)
     death_attr_service = build_death_attr_service(
-        CUTSCENE_PALETTE_BRIDGE_ADDR
+        CUTSCENE_PALETTE_BRIDGE_ADDR,
+        shalamar_viewport=not native_ted_postcopy,
     )
     title_delay = build_title_delay()
     story_half_row = build_story_half_row_helper(story_row_entry)
     story_quarter = build_story_quarter_helper(story_row_entry)
     story_separator = build_story_separator_helper(story_row_entry)
     story_viewport_key = build_story_viewport_key_helper()
+    ending_footer_clear_front = build_ending_footer_clear_helper()
+    story_row_increment = build_story_row_increment_helper()
     ending_absolute_row = build_ending_absolute_row_helper(story_row_entry)
     story_column = build_story_column_helper(story_column_resume)
     story_inactive = build_story_inactive_helper()
@@ -12962,6 +14098,12 @@ def main(
         STORY_VIEWPORT_KEY_HELPER_ADDR + len(story_viewport_key)
         <= BG_SWEEP_ADDR
     ), "story viewport-key helper collides with BG sweep"
+    assert (
+        ENDING_FOOTER_CLEAR_FRONT_ADDR + len(ending_footer_clear_front)
+        <= STORY_ROW_INCREMENT_HELPER_ADDR
+        and STORY_ROW_INCREMENT_HELPER_ADDR + len(story_row_increment)
+        <= ROOM_BG_REPAIR_ADDR
+    ), "ending footer cleanup collides with adjacent helpers"
     assert (
         STORY_SEPARATOR_HELPER_ADDR + len(story_separator)
         <= ENDING_ABSOLUTE_ROW_HELPER_ADDR
@@ -13124,6 +14266,11 @@ def main(
         f"bank13:0x{ENDING_ABSOLUTE_ROW_HELPER_ADDR:04X}"
     )
     print(
+        "  END footer cleanup: "
+        f"{len(ending_footer_clear_front)} bytes in an asserted-zero "
+        "bank-13 fragment"
+    )
+    print(
         f"  story viewport-column helper: {len(story_column)} bytes at "
         f"bank13:0x{STORY_COLUMN_HELPER_ADDR:04X}"
     )
@@ -13165,7 +14312,10 @@ def main(
     )
     death_late_fix = build_death_late_fix()
     title_transition = build_title_transition_service()
-    stale_window_cleanup = build_stale_window_cleanup()
+    stale_window_cleanup = build_stale_window_cleanup(
+        postcomputed_stage1_attrs
+    )
+    menu_close_repair = build_menu_close_native_repair()
     title_palette_copy = build_title_palette_copy_helper()
     assert (
         ATTRACT_OBJ_COLORIZER_ADDR + len(attract_obj)
@@ -13173,7 +14323,11 @@ def main(
     )
     assert (
         death_late_fix_addr + len(death_late_fix)
-        <= CONDITIONAL_PALETTE_IMPL_ADDR
+        <= ENDING_FOOTER_CLEAR_FRONT_ADDR
+        and ENDING_FOOTER_CLEAR_FRONT_ADDR + len(ending_footer_clear_front)
+        <= STORY_ROW_INCREMENT_HELPER_ADDR
+        and STORY_ROW_INCREMENT_HELPER_ADDR + len(story_row_increment)
+        <= ROOM_BG_REPAIR_ADDR
     )
     assert (
         ROOM_BG_REPAIR_ADDR + len(
@@ -13199,6 +14353,32 @@ def main(
     rom[
         death_late_off:death_late_off + len(death_late_fix)
     ] = death_late_fix
+    # Install after the retired OBJ LUT page is cleared; doing this during the
+    # earlier story phase would let that intentional clear erase the helper.
+    ending_footer_front_off = (
+        BANK13 + (ENDING_FOOTER_CLEAR_FRONT_ADDR - 0x4000)
+    )
+    assert rom[
+        ending_footer_front_off:
+        ending_footer_front_off + len(ending_footer_clear_front)
+    ] == bytes(len(ending_footer_clear_front)), \
+        "ending footer cleanup fragment is no longer free"
+    rom[
+        ending_footer_front_off:
+        ending_footer_front_off + len(ending_footer_clear_front)
+    ] = ending_footer_clear_front
+    story_row_increment_off = (
+        BANK13 + (STORY_ROW_INCREMENT_HELPER_ADDR - 0x4000)
+    )
+    assert rom[
+        story_row_increment_off:
+        story_row_increment_off + len(story_row_increment)
+    ] == bytes(len(story_row_increment)), \
+        "story row-increment helper fragment is no longer free"
+    rom[
+        story_row_increment_off:
+        story_row_increment_off + len(story_row_increment)
+    ] = story_row_increment
     transition_off = (
         BANK13 + (TITLE_TRANSITION_SERVICE_ADDR - 0x4000)
     )
@@ -13220,12 +14400,24 @@ def main(
     rom[
         stale_window_off:stale_window_off + len(stale_window_cleanup)
     ] = stale_window_cleanup
+    if postcomputed_stage1_attrs:
+        assert rom[
+            MENU_CLOSE_NATIVE_REPAIR_ADDR:
+            MENU_CLOSE_NATIVE_REPAIR_ADDR + len(menu_close_repair)
+        ] == bytes.fromhex("AF E0 E4 C9"), (
+            "native menu-close cleanup tail changed"
+        )
+        rom[
+            MENU_CLOSE_NATIVE_REPAIR_ADDR:
+            MENU_CLOSE_NATIVE_REPAIR_ADDR + len(menu_close_repair)
+        ] = menu_close_repair
+        install_menu_live_map_selector(rom)
     title_palette_copy_off = (
         BANK13 + (TITLE_PALETTE_COPY_HELPER_ADDR - 0x4000)
     )
     assert (
         STALE_WINDOW_CLEANUP_ADDR + len(stale_window_cleanup)
-        == TITLE_PALETTE_COPY_HELPER_ADDR
+        <= TITLE_PALETTE_COPY_HELPER_ADDR
     )
     assert (
         TITLE_PALETTE_COPY_HELPER_ADDR + len(title_palette_copy)
@@ -13272,6 +14464,11 @@ def main(
         f"  stale gameplay Window cleanup: {len(stale_window_cleanup)} bytes "
         f"at bank13:0x{STALE_WINDOW_CLEANUP_ADDR:04X}"
     )
+    if postcomputed_stage1_attrs:
+        print(
+            "  item-menu live-map selector: "
+            f"fixed:0x{MENU_LIVE_MAP_SELECTOR_ADDR:04X} reads LCDC.3"
+        )
     print(
         "  idle-throttled palette service: "
         f"{len(conditional_palette)} bytes at "
@@ -13410,7 +14607,9 @@ def main(
         LAVA_ATTR_STAGE7_SOURCE_B_ADDR,
     )
     lava_attr_room_match = build_lava_attr_room_match()
-    lava_attr_stage7_runtime = build_lava_attr_stage7_runtime()
+    lava_attr_stage7_runtime = build_lava_attr_stage7_runtime(
+        always_stage1=buffered_stage1_attrs
+    )
     lava_stage7_first_capacity = (
         OAM_FREE_EMITTER_ADDR - LAVA_ATTR_STAGE7_SOURCE_A_ADDR
     )
@@ -13428,6 +14627,11 @@ def main(
         DEATH_FADE_HELPER_ADDR + len(death_fade_helper)
         <= TILE_COLORIZER_ADDR
     )
+    assert DEATH_PALETTE_ROW_ADDR + len(death_gameover_palette) <= (
+        DEATH_FADE_INTERMEDIATE_ADDR
+    )
+    assert DEATH_GAMEOVER_PALETTE_ROW_ADDR \
+        + len(death_gameover_text_palette) <= DEATH_FADE_WHITE_ADDR
     assert (
         DEATH_FADE_WHITE_ADDR + len(DEATH_FADE_WHITE)
         <= LAVA_ATTR_STAGE7_SOURCE_B_ADDR
@@ -13560,8 +14764,21 @@ def main(
         stage1_hazard_bank7_copy_tail,
     ) = build_stage1_hazard_bank1_copy_routines()
     stage1_hazard_bank1_loader = build_stage1_hazard_bank1_loader()
-    stage1_entry_patch_gate = build_stage1_entry_patch_gate()
+    stage1_entry_patch_gate = build_stage1_entry_patch_gate(
+        defer_palette_to_map_flip=clean_stage_handoff,
+    )
     stage1_lut_off = BANK13 + DUNGEON_TABLE_ADDR - 0x4000
+    # Keep the shared Stage-1 table semantic: these tile IDs also occur in
+    # ordinary terrain and pickup redraws, so setting VRAM-bank 1 globally
+    # turns unrelated cells into hazard art after menu/item/low-health map
+    # publications.  Only the geometry-bounded hazard-row writer may add bit
+    # 3 for real teeth.  Assert the YAML authority here so a global-bank
+    # regression fails at build time instead of reaching hardware.
+    for tile in (
+        *range(0x64, 0x6A),
+        *range(0x74, 0x7A),
+    ):
+        assert rom[stage1_lut_off + tile] == 0x07
     (
         stage1_entry_patch_body,
         stage1_entry_patch_tail,
@@ -13595,7 +14812,14 @@ def main(
         stage1_hazard_row0_repair_middle,
         stage1_hazard_row0_repair_tail,
     ) = build_stage1_hazard_row0_transition_repair()
-    stage1_hazard_room_dispatcher = build_stage1_hazard_room_dispatcher()
+    (
+        stage1_hazard_shift8_publisher,
+        stage1_hazard_shift8_leaves,
+        stage1_hazard_row0_phase7,
+    ) = build_stage1_hazard_shift8_helpers()
+    stage1_hazard_room_dispatcher = build_stage1_hazard_room_dispatcher(
+        tagged_exact_destination=stage1_tagged_destination,
+    )
     oam_wram_copy_tail13, oam_wram_copy_ted_helper_cont = build_oam_wram_copy_tail(
         postcomputed_attrs=True,
     )
@@ -13624,16 +14848,24 @@ def main(
         demo_pickup_writer_tail,
         demo_pickup_phase_writer,
         demo_pickup_phase_writer_tail,
-    ) = build_demo_pickup_writer(demo_pickup_writer_phase_nops)
+    ) = build_demo_pickup_writer(
+        demo_pickup_writer_phase_nops,
+        live_writes=not postcomputed_stage1_attrs,
+    )
     semantic_helpers = (
         (
             OAM_PALETTE_RESOLVER_ADDR,
-            build_oam_palette_resolver() + build_stage1_atomic_setup(),
+            build_oam_palette_resolver() + build_stage1_atomic_setup(
+                tagged_exact_destination=stage1_tagged_destination,
+            ),
         ),
         (OAM_CENTRAL_EMITTER_ADDR, build_oam_central_emitter()),
         (OAM_BOSS_LUT_SERVICE_ADDR, build_oam_boss_lut_service()),
         (OAM_FREE_EMITTER_ADDR, build_oam_free_emitter()),
-        (OAM_WRAM_COPY_ADDR, build_oam_wram_copy()),
+        (
+            OAM_WRAM_COPY_ADDR,
+            build_oam_wram_copy(always_stage1=buffered_stage1_attrs),
+        ),
         (TITLE_TRANSITION_SERVICE_ADDR, title_transition),
         (NATIVE_GLYPH_RESTORE_ADDR, build_native_glyph_restore()),
         (OAM_LUT_INIT_ADDR, build_oam_lut_init()),
@@ -13816,6 +15048,25 @@ def main(
                 f"({capacity} bytes)"
             )
         rom[fragment_off:fragment_off + len(payload)] = payload
+    if not native_ted_postcopy:
+        death_viewport_front, death_viewport_tail = (
+            build_death_shalamar_viewport()
+        )
+        for address, payload in (
+            (DEATH_SHALAMAR_VIEWPORT_FRONT_ADDR, death_viewport_front),
+            (DEATH_SHALAMAR_VIEWPORT_TAIL_ADDR, death_viewport_tail),
+        ):
+            viewport_off = BANK13 + address - 0x4000
+            assert rom[
+                viewport_off:viewport_off + len(payload)
+            ] == bytes(len(payload)), (
+                f"Shalamar death viewport cave ${address:04X} is not free"
+            )
+            rom[viewport_off:viewport_off + len(payload)] = payload
+    clean_stage_handoff = (
+        _os.environ.get("PENTA_STAGE_CARD_CLEAN_HANDOFF", "0") == "1"
+        and expanded_ted_production
+    )
     if not expanded_ted_payload:
         assert bytes(
             rom[protected_title_glyph_off:protected_title_glyph_off + 0x20]
@@ -13894,8 +15145,8 @@ def main(
         lava_stage5_signature_off + len(lava_attr_stage5_signature)
     ] = lava_attr_stage5_signature
     for address, palette in (
-        (DEATH_FADE_NORMAL_ADDR, DEATH_FADE_NORMAL),
-        (DEATH_FADE_INTERMEDIATE_ADDR, DEATH_FADE_INTERMEDIATE),
+        (DEATH_PALETTE_ROW_ADDR, death_gameover_palette),
+        (DEATH_GAMEOVER_PALETTE_ROW_ADDR, death_gameover_text_palette),
         (DEATH_FADE_WHITE_ADDR, DEATH_FADE_WHITE),
     ):
         palette_off = BANK13 + (address - 0x4000)
@@ -13983,6 +15234,12 @@ def main(
          stage1_hazard_row0_repair_middle),
         (STAGE1_HAZARD_ROW0_REPAIR_TAIL_ADDR,
          stage1_hazard_row0_repair_tail),
+        (STAGE1_HAZARD_ROW0_PHASE7_ADDR,
+         stage1_hazard_row0_phase7),
+        (STAGE1_HAZARD_SHIFT8_PUBLISHER_ADDR,
+         stage1_hazard_shift8_publisher),
+        (STAGE1_HAZARD_SHIFT8_LEAVES_ADDR,
+         stage1_hazard_shift8_leaves),
         (STAGE1_HAZARD_START4_HELPER_ADDR,
          stage1_hazard_start4_helper),
         (STAGE1_HAZARD_START4_EDGE_ADDR,
@@ -14280,7 +15537,7 @@ def main(
     # three-tile atomic path exactly once per destination map. Rotating hazards
     # are handled by the selective post-expander service, so their animation
     # never replays an expensive whole-map atomic copy.
-    if buffered_stage1_attrs:
+    if postcomputed_stage1_attrs:
         assert (
             not stock_tile_copy
             and not compact_tile_copy
@@ -14298,8 +15555,13 @@ def main(
             INLINE_ATTR_DECISION_HELPER_ADDR + 3,
             STAGE1_ATOMIC_SETUP_ADDR,
             STAGE1_ATOMIC_WRAP_ADDR,
-            STAGE1_HAZARD_PURE_MAP_ADDR,
+            (
+                STAGE1_POSTCOPY_GUARD_WRAM_ADDR
+                if buffered_stage1_attrs
+                else STAGE1_HAZARD_PURE_MAP_ADDR
+            ),
             STAGE1_SOURCE_GENERATION_RST,
+            tagged_exact_destination=stage1_tagged_destination,
         )
         atomic_row_addr = 0
         print(
@@ -14360,7 +15622,7 @@ def main(
     stage1_atomic_wrap_tail = build_stage1_atomic_wrap_tail()
     available = 0x436D - 0x42A7 + 1
     assert len(inline_blob) <= available
-    if buffered_stage1_attrs:
+    if postcomputed_stage1_attrs:
         title_tail_length = 14
         title_pure_entry = 0x42A7 + len(inline_blob) - title_tail_length
         title_prefix = bytes.fromhex("26 98 AF 6F")
@@ -14387,7 +15649,8 @@ def main(
         assert rom[
             STAGE1_ATOMIC_WRAP_TAIL_ADDR:0x436E
         ] == bytes(0x436E - STAGE1_ATOMIC_WRAP_TAIL_ADDR), (
-            "atomic wrapper bank-1 tail is no longer free"
+            "atomic wrapper bank-1 tail is no longer free: "
+            + rom[STAGE1_ATOMIC_WRAP_TAIL_ADDR:0x436E].hex()
         )
         rom[
             STAGE1_ATOMIC_WRAP_TAIL_ADDR:0x436E
@@ -14399,7 +15662,7 @@ def main(
     assert rom[
         INLINE_ATTR_DECISION_HELPER_ADDR:0x34A3
     ] == bytes(0x34A3 - INLINE_ATTR_DECISION_HELPER_ADDR)
-    if buffered_stage1_attrs:
+    if postcomputed_stage1_attrs:
         fixed_inline_helpers = (
             inline_attr_decision
             + stage1_atomic_wrap
@@ -14577,6 +15840,131 @@ def main(
             "  attract-only compact pure copier: "
             f"{len(demo_compact)} bytes at bank13:0x"
             f"{DEMO_COMPACT_COPY_ADDR:04X}; live/title remain native"
+        )
+
+    if not restoring_native_copier and not demo_compact_tile_copy:
+        # RST $30's unconditional JP makes $0033-$0037 unreachable by
+        # fallthrough. Prove that the stock image also has no direct absolute
+        # transfer into any byte before claiming the padding as executable.
+        fixed_leaf_preimage = bytes.fromhex("7F CD 7B FE FF")
+        assert (
+            rom[
+                DEATH_FINAL_PUBLISH_FIXED_ADDR:
+                DEATH_FINAL_PUBLISH_FIXED_ADDR + len(fixed_leaf_preimage)
+            ]
+            == vanilla_rom[
+                DEATH_FINAL_PUBLISH_FIXED_ADDR:
+                DEATH_FINAL_PUBLISH_FIXED_ADDR + len(fixed_leaf_preimage)
+            ]
+            == fixed_leaf_preimage
+        ), "RST $30 fallthrough padding is no longer stock"
+        absolute_transfer_opcodes = (
+            0xC3, 0xC2, 0xCA, 0xD2, 0xDA,
+            0xCD, 0xC4, 0xCC, 0xD4, 0xDC,
+        )
+        for target in range(
+            DEATH_FINAL_PUBLISH_FIXED_ADDR,
+            DEATH_FINAL_PUBLISH_FIXED_ADDR + len(fixed_leaf_preimage),
+        ):
+            encoded_targets = (
+                bytes((opcode, target & 0xFF, target >> 8))
+                for opcode in absolute_transfer_opcodes
+            )
+            assert not any(
+                encoded in vanilla_rom for encoded in encoded_targets
+            ), f"stock control transfer targets RST $30 padding ${target:04X}"
+
+        death_publish_leaf = build_death_final_publish_leaf(
+            DEATH_FINAL_PUBLISH_RETURN_ADDR
+        )
+        rom[
+            DEATH_FINAL_PUBLISH_FIXED_ADDR:
+            DEATH_FINAL_PUBLISH_FIXED_ADDR + len(death_publish_leaf)
+        ] = death_publish_leaf
+
+        # This bank-1 tail was already the asserted private cave for the
+        # mutually-exclusive cached-Ted diagnostic, but that experiment never
+        # installed a payload at its MAP address. Production can therefore
+        # own the complete nine-byte run without touching stock data or a
+        # callable instruction boundary.
+        death_publish_return_preimage = bytes(9)
+        assert (
+            rom[
+                DEATH_FINAL_PUBLISH_RETURN_ADDR:
+                DEATH_FINAL_PUBLISH_RETURN_ADDR
+                + len(death_publish_return_preimage)
+            ]
+            == vanilla_rom[
+                DEATH_FINAL_PUBLISH_RETURN_ADDR:
+                DEATH_FINAL_PUBLISH_RETURN_ADDR
+                + len(death_publish_return_preimage)
+            ]
+            == death_publish_return_preimage
+        ), "death publication return cave is no longer stock zero space"
+        for target in range(
+            DEATH_FINAL_PUBLISH_RETURN_ADDR,
+            DEATH_FINAL_PUBLISH_RETURN_ADDR
+            + len(death_publish_return_preimage),
+        ):
+            encoded_targets = (
+                bytes((opcode, target & 0xFF, target >> 8))
+                for opcode in absolute_transfer_opcodes
+            )
+            assert not any(
+                encoded in vanilla_rom[:0x8000]
+                for encoded in encoded_targets
+            ), f"stock control transfer targets death return cave ${target:04X}"
+        death_publish_return = build_death_final_publish_return(
+            title_pure_entry
+        )
+        rom[
+            DEATH_FINAL_PUBLISH_RETURN_ADDR:
+            DEATH_FINAL_PUBLISH_RETURN_ADDR + len(death_publish_return)
+        ] = death_publish_return
+
+        # Preserve the transition's exact 14-byte width and full register
+        # contract. CALL $007E leaves A=0, so INC A sets FFE4=1. Publish while
+        # D880 still identifies the defeated boss, then use LD [HL],n so the
+        # wrapper's restored A=0/Z survives the scene change. The following
+        # stock instruction replaces HL, while the wrapper has retained the
+        # live BC/DE values consumed by ending and attract-return control flow.
+        death_transition_preimage = bytes.fromhex(
+            "3E 01 E0 E4 CD 7E 00 F5 3E 17 EA 80 D8 F1"
+        )
+        assert (
+            rom[
+                DEATH_TRANSITION_ADDR:
+                DEATH_TRANSITION_ADDR + len(death_transition_preimage)
+            ]
+            == vanilla_rom[
+                DEATH_TRANSITION_ADDR:
+                DEATH_TRANSITION_ADDR + len(death_transition_preimage)
+            ]
+            == death_transition_preimage
+        ), "stock death transition preimage changed"
+        assert rom[0x007E:0x0088] == bytes.fromhex(
+            "3E 01 EA 89 D8 AF EA 80 D8 C9"
+        ), "CALL $007E no longer returns A=0/Z"
+        death_transition = bytes([
+            0xCD, 0x7E, 0x00,               # stock D889=1, D880=0
+            0x3C,                           # A=1
+            0xE0, 0xE4,                     # stock cinematic flag
+            0xCD,
+            DEATH_FINAL_PUBLISH_FIXED_ADDR & 0xFF,
+            DEATH_FINAL_PUBLISH_FIXED_ADDR >> 8,  # publish; A=0/Z, BC/DE live
+            0x21, 0x80, 0xD8,               # HL = D880 (disposable here)
+            0x36, 0x17,                     # enter stock death scene
+        ])
+        assert len(death_transition) == len(death_transition_preimage)
+        rom[
+            DEATH_TRANSITION_ADDR:
+            DEATH_TRANSITION_ADDR + len(death_transition)
+        ] = death_transition
+        print(
+            "  death final publication: completed C1A0 -> $9C00 via "
+            f"fixed:${DEATH_FINAL_PUBLISH_FIXED_ADDR:04X} at stock "
+            f"bank1:${DEATH_FINAL_PUBLISH_RETURN_ADDR:04X} return + "
+            f"${DEATH_TRANSITION_ADDR:04X} transition"
         )
 
     use_stage1_hazard_hook = not (
@@ -14761,13 +16149,42 @@ def main(
     rom[off:off + len(prelude)] = prelude
     print(f"  safe colorize prelude: {len(prelude)} bytes at bank13:0x{COLORIZE_PRELUDE_ADDR:04X}")
 
+    window_attr_clear = build_window_attr_clear_helper()
+    window_clear_off = BANK13 + (WINDOW_ATTR_CLEAR_HELPER_ADDR - 0x4000)
+    assert rom[
+        window_clear_off:window_clear_off + len(window_attr_clear)
+    ] == bytes(len(window_attr_clear)), (
+        "Window attribute row helper padding is no longer free"
+    )
+    rom[
+        window_clear_off:window_clear_off + len(window_attr_clear)
+    ] = window_attr_clear
+
+    levelsel_transition, levelsel_tail = build_levelsel_rom_transition()
+    levelsel_off = BANK13 + (LEVELSEL_ROM_ENTRY_ADDR - 0x4000)
+    assert rom[
+        levelsel_off:levelsel_off + len(levelsel_transition)
+    ] == bytes(len(levelsel_transition)), (
+        "ROM-resident level-select transition cave is no longer free"
+    )
+    rom[
+        levelsel_off:levelsel_off + len(levelsel_transition)
+    ] = levelsel_transition
+    print(
+        "  level-select transition: "
+        f"{len(levelsel_transition)}+{len(levelsel_tail)} ROM bytes at "
+        f"bank13:0x{LEVELSEL_ROM_ENTRY_ADDR:04X}/"
+        f"0x{LEVELSEL_ROM_TAIL_ADDR:04X}; no dungeon WRAM executable copy"
+    )
+
     title_palette_fix = build_title_palette_fix(story_dispatch)
     assert (
         TITLE_PALETTE_FIX_ADDR + len(title_palette_fix)
         <= STORY_SEPARATOR_HELPER_ADDR
     ), "title palette repair collides with story lower-panel helper"
-    assert rom[palette_source_off:palette_source_off + 8] == expected_bg0, \
-        "title palette source no longer matches YAML BG0"
+    assert rom[
+        palette_source_off + 56:palette_source_off + 64
+    ] == expected_title_bg, "title palette alias no longer matches YAML selector"
     off = BANK13 + (TITLE_PALETTE_FIX_ADDR - 0x4000)
     assert rom[off:off + len(title_palette_fix)] == bytes(len(title_palette_fix)), \
         "title palette repair slot is no longer free"
@@ -14842,19 +16259,18 @@ def main(
         0xF0, 0x40,                        # LDH A,[LCDC]
         0xE6, 0x20,                        # AND window-enable
         0x20, 0x0A,                        # JR NZ, skip full colorizer
-        # Death ($17) owns a bounded two-map neutral pass above; STAGE XX ($18)
-        # uses its all-pal0 inline path. Both skip the gameplay colorizer:
-        # death must not be repainted from the stale dungeon/arena table, and
-        # the splash must retain stock VBlank/ditty timing. On the final splash
-        # VBlank, FFB7 already identifies Stage 1; publish the eleven first-
-        # room chromatic attrs before D880 changes on the following main loop.
-        0xFA, 0x80, 0xD8,                  # LD A,[D880]
-        0xD6, 0x17,                        # SUB first skipped scene
-        0xD6, 0x01,                        # death=Carry; splash=Zero
-        0xCC,                              # CALL Z, hidden entry patch
-        STAGE1_ENTRY_PATCH_GATE_ADDR & 0xFF,
-        STAGE1_ENTRY_PATCH_GATE_ADDR >> 8,
-        0xD4, COLORIZE_ADDR & 0xFF, (COLORIZE_ADDR >> 8) & 0xFF,
+        # Receipt-proven idle selector. Run the complete colorizer only while
+        # a room sweep is pending; otherwise dispatch title/gameplay OAM
+        # directly. Besides restoring prerecorded-demo cadence, the retained
+        # JR over the fast call is the target of the item-menu branch above.
+        0xFA, BG_SWEEP_COUNT_ADDR & 0xFF,
+        BG_SWEEP_COUNT_ADDR >> 8,
+        0xB7,
+        0x28, 0x05,
+        0xCD, COLORIZE_ADDR & 0xFF, COLORIZE_ADDR >> 8,
+        0x18, 0x03,
+        0xCD, ATTRACT_OBJ_COLORIZER_ADDR & 0xFF,
+        ATTRACT_OBJ_COLORIZER_ADDR >> 8,
         # One-shot period + v3.01 digits + footer attributes. Keeping this
         # after colorize prevents it from delaying first-VBlank CRAM writes.
         0xCD, VRAM_GLYPH_COPY_ADDR & 0xFF,
@@ -14898,7 +16314,7 @@ def main(
                 COLORIZE_PRELUDE_ADDR >> 8,
             ])],
             "colorizer": [bytes([
-                0xD4, COLORIZE_ADDR & 0xFF, COLORIZE_ADDR >> 8,
+                0xCD, COLORIZE_ADDR & 0xFF, COLORIZE_ADDR >> 8,
             ])],
             "glyph-copy": [bytes([
                 0xCD, VRAM_GLYPH_COPY_ADDR & 0xFF,
@@ -14970,11 +16386,7 @@ def main(
                 == LAVA_ATTR_DECIDER_BANK0_MAP_ENTRY_ADDR
             )
         else:
-            # Atomic completion reloads exact D880 immediately before calling
-            # this selector. The layered v65 lineage never reached the shared
-            # banked completion because stale A=$01 returned here. Admit only
-            # Penta's receipt-proven seam repair; waking every dormant arena
-            # post-copy sanitizer is a materially broader behavior change.
+            # Keep Stage 1 on bank 14 and every later dungeon/arena on bank 13.
             hazard_mapper_offset = STAGE1_HAZARD_BANK0_MAP_ADDR - 0x0824
             assert len(new_hook) <= hazard_mapper_offset
             new_hook.extend(bytes(hazard_mapper_offset - len(new_hook)))
@@ -15157,16 +16569,34 @@ def main(
         "the title-palette service"
     )
 
-    # 17. Levelsel JP NZ patch
-    expected = bytes([0xC2, 0x93, 0x73])
-    actual = bytes(rom[LEVELSEL_PATCH_ADDR:LEVELSEL_PATCH_ADDR + 3])
-    assert actual == expected, f"levelsel patch site corrupted: {actual.hex()}"
+    # 17. Route GAME START through the ROM-resident transition after the
+    # untouched CALL $007E. The helper calls bank1:$408E via its rebuilt stack
+    # and returns at $3B42 after reproducing DI/stack-reset/EI. Keep the
+    # native save-present JP NZ,$7393 intact; no branch targets dungeon WRAM.
+    expected = bytes.fromhex("CD 8E 40 F3 31 FF DF FB")
+    actual = bytes(
+        rom[LEVELSEL_START_PATCH_ADDR:LEVELSEL_START_PATCH_ADDR + len(expected)]
+    )
+    assert actual == expected, f"GAME START patch site corrupted: {actual.hex()}"
+    assert rom[
+        LEVELSEL_PATCH_ADDR:LEVELSEL_PATCH_ADDR + 3
+    ] == bytes.fromhex("C2 93 73"), "native level-select target moved"
     if minimal_prelude:
-        print("  diagnostic isolation: native level-select branch retained")
+        print("  diagnostic isolation: native GAME START transition retained")
     else:
-        rom[LEVELSEL_PATCH_ADDR + 1] = LEVELSEL_STUB_WRAM & 0xFF
-        rom[LEVELSEL_PATCH_ADDR + 2] = (LEVELSEL_STUB_WRAM >> 8) & 0xFF
-        print(f"  Levelsel JP NZ patched: 0x{LEVELSEL_PATCH_ADDR:04X} → 0x{LEVELSEL_STUB_WRAM:04X}")
+        rom[
+            LEVELSEL_START_PATCH_ADDR:LEVELSEL_START_PATCH_ADDR + len(expected)
+        ] = bytes([
+            0x3E, 0x0D,                         # LD A,bank 13
+            0xCD, 0x61, 0x00,                   # CALL bank switch
+            0xC3, LEVELSEL_ROM_ENTRY_ADDR & 0xFF,
+            LEVELSEL_ROM_ENTRY_ADDR >> 8,       # JP bank13 transition
+        ])
+        print(
+            f"  GAME START routed: fixed:0x{LEVELSEL_START_PATCH_ADDR:04X} "
+            f"→ bank13:0x{LEVELSEL_ROM_ENTRY_ADDR:04X}; "
+            f"JP NZ at 0x{LEVELSEL_PATCH_ADDR:04X} remains native $7393"
+        )
 
     # Header checksum
     chk = 0
@@ -15301,11 +16731,52 @@ def main(
         "boss LUTs verified"
     )
 
+    stage7_r265_receipt = None
+    stage7_r265_receipt_path = None
+    if stage7_dual_plane_r265:
+        # Keep the not-yet-promoted Stage-7 transport out of the default
+        # release identity.  Its production-facing installer accepts only the
+        # complete receipt-qualified r264 ROM and rematerializes the exact
+        # a4c... candidate; a custom scratch output prevents an accidental
+        # overwrite of FIXED.gb while live release gates remain.
+        from stage7_dual_plane_r265 import (
+            checked_scratch as checked_stage7_scratch,
+            install_stage7_r265,
+        )
+        checked_stage7_scratch(output_path, label="Stage-7 r265 ROM output")
+        optimized, stage7_r265_receipt = install_stage7_r265(bytes(rom))
+        rom = bytearray(optimized)
+        stage7_r265_receipt_path = output_path.with_suffix(
+            ".stage7-r265.json"
+        )
+        checked_stage7_scratch(
+            stage7_r265_receipt_path,
+            label="Stage-7 r265 integration receipt",
+        )
+        print(
+            "  Stage-7 r265 opt-in: exact hidden-map dual-plane HDMA + "
+            "scene-$08 Window signature invalidation"
+        )
+
     write_output_with_backup(
         output_path,
         rom,
         backup_existing=output_path.resolve() == OUTPUT_PATH.resolve(),
     )
+    if stage7_r265_receipt is not None:
+        import json as _json
+        resolved_candidate = output_path.resolve()
+        try:
+            candidate_label = str(
+                resolved_candidate.relative_to(_script_dir.resolve())
+            )
+        except ValueError:
+            candidate_label = str(resolved_candidate)
+        stage7_r265_receipt["candidate_path"] = candidate_label
+        stage7_r265_receipt_path.write_text(
+            _json.dumps(stage7_r265_receipt, indent=2, sort_keys=True) + "\n"
+        )
+        print(f"Wrote {stage7_r265_receipt_path}")
     print(f"Wrote {output_path} ({len(rom)} bytes)")
     return output_path
 
@@ -15378,6 +16849,14 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--cached-stage1-attrs",
+        action="store_true",
+        help=(
+            "use the native-width cached Stage-1 attribute path with the "
+            "selective post-copy hazard owner"
+        ),
+    )
+    parser.add_argument(
         "--compact-tile-copy",
         action="store_true",
         help="diagnostically use the compact four-tile single-wait copier",
@@ -15434,6 +16913,23 @@ if __name__ == "__main__":
             "phase; the release default is receipt-locked in source"
         ),
     )
+    parser.add_argument(
+        "--stage1-tagged-destination",
+        action="store_true",
+        help=(
+            "retain the exact physical Stage-1 destination on pure and dirty "
+            "post-copy routes using the receipt-qualified tagged FFA5 ABI"
+        ),
+    )
+    parser.add_argument(
+        "--stage7-dual-plane-r265",
+        action="store_true",
+        help=(
+            "opt in to the receipt-qualified Stage-7 hidden-map dual-plane "
+            "HDMA transport and menu-signature repair; requires the exact "
+            "r264 source base and a custom scratch --output"
+        ),
+    )
     arguments = parser.parse_args()
     main(
         palette_yaml=arguments.palette_yaml,
@@ -15448,6 +16944,7 @@ if __name__ == "__main__":
         minimal_prelude=arguments.minimal_prelude,
         disable_lava_override=arguments.disable_lava_override,
         buffered_stage1_attrs=arguments.buffered_stage1_attrs,
+        cached_stage1_attrs=arguments.cached_stage1_attrs,
         compact_tile_copy=arguments.compact_tile_copy,
         demo_compact_tile_copy=arguments.demo_compact_tile_copy,
         semantic_stage1_prototype=arguments.semantic_stage1_prototype,
@@ -15461,4 +16958,6 @@ if __name__ == "__main__":
         demo_pickup_writer_phase_nops=(
             arguments.demo_pickup_writer_phase_nops
         ),
+        stage1_tagged_destination=arguments.stage1_tagged_destination,
+        stage7_dual_plane_r265=arguments.stage7_dual_plane_r265,
     )

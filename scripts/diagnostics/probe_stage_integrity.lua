@@ -11,7 +11,7 @@
 -- checkpoint transition can muddy the result.
 
 local TARGET = tonumber(os.getenv("STAGE_TARGET") or "1")
-local OUT = os.getenv("STAGE_OUT") or "/tmp/penta_stage_integrity"
+local OUT = assert(os.getenv("STAGE_OUT"), "STAGE_OUT required")
 local SHOT = os.getenv("STAGE_SHOT") == "1"
 local STATE_OUT = os.getenv("STAGE_STATE_OUT")
 local ROUTE_TRACE = os.getenv("STAGE_ROUTE_TRACE")
@@ -92,6 +92,14 @@ local function capture()
   dump_range(OUT .. ".vram1.bin", 0x8000, 0x97FF)
   dump_range(OUT .. ".attr.bin", 0x9800, 0x9FFF)
   dump_range(OUT .. ".bg-lut.bin", 0xC600, 0xC6FF)
+  local old_svbk = emu:read8(0xFF70)
+  emu:write8(0xFF70, 1)
+  dump_range(OUT .. ".wram1-db.bin", 0xDB00, 0xDB7F)
+  emu:write8(0xFF70, 2)
+  dump_range(OUT .. ".wram2-plane.bin", 0xD000, 0xD3FF)
+  emu:write8(0xFF70, 3)
+  dump_range(OUT .. ".wram3-plane.bin", 0xD000, 0xD3FF)
+  emu:write8(0xFF70, old_svbk)
 
   local old_bcps = emu:read8(0xFF68)
   local bgp = assert(io.open(OUT .. ".bgp.bin", "wb"))
@@ -124,11 +132,13 @@ local function capture()
   local meta = assert(io.open(OUT .. ".meta", "w"))
   meta:write(string.format(
     "frame=%d target=%d expected_scene=%02X D880=%02X FFC1=%02X FF91=%02X DF02=%02X DF0D=%02X FFBA=%02X " ..
-    "LCDC=%02X SCX=%02X SCY=%02X active_map=%04X visible=%d unsafe_attr=%d\n",
+    "LCDC=%02X STAT=%02X HDMA5=%02X PC=%04X SP=%04X SCX=%02X SCY=%02X " ..
+    "active_map=%04X visible=%d unsafe_attr=%d\n",
     f, TARGET, expected_scene, emu:read8(0xD880), emu:read8(0xFFC1),
     emu:read8(0xFF91), emu:read8(0xDF02), emu:read8(0xDF0D), emu:read8(0xFFBA),
-    emu:read8(0xFF40), emu:read8(0xFF43),
-    emu:read8(0xFF42), active_base, visible, unsafe))
+    emu:read8(0xFF40), emu:read8(0xFF41), emu:read8(0xFF55),
+    emu:readRegister("PC") & 0xFFFF, emu:readRegister("SP") & 0xFFFF,
+    emu:read8(0xFF43), emu:read8(0xFF42), active_base, visible, unsafe))
   meta:write("visible_attr_hist=" .. table.concat(parts, ",") .. "\n")
   meta:close()
 

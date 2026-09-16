@@ -24,6 +24,8 @@ from scripts.arena_semantic_key import (  # noqa: E402
     HELPER_BANK,
     HELPER_ENTRY,
     build_helper,
+    cache_writer_is_owned,
+    cache_writer_pc_ranges,
 )
 
 MGBA = ROOT / "scripts" / "mgba-qt-singleflight"
@@ -63,9 +65,11 @@ def terminate(process: subprocess.Popen[bytes]) -> None:
 
 def capture(
     rom: Path, state: Path, prefix: Path, target: int, frames: int,
-    timeout: float, helper_end: int, record: tuple[int, ...],
+    timeout: float, writer_ranges: tuple[tuple[int, int], ...],
+    record: tuple[int, ...],
     expect_foreign: bool,
 ) -> dict[str, object]:
+    rom_data = rom.read_bytes()
     prefix.parent.mkdir(parents=True, exist_ok=True)
     marker = Path(str(prefix) + ".done")
     trace = Path(str(prefix) + ".trace")
@@ -125,8 +129,10 @@ def capture(
     foreign = [
         row for row in writers
         if row["address"] not in record
-        or row["bank"] != HELPER_BANK
-        or not (HELPER_ENTRY <= row["pc"] < helper_end)
+        or not cache_writer_is_owned(
+            rom_data, row["bank"], row["pc"],
+            shalamar_native_exact_class=0,
+        )
     ]
     if foreign and not expect_foreign:
         raise RuntimeError(
@@ -182,10 +188,11 @@ def main() -> int:
     if args.record_size < 1 or args.record_base + args.record_size > 0xE000:
         parser.error("record range must be within WRAM C000-DFFF")
     record = tuple(range(args.record_base, args.record_base + args.record_size))
-    helper_end = HELPER_ENTRY + len(build_helper(
-        shalamar_native_exact_class=args.shalamar_native_exact_class
-    ))
     rom = args.rom.resolve()
+    writer_ranges = cache_writer_pc_ranges(
+        rom.read_bytes(),
+        shalamar_native_exact_class=args.shalamar_native_exact_class,
+    )
     states = args.states.resolve()
     bosses = []
     for target in range(9):
@@ -198,7 +205,7 @@ def main() -> int:
         runs = [capture(
             rom, matches[0].resolve(),
             args.output.parent / "ownership" / BOSSES[target].name / f"run-{run + 1}",
-            target, args.frames, args.timeout, helper_end, record,
+            target, args.frames, args.timeout, writer_ranges, record,
             args.expect_foreign_writer,
         ) for run in range(args.replays)]
         fingerprints = [run["writer_trajectory_sha256"] for run in runs]
@@ -233,7 +240,9 @@ def main() -> int:
         "deterministic_replays": args.replays,
         "record": f"{record[0]:04X}-{record[-1]:04X}",
         "allowed_writer_bank": f"{HELPER_BANK:02X}",
-        "allowed_writer_pc_range": f"{HELPER_ENTRY:04X}-{helper_end - 1:04X}",
+        "allowed_writer_pc_ranges": [
+            f"{start:04X}-{end - 1:04X}" for start, end in writer_ranges
+        ],
         "per_byte_writer_counts": totals,
         "foreign_writers": foreign_total,
         "expected_foreign_writer": args.expect_foreign_writer,

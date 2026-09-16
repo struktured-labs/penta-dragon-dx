@@ -68,6 +68,12 @@ def main() -> int:
             "--output",
             "tmp/precommit-ted-contract-controls.json",
         ),
+        (
+            sys.executable,
+            "scripts/diagnostics/verify_stage1_visual_contract_controls.py",
+            "--output",
+            "tmp/precommit-stage1-visual-contract-controls.json",
+        ),
     )
     for command in checks:
         if run(*command):

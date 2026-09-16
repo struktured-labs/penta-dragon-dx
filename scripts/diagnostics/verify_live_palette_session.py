@@ -28,6 +28,45 @@ LUA = ROOT / "scripts/lua/live_palettes.lua"
 STAGE_GENERATOR = Path(__file__).with_name("generate_stream_stage_states.py")
 BOSS_GENERATOR = Path(__file__).with_name("generate_stream_boss_states.py")
 STORY_GENERATOR = Path(__file__).with_name("generate_stream_story_states.py")
+TITLE_STATE_PROBE = Path(__file__).with_name("probe_capture_title_state.lua")
+
+
+def prepare_title_runtime_rom(rom: Path, temporary: Path) -> tuple[Path, Path]:
+    runtime = temporary / "title-runtime"
+    runtime.mkdir(parents=True)
+    runtime_rom = runtime / "candidate.gb"
+    shutil.copy2(rom.resolve(), runtime_rom)
+    return runtime_rom, runtime
+
+
+def title_capture_command(
+    mgba: str,
+    runtime_rom: Path,
+    runtime: Path,
+) -> list[str]:
+    return [
+        mgba,
+        "--fastforward",
+        "-C", f"savegamePath={runtime}",
+        "-C", f"savestatePath={runtime}",
+        "--script", str(TITLE_STATE_PROBE),
+        str(runtime_rom),
+    ]
+
+
+def live_palette_command(
+    mgba: str,
+    runtime_rom: Path,
+    runtime: Path,
+) -> list[str]:
+    return [
+        mgba,
+        "--fastforward",
+        "-C", f"savegamePath={runtime}",
+        "-C", f"savestatePath={runtime}",
+        str(runtime_rom),
+        "--script", str(LUA),
+    ]
 
 
 def reserve_port() -> int:
@@ -121,6 +160,7 @@ def main() -> int:
         prefix="penta-live-palette-", dir=scratch
     ) as tmp:
         tmpdir = Path(tmp)
+        runtime_rom, runtime = prepare_title_runtime_rom(args.rom, tmpdir)
         live_file = tmpdir / "live.txt"
         palette_yaml = tmpdir / "palettes.yaml"
         palette_backup_dir = tmpdir / "palette-backups"
@@ -139,6 +179,49 @@ def main() -> int:
             if args.story_states
             else tmpdir / "story-states"
         )
+        curated_state_dir = ROOT / "save_states_for_claude"
+        if args.rom.read_bytes()[0x143] == 0xC0:
+            from normalize_mgba_state_pc import retarget_rom_identity
+            curated_source = curated_state_dir
+            curated_state_dir = tmpdir / "curated-identity"
+            # Only the explicit scene-button whitelist, not a corpus-wide
+            # rewrite. Conversion permits the exact CGB $80->$C0 metadata
+            # transition and preserves every machine-state byte.
+            curated_names = (
+                "level1_sara_w_alone.ss0",
+                "level1_sara_d_alone.ss0", "level1_sara_w_crow.ss0",
+                "level1_sara_w_4_hornets.ss0", "level1_sara_w_orc.ss0",
+                "level1_sara_w_soldier.ss0", "level1_sara_w_mage_health1_items.ss0",
+                "level1_cat_fish_moth_spike_hazard_orb_item.ss0",
+                "level1_sara_w_gargoyle_mini_boss.ss0",
+                "level1_sara_w_spier_miniboss.ss0",
+                "sara_d_special_spiral_weapon_activated_level1_v_2.31.ss0",
+                "level1_sara_w_in_jet_form_secret_stage.ss0",
+                "level1_square_cat_fish_menu_open.ss0",
+            )
+            for name in curated_names:
+                retarget_rom_identity(curated_source / name, curated_state_dir / name, args.rom)
+            # The historical title is DMG, unlike the curated combat states.
+            # Reach a fresh CGB title from this candidate; never relabel a DMG
+            # machine snapshot as CGB.
+            title_state = curated_state_dir / "title_screen.ss0"
+            title_env = os.environ.copy()
+            title_env.update(CAPTURE_TITLE_STATE=str(title_state),
+                             QT_QPA_PLATFORM="offscreen", SDL_AUDIODRIVER="dummy")
+            with (tmpdir / "title-capture.log").open("w") as title_log:
+                subprocess.run(
+                    title_capture_command(
+                        str(args.mgba), runtime_rom, runtime
+                    ),
+                    env=title_env,
+                    cwd=ROOT,
+                    stdout=title_log,
+                    stderr=subprocess.STDOUT,
+                    timeout=30,
+                    check=True,
+                )
+            if not title_state.is_file():
+                raise RuntimeError("cold title capture produced no state")
         lua_log = tmpdir / "lua.log"
         smoke_out = tmpdir / "smoke.txt"
         source_yaml = ROOT / "palettes/penta_palettes_v097.yaml"
@@ -350,19 +433,14 @@ def main() -> int:
                 LIVE_PALETTE_LOG=str(lua_log),
                 LIVE_PALETTE_VISUAL_AUDIT_OUT=str(visual_audit),
                 LIVE_PALETTE_STAGE_STATE_DIR=str(stage_state_dir),
+                LIVE_PALETTE_STATE_DIR=str(curated_state_dir),
                 LIVE_PALETTE_BOSS_STATE_DIR=str(boss_state_dir),
                 LIVE_PALETTE_STORY_STATE_DIR=str(story_state_dir),
                 QT_QPA_PLATFORM="offscreen",
                 SDL_AUDIODRIVER="dummy",
             )
             emulator = subprocess.Popen(
-                [
-                    args.mgba,
-                    "--fastforward",
-                    str(args.rom.resolve()),
-                    "--script",
-                    str(LUA),
-                ],
+                live_palette_command(args.mgba, runtime_rom, runtime),
                 cwd=ROOT,
                 env=visual_env,
                 stdout=subprocess.DEVNULL,
@@ -611,19 +689,14 @@ def main() -> int:
                 LIVE_PALETTE_LOG=str(lua_log),
                 LIVE_PALETTE_SMOKE_OUT=str(smoke_out),
                 LIVE_PALETTE_STAGE_STATE_DIR=str(stage_state_dir),
+                LIVE_PALETTE_STATE_DIR=str(curated_state_dir),
                 LIVE_PALETTE_BOSS_STATE_DIR=str(boss_state_dir),
                 LIVE_PALETTE_STORY_STATE_DIR=str(story_state_dir),
                 QT_QPA_PLATFORM="offscreen",
                 SDL_AUDIODRIVER="dummy",
             )
             emulator = subprocess.Popen(
-                [
-                    args.mgba,
-                    "--fastforward",
-                    str(args.rom.resolve()),
-                    "--script",
-                    str(LUA),
-                ],
+                live_palette_command(args.mgba, runtime_rom, runtime),
                 cwd=ROOT,
                 env=emulator_env,
                 stdout=subprocess.DEVNULL,
@@ -687,19 +760,14 @@ def main() -> int:
                 LIVE_PALETTE_LOG=str(lua_log),
                 LIVE_PALETTE_SPECIAL_AUDIT_OUT=str(special_audit),
                 LIVE_PALETTE_STAGE_STATE_DIR=str(stage_state_dir),
+                LIVE_PALETTE_STATE_DIR=str(curated_state_dir),
                 LIVE_PALETTE_BOSS_STATE_DIR=str(boss_state_dir),
                 LIVE_PALETTE_STORY_STATE_DIR=str(story_state_dir),
                 QT_QPA_PLATFORM="offscreen",
                 SDL_AUDIODRIVER="dummy",
             )
             emulator = subprocess.Popen(
-                [
-                    args.mgba,
-                    "--fastforward",
-                    str(args.rom.resolve()),
-                    "--script",
-                    str(LUA),
-                ],
+                live_palette_command(args.mgba, runtime_rom, runtime),
                 cwd=ROOT,
                 env=special_env,
                 stdout=subprocess.DEVNULL,
@@ -779,19 +847,14 @@ def main() -> int:
                 LIVE_PALETTE_LOG=str(lua_log),
                 LIVE_PALETTE_SCENE_AUDIT_OUT=str(scene_audit),
                 LIVE_PALETTE_STAGE_STATE_DIR=str(stage_state_dir),
+                LIVE_PALETTE_STATE_DIR=str(curated_state_dir),
                 LIVE_PALETTE_BOSS_STATE_DIR=str(boss_state_dir),
                 LIVE_PALETTE_STORY_STATE_DIR=str(story_state_dir),
                 QT_QPA_PLATFORM="offscreen",
                 SDL_AUDIODRIVER="dummy",
             )
             emulator = subprocess.Popen(
-                [
-                    args.mgba,
-                    "--fastforward",
-                    str(args.rom.resolve()),
-                    "--script",
-                    str(LUA),
-                ],
+                live_palette_command(args.mgba, runtime_rom, runtime),
                 cwd=ROOT,
                 env=audit_env,
                 stdout=subprocess.DEVNULL,

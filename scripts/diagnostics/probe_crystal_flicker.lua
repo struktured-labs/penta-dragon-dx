@@ -14,6 +14,7 @@ local SCREENSHOTS = os.getenv("CRYSTAL_FLICKER_SCREENSHOTS") == "1"
 local SCREENSHOT_STEP = tonumber(os.getenv("CRYSTAL_FLICKER_SCREENSHOT_STEP") or "60")
 local TRACE_STEP = tonumber(os.getenv("CRYSTAL_FLICKER_TRACE_STEP") or "1")
 local STATE_OUT = os.getenv("CRYSTAL_FLICKER_STATE_OUT")
+local STATE_FILE = os.getenv("CRYSTAL_FLICKER_STATE_FILE")
 local STATE_TRACE = os.getenv("CRYSTAL_FLICKER_STATE_TRACE") == "1"
 local COPY_TRACE = os.getenv("CRYSTAL_FLICKER_COPY_TRACE") == "1"
 local AFTERIMAGE = os.getenv("CRYSTAL_FLICKER_AFTERIMAGE") or ""
@@ -21,6 +22,7 @@ local EXPECTED_SCENE = tonumber(os.getenv("CRYSTAL_FLICKER_EXPECTED_SCENE") or "
 local frame = 0
 local trace = assert(io.open(OUT .. ".trace", "w"))
 local finished = false
+local state_loaded = STATE_FILE == nil
 local last_body = nil
 local blank_publishes, afterimage_fills = 0, 0
 local boss_released = false
@@ -186,6 +188,14 @@ end
 
 callbacks:add("frame", function()
     if finished then return end
+    if not state_loaded then
+        local ok, result = pcall(function()
+            return emu:loadStateFile(STATE_FILE)
+        end)
+        assert(ok and result ~= false, "failed to load requested crystal state")
+        state_loaded = true
+        return
+    end
     frame = frame + 1
     emu:setKeys(0)
     -- D000-DFFF is banked. Candidate arena publishers can remain on SVBK2/3

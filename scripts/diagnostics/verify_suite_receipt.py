@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -188,11 +189,76 @@ def main() -> int:
     if failed:
         return fail(f"receipt contains non-passing gates: {failed}")
 
+    # The receipt's manifest pointer must resolve to the manifest actually on
+    # disk. The suite writes post-run integrity fields (finished_at,
+    # resumed_at, *_after, rom_hashes_intact) into the manifest AFTER the hash
+    # is captured, so a receipt emitted before that final flush names a
+    # manifest that never exists. That produced a dangling pointer in three
+    # consecutive qualification runs and every one passed, because nothing
+    # here checked it. Only enforced when the matrix sits beside the receipt:
+    # the published copy in docs/ is intentionally separated from its run
+    # directory, and absence there is not evidence of a defect.
+    manifest_sha = matrix.get("manifest_sha256")
+    if not manifest_sha:
+        return fail("receipt does not record matrix.manifest_sha256")
+    manifest_path = receipt_path.parent / "matrix" / "manifest.json"
+    if manifest_path.is_file():
+        actual_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        if actual_sha != manifest_sha:
+            return fail(
+                "receipt matrix.manifest_sha256 does not match the manifest on "
+                f"disk: receipt names {manifest_sha[:16]}..., "
+                f"{manifest_path} hashes to {actual_sha[:16]}...; the receipt "
+                "was emitted before the manifest's final write"
+            )
+
+    source_profile_name = (
+        profile.get("name")
+        if profile.get("name") in {
+            "r534-original-source-v1",
+            "r536-original-source-v1",
+            "restart-original-source-v1",
+        }
+        else None
+    )
     ledger_errors = validate_release_ledger(
-        receipt.get("release_ledger"), expanded=expanded
+        receipt.get("release_ledger"),
+        expanded=expanded,
+        source_profile=source_profile_name,
     )
     if ledger_errors:
         return fail("invalid release exception ledger: " + "; ".join(ledger_errors))
+
+    from r534_source_profile import PROFILE, builder
+    if (profile.get("name") == PROFILE["name"]
+            or candidate.get("sha256") == builder.CONTRACT["candidate_sha256"]):
+        from r534_suite_evidence import verify
+        try:
+            verify(receipt)
+        except (ValueError, OSError, KeyError, TypeError, RuntimeError) as error:
+            return fail(f"invalid r534 suite evidence: {error}")
+
+    from r536_source_profile import PROFILE as R536_PROFILE, builder as r536_builder
+    if (
+        profile.get("name") == R536_PROFILE["name"]
+        or candidate.get("sha256") == r536_builder.CONTRACT["candidate_sha256"]
+    ):
+        from r536_suite_evidence import verify
+        try:
+            verify(receipt)
+        except (ValueError, OSError, KeyError, TypeError, RuntimeError) as error:
+            return fail(f"invalid r536 suite evidence: {error}")
+
+    from restart_source_profile import PROFILE as RESTART_PROFILE, builder as restart_builder
+    if (
+        profile.get("name") == RESTART_PROFILE["name"]
+        or candidate.get("sha256") == restart_builder.CONTRACT["candidate_sha256"]
+    ):
+        from restart_suite_evidence import verify
+        try:
+            verify(receipt)
+        except (ValueError, OSError, KeyError, TypeError, RuntimeError) as error:
+            return fail(f"invalid restart suite evidence: {error}")
 
     if args.staged:
         try:

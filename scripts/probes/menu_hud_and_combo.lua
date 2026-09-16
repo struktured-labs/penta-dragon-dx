@@ -58,13 +58,13 @@ callbacks:add("frame", function()
     if MODE == "title" and f == 600 then
         local lcdc = emu:read8(0xFF40)
         local bg_map = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
-        local contaminated = 0
+        local nonzero, unsafe = 0, 0
         emu:write8(0xFF4F, 1)
         for row = 0, 17 do
             for col = 0, 19 do
-                if (emu:read8(bg_map + row * 32 + col) & 7) ~= 0 then
-                    contaminated = contaminated + 1
-                end
+                local attr = emu:read8(bg_map + row * 32 + col)
+                if (attr & 7) ~= 0 then nonzero = nonzero + 1 end
+                if (attr & 0xF8) ~= 0 then unsafe = unsafe + 1 end
             end
         end
         emu:write8(0xFF4F, 0)
@@ -78,7 +78,8 @@ callbacks:add("frame", function()
             d880 = string.format("%02X", emu:read8(0xD880)),
             lcdc = string.format("%02X", lcdc),
             bg_map = string.format("%04X", bg_map),
-            contaminated_cells = contaminated,
+            contaminated_cells = nonzero,
+            unsafe_cells = unsafe,
             palette0 = palette,
         })
     end

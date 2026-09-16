@@ -110,6 +110,7 @@ def wait_capture(
     env = os.environ.copy()
     env.update(
         BOSS_ANIMATION_OUT=str(prefix),
+        PENTA_STATE_FILE=str(state.resolve()),
         BOSS_ANIMATION_SCENE=str(scene),
         BOSS_ANIMATION_FRAMES=str(frames),
         BOSS_ANIMATION_STEP=str(step),
@@ -119,7 +120,7 @@ def wait_capture(
     )
     process = subprocess.Popen(
         [
-            str(MGBA), "--fastforward", "-t", str(state),
+            str(MGBA), "--fastforward",
             "-C", f"savegamePath={prefix.parent}",
             "-C", f"savestatePath={prefix.parent}",
             str(rom), "--script", str(PROBE),

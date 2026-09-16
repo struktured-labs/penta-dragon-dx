@@ -1,23 +1,14 @@
 #!/usr/bin/env bash
 # Launch mgba-qt for human play on NVIDIA + KDE Wayland
-# Usage: launch_mgba.sh [rom_path]
+# Usage: launch_mgba.sh [rom_path] [mGBA arguments...]
 set -euo pipefail
 
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-ROM="${1:-rom/working/penta_dragon_dx_FIXED.gb}"
 GUARDED_MGBA="$PROJECT_DIR/scripts/mgba-qt-singleflight"
-if [[ "$#" -gt 0 ]]; then
+ROM_ARGUMENT=""
+if [[ "$#" -gt 0 && "$1" != -* ]]; then
+    ROM_ARGUMENT="$1"
     shift
-fi
-
-# Resolve relative paths against project dir
-if [[ "$ROM" != /* ]]; then
-    ROM="$PROJECT_DIR/$ROM"
-fi
-
-if [ ! -f "$ROM" ]; then
-    echo "ROM not found: $ROM"
-    exit 1
 fi
 
 # Ensure OpenGL display driver in config
@@ -29,6 +20,14 @@ fi
 # Stay alive as the emulator's guardian. If this launcher is interrupted, the
 # wrapper's parent-death signal terminates the exact emulator it owns.
 echo "Starting guarded mGBA (a concurrent emulator will fail closed)..."
+PREPARE_ARGUMENTS=(--project-root "$PROJECT_DIR")
+if [[ -n "$ROM_ARGUMENT" ]]; then
+    PREPARE_ARGUMENTS+=(--rom "$ROM_ARGUMENT")
+fi
+for argument in "$@"; do
+    PREPARE_ARGUMENTS+=("--extra-arg=$argument")
+done
+ROM="$(/usr/bin/python3 "$PROJECT_DIR/scripts/prepare_headed_launch.py" "${PREPARE_ARGUMENTS[@]}")"
 DISPLAY=:0 \
 QT_QPA_PLATFORM=xcb \
 __GLX_VENDOR_LIBRARY_NAME=nvidia \

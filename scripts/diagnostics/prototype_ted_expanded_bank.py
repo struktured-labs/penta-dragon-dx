@@ -51,6 +51,20 @@ LATER_SCROLL_BANK = 18
 STAGE1_CODE_BANK = 19
 STAGE1_PURE_MAP_BANK_IMMEDIATE = 0x10E3
 STAGE1_ART_LOADER_BANK_IMMEDIATE = 0x6A23
+STAGE1_PRIVATE_ENTRY = 0x6C80
+STAGE1_PRIVATE_GUARD = 0x6CCA
+# The installed arena-semantic WRAM image ends at $DBF0, but its executable
+# paths all return by $DBDE.  Its final twelve receipt-locked padding bytes can
+# therefore host a fixed-width Stage-1 scene guard without growing either the
+# hot copier or the cold installer.  The guard also clears the consumed FFA5
+# dirty latch on every rejected non-Stage-1 path; otherwise a later pure copy
+# inherits the prior destination and recompiles all 24 attribute rows.  The
+# bytes cross the final seven bytes of source fragment B and all five bytes of
+# source fragment C.
+STAGE1_WRAM_SCENE_GUARD = 0xDBE5
+STAGE1_WRAM_SCENE_GUARD_SOURCE_B = 0x56E7
+STAGE1_WRAM_SCENE_GUARD_SOURCE_C = 0x56FA
+STAGE1_POSTCOPY_CALL_RANGE = (0x42A7, 0x436E)
 LATER_SCROLL_ENTRY = 0x6B99
 LATER_SCROLL_HELPER = 0x4000
 LATER_PUBLISH_ENTRY = 0x4298
@@ -548,12 +562,91 @@ def global_checksum(rom: bytearray) -> int:
     return (sum(rom[:0x014E]) + sum(rom[0x0150:])) & 0xFFFF
 
 
+def install_stage1_wram_scene_guard(production: bytearray) -> None:
+    """Reject non-Stage-1 scanner work and retire its consumed dirty latch."""
+    # Stage 2-7 never need the relocated Stage-1 hazard scanner. Reject those
+    # scenes in always-mapped WRAM before the fixed helper maps bank 19;
+    # Stage 1 has FFBA=0 and tail-enters the exact existing helper. The cold
+    # arena-semantic installer already copies all 77 bytes through $DBF0, so
+    # replacing only its final zero padding leaves its copy ABI, sentinel, and
+    # executable arena paths unchanged. FFA5 is the authoritative destination
+    # for a real dirty copy, but it must be cleared after that copy completes.
+    # Stage 1 reaches the banked scanner which already performs this clear;
+    # rejected Stage 2-7 paths perform it locally before returning.
+    guard = bytes.fromhex("F0 BA B7 28 04 AF E0 A5 C9 C3 E2 10")
+    source_b = bank_offset(SOURCE_BANK, STAGE1_WRAM_SCENE_GUARD_SOURCE_B)
+    source_c = bank_offset(SOURCE_BANK, STAGE1_WRAM_SCENE_GUARD_SOURCE_C)
+    source_b_size = 7
+    source_c_size = 5
+    old_guard = bytes.fromhex("F0 BA B7 C0 C3 E2 10")
+    preimage = (
+        bytes(production[source_b:source_b + source_b_size])
+        + bytes(production[source_c:source_c + source_c_size])
+    )
+    accepted_preimages = (
+        bytes(len(guard)),
+        bytes(5) + old_guard,
+    )
+    assert preimage in accepted_preimages, (
+        "WRAM scene-guard source changed: expected the source-built zero "
+        f"padding or exact seven-byte predecessor, got {preimage.hex(' ')}"
+    )
+    production[source_b:source_b + source_b_size] = guard[:source_b_size]
+    production[source_c:source_c + source_c_size] = guard[source_b_size:]
+    # Tagged builds use CALL NZ for the pure-room shortcut and an ordinary
+    # CALL for the dirty completion.  Preserve that condition while replacing
+    # only the common target.  Older untagged builds legitimately use two
+    # ordinary CALLs, so both exact opcode layouts remain accepted.
+    expected_site_layouts = (
+        (0x42F2, 0x4354),  # tagged always-owner pure path
+        (0x42F6, 0x4354),  # conditional/legacy pure path
+    )
+    targets = {
+        "native": bytes.fromhex("E2 10"),
+        "predecessor": bytes.fromhex("EA DB"),
+    }
+    calls_by_target = {
+        name: [
+            (address, production[address])
+            for address in range(*STAGE1_POSTCOPY_CALL_RANGE)
+            if production[address] in (0xCD, 0xC4)
+            and production[address + 1:address + 3] == target
+        ]
+        for name, target in targets.items()
+    }
+    active_targets = [
+        name for name, sites in calls_by_target.items() if len(sites) == 2
+    ]
+    assert len(active_targets) == 1, (
+        "expected exactly two generated post-copy calls at either native "
+        f"$10E2 or predecessor $DBEA, found {calls_by_target}"
+    )
+    call_sites = calls_by_target[active_targets[0]]
+    assert tuple(address for address, _ in call_sites) in expected_site_layouts, (
+        f"Stage-1 post-copy call sites changed: {call_sites}"
+    )
+    call_opcodes = tuple(opcode for _, opcode in call_sites)
+    assert call_opcodes in ((0xCD, 0xCD), (0xC4, 0xCD)), (
+        "Stage-1 post-copy call conditions changed: "
+        f"{[hex(opcode) for opcode in call_opcodes]}"
+    )
+    for call_site, call_opcode in call_sites:
+        production[call_site:call_site + 3] = bytes([
+            call_opcode,
+            STAGE1_WRAM_SCENE_GUARD & 0xFF,
+            STAGE1_WRAM_SCENE_GUARD >> 8,
+        ])
+
+
 def combine(
     production_path: Path,
     verified_ted_path: Path,
     output: Path,
     *,
     native_pose_table: bool = False,
+    native_stage1_profile: bool = False,
+    stage1_private_scanner_guard: bool = False,
+    stage1_wram_scene_guard: bool = False,
     native_layout_rom: Path | None = None,
     shalamar_native_exact_class: int | None = None,
 ) -> None:
@@ -683,6 +776,31 @@ def combine(
             stage1_source:stage1_source + BANK_SIZE
         ] == native_bank
 
+        if stage1_private_scanner_guard:
+            # The fixed-bank post-copy completion maps this private bank for
+            # every stage.  Only Stage 1 needs the hazard scanner, however;
+            # later stages have their own complete semantic publishers.  Use
+            # FFBA (the scene discriminator already maintained by production)
+            # so this check remains valid while SVBK exposes bank 3 instead of
+            # the D880 scene byte.  Stage 1 has FFBA=0 and falls through to the
+            # existing dispatcher; Stage 2-7 return before scanner work.
+            entry = bank_offset(STAGE1_CODE_BANK, STAGE1_PRIVATE_ENTRY)
+            guard = bank_offset(STAGE1_CODE_BANK, STAGE1_PRIVATE_GUARD)
+            predecessor = bank_offset(STAGE1_CODE_BANK, 0x6CC2)
+            assert production[entry:entry + 3] == bytes.fromhex("C3 CE 6C")
+            assert production[predecessor:predecessor + 3] == bytes.fromhex(
+                "C3 EE 6B"
+            )
+            assert production[guard:guard + 4] == bytes(4)
+            production[entry:entry + 3] = bytes.fromhex("C3 CA 6C")
+            production[guard:guard + 4] = bytes.fromhex("F0 BA B7 C0")
+
+    if stage1_wram_scene_guard:
+        assert native_layout_rom is not None, (
+            "the WRAM scene guard requires the relocated Stage-1 scanner"
+        )
+        install_stage1_wram_scene_guard(production)
+
     # The shared animated-arena cache executes from WRAM and briefly maps this
     # dedicated expansion bank to compute its two seven-cell sums. Never place
     # executable bytes back in bank 14: its apparent zero caves are native
@@ -713,13 +831,40 @@ def combine(
         penta_seam_destination + len(penta_seam_helper)
     ] = penta_seam_helper
 
-    # The shared map entry remains the native fixed selector.  The retired
+    # The shared map entry remains the native fixed selector. The retired
     # bank-18 dispatcher was introduced before the complete post-copy
     # publishers existed; deterministic all-stage receipts show it costs
-    # roughly 4-66% depending on the stage and is no longer required.
-    assert production[
-        LATER_PUBLISH_DISPATCH_STUB:LATER_PUBLISH_DISPATCH_STUB + 5
-    ] == bytes.fromhex("7F CD 7B FE FF")
+    # roughly 4-66% depending on the stage and is no longer required. The
+    # unreachable RST-$30 tail and its private bank-1 return cave now hold the
+    # production death-map publication path; preserve both through expansion.
+    if native_stage1_profile:
+        # The fail-safe Stage-1 profile restores RST $30's stock copier and
+        # therefore cannot borrow its unreachable fallthrough or bank-1 tail
+        # for the buffered-copier death epilogue. Both regions must remain
+        # exact native bytes; the stock final-map path stays authoritative.
+        assert native_layout_rom is not None
+        native_image = native_layout_rom.read_bytes()
+        assert production[
+            LATER_PUBLISH_DISPATCH_STUB:LATER_PUBLISH_DISPATCH_STUB + 5
+        ] == native_image[
+            LATER_PUBLISH_DISPATCH_STUB:LATER_PUBLISH_DISPATCH_STUB + 5
+        ]
+        assert production[0x7CAE:0x7CB7] == native_image[0x7CAE:0x7CB7]
+    else:
+        assert production[
+            LATER_PUBLISH_DISPATCH_STUB:LATER_PUBLISH_DISPATCH_STUB + 5
+        ] == bytes.fromhex("26 9C C3 AE 7C")
+        death_return = production[0x7CAE:0x7CB7]
+        assert death_return[:3] == bytes.fromhex("C5 D5 CD")
+        assert death_return[5:] == bytes.fromhex("D1 C1 AF C9")
+        title_pure_entry = death_return[3] | (death_return[4] << 8)
+        assert 0x42A7 <= title_pure_entry < 0x4368
+        assert production[
+            title_pure_entry:title_pure_entry + 9
+        ] == bytes.fromhex("AF 6F CD 82 34 06 05 18 00")
+        assert production[
+            title_pure_entry - 2:title_pure_entry
+        ] == bytes.fromhex("26 98")
     assert production[0x4295:0x42A0] == bytes.fromhex(
         "FA 0B DC 3C E6 01 EA 0B DC 28 05"
     )
@@ -782,6 +927,10 @@ def combine(
     suffix = ", bank 17 <- exact native sparse poses" if native_pose_table else ""
     if native_layout_rom is not None:
         suffix += ", bank 14 <- native layout, bank 19 <- Stage-1 code"
+    if stage1_private_scanner_guard:
+        suffix += ", Stage-1-private scanner guard"
+    if stage1_wram_scene_guard:
+        suffix += ", WRAM-local Stage-1 scene guard"
     print(
         f"wrote {output} ({len(production)} bytes), "
         f"bank 16 <- verified Ted bank 13{suffix}, "
@@ -795,6 +944,9 @@ def main() -> int:
     parser.add_argument("verified_ted", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--native-pose-table", action="store_true")
+    parser.add_argument("--native-stage1-profile", action="store_true")
+    parser.add_argument("--stage1-private-scanner-guard", action="store_true")
+    parser.add_argument("--stage1-wram-scene-guard", action="store_true")
     parser.add_argument("--native-layout-rom", type=Path)
     parser.add_argument(
         "--shalamar-native-exact-class",
@@ -806,6 +958,9 @@ def main() -> int:
     combine(
         args.production, args.verified_ted, args.output,
         native_pose_table=args.native_pose_table,
+        native_stage1_profile=args.native_stage1_profile,
+        stage1_private_scanner_guard=args.stage1_private_scanner_guard,
+        stage1_wram_scene_guard=args.stage1_wram_scene_guard,
         native_layout_rom=args.native_layout_rom,
         shalamar_native_exact_class=args.shalamar_native_exact_class,
     )

@@ -4,6 +4,8 @@
 
 local OUT = assert(os.getenv("BOSS_SEMANTIC_OUT"),
   "BOSS_SEMANTIC_OUT is required")
+local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
+  "PENTA_STATE_FILE required")
 local EXPECTED_SCENE = tonumber(os.getenv("BOSS_SEMANTIC_SCENE") or "15")
 local FRAMES = tonumber(os.getenv("BOSS_SEMANTIC_FRAMES") or "900")
 local WRAM_CORPUS = os.getenv("BOSS_SEMANTIC_WRAM_CORPUS") == "1"
@@ -15,6 +17,7 @@ local planes = assert(io.open(OUT .. ".planes.bin", "wb"))
 local tiles = assert(io.open(OUT .. ".tiles.bin", "wb"))
 local wram = WRAM_CORPUS and assert(io.open(OUT .. ".wram.bin", "wb")) or nil
 local frame, copies, repeats, changes, finished = 0, 0, 0, 0, false
+local state_loaded = false
 local scene_drift_frames = 0
 local previous = {}
 local previous_tiles = {}
@@ -48,6 +51,7 @@ end
 -- arena helper and all four bytes are exercised by the complete boss suite.
 pcall(function()
   emu:setRangeWatchpoint(function(info)
+    if not state_loaded then return end
     local address = info.address & 0xFFFF
     cache_writer_counts[address] = (cache_writer_counts[address] or 0) + 1
     trace:write(string.format(
@@ -223,11 +227,30 @@ end)
 
 callbacks:add("frame", function()
   if finished then return end
+  if not state_loaded then
+    local ok, result = pcall(function()
+      return emu:loadStateFile(STATE_FILE)
+    end)
+    assert(ok and result ~= false, "failed to load requested boss state")
+    state_loaded = true
+    return
+  end
   frame = frame + 1
   emu:setKeys(0)
+  -- D000-DFFF is banked CGB WRAM. The atomic attribute compiler may span a
+  -- frame boundary with bank 2/3 selected, where D880 and the keep-alive
+  -- addresses are private attribute bytes rather than game state. Defer all
+  -- D-range reads/writes until the runtime restores bank 0/1.
+  local svbk = emu:read8(0xFF70) & 0x07
+  if svbk ~= 0 and svbk ~= 1 then return end
   emu:write8(0xDCBB, 0xF0)
   emu:write8(0xDCDC, 0xFF)
   emu:write8(0xDCDD, 0xFF)
+  -- Synthetic entry states can retain the stock post-boss exit latches.
+  -- Hold the same neutral arena state used by the speed, trajectory, and
+  -- publication probes; these bytes do not select a pose or publication.
+  emu:write8(0xD888, 0x00)
+  emu:write8(0xDD06, 0x00)
   if emu:read8(0xD880) ~= EXPECTED_SCENE then
     scene_drift_frames = scene_drift_frames + 1
   else

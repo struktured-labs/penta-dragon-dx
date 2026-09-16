@@ -8,12 +8,14 @@ from collections import Counter
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
+import subprocess
 import zlib
 
-from pyboy import PyBoy
+from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -65,7 +67,7 @@ class Panel:
 
 
 def visible_bg(
-    pyboy: PyBoy,
+    pyboy,
 ) -> tuple[Counter[int], int, Counter[tuple[int, int]], bytes, bytes]:
     memory = pyboy.memory
     lcdc = memory[0xFF40]
@@ -94,14 +96,14 @@ def visible_bg(
     return palettes, unsafe_attrs, tiles, bytes(tilemap), bytes(attributes)
 
 
-def story_state(pyboy: PyBoy) -> dict[str, int]:
+def story_state(pyboy) -> dict[str, int]:
     return {
         name: pyboy.memory[address]
         for name, address in STORY_STATE_BYTES.items()
     }
 
 
-def pulse(pyboy: PyBoy, button: str, hold: int = 4, gap: int = 4) -> int:
+def pulse(pyboy, button: str, hold: int = 4, gap: int = 4) -> int:
     pyboy.button_press(button)
     pyboy.tick(hold, True)
     pyboy.button_release(button)
@@ -109,10 +111,54 @@ def pulse(pyboy: PyBoy, button: str, hold: int = 4, gap: int = 4) -> int:
     return hold + gap
 
 
+def capture_mgba(args, output: Path):
+    """Capture through the same guarded CGB runtime as the release matrix."""
+    from generate_stream_boss_states import run_until_marker
+    marker = output / "capture.done"
+    marker.unlink(missing_ok=True)
+    environment = dict(os.environ, QT_QPA_PLATFORM="offscreen",
+                       SDL_AUDIODRIVER="dummy", OPENING_INVENTORY_OUT=str(output),
+                       OPENING_INVENTORY_FRAMES=str(args.frames))
+    command = [str(ROOT / "scripts/mgba-qt-singleflight"), "--fastforward",
+               "-C", "savegamePath=" + str(output), "--script",
+               str(Path(__file__).with_name("probe_opening_inventory_mgba.lua")),
+               str(args.rom.resolve())]
+    # Never call os.exit inside Qt's frame callback: captures can be complete
+    # yet teardown races the renderer and segfaults. The parent owns shutdown.
+    run_until_marker(command, environment, ROOT, marker, 60)
+    if marker.read_text().strip() != 'complete':
+        raise RuntimeError('opening capture completion marker is invalid')
+    transitions, panels, reached, finished = [], [], False, False
+    for line in (output / "capture.tsv").read_text().splitlines():
+        fields = line.split("\t")
+        if fields[0] == "scene":
+            transitions.append(tuple(map(int, fields[1:])))
+        elif fields[0] == "done":
+            finished, reached = True, fields[1] == "1"
+        elif fields[0] == "panel":
+            _, frame, tile_hex, attr_hex, state_hex, filename = fields
+            tiles, attrs, state = map(bytes.fromhex, (tile_hex, attr_hex, state_hex))
+            if len(tiles) != 360 or len(attrs) != 360 or len(state) != len(STORY_STATE_BYTES):
+                raise ValueError("incomplete opening capture")
+            path = output / filename
+            with Image.open(path) as image:
+                if image.size != (160, 144):
+                    raise ValueError("wrong opening screenshot dimensions")
+                image_crc = zlib.crc32(image.convert("RGB").tobytes())
+            panels.append(Panel(int(frame), Counter(a & 7 for a in attrs),
+                                sum(bool(a & 0xF8) for a in attrs),
+                                Counter((t, a & 7) for t, a in zip(tiles, attrs)),
+                                tiles, attrs, zlib.crc32(tiles), image_crc,
+                                dict(zip(STORY_STATE_BYTES, state)), path))
+    if not finished:
+        raise RuntimeError("opening capture lacks terminal marker")
+    return transitions, panels, reached
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("rom", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("/tmp/penta-opening"))
+    parser.add_argument("--output", type=Path, default=ROOT / "tmp/penta-opening")
     parser.add_argument(
         "--palette-yaml",
         type=Path,
@@ -150,77 +196,7 @@ def main() -> int:
         for art_id, panel in cutscene_panels.items()
     }
 
-    pyboy = PyBoy(
-        str(args.rom.resolve()),
-        window="null",
-        cgb=True,
-        sound_emulated=False,
-        log_level=5,
-    )
-    pyboy.set_emulation_speed(0)
-    transitions = []
-    panels = []
-    previous_scene = None
-    opening_started = False
-    last_panel = -1000
-    panel_number = 0
-    frame = 0
-    try:
-        while frame < args.frames:
-            pyboy.tick(1, True)
-            frame += 1
-            scene = pyboy.memory[0xD880]
-            if scene != previous_scene:
-                transitions.append((
-                    frame, scene, pyboy.memory[0xFFC1],
-                    pyboy.memory[0xFFBA], pyboy.memory[0xFFE4],
-                ))
-                previous_scene = scene
-
-            # The title defaults to OPENING START. A selects the highlighted
-            # option; repeat once in case the first pulse lands during draw-in.
-            if not opening_started and frame in {210, 330}:
-                frame += pulse(pyboy, "a")
-
-            if scene == 0x15:
-                opening_started = True
-                # Sample settled panels, and tap A periodically to advance any
-                # text wait without skipping all of the intervening animation.
-                if frame - last_panel >= 360:
-                    panel_number += 1
-                    (
-                        palettes,
-                        unsafe_attrs,
-                        tiles,
-                        tilemap,
-                        attributes,
-                    ) = visible_bg(pyboy)
-                    path = output / f"panel{panel_number:02d}_f{frame}.png"
-                    image = pyboy.screen.image
-                    image.save(path)
-                    panels.append(
-                        Panel(
-                            frame,
-                            palettes,
-                            unsafe_attrs,
-                            tiles,
-                            tilemap,
-                            attributes,
-                            zlib.crc32(tilemap),
-                            zlib.crc32(image.tobytes()),
-                            story_state(pyboy),
-                            path,
-                        )
-                    )
-                    last_panel = frame
-                if frame % 300 == 0:
-                    frame += pulse(pyboy, "a", 2, 2)
-            elif opening_started and scene in {0x00, 0x01, 0x1C}:
-                # Opening returned to the title.
-                if frame - last_panel > 120:
-                    break
-    finally:
-        pyboy.stop()
+    transitions, panels, opening_started = capture_mgba(args, output)
 
     print("Scene transitions:")
     print("  " + " ".join(
@@ -384,6 +360,7 @@ def main() -> int:
             else "neutral" if args.expect_neutral else "inventory"
         ),
         "route": "opening",
+        "capture_backend": "mgba-qt-singleflight",
         "rom": str(args.rom.resolve()),
         "rom_sha256": sha256(args.rom.resolve()),
         "palette_yaml": str(args.palette_yaml.resolve()),

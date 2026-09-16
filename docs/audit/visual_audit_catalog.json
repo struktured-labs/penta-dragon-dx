@@ -1,0 +1,93 @@
+{
+  "schema": "penta-dragon-dx-visual-audit-catalog-v1",
+  "categories": [
+    {"id": "stages", "title": "Stages 1–7", "expected_items": 7, "minimum_images_per_item": 40, "human_priority": "critical"},
+    {"id": "bosses", "title": "Bosses — OG / DX", "expected_items": 9, "minimum_images_per_item": 8, "human_priority": "critical"},
+    {"id": "minibosses", "title": "Miniboss index", "expected_items": 16, "minimum_images_per_item": 1, "human_priority": "critical"},
+    {"id": "pickups", "title": "Pickup forms", "expected_items": 19, "minimum_images_per_item": 1, "human_priority": "critical"},
+    {"id": "heroes", "title": "Sara W / Sara D", "expected_items": 2, "minimum_images_per_item": 1, "human_priority": "critical"},
+    {"id": "monsters", "title": "Regular monsters / spotlight roster", "expected_items": 36, "minimum_images_per_item": 1, "human_priority": "high"},
+    {"id": "projectiles", "title": "Projectiles and effects", "expected_items": 8, "minimum_images_per_item": 1, "human_priority": "high"},
+    {"id": "opening", "title": "Opening cutscene", "expected_items": 33, "minimum_images_per_item": 1, "human_priority": "high"},
+    {"id": "pre_final", "title": "Pre-final cutscene", "expected_items": 43, "minimum_images_per_item": 1, "human_priority": "high"},
+    {"id": "ending", "title": "Ending / credits / epilogue", "expected_items": 10, "minimum_images_per_item": 1, "human_priority": "critical"},
+    {"id": "story_keyframes", "title": "Story palette keyframes", "expected_items": 12, "minimum_images_per_item": 1, "human_priority": "high"},
+    {"id": "secret", "title": "Secret / bonus route", "expected_items": 3, "minimum_images_per_item": 1, "human_priority": "critical"},
+    {"id": "menus", "title": "Item menus and HUD", "expected_items": 10, "minimum_images_per_item": 1, "human_priority": "high"},
+    {"id": "hazards", "title": "Hazards and low-health stress", "expected_items": 24, "minimum_images_per_item": 1, "human_priority": "critical"},
+    {"id": "title", "title": "Title, cursor, and showcase", "expected_items": 16, "minimum_images_per_item": 1, "human_priority": "high"},
+    {"id": "death", "title": "Death and game-over", "expected_items": 12, "minimum_images_per_item": 1, "human_priority": "medium"}
+  ],
+  "bosses": [
+    {"id": "shalamar", "label": "Shalamar", "palette_rows": ["bg_palettes.Dungeon", "bg_palettes.BG4", "bg_palettes.BG5"]},
+    {"id": "riff", "label": "Riff", "palette_rows": ["bg_palettes.BG2"]},
+    {"id": "crystal_dragon", "label": "Crystal Dragon", "palette_rows": ["bg_palettes.BG4", "boss_palettes.Boss4_Ice"]},
+    {"id": "cameo", "label": "Cameo", "palette_rows": ["bg_palettes.BG1"]},
+    {"id": "ted", "label": "Ted", "palette_rows": ["bg_palettes.Dungeon", "bg_palettes.BG3", "bg_palettes.BG4", "bg_palettes.BG5", "bg_palettes.BG6"]},
+    {"id": "troop", "label": "Troop", "palette_rows": ["bg_palettes.Dungeon", "bg_palettes.BG7"]},
+    {"id": "faze", "label": "Faze", "palette_rows": ["bg_palettes.Dungeon", "bg_palettes.BG1", "bg_palettes.BG2", "bg_palettes.BG6"]},
+    {"id": "angela", "label": "Angela", "palette_rows": ["bg_palettes.Dungeon", "bg_palettes.BG1", "bg_palettes.BG2", "bg_palettes.BG7"]},
+    {"id": "penta_dragon", "label": "Penta Dragon", "palette_rows": ["bg_palettes.Dungeon", "bg_palettes.BG1", "bg_palettes.BG2", "bg_palettes.BG3", "bg_palettes.BG4", "bg_palettes.BG5"]}
+  ],
+  "projectiles": [
+    {"id": "sara_w", "label": "Sara W shot", "tile_range": [0, 15], "palette_row": "obj_palettes.EnemyProjectile"},
+    {"id": "sara_d", "label": "Sara D dragon-fire projectile", "tile_range": [6, 10], "palette_row": "obj_palettes.EnemyProjectile"},
+    {"id": "enemy", "label": "Enemy projectile", "tile_range": [0, 15], "palette_row": "obj_palettes.EnemyProjectile"},
+    {"id": "spider", "label": "Spider orbiting attack", "tile_range": [0, 255], "oam_slots": [32, 39], "palette_row": "boss_palettes.Spider"},
+    {"id": "effects", "label": "Sara W weapon / hit effect", "tile_range": [16, 31], "palette_row": "obj_palettes.SaraWitch"},
+    {"id": "spiral", "label": "Spiral weapon", "palette_row": "powerup_palettes.SpiralProjectile"},
+    {"id": "shield", "label": "Shield weapon", "palette_row": "powerup_palettes.ShieldProjectile"},
+    {"id": "turbo", "label": "Turbo palette guard (no natural active fixture)", "palette_row": "powerup_palettes.TurboProjectile"}
+  ],
+  "review_presets": {
+    "fixed-defect-classes": {
+      "title": "08-23 revision checks",
+      "description": "Five current-candidate receipts for the exact classes flagged in the 08-23 review export. No prior verdicts are migrated.",
+      "items": [
+        {"audit_id": "stages:stage-5", "label": "Pickup faces and neutral shadows", "reason": "Checks colored pickup faces, neutral cast-shadow pixels, and unchanged paired OG geometry in Stage 5.", "max_pairs": 3},
+        {"audit_id": "ending:panel-02", "label": "Post-final dragon boundary", "reason": "Checks the revised coherent body mask and removal of the ruler-straight palette band."},
+        {"audit_id": "story_keyframes:post-final-lisa", "label": "Lisa portrait boundary", "reason": "Checks one contiguous tapered portrait silhouette without horizontal color bands."},
+        {"audit_id": "ending:panel-08", "label": "Clean END footer", "reason": "Only END and the copyright row may remain; the two stock script-workspace rows below must be blank."},
+        {"audit_id": "death:sample-01", "label": "Shalamar death and GAME OVER", "reason": "Checks the complete chromatic Shalamar illustration, exact white fade, and separate neutral GAME OVER text."}
+      ]
+    },
+    "08-23-2-revisions": {
+      "title": "08-23-2 corrected classes",
+      "description": "Three fresh receipts for the defect classes in the 08-23-2 export. No prior human verdicts are migrated.",
+      "items": [
+        {"audit_id": "story_keyframes:post-final-lisa", "label": "Lisa portrait boundary", "reason": "Checks one contiguous tapered portrait silhouette without horizontal color bands."},
+        {"audit_id": "ending:panel-08", "label": "Clean END footer", "reason": "Only END and the copyright row may remain; the two stock script-workspace rows below must be blank."},
+        {"audit_id": "death:sample-01", "label": "Full Shalamar death portrait", "reason": "Checks the complete top-aligned chromatic illustration, exact white fade, and separate neutral GAME OVER text."}
+      ]
+    },
+    "08-24-3-revisions": {
+      "title": "08-24 review -3 revisions",
+      "description": "Two fresh candidate-bound receipts for the open Lisa nose transition and Shalamar death composition. The accepted END footer is not repeated.",
+      "items": [
+        {"audit_id": "story_keyframes:post-final-lisa", "label": "Lisa nose transition", "reason": "Checks that the projecting snout stays on the purple body palette through rows 5-6 instead of ending in a horizontal blue strip."},
+        {"audit_id": "death:sample-01", "label": "Shalamar complete death art", "reason": "Checks the completed $9C00 publication with visible head and lower claws, exact white fade, and neutral GAME OVER text."}
+      ]
+    }
+  },
+  "intentional_blank_sources": {
+    "suite-artifacts/death-gameover/boss3_cameo.fade-white.png": "The stock death transition deliberately reaches a full-white fade before GAME OVER.",
+    "suite-artifacts/death-gameover/boss6_faze.window-begin.png": "The stock GAME OVER Window begins while the death transition is still fully white.",
+    "suite-artifacts/ending-inventory-a/ending.panel001_f9000.png": "The stock post-final route begins on a full-white transition before the first committed illustration.",
+    "suite-artifacts/ending-inventory-a/ending.panel006_f16920.png": "This exact candidate reaches the same full-white stock transition between Sara's final dialogue and the credits.",
+    "suite-artifacts/ending-inventory-a/ending.panel006_f17010.png": "Both deterministic ending inventories capture the same full-white stock transition between Sara's final dialogue and the credits.",
+    "suite-artifacts/ending-inventory-a/ending.panel001_f8910.png": "The current inventory starts on the stock full-black transition immediately before the first committed ending illustration.",
+    "suite-artifacts/ending-inventory-a/ending.panel007_f15570.png": "The current inventory captures the stock full-black transition from the ending dialogue into the credits.",
+    "suite-artifacts/ending-inventory-a/ending.panel009_f16110.png": "The current inventory captures a stock full-black inter-credit transition between committed credit cards.",
+    "suite-artifacts/pre-final-inventory/pre-final.panel001_f9000.png": "The stock pre-final route begins on a full-white transition before the first committed illustration.",
+    "suite-artifacts/pre-final-inventory/pre-final.panel001_f8910.png": "The current inventory begins on the stock full-black transition immediately before the three-dragon illustration.",
+    "suite-artifacts/opening-cutscene/panel01_f258.png": "Stock opening starts on a full-white fade before the first dialogue panel.",
+    "suite-artifacts/opening-cutscene/panel01_f259.png": "Stock opening starts on a full-white fade before the first dialogue panel.",
+    "suite-artifacts/opening-cutscene/panel01_f288.png": "The current opening inventory begins on the stock full-white fade before the first dialogue panel.",
+    "suite-artifacts/pre-final-inventory/panel41_f3660_s19.png": "Stock pre-final sequence uses a full-white transition after the three-dragon illustration.",
+    "suite-artifacts/pre-final-inventory/panel43_f3848_s18.png": "Stock pre-final sequence ends this inventoried phase on a full-white transition.",
+    "suite-artifacts/title-showcase/title.05.scene1C.f2607.png": "Stock sliding-banner transition reaches a fully black frame before the spotlight reel.",
+    "suite-artifacts/title-showcase/title.05.scene1C.f2611.png": "Stock sliding-banner transition reaches a fully black frame before the spotlight reel.",
+    "suite-artifacts/title-showcase/title.05.scene1C.f2459.png": "The current title showcase captures the stock full-black handoff from the sliding banner to the spotlight reel.",
+    "suite-artifacts/title-showcase/title.cram-blank.f26.scene01.e15.png": "Dedicated title CRAM blanking receipt intentionally captures the full-white blank frame."
+  }
+}

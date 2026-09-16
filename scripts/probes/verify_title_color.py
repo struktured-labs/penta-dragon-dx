@@ -14,7 +14,7 @@ Exit codes:
     2 — harness error (couldn't capture)
 """
 from __future__ import annotations
-import os, sys, subprocess, tempfile, argparse
+import os, sys, subprocess, tempfile, argparse, shutil
 from pathlib import Path
 
 
@@ -22,22 +22,35 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MGBA_QT = PROJECT_ROOT / "scripts/mgba-qt-singleflight"
 
 
-def capture_title(rom_path: str, frame_at: int, lua_script: str) -> str:
+def capture_title(
+    rom_path: str,
+    frame_at: int,
+    lua_script: str,
+    runtime: Path,
+) -> Path:
     """Run headless mgba, return path to captured PNG. Raises on failure."""
-    out_png = tempfile.NamedTemporaryFile(suffix=".png", delete=False).name
+    source_rom = Path(rom_path).resolve()
+    runtime_rom = runtime / "candidate.gb"
+    shutil.copy2(source_rom, runtime_rom)
+    out_png = runtime / "title.png"
     env = os.environ.copy()
-    env["STATE_PATH"] = out_png
+    env["STATE_PATH"] = str(out_png)
     env["FRAME_AT"] = str(frame_at)
     env.pop("DISPLAY", None)
     env.pop("WAYLAND_DISPLAY", None)
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["SDL_AUDIODRIVER"] = "dummy"
     cmd = [
-        str(MGBA_QT), rom_path,
+        str(MGBA_QT),
+        "-C", f"savegamePath={runtime}",
+        "-C", f"savestatePath={runtime}",
+        str(runtime_rom),
         "--script", lua_script,
         "-l", "0",
     ]
     proc = subprocess.run(cmd, env=env, capture_output=True, timeout=60)
+    if proc.returncode == 75:
+        raise SystemExit(75)
     if not os.path.exists(out_png) or os.path.getsize(out_png) < 100:
         sys.stderr.write(f"[verify_title_color] mgba did not produce screenshot.\n")
         sys.stderr.write(f"  cmd: {' '.join(cmd)}\n")
@@ -87,19 +100,28 @@ def main():
         sys.stderr.write(f"ROM not found: {args.rom}\n")
         sys.exit(2)
 
-    try:
-        png = capture_title(args.rom, args.frame, args.lua)
-    except Exception as e:
-        sys.stderr.write(f"capture failed: {e}\n")
-        sys.exit(2)
-
-    try:
+    PROJECT_ROOT.joinpath("tmp").mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-title-color-", dir=PROJECT_ROOT / "tmp"
+    ) as directory:
+        try:
+            png = capture_title(
+                args.rom, args.frame, args.lua, Path(directory)
+            )
+        except Exception as e:
+            sys.stderr.write(f"capture failed: {e}\n")
+            sys.exit(2)
         stats = analyze_white_ratio(png)
-    except Exception:
-        if not args.keep_png:
-            try: os.unlink(png)
-            except OSError: pass
-        raise
+
+        kept_png = None
+        if args.keep_png:
+            kept_file = tempfile.NamedTemporaryFile(
+                prefix="penta-title-color-", suffix=".png", delete=False,
+                dir=PROJECT_ROOT / "tmp",
+            )
+            kept_file.close()
+            kept_png = Path(kept_file.name)
+            shutil.copy2(png, kept_png)
     print(f"ROM:              {args.rom}")
     print(f"Captured frame:   {args.frame}")
     print(f"Total pixels:     {stats['total_pixels']}")
@@ -112,12 +134,7 @@ def main():
     print(f"Min colors required: {args.min_colors}")
 
     if args.keep_png:
-        print(f"PNG kept at: {png}")
-    else:
-        try:
-            os.unlink(png)
-        except OSError:
-            pass
+        print(f"PNG kept at: {kept_png}")
 
     # PASS criteria:
     #   - At least min_colors distinct colors (default 2), AND

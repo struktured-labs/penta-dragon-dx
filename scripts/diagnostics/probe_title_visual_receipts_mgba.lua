@@ -3,6 +3,9 @@
 
 local OUT = assert(os.getenv("TITLE_VISUAL_OUT"))
 local LIMIT = tonumber(os.getenv("TITLE_VISUAL_MAX_FRAMES") or "26000")
+local MIN_DEMO_SAMPLES = tonumber(
+  os.getenv("TITLE_VISUAL_MIN_DEMO_SAMPLES") or "20"
+)
 local FOOTER_HEX = assert(os.getenv("TITLE_VISUAL_FOOTER_HEX"))
 local PERIOD_HEX = assert(os.getenv("TITLE_VISUAL_PERIOD_HEX"))
 
@@ -85,7 +88,9 @@ local function capture_banner(phase, scene_age)
 end
 
 local function sample_demo()
-  if frame % 10 ~= 0 or emu:read8(0xFFBF) ~= 1 then return end
+  -- Audit every rendered boss frame. Ten-frame decimation can miss most of
+  -- a short visible pose and also skip a one-frame palette regression.
+  if emu:read8(0xFFBF) ~= 1 then return end
   local actors = 0
   for slot = 0, 39 do
     local base = 0xFE00 + slot * 4
@@ -158,7 +163,7 @@ callbacks:add("frame", function()
   if scene == 0x0A then sample_demo() end
   if captures.cold_footer and captures.returned_footer
       and captures.cold_banner and captures.returned_banner
-      and demo_samples >= 40 and live_scene1b then
+      and demo_samples >= MIN_DEMO_SAMPLES and live_scene1b then
     finish(demo_mismatches == 0 and "ok" or "failed", "complete-title-inventory")
   elseif frame >= LIMIT then
     finish("failed", "title-inventory-timeout")

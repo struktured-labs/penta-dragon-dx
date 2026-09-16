@@ -28,7 +28,8 @@ Usage:
     uv run python scripts/mister.py game_start                     # Macro: launch + DOWN→A→A→A to gameplay
     uv run python scripts/mister.py capture_gameplay [secs] [label] # Launch + play + periodic screenshots
     uv run python scripts/mister.py deploy_and_test [version]      # Build + deploy + launch + screenshot
-    uv run python scripts/mister.py release_sweep_start MANIFEST   # Start hash-bound physical release sweep
+    uv run python scripts/mister.py release_sweep_start MANIFEST [ROM] [PATCH]
+                                                                  # Start hash-bound physical release sweep
     uv run python scripts/mister.py release_checkpoint HW NAME confirm
     uv run python scripts/mister.py release_sweep_finish HW        # Seal pass after every confirmation
     uv run python scripts/mister.py list_states                    # List save states on MiSTer
@@ -63,6 +64,12 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone
 
+SCRIPTS_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPTS_ROOT))
+from build_release_bundle import REQUIRED_GATE_ORDER
+from suite_contract import source_snapshot
+from runtime_tools import emulator_runtime_snapshot, runtime_snapshots_match
+
 # === Configuration ===
 
 import os
@@ -78,7 +85,9 @@ MISTER_ROM_PATH = f"{MISTER_ROM_DIR}/{MISTER_ROM_NAME}"
 MISTER_SCREENSHOTS_DIR = "/media/fat/screenshots"
 MISTER_SAVESTATES_DIR = "/media/fat/savestates"
 MISTER_CMD = "/dev/MiSTer_cmd"
-MISTER_MGL_PATH = "/tmp/penta.mgl"
+# Generated launch metadata belongs beside this project's deployed ROM, not
+# in the device's system /tmp directory.
+MISTER_MGL_PATH = f"{MISTER_ROM_DIR}/penta_dragon_dx_launch.mgl"
 MISTER_CORE = "_Console/Gameboy"
 
 # Paths on local machine
@@ -105,6 +114,9 @@ REQUIRED_HARDWARE_CHECKPOINTS = (
     "later_stage",
     "boss_arena",
     "death_gameover",
+    "gameover_title_recovery",
+    "gameover_new_game_level_recovery",
+    "stage1_sara_w_ceiling",
 )
 
 # Paths on blackmage
@@ -284,15 +296,15 @@ def cmd_status():
     print(f"  Save states: {len(states)} ({', '.join(states) if states else 'none'})")
 
 
-def cmd_deploy():
+def cmd_deploy(local_rom: Path = LOCAL_ROM):
     """Deploy ROM to MiSTer."""
-    if not LOCAL_ROM.exists():
-        print(f"ERROR: Local ROM not found: {LOCAL_ROM}")
+    if not local_rom.exists():
+        print(f"ERROR: Local ROM not found: {local_rom}")
         print("Build first: uv run python scripts/create_vblank_colorizer_v266.py")
         sys.exit(1)
 
     import hashlib
-    local_md5 = hashlib.md5(LOCAL_ROM.read_bytes()).hexdigest()
+    local_md5 = hashlib.md5(local_rom.read_bytes()).hexdigest()
     remote_md5 = get_rom_md5()
 
     if local_md5 == remote_md5:
@@ -302,7 +314,7 @@ def cmd_deploy():
     print(f"Deploying ROM to MiSTer...")
     print(f"  Local:  {local_md5[:8]}...")
     print(f"  Remote: {remote_md5[:8]}..." if remote_md5 != "MISSING" else "  Remote: not present")
-    scp_to_mister(LOCAL_ROM, MISTER_ROM_PATH)
+    scp_to_mister(local_rom, MISTER_ROM_PATH)
     new_md5 = get_rom_md5()
     if new_md5 != local_md5:
         print(f"ERROR: MD5 mismatch after deploy! {new_md5} != {local_md5}")
@@ -1132,18 +1144,25 @@ def write_json_atomic(path: Path, value: dict) -> None:
     temporary.replace(path)
 
 
-def verify_release_sweep_inputs(emulator_manifest_path: Path) -> tuple[dict, str]:
+def verify_release_sweep_inputs(
+    emulator_manifest_path: Path,
+    local_rom: Path = LOCAL_ROM,
+    local_patch: Path = LOCAL_RELEASE_PATCH,
+) -> tuple[dict, str]:
     """Validate the exact local ROM/IPS/emulator evidence before hardware use."""
-    if not LOCAL_ROM.is_file():
-        raise RuntimeError(f"release ROM not found: {LOCAL_ROM}")
-    if not LOCAL_RELEASE_PATCH.is_file():
-        raise RuntimeError(f"release IPS not found: {LOCAL_RELEASE_PATCH}")
+    if not local_rom.is_file():
+        raise RuntimeError(f"release ROM not found: {local_rom}")
+    if not local_patch.is_file():
+        raise RuntimeError(f"release IPS not found: {local_patch}")
     if not emulator_manifest_path.is_file():
         raise RuntimeError(
             f"emulator release manifest not found: {emulator_manifest_path}"
         )
 
-    local_md5 = md5_file(LOCAL_ROM)
+    local_md5 = md5_file(local_rom)
+    local_sha = sha256_file(local_rom)
+    patch_sha = sha256_file(local_patch)
+    emulator_sha = sha256_file(emulator_manifest_path)
     emulator = load_json_object(emulator_manifest_path, "emulator manifest")
     required_values = {
         "status": "emulator-pass",
@@ -1152,17 +1171,63 @@ def verify_release_sweep_inputs(emulator_manifest_path: Path) -> tuple[dict, str
         "rom_md5": local_md5,
         "source_rom_md5_after": local_md5,
         "tested_rom_md5_after": local_md5,
+        "rom_size": local_rom.stat().st_size,
         "rom_hashes_intact": True,
+        "source_inputs_intact": True,
+        "runtime_tools_intact": True,
     }
     for key, expected in required_values.items():
-        if emulator.get(key) != expected:
+        if emulator.get(key) != expected or type(emulator.get(key)) is not type(expected):
             raise RuntimeError(
                 f"emulator manifest {key} does not match {expected!r}"
             )
 
     results = emulator.get("results")
-    if not isinstance(results, list) or len(results) != 30:
-        raise RuntimeError("hardware sweep requires all 30 emulator gate results")
+    if not isinstance(results, list):
+        raise RuntimeError("hardware sweep requires emulator gate results")
+    names = [
+        item.get("name")
+        for item in results
+        if isinstance(item, dict)
+    ]
+    if tuple(names) != REQUIRED_GATE_ORDER:
+        raise RuntimeError(
+            "hardware sweep emulator gate roster differs from the "
+            f"authoritative {len(REQUIRED_GATE_ORDER)}-gate order"
+        )
+    if emulator.get("selected_gates") != names:
+        raise RuntimeError(
+            "hardware sweep emulator selected_gates differs from its results"
+        )
+    if (
+        not emulator.get("source_fingerprint")
+        or emulator.get("source_fingerprint")
+        != emulator.get("source_fingerprint_after")
+    ):
+        raise RuntimeError(
+            "hardware sweep emulator source fingerprint was not stable"
+        )
+    if (
+        not emulator.get("runtime_tools")
+        or not runtime_snapshots_match(
+            emulator.get("runtime_tools"),
+            emulator.get("runtime_tools_after"),
+        )
+    ):
+        raise RuntimeError(
+            "hardware sweep emulator runtime-tool identities were not stable"
+        )
+    snapshot = source_snapshot()
+    if (emulator.get("source_fingerprint") != snapshot[0]
+            or emulator.get("source_input_count") != len(snapshot[1])):
+        raise RuntimeError("hardware sweep emulator source snapshot is not current")
+    runtime = emulator_runtime_snapshot()
+    if not runtime_snapshots_match(emulator["runtime_tools"], runtime):
+        raise RuntimeError("hardware sweep emulator runtime identities are not current")
+    for label in ("source_rom", "tested_rom"):
+        recorded = emulator.get(label)
+        if not isinstance(recorded, str) or sha256_file(Path(recorded)) != local_sha:
+            raise RuntimeError(f"hardware sweep emulator {label} bytes differ")
     incomplete = [
         item.get("name", "<invalid>")
         for item in results
@@ -1177,9 +1242,9 @@ def verify_release_sweep_inputs(emulator_manifest_path: Path) -> tuple[dict, str
         [
             sys.executable,
             str(RELEASE_PATCH_VERIFIER),
-            str(LOCAL_ROM),
+            str(local_rom),
             "--patch",
-            str(LOCAL_RELEASE_PATCH),
+            str(local_patch),
         ],
         cwd=str(PROJECT_ROOT),
         capture_output=True,
@@ -1189,6 +1254,11 @@ def verify_release_sweep_inputs(emulator_manifest_path: Path) -> tuple[dict, str
     if patch_result.returncode != 0:
         detail = patch_result.stdout.strip() or patch_result.stderr.strip()
         raise RuntimeError(f"release IPS preflight failed: {detail}")
+    if (sha256_file(local_rom) != local_sha or sha256_file(local_patch) != patch_sha
+            or sha256_file(emulator_manifest_path) != emulator_sha
+            or source_snapshot() != snapshot
+            or not runtime_snapshots_match(emulator_runtime_snapshot(), runtime)):
+        raise RuntimeError("hardware sweep inputs or source/runtime identities changed during preflight")
     return emulator, local_md5
 
 
@@ -1231,11 +1301,16 @@ def verify_live_sweep_identity(manifest: dict) -> None:
         )
     if manifest.get("mister_host") != MISTER_HOST:
         raise RuntimeError("hardware sweep is bound to a different MiSTer host")
-    if md5_file(LOCAL_ROM) != manifest.get("rom_md5"):
+    local_rom = Path(manifest.get("local_rom", LOCAL_ROM)).resolve()
+    local_patch = Path(manifest.get("local_patch", LOCAL_RELEASE_PATCH)).resolve()
+    if not local_rom.is_file() or md5_file(local_rom) != manifest.get("rom_md5"):
         raise RuntimeError("local release ROM changed during the hardware sweep")
-    if sha256_file(LOCAL_ROM) != manifest.get("rom_sha256"):
+    if sha256_file(local_rom) != manifest.get("rom_sha256"):
         raise RuntimeError("local release ROM SHA-256 changed during the sweep")
-    if sha256_file(LOCAL_RELEASE_PATCH) != manifest.get("release_patch_sha256"):
+    if (
+        not local_patch.is_file()
+        or sha256_file(local_patch) != manifest.get("release_patch_sha256")
+    ):
         raise RuntimeError("release IPS changed during the hardware sweep")
 
     emulator_path = Path(manifest.get("emulator_manifest", ""))
@@ -1245,6 +1320,10 @@ def verify_live_sweep_identity(manifest: dict) -> None:
         != manifest.get("emulator_manifest_sha256")
     ):
         raise RuntimeError("emulator release manifest changed during the sweep")
+
+    # Reservation and immutable file hashes alone do not prove the current
+    # checkout/runtime still matches the qualified emulator run.
+    verify_release_sweep_inputs(emulator_path, local_rom, local_patch)
 
     corename = get_corename()
     if corename != "GBC":
@@ -1258,18 +1337,29 @@ def verify_live_sweep_identity(manifest: dict) -> None:
         )
 
 
-def cmd_release_sweep_start(emulator_manifest: str = ""):
+def cmd_release_sweep_start(
+    emulator_manifest: str = "",
+    rom: str = "",
+    patch: str = "",
+):
     """Deploy and start a reservation-backed, hash-bound physical sweep."""
     if not emulator_manifest:
         raise RuntimeError(
-            "usage: mister.py release_sweep_start EMULATOR_MANIFEST"
+            "usage: mister.py release_sweep_start "
+            "EMULATOR_MANIFEST [ROM] [PATCH]"
         )
     emulator_path = Path(emulator_manifest).resolve()
-    emulator, local_md5 = verify_release_sweep_inputs(emulator_path)
+    local_rom = Path(rom).resolve() if rom else LOCAL_ROM.resolve()
+    local_patch = Path(patch).resolve() if patch else LOCAL_RELEASE_PATCH.resolve()
+    emulator, local_md5 = verify_release_sweep_inputs(
+        emulator_path,
+        local_rom,
+        local_patch,
+    )
 
     # The main dispatcher already checked the reservation. Recheck at every
     # hardware boundary through cmd_deploy/cmd_launch/cmd_screenshot as well.
-    cmd_deploy()
+    cmd_deploy(local_rom)
     if get_rom_md5() != local_md5:
         raise RuntimeError("MiSTer ROM hash differs immediately after deployment")
     cmd_launch()
@@ -1312,8 +1402,10 @@ def cmd_release_sweep_start(emulator_manifest: str = ""):
             reservation_id.encode("utf-8")
         ).hexdigest(),
         "rom_md5": local_md5,
-        "rom_sha256": sha256_file(LOCAL_ROM),
-        "release_patch_sha256": sha256_file(LOCAL_RELEASE_PATCH),
+        "rom_sha256": sha256_file(local_rom),
+        "release_patch_sha256": sha256_file(local_patch),
+        "local_rom": str(local_rom),
+        "local_patch": str(local_patch),
         "emulator_manifest": str(emulator_path),
         "emulator_manifest_sha256": sha256_file(emulator_path),
         "emulator_gates_passed": len(emulator["results"]),
@@ -1486,7 +1578,7 @@ def main():
         "cheats": lambda: cmd_cheats(*args[:1]) if args else cmd_cheats(),
         "reservation_check": lambda: cmd_reservation_check(),
         "release_sweep_start": (
-            lambda: cmd_release_sweep_start(*args[:1])
+            lambda: cmd_release_sweep_start(*args[:3])
             if args
             else cmd_release_sweep_start()
         ),

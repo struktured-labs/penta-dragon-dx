@@ -44,7 +44,7 @@ import time
 
 from boss_geometry_contract import BOSSES
 
-SCHEMA = "penta-boss-speed-parity-v1"
+SCHEMA = "penta-boss-speed-parity-v2"
 ROOT = Path(__file__).resolve().parents[2]
 MGBA = ROOT / "scripts" / "mgba-qt-singleflight"
 PROBE = Path(__file__).with_name("probe_boss_speed_parity.lua")
@@ -123,7 +123,7 @@ def classify_throughput(
 
 
 def throughput_policy_controls() -> dict[str, bool]:
-    accepted_slow = {"crystal_dragon": 0.95}
+    accepted_slow = {"crystal_dragon": 0.95, "ted": 0.975}
     classify = lambda boss, ratio: classify_throughput(
         boss, ratio, 0.02, accepted_slow, 1.20
     )
@@ -140,6 +140,12 @@ def throughput_policy_controls() -> dict[str, bool]:
         )["accepted_slowdown_deviation"],
         "crystal_below_floor_rejected": not classify(
             "crystal_dragon", 0.949
+        )["throughput_accepted"],
+        "ted_measured_compromise_accepted": classify(
+            "ted", 0.977
+        )["accepted_slowdown_deviation"],
+        "ted_below_compromise_floor_rejected": not classify(
+            "ted", 0.974
         )["throughput_accepted"],
         "bounded_speedup_accepted": classify("cameo", 1.16)[
             "accepted_bounded_speedup"
@@ -192,6 +198,7 @@ def capture(
     env = os.environ.copy()
     env.update(
         BOSS_SPEED_OUT=str(prefix),
+        PENTA_STATE_FILE=str(state.resolve()),
         BOSS_SPEED_SCENE=str(BOSSES[target].scene),
         BOSS_SPEED_WARMUP=str(warmup),
         BOSS_SPEED_FRAMES=str(frames),
@@ -212,7 +219,7 @@ def capture(
     )
     process = subprocess.Popen(
         [
-            str(MGBA), "--fastforward", "-t", str(state),
+            str(MGBA), "--fastforward",
             "-C", f"savegamePath={prefix.parent}",
             "-C", f"savestatePath={prefix.parent}",
             str(rom), "--script", str(PROBE),
@@ -475,8 +482,10 @@ def main() -> int:
         "status": "pass" if not failures else "fail",
         "instrument": (
             "arena-loop iterations at bank2:$406F (FF99==$02 filtered) "
-            "per observed arena frame"
+            "per observed arena frame; window synchronized on the first "
+            "arena-loop anchor after warmup"
         ),
+        "measurement_window": "cpu-anchor-synchronized-fixed-host-frames",
         "warmup_frames": args.warmup,
         "observation_frames": args.frames,
         "maximum_slowdown_percent": args.max_slowdown * 100.0,

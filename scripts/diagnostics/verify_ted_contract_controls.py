@@ -641,6 +641,11 @@ def main() -> int:
         and stage_speed_gate.command[
             stage_speed_gate.command.index("--accepted-slowdown-floor") + 1
         ] == "0.96"
+        and {
+            stage_speed_gate.command[index + 1]
+            for index, argument in enumerate(stage_speed_gate.command[:-1])
+            if argument == "--accepted-slow-stage"
+        } == {"1=0.959", "5=0.95"}
         and boss_speed_gate.command[
             boss_speed_gate.command.index("--frames") + 1
         ] == "1800"
@@ -652,7 +657,7 @@ def main() -> int:
         ] == "crystal_dragon=0.95"
         and boss_speed_gate.command[
             boss_speed_gate.command.index(
-                "--phase-mismatch-speedup-ceiling"
+                "--bounded-speedup-ceiling"
             ) + 1
         ] == "1.20"
         and boss_speed_gate.dependencies == ("boss_arenas", "boss_og_states")
@@ -668,6 +673,9 @@ def main() -> int:
         and boss_publication_gate.command[
             boss_publication_gate.command.index("--phase-ratio-ceiling") + 1
         ] == "1.20"
+        and boss_publication_gate.command[
+            boss_publication_gate.command.index("--accepted-fast-boss") + 1
+        ] == "cameo=1.23"
         and "--target-only" in north_integrity_gate.command
         and "--max-frame-lag-ratio" not in north_integrity_gate.command
         and game_start_gate.command[

@@ -19,12 +19,27 @@ local STREAM_TRACE_PATH = os.getenv("SOAK_STREAM_TRACE")
 local FLIP_TRACE_PATH = os.getenv("SOAK_FLIP_TRACE")
 local LCDC_TRACE_PATH = os.getenv("SOAK_LCDC_TRACE")
 local SEMANTIC_WRITE_TRACE_PATH = os.getenv("SOAK_SEMANTIC_WRITE_TRACE")
+local CAPTURE_FLIP_STATES = os.getenv("SOAK_FLIP_STATES") == "1"
 local AUDIT_WRAM = os.getenv("SOAK_WRAM_AUDIT") == "1"
 local CAPTURE_SCREENSHOTS = os.getenv("SOAK_SCREENSHOTS") == "1"
 local CAPTURE_STABLE = tonumber(os.getenv("SOAK_CAPTURE_STABLE") or "4")
+local WINDOW_HELPER_ADDR = tonumber(
+  os.getenv("SOAK_WINDOW_HELPER_ADDR") or "0")
+local WINDOW_HELPER_BANK = tonumber(
+  os.getenv("SOAK_WINDOW_HELPER_BANK") or "0")
 local EXPECTED_SCENE = TARGET + 2
+local PRIMARY_FIXED_STORE = tonumber(os.getenv("SOAK_PRIMARY_FIXED_STORE") or "4844")
 local KEY_A, KEY_START = 0x01, 0x08
 local KEY_RIGHT, KEY_LEFT, KEY_UP, KEY_DOWN = 0x10, 0x20, 0x40, 0x80
+local raw_vram = assert(emu.memory.vram)
+local game_wram = assert(emu.memory.wram)
+-- Native state belongs to physical WRAM bank 1. CPU-bus reads at a frame
+-- callback can instead expose a temporary compiler bank or OAM-DMA $FF.
+-- Do not change SVBK or use this accessor for bank-2/3 staging planes.
+local function game_read(address)
+  assert(address >= 0xD000 and address <= 0xDFFF)
+  return game_wram:read8(address - 0xC000)
+end
 
 local f, phase, seeded, confirmed = 0, "title", false, false
 local play_frame, expected_samples = 0, 0
@@ -32,9 +47,52 @@ local unsafe_attrs, unexpected_attrs, lava_mismatches = 0, 0, 0
 local max_unsafe, max_unexpected, max_lava_mismatch = 0, 0, 0
 local pickup_expected, pickup_mismatches, max_pickup_mismatch = 0, 0, 0
 local material_expected, material_mismatches, max_material_mismatch = 0, 0, 0
+local ffe4_zero_play_frames, ffe4_nonzero_play_frames = 0, 0
+local first_ffe4_nonzero_play_frame, first_ffe4_nonzero_value = -1, -1
+local window_helper_hits, window_helper_ffe4_nonzero_hits = 0, 0
 local last_room, room_stable = -1, 0
 local rooms, scenes, captured_rooms, captured_mismatches = {}, {}, {}, {}
 local done = false
+-- Optional read-only buffer lifetime trace. Physical WRAM avoids confusing
+-- the bank-1 gameplay state with the bank-3 DMA source during a transfer.
+if os.getenv("SOAK_DMA_TRACE") == "1" then
+  local trace = assert(io.open(OUT .. ".dma-buffer.tsv", "w"))
+  local wram = assert(emu.memory.wram)
+  local writes = {}
+  for row = 0, 23 do writes[row] = 0 end
+  local events = 0
+  local function record(kind, address, value)
+    if play_frame > 1000 or events >= 5000 then return end
+    if wram:read8(0x1880) ~= EXPECTED_SCENE then return end
+    events = events + 1
+    local counts = {}
+    for row = 0, 23 do counts[#counts+1] = tostring(writes[row]) end
+    trace:write(string.format("%s\t%d\t%d\t%04X\t%02X\t%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%s\n",
+      kind, f, play_frame, emu:readRegister("PC") & 65535,
+      emu:read8(0xFF99), address or 0, value or 0,
+      emu:read8(0xFFE0), emu:read8(0xFFC4), emu:read8(0xFF70),
+      wram:read8(0x3280), table.concat(counts, ",")))
+    trace:flush()
+  end
+  trace:write("kind\tframe\tplay\tpc\tbank\taddress\tvalue\tffe0\tffc4\tsvbk\tbuffer_row20col0\trow_write_counts\n")
+  for offset = 0, 0x2FF do
+    local watched = offset
+    assert(emu:setWatchpoint(function(info)
+      if (emu:read8(0xFF70) & 7) ~= 3 then return end
+      writes[watched >> 5] = writes[watched >> 5] + 1
+      if watched == 0x280 or watched == 0x00A then
+        record("write", 0xD000 + watched, info.newValue & 255)
+      end
+    end, 0xD000 + watched, C.WATCHPOINT_TYPE.WRITE) > 0)
+  end
+  for _, pc in ipairs({0x42FC, 0x4324}) do
+    local site = pc
+    assert(emu:setBreakpoint(function() record("pipeline", site, 0) end, site) > 0)
+  end
+  assert(emu:setWatchpoint(function(info)
+    record("dma", 0xFF55, info.newValue & 255)
+  end, 0xFF55, C.WATCHPOINT_TYPE.WRITE) > 0)
+end
 local attr_trace = ATTR_TRACE_PATH and assert(io.open(ATTR_TRACE_PATH, "w")) or nil
 local layout_trace = LAYOUT_TRACE_PATH and assert(io.open(LAYOUT_TRACE_PATH, "w")) or nil
 local flip_trace = FLIP_TRACE_PATH and assert(io.open(FLIP_TRACE_PATH, "w")) or nil
@@ -52,6 +110,20 @@ local SEMANTIC_WRITE_EVENT_LIMIT = 512
 -- DAFA-DAFF is deliberately excluded because it is live Stage-7 metadata.
 local WRAM_AUDIT_RANGES = {{0xD900, 0xD9FF}, {0xDA00, 0xDAF9}}
 
+if WINDOW_HELPER_ADDR > 0 and WINDOW_HELPER_BANK > 0 then
+  local breakpoint_id = emu:setBreakpoint(function()
+    if phase ~= "play" or game_read(0xD880) ~= EXPECTED_SCENE
+        or emu:read8(0xFF99) ~= WINDOW_HELPER_BANK then return end
+    window_helper_hits = window_helper_hits + 1
+    if emu:read8(0xFFE4) ~= 0 then
+      window_helper_ffe4_nonzero_hits =
+        window_helper_ffe4_nonzero_hits + 1
+    end
+  end, WINDOW_HELPER_ADDR)
+  assert(type(breakpoint_id) == "number" and breakpoint_id > 0,
+    "failed exact Window-helper breakpoint")
+end
+
 if lcdc_trace then
   -- mGBA does not install range watchpoints on I/O registers. These are the
   -- decoded LDH [$FF40],A sites that own dungeon map selection. Recording at
@@ -64,13 +136,13 @@ if lcdc_trace then
   for _, record in ipairs(lcdc_post_writes) do
     local site, segment = record[1], record[2]
     local callback = function()
-      if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE then return end
+      if phase ~= "play" or game_read(0xD880) ~= EXPECTED_SCENE then return end
       lcdc_trace:write(string.format(
         "%d\t%02X\t%04X\t%d\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\n",
         play_frame, emu:read8(0xFF99), site, segment,
         emu:read8(0xFF40), emu:readRegister("A") & 0xFF,
-        emu:read8(0xDC0B), emu:read8(0xFFBD),
-        emu:read8(0xFF43), emu:read8(0xFF42), emu:read8(0xDF4E)))
+        game_read(0xDC0B), emu:read8(0xFFBD),
+        emu:read8(0xFF43), emu:read8(0xFF42), game_read(0xDF4E)))
       lcdc_trace:flush()
     end
     if segment < 0 then emu:setBreakpoint(callback, site)
@@ -80,7 +152,9 @@ end
 
 local LAVA5 = {
   [0x02]=true, [0x03]=true, [0x04]=true, [0x05]=true,
+  [0x06]=true, [0x07]=true,
   [0x12]=true, [0x13]=true, [0x14]=true, [0x15]=true,
+  [0x16]=true, [0x17]=true,
 }
 local LAVA7 = {[0x19]=true, [0x1A]=true}
 -- Collision-audited against all 24 committed Stage 2-7 room captures. Apply
@@ -118,13 +192,38 @@ local function semantic_pickup(tile)
   return nil
 end
 
+local function visible_active_map_cell(address)
+  local lcdc = emu:read8(0xFF40)
+  -- The Stage-7 gameplay contract has LCD enabled and Window disabled. A
+  -- menu/window route is a separate containment gate, not a dungeon-BG write.
+  if (lcdc & 0x80) == 0 or (lcdc & 0x20) ~= 0 then return false end
+  local base = (lcdc & 0x08) ~= 0 and 0x9C00 or 0x9800
+  if address < base or address >= base + 0x400 then return false end
+  local index = address - base
+  local row, column = math.floor(index / 32), index & 31
+  local scx, scy = emu:read8(0xFF43), emu:read8(0xFF42)
+  local first_col, first_row = math.floor(scx / 8), math.floor(scy / 8)
+  local cols = ((scx & 7) == 0) and 20 or 21
+  local rows = ((scy & 7) == 0) and 18 or 19
+  local visible_col, visible_row = false, false
+  for offset = 0, cols - 1 do
+    if ((first_col + offset) & 31) == column then visible_col = true end
+  end
+  for offset = 0, rows - 1 do
+    if ((first_row + offset) & 31) == row then visible_row = true end
+  end
+  return visible_col and visible_row
+end
+
 if SEMANTIC_WRITE_TRACE_PATH then
   assert(emu:setRangeWatchpoint(function(info)
-    if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE
+    if phase ~= "play" or game_read(0xD880) ~= EXPECTED_SCENE
+        or emu:read8(0xFF47) ~= 0xE4 or game_read(0xDF4C) ~= 0
         or #semantic_write_events >= SEMANTIC_WRITE_EVENT_LIMIT then
       return
     end
     local address = info.address & 0xFFFF
+    if not visible_active_map_cell(address) then return end
     local old_vbk = emu:read8(0xFF4F)
     local tile, attr
     if (old_vbk & 1) == 0 then
@@ -137,8 +236,13 @@ if SEMANTIC_WRITE_TRACE_PATH then
       tile = emu:read8(address)
     end
     emu:write8(0xFF4F, old_vbk)
-    local expected = semantic_pickup(tile) or stage_material(tile)
-    if expected and attr ~= expected then
+    -- C600 is the candidate's exact per-tile Stage-7 attribute LUT. Checking
+    -- every visible CPU write catches both directions of a trail: a pickup or
+    -- lava tile briefly retaining neutral attrs, and an ordinary replacement
+    -- tile briefly retaining the old colored attr. Whole-map HDMA is checked
+    -- independently at the two pre-display publisher breakpoints below.
+    local expected = emu:read8(0xC600 + tile)
+    if attr ~= expected then
       semantic_write_events[#semantic_write_events + 1] = string.format(
         "f=%d room=%02X addr=%04X vbk=%d old=%02X new=%02X " ..
         "tile=%02X attr=%02X expected=%d bank=%02X pc=%04X " ..
@@ -147,7 +251,7 @@ if SEMANTIC_WRITE_TRACE_PATH then
         (info.oldValue or 0) & 0xFF, info.value & 0xFF,
         tile, attr, expected, emu:read8(0xFF99),
         emu:readRegister("PC") & 0xFFFF, emu:read8(0xFF43),
-        emu:read8(0xFF42), emu:read8(0xDF4E))
+        emu:read8(0xFF42), game_read(0xDF4E))
     end
   end, 0x9800, 0x9FFF, C.WATCHPOINT_TYPE.WRITE_CHANGE) > 0)
 end
@@ -159,7 +263,7 @@ if attr_trace then
   emu:setBreakpoint(function() tile_copy_map = 0x9C00 end, 0x42A0)
   emu:setBreakpoint(function() tile_copy_map = 0x9800 end, 0x42A5)
   emu:setBreakpoint(function()
-    if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE then
+    if phase ~= "play" or game_read(0xD880) ~= EXPECTED_SCENE then
       return
     end
     tile_copy_hits = tile_copy_hits + 1
@@ -182,11 +286,11 @@ if attr_trace then
       "%02X%02X%02X%02X%02X%02X\t%s\t%s\t%04X\n",
       tile_copy_hits, play_frame, emu:read8(0xFFBD),
       emu:read8(0xFF43), emu:read8(0xFF42), emu:read8(0xC1A4),
-      emu:read8(0xDF4F), emu:read8(0xFFE0),
-      emu:read8(0xDF53), emu:read8(0xDF54), emu:read8(0xDF55),
-      emu:read8(0xDF56), emu:read8(0xDF57), emu:read8(0xDF58),
-      emu:read8(0xDAFA), emu:read8(0xDAFB), emu:read8(0xDAFC),
-      emu:read8(0xDAFD), emu:read8(0xDAFE), emu:read8(0xDAFF),
+      game_read(0xDF4F), emu:read8(0xFFE0),
+      game_read(0xDF53), game_read(0xDF54), game_read(0xDF55),
+      game_read(0xDF56), game_read(0xDF57), game_read(0xDF58),
+      game_read(0xDAFA), game_read(0xDAFB), game_read(0xDAFC),
+      game_read(0xDAFD), game_read(0xDAFE), game_read(0xDAFF),
       emu:read8(0xC6AF), emu:read8(0xC6C7), emu:read8(0xC6A1),
       emu:read8(0xC607), emu:read8(0xC605), emu:read8(0xC62D),
       table.concat(bitset), table.concat(rawset), tile_copy_map))
@@ -203,7 +307,7 @@ if STREAM_TRACE_PATH then
   assert(emu:setRangeWatchpoint(function(info)
     if phase ~= "play" or play_frame < 40 or play_frame > 1200
         or (TARGET ~= 3 and TARGET ~= 4 and TARGET ~= 6)
-        or emu:read8(0xD880) ~= EXPECTED_SCENE then
+        or game_read(0xD880) ~= EXPECTED_SCENE then
       return
     end
     local pc = emu:readRegister("PC") & 0xFFFF
@@ -249,7 +353,7 @@ if VRAM_WATCH_ADDRS ~= "" then
           emu:readRegister("HL") & 0xFFFF,
           emu:readRegister("DE") & 0xFFFF,
           emu:readRegister("BC") & 0xFFFF,
-          emu:read8(0xD880), emu:read8(0xFFBD)))
+          game_read(0xD880), emu:read8(0xFFBD)))
       end, address, address, C.WATCHPOINT_TYPE.WRITE_CHANGE)
       if id and id > 0 then installed = installed + 1 end
     end
@@ -269,14 +373,14 @@ if TRACE_ADDRS ~= "" then
           "dcfd=%02X dd09=%02X a=%02X f=%02X scx=%02X scy=%02X " ..
           "decision=%02X bank=%02X svbk=%02X mapped4C54=%02X " ..
           "e=%02X h=%02X l=%02X phase=%02X bcps=%02X",
-          address, tostring(segment), address, emu:read8(0xD880),
-          emu:read8(0xFFBD), emu:read8(0xDCFD), emu:read8(0xDD09),
+          address, tostring(segment), address, game_read(0xD880),
+          emu:read8(0xFFBD), game_read(0xDCFD), game_read(0xDD09),
           emu:readRegister("A"), emu:readRegister("F"),
           emu:read8(0xFF43), emu:read8(0xFF42),
           emu:read8(0xFFE0), emu:read8(0xFF99), emu:read8(0xFF70),
           emu:read8(0x4C54), emu:readRegister("E"),
           emu:readRegister("H"), emu:readRegister("L"),
-          emu:read8(0xDF4C), emu:read8(0xFF68)))
+          game_read(0xDF4C), emu:read8(0xFF68)))
       end
       if segment then
         emu:setBreakpoint(callback, address, segment)
@@ -383,9 +487,9 @@ local function capture_room(room)
     "frame=%d target=%d expected_scene=%02X D880=%02X FFC1=%02X FFBA=%02X " ..
     "LCDC=%02X SCX=%02X SCY=%02X phase=%02X prelude=%02X " ..
     "active_map=%04X room=%02X\n",
-    f, TARGET, EXPECTED_SCENE, emu:read8(0xD880), emu:read8(0xFFC1),
+    f, TARGET, EXPECTED_SCENE, game_read(0xD880), emu:read8(0xFFC1),
     emu:read8(0xFFBA), emu:read8(0xFF40), emu:read8(0xFF43),
-    emu:read8(0xFF42), emu:read8(0xDF4C), emu:read8(0xFF91),
+    emu:read8(0xFF42), game_read(0xDF4C), emu:read8(0xFF91),
     active_base, room))
   meta:close()
   emu:write8(0xFF4F, old_vbk)
@@ -409,7 +513,7 @@ local function sample_visible()
     for _, offset in ipairs({444, 149, 19, 251}) do
       signature_a = signature_a ~ emu:read8(0xC1A0 + offset)
     end
-    for _, offset in ipairs({0, 59, 333}) do
+    for _, offset in ipairs({0, 59, 333, 201}) do
       signature_b = signature_b ~ emu:read8(0xC1A0 + offset)
     end
     layout_trace:write(string.format(
@@ -417,12 +521,12 @@ local function sample_visible()
       "%02X\t%02X\t%02X%02X%02X%02X\t%02X\t%02X\t" ..
       "%02X%02X%02X%02X\t%s\n",
       play_frame, emu:read8(0xFFBD), base, signature_a, signature_b,
-      emu:read8(0xDF53), emu:read8(0xDF54), emu:read8(0xDF55),
-      emu:read8(0xDF56), emu:read8(0xDF57), emu:read8(0xDF58),
+      game_read(0xDF53), game_read(0xDF54), game_read(0xDF55),
+      game_read(0xDF56), game_read(0xDF57), game_read(0xDF58),
       emu:read8(0xFF43), emu:read8(0xFF42),
-      emu:read8(0xDC00), emu:read8(0xDC01),
-      emu:read8(0xDC02), emu:read8(0xDC03),
-      emu:read8(0xDC0B), emu:read8(0xFFCF),
+      game_read(0xDC00), game_read(0xDC01),
+      game_read(0xDC02), game_read(0xDC03),
+      game_read(0xDC0B), emu:read8(0xFFCF),
       emu:read8(0xFFE8), emu:read8(0xFFE9),
       emu:read8(0xFFEA), emu:read8(0xFFEB),
       table.concat(raw)))
@@ -507,7 +611,7 @@ local function sample_visible()
     for _, offset in ipairs({444, 149, 19, 251}) do
       signature_a = signature_a ~ emu:read8(0xC1A0 + offset)
     end
-    for _, offset in ipairs({0, 59, 333}) do
+    for _, offset in ipairs({0, 59, 333, 201}) do
       signature_b = signature_b ~ emu:read8(0xC1A0 + offset)
     end
     local mismatch_room = emu:read8(0xFFBD)
@@ -528,16 +632,19 @@ local function sample_visible()
       local mismatch_svbk = emu:read8(0xFF70)
       emu:write8(0xFF70, 2)
       dump_range(mismatch_prefix .. ".shadow.bin", 0xD000, 0xD7FF)
+      dump_range(mismatch_prefix .. ".wram2-plane.bin", 0xD000, 0xD3FF)
+      emu:write8(0xFF70, 3)
+      dump_range(mismatch_prefix .. ".wram3-plane.bin", 0xD000, 0xD3FF)
       emu:write8(0xFF70, mismatch_svbk)
     end
     log(string.format(
       "lava_mismatch=%d pickup_mismatch=%d material_mismatch=%d room=%02X scene=%02X scx=%02X scy=%02X count=%02X cache=%02X sig=%02X/%02X meta=%02X%02X%02X/%02X%02X%02X xy=%s pickup_xy=%s",
       sample_lava_mismatch, sample_pickup_mismatch, sample_material_mismatch,
-      emu:read8(0xFFBD), emu:read8(0xD880),
-      emu:read8(0xFF43), emu:read8(0xFF42), emu:read8(0xDF4E),
-      emu:read8(0xDF4F), signature_a, signature_b,
-      emu:read8(0xDF53), emu:read8(0xDF54), emu:read8(0xDF55),
-      emu:read8(0xDF56), emu:read8(0xDF57), emu:read8(0xDF58),
+      emu:read8(0xFFBD), game_read(0xD880),
+      emu:read8(0xFF43), emu:read8(0xFF42), game_read(0xDF4E),
+      game_read(0xDF4F), signature_a, signature_b,
+      game_read(0xDF53), game_read(0xDF54), game_read(0xDF55),
+      game_read(0xDF56), game_read(0xDF57), game_read(0xDF58),
       table.concat(lava_mismatch_xy, ","),
       table.concat(pickup_mismatch_xy, ",")))
   end
@@ -546,66 +653,128 @@ end
 
 if flip_trace then
   local flip_index = 0
-  -- $12E0 (room publication) and $3089 (scroll publication) read the
-  -- already-toggled DC0B selector and publish the matching LCDC bit
-  -- immediately afterward. Inspect that destination here, while it is still
-  -- inactive, so a readable failure proves the map was wrong before display.
-  -- VRAM returns FF in PPU mode 3; record metadata but deliberately skip the
-  -- scan in that mode instead of emitting hundreds of false mismatches.
-  local function trace_flip(site, explicit_base)
-    if phase ~= "play" or emu:read8(0xD880) ~= EXPECTED_SCENE
-        or emu:read8(0xFF47) ~= 0xE4 or emu:read8(0xDF4C) ~= 0 then
+  -- $12E0 and $0AB8 are the two stock $4295 producer continuations. Their
+  -- actual LCDC stores are $12EC and $3095 respectively. Inspect immediately
+  -- before those stores, deriving the camera that the continuation will make
+  -- live (DC00/DC02 or pending DD85/DD87), while the destination must still
+  -- be physically hidden.
+  -- This mGBA build's raw VRAM domain exposes physical bank 0 only.  It stays
+  -- readable during mode 3, so the online half of the gate checks all 576
+  -- tile IDs here.  When SOAK_FLIP_STATES is armed, the matching PNG
+  -- savestate's gbAs payload is the fail-closed offline authority for both
+  -- physical VRAM banks, including all 576 attributes.
+  local function trace_flip(
+      site, explicit_base, explicit_scx, explicit_scy,
+      require_hidden, camera_contract_ok, allow_transition)
+    if phase ~= "play" or game_read(0xD880) ~= EXPECTED_SCENE
+        or emu:read8(0xFFC1) ~= 1 then
+      return
+    end
+    if not allow_transition
+        and (emu:read8(0xFF47) ~= 0xE4 or game_read(0xDF4C) ~= 0) then
       return
     end
     flip_index = flip_index + 1
-    local selector = emu:read8(0xDC0B) & 0x01
+    local selector = game_read(0xDC0B) & 0x01
     local base = explicit_base or (selector ~= 0 and 0x9C00 or 0x9800)
-    local scx, scy = emu:read8(0xFF43), emu:read8(0xFF42)
+    local scx = explicit_scx or emu:read8(0xFF43)
+    local scy = explicit_scy or emu:read8(0xFF42)
     local stat_mode = emu:read8(0xFF41) & 0x03
     local first_col, first_row = math.floor(scx / 8), math.floor(scy / 8)
     local cols = ((scx & 7) == 0) and 20 or 21
     local rows = ((scy & 7) == 0) and 18 or 19
-    local old_vbk = emu:read8(0xFF4F)
-    local mismatches = {}
-    local tiles = {}
-    if stat_mode ~= 3 then
-      emu:write8(0xFF4F, 0)
-      for y = 0, rows - 1 do
-        for x = 0, cols - 1 do
-          local row, col = (first_row + y) & 31, (first_col + x) & 31
-          local address = base + row * 32 + col
-          tiles[#tiles + 1] = {x=x, y=y, address=address, tile=emu:read8(address)}
-        end
+    local mismatches, mismatch_count = {}, 0
+    local function mismatch(text)
+      mismatch_count = mismatch_count + 1
+      if #mismatches < 32 then mismatches[#mismatches + 1] = text end
+    end
+    local current_lcdc = emu:read8(0xFF40)
+    if camera_contract_ok == false then
+      mismatch("camera-source-contract")
+    end
+    if require_hidden and (current_lcdc & 0x80) ~= 0 then
+      local displayed = (current_lcdc & 0x08) ~= 0 and 0x9C00 or 0x9800
+      if displayed == base then
+        mismatch(string.format("visible-target:%04X", base))
       end
-      emu:write8(0xFF4F, 1)
-      for _, cell in ipairs(tiles) do
-        local attr = emu:read8(cell.address)
-        local semantic = semantic_pickup(cell.tile)
-        local material = stage_material(cell.tile)
-        local expected = semantic or material
-        local lava = ((TARGET == 4 and LAVA5[cell.tile])
-          or (TARGET == 6 and LAVA7[cell.tile])) and 5 or 0
-        local bad = (attr & 0xF8) ~= 0
-          or (expected and attr ~= expected)
-          or (not expected and attr ~= 0 and not (lava == 5 and attr == 5))
-          or (attr == 5 and lava ~= 5)
-        if bad then
-          mismatches[#mismatches + 1] = string.format(
-            "%d:%d:%04X:%02X:%d>%s", cell.x, cell.y, cell.address,
-            cell.tile, attr, expected and tostring(expected) or "0")
+      if (current_lcdc & 0x20) ~= 0 then
+        mismatch("window-enabled")
+      end
+    end
+    if (emu:read8(0xFF70) & 0x07) ~= 0x01 then
+      mismatch("publisher-svbk-not-1")
+    end
+    local state_name = "-"
+    if CAPTURE_FLIP_STATES then
+      state_name = string.format("flip%06d.ss0", flip_index)
+      local state_path = OUT .. string.format(".flip%06d.ss0", flip_index)
+      local ok, result = pcall(function()
+        return emu:saveStateFile(state_path)
+      end)
+      if not ok or result == false then
+        mismatch("savestate-failed")
+      end
+    end
+    for row = 0, 23 do
+      for col = 0, 23 do
+        local source_offset = row * 24 + col
+        local address = base + row * 32 + col
+        local vram_offset = address - 0x8000
+        local expected_tile = emu:read8(0xC1A0 + source_offset)
+        local actual_tile = raw_vram:read8(vram_offset)
+        if actual_tile ~= expected_tile then
+          mismatch(string.format(
+            "tile:%d:%d:%04X:%02X>%02X", col, row, address,
+            actual_tile, expected_tile))
         end
       end
     end
-    emu:write8(0xFF4F, old_vbk)
     flip_trace:write(string.format(
-      "%d\t%d\t%04X\t%d\t%02X\t%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%d\t%s\n",
+      "%d\t%d\t%04X\t%d\t%02X\t%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%d\t%s\t%s\n",
       flip_index, play_frame, site, stat_mode, selector, base,
-      emu:read8(0xFFBD), scx, scy, emu:read8(0xDF04),
-      emu:read8(0xDF4E), #mismatches, table.concat(mismatches, ",")))
+      emu:read8(0xFFBD), scx, scy, game_read(0xDF04),
+      game_read(0xDF4E), mismatch_count, table.concat(mismatches, ","),
+      state_name))
     flip_trace:flush()
   end
-  emu:setBreakpoint(function() trace_flip(0x12E0) end, 0x12E0)
-  emu:setBreakpoint(function() trace_flip(0x3089) end, 0x3089)
+  emu:setBreakpoint(function()
+    local selector = game_read(0xDC0B) & 0x01
+    local base = (emu:readRegister("A") & 0x08) ~= 0 and 0x9C00 or 0x9800
+    local scx, scy = emu:read8(0xFF43), emu:read8(0xFF42)
+    if emu:read8(0xFF97) ~= 0x02 then
+      scx = game_read(0xDC00) & 0x0F
+      scy = game_read(0xDC02) & 0x0F
+    end
+    trace_flip(0x12E0, base, scx, scy, true,
+      base == (selector ~= 0 and 0x9C00 or 0x9800), true)
+  end, PRIMARY_FIXED_STORE)
+  if os.getenv("SOAK_PRIMARY_BANK13_STORES") == "1" then
+    local primary_frame,primary_lcdc=nil,nil
+    for _, address in ipairs({0x7457,0x7462}) do
+      local site=address
+      assert(emu:setBreakpoint(function()
+        local next_lcdc=emu:readRegister("A") & 0xFF
+        local base=(next_lcdc & 0x08) ~= 0 and 0x9C00 or 0x9800
+        -- The pinned primary's JR at 7459 lands at 7461, then repeats
+        -- the same LCDC store. Only this paired idempotent write may target
+        -- the already-active map; both events retain the full tile audit.
+        local repeat_store=site==0x7462 and primary_frame==play_frame
+          and primary_lcdc==next_lcdc and emu:read8(0xFF40)==next_lcdc
+        trace_flip(site,base,nil,nil,not repeat_store,nil,true)
+        if site==0x7457 then primary_frame,primary_lcdc=play_frame,next_lcdc
+        else primary_frame,primary_lcdc=nil,nil end
+      end,site,13)>0)
+    end
+  end
+  emu:setBreakpoint(function()
+    local selector = game_read(0xDC0B) & 0x01
+    local base = (emu:readRegister("A") & 0x08) ~= 0 and 0x9C00 or 0x9800
+    local scx = game_read(0xDD85) & 0x1F
+    local scy = game_read(0xDD87) & 0x1F
+    local camera_ok = emu:read8(0xFF43) == scx and emu:read8(0xFF42) == scy
+      and base == (selector ~= 0 and 0x9C00 or 0x9800)
+    trace_flip(0x3095, base, scx, scy, true, camera_ok, true)
+  end, 0x3095)
   -- DC0B is not the sole display authority. Native room/reset paths also
   -- write LCDC bit 3 directly; audit the map selected by A at every decoded
   -- executable site. $43D8 is the post-publication continuation inside the
@@ -654,12 +823,18 @@ local function write_report()
     "unsafe=%d unexpected=%d lava_mismatch=%d max_unsafe=%d " ..
     "max_unexpected=%d max_lava_mismatch=%d pickup_expected=%d " ..
     "pickup_mismatch=%d max_pickup_mismatch=%d material_expected=%d " ..
-    "material_mismatch=%d max_material_mismatch=%d wram_changed=%d\n",
+    "material_mismatch=%d max_material_mismatch=%d wram_changed=%d " ..
+    "ffe4_zero_play_frames=%d ffe4_nonzero_play_frames=%d " ..
+    "first_ffe4_nonzero_play_frame=%d first_ffe4_nonzero_value=%d " ..
+    "window_helper_hits=%d window_helper_ffe4_nonzero_hits=%d\n",
     TARGET, TARGET + 1, play_frame, EXPECTED_SCENE, expected_samples,
     #room_list, unsafe_attrs, unexpected_attrs, lava_mismatches,
     max_unsafe, max_unexpected, max_lava_mismatch, pickup_expected,
     pickup_mismatches, max_pickup_mismatch, material_expected,
-    material_mismatches, max_material_mismatch, wram_changed))
+    material_mismatches, max_material_mismatch, wram_changed,
+    ffe4_zero_play_frames, ffe4_nonzero_play_frames,
+    first_ffe4_nonzero_play_frame, first_ffe4_nonzero_value,
+    window_helper_hits, window_helper_ffe4_nonzero_hits))
   fh:write("room_ids=" .. table.concat(room_text, ",") .. "\n")
   fh:write("scene_ids=" .. table.concat(scene_text, ",") .. "\n")
   local changed_addresses = {}
@@ -701,6 +876,9 @@ local function write_report()
   if layout_trace then layout_trace:close(); layout_trace = nil end
   if flip_trace then flip_trace:close(); flip_trace = nil end
   if lcdc_trace then lcdc_trace:close(); lcdc_trace = nil end
+  local completion = assert(io.open(OUT .. ".done", "w"))
+  completion:write("DONE\n")
+  completion:close()
   done = true
   log("DONE")
   emu:stop()
@@ -735,7 +913,7 @@ callbacks:add("frame", function()
     seed_sram()
     if f % 60 >= 10 and f % 60 < 16 then emu:setKeys(KEY_A)
     else emu:setKeys(0) end
-    if emu:read8(0xD880) == 0x18 or emu:read8(0xFFC1) == 1 then
+    if game_read(0xD880) == 0x18 or emu:read8(0xFFC1) == 1 then
       confirmed = true
       phase = "loading"
       log("level selected")
@@ -749,7 +927,7 @@ callbacks:add("frame", function()
   if phase == "loading" then
     emu:write8(0xFFBA, TARGET)
     emu:setKeys(0)
-    if emu:read8(0xD880) == EXPECTED_SCENE and emu:read8(0xFFC1) == 1 then
+    if game_read(0xD880) == EXPECTED_SCENE and emu:read8(0xFFC1) == 1 then
       phase = "play"
       log("stable gameplay entered")
     end
@@ -758,6 +936,16 @@ callbacks:add("frame", function()
   end
 
   play_frame = play_frame + 1
+  local sampled_ffe4 = emu:read8(0xFFE4)
+  if sampled_ffe4 == 0 then
+    ffe4_zero_play_frames = ffe4_zero_play_frames + 1
+  else
+    ffe4_nonzero_play_frames = ffe4_nonzero_play_frames + 1
+    if first_ffe4_nonzero_play_frame < 0 then
+      first_ffe4_nonzero_play_frame = play_frame
+      first_ffe4_nonzero_value = sampled_ffe4
+    end
+  end
   if PALETTE_TRACE > 0 and play_frame <= PALETTE_TRACE then
     local old_bcps = emu:read8(0xFF68)
     emu:write8(0xFF68, 0)
@@ -767,11 +955,11 @@ callbacks:add("frame", function()
     emu:write8(0xFF68, old_bcps)
     log(string.format(
       "palette phase=%02X prelude=%02X scene=%02X bgp=%02X bg0=%02X,%02X",
-      emu:read8(0xDF4C), emu:read8(0xFF91), emu:read8(0xD880),
+      game_read(0xDF4C), emu:read8(0xFF91), game_read(0xD880),
       emu:read8(0xFF47), bg0_0, bg0_2))
   end
   audit_wram()
-  local scene, room = emu:read8(0xD880), emu:read8(0xFFBD)
+  local scene, room = game_read(0xD880), emu:read8(0xFFBD)
   scenes[scene] = true
   if scene == EXPECTED_SCENE and emu:read8(0xFFC1) == 1 then
     rooms[room] = true
@@ -785,7 +973,7 @@ callbacks:add("frame", function()
     -- by the DMG fade and can precede the stage-specific BG0 repair by dozens
     -- of frames; a release receipt must represent the stable rendered room.
     if room_stable >= CAPTURE_STABLE and emu:read8(0xFF47) == 0xE4
-        and emu:read8(0xDF4C) == 0 and not captured_rooms[room] then
+        and game_read(0xDF4C) == 0 and not captured_rooms[room] then
       captured_rooms[room] = true
       capture_room(room)
     end
@@ -795,7 +983,7 @@ callbacks:add("frame", function()
     -- scheduler is idle. Sampling hidden transition frames made a correct
     -- five-row priority repair look like persistent on-screen corruption.
     if play_frame % SAMPLE_INTERVAL == 0 and emu:read8(0xFF47) == 0xE4
-        and emu:read8(0xDF4C) == 0 then
+        and game_read(0xDF4C) == 0 then
       sample_visible()
     end
   end

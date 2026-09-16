@@ -70,7 +70,10 @@ ENDING_TAIL_STATES = (
 )
 ENDING_TAIL_GUARDS = {
     "credits": (0x16, 0x01, 0x00, 0x00, 240),
-    "end_page": (0x16, 0x01, 0x00, 0x01, 60),
+    # Hold the END discriminator long enough for the last stock credit rows
+    # to scroll fully offscreen.  The former 60-frame state was semantically
+    # valid but captured duplicate/clipped credit glyphs under the END card.
+    "end_page": (0x16, 0x01, 0x00, 0x01, 240),
     "epilogue_text": (0x00, 0x0C, 0x01, 0x01, 180),
 }
 STORY_STATES = tuple(
@@ -98,6 +101,16 @@ def artifact_status(*paths: Path) -> str:
             size = "missing"
         parts.append(f"{path.name}={size}")
     return ", ".join(parts)
+
+
+def trace_excerpt(path: Path, needle: str, tail: int = 24) -> str:
+    """Keep targeted diagnostic hits plus a bounded failure-trace tail."""
+    if not path.is_file():
+        return "none"
+    lines = path.read_text().splitlines()
+    selected = [line for line in lines if needle in line]
+    selected.extend(lines[-tail:])
+    return " | ".join(dict.fromkeys(selected))
 
 
 def screenshot_color_metrics(path: Path) -> dict[str, int | float]:
@@ -343,6 +356,7 @@ def generate_final_story(
     state = tmpdir / f"{stem}.ss0"
     capture_report = tmpdir / f"{stem}.capture.report"
     capture_done = Path(str(capture_report) + ".done")
+    capture_trace = Path(str(capture_report) + ".trace")
     capture_screenshot = tmpdir / f"{stem}.capture.png"
     env = os.environ.copy()
     env.update(
@@ -405,7 +419,14 @@ def generate_final_story(
         or state.stat().st_size < 1024
     ):
         raise RuntimeError(
-            f"{entry} capture failed: {', '.join(missing) or capture_detail}"
+            f"{entry} capture failed: "
+            f"missing={','.join(missing) or 'none'}; "
+            f"done={capture_done.read_text().strip()!r}; "
+            f"state_bytes={state.stat().st_size if state.is_file() else -1}; "
+            f"screenshot_bytes="
+            f"{capture_screenshot.stat().st_size if capture_screenshot.is_file() else -1}; "
+            f"report={capture_detail}; "
+            f"trace={trace_excerpt(capture_trace, '9950')}"
         )
 
     # This second process does no entry injection. It proves that the state
@@ -476,7 +497,11 @@ def generate_final_story(
     ):
         raise RuntimeError(
             f"{entry} clean-load validation failed: "
-            f"{', '.join(missing) or clean_detail}"
+            f"missing={','.join(missing) or 'none'}; "
+            f"done={clean_done.read_text().strip()!r}; "
+            f"screenshot_bytes="
+            f"{clean_screenshot.stat().st_size if clean_screenshot.is_file() else -1}; "
+            f"report={clean_detail}"
         )
 
     shutil.move(state, output / f"{stem}.ss0")

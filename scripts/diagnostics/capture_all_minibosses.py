@@ -1,301 +1,414 @@
 #!/usr/bin/env python3
-"""Capture a current-build visual receipt for all 16 miniboss indices.
+"""Capture all 16 native miniboss descriptors under guarded mGBA.
 
-The stock game reaches the indices through eight long, chained spawn tables.
-For a bounded visual inventory this verifier copies the requested ROM to a
-temporary file and changes only the confirmed Stage 1 miniboss selector byte
-at file offset 0x3402F. The source ROM is never modified. Gameplay then boots
-normally and the game itself performs the DC04 -> FFBF detection, entity
-initialization, animation, OAM composition, and palette selection.
-
-This is a visual-inventory route, not proof that every encounter is naturally
-reachable at that location. The JSON receipt records the one-byte selector
-patch and explicitly distinguishes defined YAML palettes (FFBF 1..8) from the
-currently undefined entries (FFBF 9..16).
+Each run copies the candidate into repository-local scratch and transplants one
+complete native five-entity descriptor into Stage 1's first miniboss section at
+file offset 0x3402F.  Patching only DC04 creates a deterministic Frankenstein:
+the selected miniboss's first entity plus Gargoyle entities 2-5.  The complete
+descriptor keeps DC04:DC08 semantically valid while the source ROM remains
+unchanged.  Two full passes must match exactly.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
+import time
+from typing import Any
 
 from PIL import Image, ImageDraw
-from pyboy import PyBoy
 import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
+MGBA = ROOT / "scripts/mgba-qt-singleflight"
+PROBE = ROOT / "scripts/diagnostics/probe_all_minibosses_visual.lua"
 PALETTE_YAML = ROOT / "palettes/penta_palettes_v097.yaml"
+OWNER = ".penta-miniboss-audit-owned"
 SPAWN_SELECTOR_OFFSET = 0x3402F
-SPAWN_SELECTOR_ORIGINAL = 0x30
-ENTITY_SLOTS = (0xDC85, 0xDC8D, 0xDC95, 0xDC9D, 0xDCA5)
+SPAWN_DESCRIPTOR_ORIGINAL = bytes(range(0x30, 0x35))
+# First native occurrence of every complete descriptor.  These offsets come
+# from the eight stock bank-13 level tables, not from a fabricated selector
+# sequence.  Level/section metadata is retained in the receipt for review.
+NATIVE_CONTEXTS = (
+    (1, 2, 0x3402F), (1, 5, 0x3403E),
+    (2, 2, 0x343F7), (2, 5, 0x34406),
+    (3, 2, 0x3466E), (3, 5, 0x3467D),
+    (4, 12, 0x34CA3), (4, 13, 0x34CA8),
+    (5, 4, 0x34D2B), (5, 5, 0x34D30),
+    (6, 4, 0x34E36), (6, 7, 0x34E45),
+    (7, 4, 0x35049), (7, 5, 0x3504E),
+    (8, 2, 0x3511E), (8, 5, 0x3512D),
+)
 BOSS_YAML_KEYS = (
-    "Gargoyle",
-    "Spider",
-    "Boss3_Crimson",
-    "Boss4_Ice",
-    "Boss5_Void",
-    "Boss6_Poison",
-    "Boss7_Knight",
-    "Angela",
+    "Gargoyle", "Spider", "Boss3_Crimson", "Boss4_Ice", "Boss5_Void",
+    "Boss6_Poison", "Boss7_Knight", "Angela",
 )
 BOSS_NAMES = (
-    "Gargoyle",
-    "Spider",
-    "Crimson",
-    "Ice",
-    "Void",
-    "Poison",
-    "Knight",
-    "Angela",
-    "Boss 9 (unnamed)",
-    "Boss 10 (unnamed)",
-    "Boss 11 (unnamed)",
-    "Boss 12 (unnamed)",
-    "Boss 13 (unnamed)",
-    "Boss 14 (unnamed)",
-    "Boss 15 (unnamed)",
+    "Gargoyle", "Spider", "Crimson", "Ice", "Void", "Poison", "Knight",
+    "Angela", "Boss 9 (unnamed)", "Boss 10 (unnamed)",
+    "Boss 11 (unnamed)", "Boss 12 (unnamed)", "Boss 13 (unnamed)",
+    "Boss 14 (unnamed)", "Boss 15 (unnamed)",
     "Boss 16 (unfinished / unnamed)",
 )
-TITLE_INPUT = (
-    (180, 185, "down"),
-    (201, 206, "a"),
-    (261, 266, "a"),
-    (321, 326, "a"),
-)
+
+
+def palette_source_index(boss_index: int) -> int:
+    """Return the 1-based YAML row selected by the ROM's O(1) alias rule."""
+    return ((boss_index - 1) & 0x07) + 1
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def parse_report(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            values[key] = value
+    return values
 
 
 def bgr555_to_rgb(value: str) -> str:
     packed = int(value, 16)
-    channels = (
-        packed & 0x1F,
-        (packed >> 5) & 0x1F,
-        (packed >> 10) & 0x1F,
-    )
+    channels = (packed & 0x1F, (packed >> 5) & 0x1F, (packed >> 10) & 0x1F)
     return "#" + "".join(f"{round(channel * 255 / 31):02X}" for channel in channels)
 
 
-def visible_boss_oam(pyboy: PyBoy) -> list[dict[str, int]]:
-    sprites = []
-    for slot in range(4, 40):
-        address = 0xFE00 + slot * 4
-        y, x, tile, attr = (
-            int(pyboy.memory[address + offset]) for offset in range(4)
-        )
-        if 0 < y < 160 and 0 < x < 168 and tile >= 0x30:
-            sprites.append(
-                {
-                    "slot": slot,
-                    "y": y,
-                    "x": x,
-                    "tile": tile,
-                    "palette": attr & 7,
-                }
-            )
-    return sprites
+def parse_oam(raw: str) -> list[dict[str, int]]:
+    rows = []
+    for record in raw.split(","):
+        if not record:
+            continue
+        slot, x, y, tile, attr = record.split(":")
+        rows.append({
+            "slot": int(slot), "x": int(x), "y": int(y),
+            "tile": int(tile, 16), "attr": int(attr, 16),
+            "palette": int(attr, 16) & 7,
+        })
+    return rows
 
 
 def capture_one(
     source_rom: bytes,
     boss_index: int,
     output: Path,
-    palette_document: dict[str, object],
-) -> dict[str, object]:
+    replay: int,
+    palette_document: dict[str, Any],
+    timeout: float,
+) -> dict[str, Any]:
     dc04 = 0x30 + (boss_index - 1) * 5
-    patched_rom = bytearray(source_rom)
-    patched_rom[SPAWN_SELECTOR_OFFSET] = dc04
-    with tempfile.NamedTemporaryFile(suffix=".gb") as temporary:
-        temporary.write(patched_rom)
-        temporary.flush()
-        pyboy = PyBoy(
-            temporary.name, window="null", cgb=True,
-            sound_emulated=False, log_level=5,
+    source_index = palette_source_index(boss_index)
+    palette_key = BOSS_YAML_KEYS[source_index - 1]
+    palette_source = palette_document["boss_palettes"][palette_key]
+    level, section, descriptor_offset = NATIVE_CONTEXTS[boss_index - 1]
+    descriptor = source_rom[descriptor_offset:descriptor_offset + 5]
+    expected_descriptor = bytes(range(dc04, dc04 + 5))
+    if descriptor != expected_descriptor:
+        raise RuntimeError(
+            f"FFBF={boss_index} native descriptor drift at "
+            f"0x{descriptor_offset:X}: {descriptor.hex(' ')} != "
+            f"{expected_descriptor.hex(' ')}"
         )
-        pyboy.set_emulation_speed(0)
-        armed = False
-        spawn_frame = None
-        best = None
-        try:
-            for frame in range(1, 1_650):
-                for first, last, button in TITLE_INPUT:
-                    if frame == first:
-                        pyboy.button_press(button)
-                    elif frame == last + 1:
-                        pyboy.button_release(button)
-
-                if frame >= 560 and not armed:
-                    pyboy.memory[0xDCB8] = 0
-                    pyboy.memory[0xDCBA] = 1
-                    pyboy.memory[0xFFD6] = 0x1E
-                    for address in ENTITY_SLOTS:
-                        pyboy.memory[address] = 0
-                    armed = True
-
-                if armed and int(pyboy.memory[0xFFBF]) == 0:
-                    pyboy.memory[0xDCDD] = 0x17
-                    pyboy.memory[0xDCDC] = 0xFF
-                    pyboy.memory[0xDCBA] = 1
-                    pyboy.memory[0xFFD6] = 0x1E
-                    for address in ENTITY_SLOTS:
-                        pyboy.memory[address] = 0
-
-                pyboy.tick(1, True)
-                actual_index = int(pyboy.memory[0xFFBF])
-                if actual_index == boss_index and spawn_frame is None:
-                    spawn_frame = frame
-                if spawn_frame is None or frame - spawn_frame < 150:
-                    continue
-
-                sprites = visible_boss_oam(pyboy)
-                score = (len(sprites), -abs((frame - spawn_frame) - 420))
-                if best is None or score > best[0]:
-                    best = (
-                        score,
-                        frame,
-                        int(pyboy.memory[0xD880]),
-                        sprites,
-                        pyboy.screen.image.copy(),
-                    )
-                if frame - spawn_frame >= 660:
+    patched = bytearray(source_rom)
+    patched[SPAWN_SELECTOR_OFFSET:SPAWN_SELECTOR_OFFSET + 5] = descriptor
+    stem = f"miniboss-{boss_index:02d}.r{replay}"
+    screenshot = output / f"{stem}.png"
+    report = output / f"{stem}.txt"
+    stdout = output / f"{stem}.stdout.txt"
+    with tempfile.NamedTemporaryFile(suffix=".gb", dir=ROOT / "tmp") as rom_file:
+        rom_file.write(patched)
+        rom_file.flush()
+        environment = os.environ.copy()
+        environment.update({
+            "QT_QPA_PLATFORM": "offscreen",
+            "SDL_AUDIODRIVER": "dummy",
+            "PENTA_MINIBOSS_INDEX": str(boss_index),
+            "PENTA_MINIBOSS_PALETTE_SLOT": str(
+                int(palette_source["slot"])
+            ),
+            "PENTA_MINIBOSS_REPORT": str(report),
+            "PENTA_MINIBOSS_SCREENSHOT": str(screenshot),
+        })
+        with stdout.open("w") as stream:
+            process = subprocess.Popen(
+                [
+                    str(MGBA), "--fastforward", "--script", str(PROBE),
+                    rom_file.name,
+                ],
+                cwd=ROOT,
+                env=environment,
+                stdout=stream,
+                stderr=subprocess.STDOUT,
+            )
+            deadline = time.monotonic() + timeout
+            completed_report = False
+            while time.monotonic() < deadline:
+                returncode = process.poll()
+                if report.is_file():
+                    completed_report = True
                     break
-        finally:
-            pyboy.stop(save=False)
+                if returncode is not None:
+                    if returncode == 75:
+                        raise SystemExit(75)
+                    break
+                time.sleep(0.02)
 
-    if spawn_frame is None:
-        raise RuntimeError(f"FFBF={boss_index} never spawned")
-    if best is None:
-        raise RuntimeError(f"FFBF={boss_index} never produced a capture candidate")
-    _score, frame, scene, sprites, image = best
-    screenshot = output / f"miniboss-{boss_index:02d}.png"
-    image.save(screenshot)
-
-    palette_entry = None
-    if boss_index <= len(BOSS_YAML_KEYS):
-        yaml_key = BOSS_YAML_KEYS[boss_index - 1]
-        raw = palette_document["boss_palettes"][yaml_key]
-        colors_bgr555 = [str(value) for value in raw["colors"]]
-        palette_entry = {
-            "yaml_key": yaml_key,
-            "slot": int(raw["slot"]),
-            "colors_bgr555": colors_bgr555,
-            "colors_rgb888": [bgr555_to_rgb(value) for value in colors_bgr555],
-        }
-
+            # The Lua shutdown APIs in this mGBA build either hang or
+            # intermittently segfault.  Once the probe closes its report, stop
+            # only the exact single-flight child owned by this verifier.  The
+            # wrapper execs mGBA, so this PID remains the owned emulator PID.
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=3)
+            returncode = process.returncode
+            if not completed_report:
+                raise RuntimeError(
+                    f"FFBF={boss_index} ended without a report (status "
+                    f"{returncode}); see {stdout}"
+                )
+    if not report.is_file() or not screenshot.is_file():
+        detail = parse_report(report) if report.is_file() else {}
+        raise RuntimeError(
+            f"FFBF={boss_index} replay {replay} incomplete: {detail}; "
+            f"see {stdout}"
+        )
+    result = parse_report(report)
+    if result.get("status") != "pass" or int(result.get("FFBF", "0"), 16) != boss_index:
+        raise RuntimeError(f"FFBF={boss_index} invalid report: {result}")
+    observed_descriptor = bytes.fromhex(result.get("descriptor", ""))
+    if observed_descriptor != descriptor:
+        raise RuntimeError(
+            f"FFBF={boss_index} loaded DC04:DC08 "
+            f"{observed_descriptor.hex(' ')} instead of native "
+            f"{descriptor.hex(' ')}"
+        )
+    words = [str(value) for value in palette_source["colors"]]
+    expected = {
+        "yaml_key": palette_key,
+        "source_selector": source_index,
+        "aliased": boss_index != source_index,
+        "slot": int(palette_source["slot"]),
+        "colors_bgr555": words,
+        "colors_rgb888": [bgr555_to_rgb(value) for value in words],
+    }
+    with Image.open(screenshot) as image:
+        if image.size != (160, 144):
+            raise RuntimeError(f"FFBF={boss_index} screenshot size is {image.size}")
+        image.verify()
+    oam = parse_oam(result.get("boss_oam", ""))
     return {
         "ffbf": boss_index,
         "dc04": dc04,
         "name": BOSS_NAMES[boss_index - 1],
-        "spawn_frame": spawn_frame,
-        "capture_frame": frame,
-        "scene": scene,
+        "native_context": {
+            "level": level,
+            "section": section,
+            "descriptor_offset": descriptor_offset,
+            "descriptor": descriptor.hex(" ").upper(),
+        },
+        "gameplay_frame": int(result["gameplay_at"]),
+        "spawn_frame": int(result["spawn_at"]),
+        "capture_frame": int(result.get("screenshot_at", result["frame"])),
+        "exit_frame": int(result["frame"]),
+        "scene": int(result["D880"], 16),
         "screenshot": str(screenshot),
-        "visible_boss_oam": sprites,
-        "hardware_palette_slots": sorted({sprite["palette"] for sprite in sprites}),
-        "expected_palette": palette_entry,
-        "palette_status": "defined" if palette_entry else "undefined",
+        "screenshot_sha256": digest(screenshot),
+        "visible_boss_oam": oam,
+        "hardware_palette_slots": sorted({row["palette"] for row in oam}),
+        "selected_expected_palette_sprite_count": int(
+            result.get("selected_expected_count", "0")
+        ),
+        "selected_center_distance": int(
+            result.get("selected_center_distance", "0")
+        ),
+        "expected_palette": expected,
+        "palette_status": "aliased" if expected["aliased"] else "defined",
     }
 
 
-def create_contact_sheet(entries: list[dict[str, object]], output: Path) -> None:
-    columns = 4
-    label_height = 28
-    cell_width, cell_height = 160, 144 + label_height
-    rows = (len(entries) + columns - 1) // columns
-    sheet = Image.new("RGB", (columns * cell_width, rows * cell_height), "black")
+def stable(row: dict[str, Any]) -> dict[str, Any]:
+    def clean(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: clean(item) for key, item in value.items()
+                if key not in ("screenshot",)
+            }
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        return value
+    return clean(row)
+
+
+def create_contact_sheet(entries: list[dict[str, Any]], output: Path) -> None:
+    columns, label_height = 4, 30
+    sheet = Image.new("RGB", (640, 4 * (144 + label_height)), "black")
     draw = ImageDraw.Draw(sheet)
     for position, entry in enumerate(entries):
-        x = position % columns * cell_width
-        y = position // columns * cell_height
-        image = Image.open(str(entry["screenshot"])).convert("RGB")
-        sheet.paste(image, (x, y + label_height))
+        x = position % columns * 160
+        y = position // columns * (144 + label_height)
+        with Image.open(str(entry["screenshot"])) as source:
+            sheet.paste(source.convert("RGB"), (x, y + label_height))
         palette = entry["expected_palette"]
         expected = (
             f"OBJ{palette['slot']} {palette['yaml_key']}"
-            if palette
-            else "PALETTE UNDEFINED"
+            + (
+                f" (alias {palette['source_selector']:02d})"
+                if palette["aliased"] else ""
+            )
         )
         draw.text((x + 2, y + 2), f"{entry['ffbf']:02d} {entry['name']}", fill="white")
         draw.text(
-            (x + 2, y + 14),
-            expected,
-            fill="#77edaa" if palette else "#ff7f8f",
+            (x + 2, y + 16), expected,
+            fill="#77edaa",
         )
     sheet.save(output)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("/tmp/penta-minibosses"))
+    parser.add_argument(
+        "--output", type=Path,
+        default=ROOT / "tmp/visual-audit-evidence/minibosses",
+    )
+    parser.add_argument("--determinism-replays", type=int, choices=(1, 2), default=2)
+    parser.add_argument("--timeout", type=float, default=45.0)
+    parser.add_argument(
+        "--indices",
+        default="1-16",
+        help="selector range for targeted diagnosis (default: 1-16)",
+    )
     args = parser.parse_args()
+    if args.indices == "1-16":
+        indices = list(range(1, 17))
+    else:
+        try:
+            indices = sorted({int(value) for value in args.indices.split(",")})
+        except ValueError as exc:
+            raise SystemExit("--indices must be 1-16 or comma-separated integers") from exc
+        if not indices or any(index < 1 or index > 16 for index in indices):
+            raise SystemExit("--indices values must be between 1 and 16")
     rom = args.rom.resolve()
     output = args.output.resolve()
+    allowed = ((ROOT / "tmp").resolve(), Path("/mnt/data/tmp").resolve())
+    if not any(output.is_relative_to(root) for root in allowed):
+        raise SystemExit("output must be under repo tmp/ or /mnt/data/tmp/")
     output.mkdir(parents=True, exist_ok=True)
-    # Remove only artifacts owned by this capture. Never recursively delete a
-    # caller-supplied output directory merely because it already exists.
-    for owned in output.glob("miniboss-*.png"):
-        owned.unlink()
-    for owned in (output / "miniboss-contact-sheet.png", output / "receipt.json"):
-        owned.unlink(missing_ok=True)
+    marker = output / OWNER
+    if any(output.iterdir()) and not marker.is_file():
+        raise SystemExit(f"refusing to replace unowned output: {output}")
+    marker.write_text("penta-miniboss-visual-audit-v1\n")
+    for path in output.iterdir():
+        if path != marker and path.is_file():
+            path.unlink()
 
     source_rom = rom.read_bytes()
-    if source_rom[SPAWN_SELECTOR_OFFSET] != SPAWN_SELECTOR_ORIGINAL:
+    if source_rom[SPAWN_SELECTOR_OFFSET:SPAWN_SELECTOR_OFFSET + 5] != SPAWN_DESCRIPTOR_ORIGINAL:
         raise SystemExit(
-            f"unexpected selector byte at 0x{SPAWN_SELECTOR_OFFSET:X}: "
-            f"0x{source_rom[SPAWN_SELECTOR_OFFSET]:02X}"
+            f"unexpected Stage 1 descriptor at 0x{SPAWN_SELECTOR_OFFSET:X}: "
+            f"{source_rom[SPAWN_SELECTOR_OFFSET:SPAWN_SELECTOR_OFFSET + 5].hex(' ')}"
         )
-    palette_document = yaml.safe_load(PALETTE_YAML.read_text())
-    entries = [
-        capture_one(source_rom, boss_index, output, palette_document)
-        for boss_index in range(1, 17)
-    ]
-    contact_sheet = output / "miniboss-contact-sheet.png"
-    create_contact_sheet(entries, contact_sheet)
+    palettes = yaml.safe_load(PALETTE_YAML.read_text())
+    passes: list[list[dict[str, Any]]] = []
+    try:
+        for replay in range(1, args.determinism_replays + 1):
+            rows = []
+            for index in indices:
+                row = capture_one(source_rom, index, output, replay, palettes, args.timeout)
+                rows.append(row)
+                print(
+                    f"replay {replay}: FFBF={index:02d} frame "
+                    f"{row['capture_frame']} sprites={len(row['visible_boss_oam'])}",
+                    flush=True,
+                )
+            passes.append(rows)
+    except Exception as exc:
+        print(f"FAIL: {exc}")
+        return 1
+
+    exact = len(passes) == 1 or all(
+        stable(first) == stable(second)
+        for first, second in zip(passes[0], passes[1], strict=True)
+    )
     failures = []
-    for entry in entries:
-        palette = entry["expected_palette"]
-        if palette and palette["slot"] not in entry["hardware_palette_slots"]:
+    if not exact:
+        failures.append("two complete 16-index capture passes differ")
+    for row in passes[0]:
+        expected = row["expected_palette"]
+        if not row["visible_boss_oam"]:
+            failures.append(f"FFBF={row['ffbf']} has no visible boss OAM")
+        if expected["slot"] not in row["hardware_palette_slots"]:
             failures.append(
-                f"FFBF={entry['ffbf']} expected OBJ{palette['slot']}, "
-                f"saw {entry['hardware_palette_slots']}"
+                f"FFBF={row['ffbf']} expected OBJ{expected['slot']}, "
+                f"saw {row['hardware_palette_slots']}"
             )
+        if row["selected_expected_palette_sprite_count"] < 4:
+            failures.append(
+                f"FFBF={row['ffbf']} has only "
+                f"{row['selected_expected_palette_sprite_count']} visible "
+                f"sprites in expected OBJ{expected['slot']}"
+            )
+    # Stable public names omit replay suffix; the replay-1 images are the
+    # canonical, hash-verified human evidence.
+    for row in passes[0]:
+        canonical = output / f"miniboss-{row['ffbf']:02d}.png"
+        canonical.write_bytes(Path(str(row["screenshot"])).read_bytes())
+        row["screenshot"] = str(canonical)
+        row["screenshot_sha256"] = digest(canonical)
+    contact_sheet = output / "miniboss-contact-sheet.png"
+    create_contact_sheet(passes[0], contact_sheet)
     receipt = {
-        "status": "failed" if failures else "ok_with_known_palette_gaps",
+        "schema": "penta-dragon-dx-miniboss-visual-audit-v1",
+        "status": "failed" if failures else "ok",
         "rom": str(rom),
+        "rom_sha256": digest(rom),
+        "palette_yaml_sha256": digest(PALETTE_YAML),
+        "determinism_replays": args.determinism_replays,
+        "deterministic_replay_exact": exact,
+        "replay_screenshot_sha256": [
+            row["screenshot_sha256"] for row in passes[-1]
+        ],
         "capture_method": {
-            "temporary_selector_patch_offset": SPAWN_SELECTOR_OFFSET,
-            "source_byte": SPAWN_SELECTOR_ORIGINAL,
-            "selected_bytes": [0x30 + index * 5 for index in range(16)],
+            "emulator": "guarded-mgba-qt-offscreen",
+            "temporary_descriptor_patch_offset": SPAWN_SELECTOR_OFFSET,
+            "source_descriptor": SPAWN_DESCRIPTOR_ORIGINAL.hex(" ").upper(),
+            "native_descriptor_offsets": [row[2] for row in NATIVE_CONTEXTS],
             "source_rom_modified": False,
         },
-        "captured": len(entries),
-        "expected": 16,
-        "defined_palette_entries": sum(
-            entry["palette_status"] == "defined" for entry in entries
-        ),
-        "undefined_palette_entries": [
-            entry["ffbf"]
-            for entry in entries
-            if entry["palette_status"] == "undefined"
-        ],
+        "captured": len(passes[0]),
+        "expected": len(indices),
+        "indices": indices,
+        "defined_palette_source_rows": 8,
+        "direct_palette_selectors": list(range(1, 9)),
+        "aliased_palette_selectors": {
+            str(index): palette_source_index(index) for index in range(9, 17)
+        },
+        "undefined_palette_selectors": [],
         "contact_sheet": str(contact_sheet),
-        "entries": entries,
+        "contact_sheet_sha256": digest(contact_sheet),
+        "entries": passes[0],
         "failures": failures,
     }
     receipt_path = output / "receipt.json"
-    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
-    print(f"Captured {len(entries)}/16 minibosses")
-    print("Defined palette entries: 1..8")
-    print("Undefined palette entries: 9..16")
-    print(f"Contact sheet: {contact_sheet}")
-    print(f"Receipt: {receipt_path}")
-    if failures:
-        for failure in failures:
-            print(f"FAIL: {failure}")
-        return 1
-    return 0
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+    print(json.dumps({
+        "status": receipt["status"], "captured": receipt["captured"],
+        "deterministic_replay_exact": exact, "failures": failures,
+        "receipt": str(receipt_path),
+    }, indent=2))
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

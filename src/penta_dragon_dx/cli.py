@@ -1,7 +1,6 @@
 import click
 from pathlib import Path
 import subprocess
-import shutil
 from . import rom_utils, palette_injector, patch_builder, display_patcher
 
 @click.group()
@@ -84,9 +83,6 @@ def build_patch(original, modified, out):
         f.write(patch_bytes)
     click.echo(f"IPS patch written: {out} ({len(patch_bytes)} bytes)")
 
-if __name__ == "__main__":
-    main()
-
 @main.command()
 @click.option("--rom", type=click.Path(exists=True, dir_okay=False), required=True, help="Path to original ROM")
 @click.option("--free-min", type=int, default=128, help="Minimum free-space run length to report")
@@ -125,10 +121,17 @@ def analyze(rom, free_min):
 @click.option("--rom", type=click.Path(exists=True, dir_okay=False), required=True, help="Path to original ROM")
 @click.option("--palette-file", type=click.Path(exists=True), required=True)
 @click.option("--hook-offset", type=str, required=False, help="File offset to patch CALL to stub (hex like 0x4000); ignored if --vblank")
-@click.option("--emu", type=str, default="mgba-qt", help="Emulator command (mgba-qt, sameboy, etc.)")
+@click.option("--emu", type=click.Choice(["mgba-qt"]), default="mgba-qt", help="Compatibility option; always uses the guarded repository launcher.")
 @click.option("--vblank", is_flag=True, help="Use VBlank interrupt hook instead of code offset")
 def dev_loop(rom, palette_file, hook_offset, emu, vblank):
     """Inject palettes and stub, write working ROM, then launch emulator."""
+    project_root = Path(__file__).resolve().parents[2]
+    launcher = project_root / "scripts" / "launch_mgba.sh"
+    if not launcher.is_file():
+        raise click.ClickException(
+            "Guarded launcher scripts/launch_mgba.sh is unavailable; "
+            "run dev-loop from a repository checkout."
+        )
     hook = None
     if not vblank:
         if not hook_offset:
@@ -159,9 +162,15 @@ def dev_loop(rom, palette_file, hook_offset, emu, vblank):
                 f"Patched CALL at file 0x{m['hook_offset']:06X} to stub bank {m['stub_bank']:02d} @0x{m['stub_addr']:04X}"
             )
 
-    cmd = shutil.which(emu) or emu
     try:
-        subprocess.Popen([cmd, str(out_path)])
-        click.echo(f"Launched {emu} {out_path}")
-    except Exception as e:
-        raise click.ClickException(f"Failed to launch emulator '{emu}': {e}")
+        result = subprocess.run(["bash", str(launcher), str(out_path.resolve())])
+    except OSError as e:
+        raise click.ClickException(f"Failed to start guarded launcher: {e}") from e
+    if result.returncode:
+        if result.returncode == 75:
+            click.echo("Emulator slot is busy; guarded launch refused.", err=True)
+        raise click.exceptions.Exit(result.returncode if result.returncode > 0 else 128 - result.returncode)
+
+
+if __name__ == "__main__":
+    main()
