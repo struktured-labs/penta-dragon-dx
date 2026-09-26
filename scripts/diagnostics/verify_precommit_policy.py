@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 from suite_contract import ROOT
-from verify_suite_receipt import FORBIDDEN_SUFFIXES, staged_paths
+from verify_suite_receipt import FORBIDDEN_SUFFIXES, is_forbidden_artifact, staged_paths
 
 
 HARNESS_PREFIXES = (
@@ -42,7 +42,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args()
     staged = staged_paths()
-    forbidden = [path for path in staged if path.suffix.lower() in FORBIDDEN_SUFFIXES]
+    # FORBIDDEN_SUFFIXES minus curated fixture savestates (see verify_suite_receipt).
+    forbidden = [path for path in staged if is_forbidden_artifact(path)]
     if forbidden:
         print("FAIL: ROM/save/state artifacts are staged: " + ", ".join(map(str, forbidden)))
         return 1
@@ -61,6 +62,7 @@ def main() -> int:
 
     checks = (
         (sys.executable, "-m", "compileall", "-q", "scripts/diagnostics", "scripts/probes"),
+        (sys.executable, "scripts/diagnostics/test_precommit_artifact_policy.py"),
         (sys.executable, "scripts/diagnostics/verify_live_regression.py", "--check-contract"),
         (
             sys.executable,

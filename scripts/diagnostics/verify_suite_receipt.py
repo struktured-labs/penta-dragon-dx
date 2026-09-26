@@ -36,6 +36,33 @@ FORBIDDEN_SUFFIXES = {
     ".ss3",
     ".ss4",
 }
+ROM_SUFFIXES = {".gb", ".gbc", ".gba"}
+# Curated emulator savestates are committable only as direct children of the
+# fixture directory (e.g. og_boss8_penta_dragon.ss0 used by
+# generate_stream_boss_states.py). The match is on the exact repo-relative
+# parent, never a substring, so tmp/scripts/diagnostics/fixtures/x.ss0 or a
+# nested subdirectory stays blocked. ROMs and SRAM (.sav/.ram) stay blocked
+# everywhere.
+FIXTURE_STATE_DIR = Path("scripts/diagnostics/fixtures")
+FIXTURE_STATE_SUFFIXES = {".ss", ".ss0", ".ss1", ".ss2", ".ss3", ".ss4"}
+assert ROM_SUFFIXES <= FORBIDDEN_SUFFIXES
+assert FIXTURE_STATE_SUFFIXES <= FORBIDDEN_SUFFIXES
+
+
+def is_forbidden_artifact(path: Path) -> bool:
+    """True when a staged repo-relative path must never be committed."""
+    path = Path(path)
+    suffix = path.suffix.lower()
+    if suffix not in FORBIDDEN_SUFFIXES:
+        return False
+    if (
+        suffix in FIXTURE_STATE_SUFFIXES
+        and not path.is_absolute()
+        and ".." not in path.parts
+        and path.parent == FIXTURE_STATE_DIR
+    ):
+        return False
+    return True
 
 
 def fail(message: str) -> int:
@@ -268,7 +295,7 @@ def main() -> int:
         forbidden = [
             str(path)
             for path in staged
-            if path.suffix.lower() in FORBIDDEN_SUFFIXES
+            if is_forbidden_artifact(path)
         ]
         if forbidden:
             return fail(

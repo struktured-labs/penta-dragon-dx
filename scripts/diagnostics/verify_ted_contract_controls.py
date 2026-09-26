@@ -634,18 +634,18 @@ def main() -> int:
     checks["whole_game_speed_official_runner_contract"] = (
         stage_speed_gate.command[
             stage_speed_gate.command.index("--targets") + 1
-        ] == "0,1,2,3,4,5,6"
+        ] == "0,1,2,3,4,5"
         and stage_speed_gate.command[
             stage_speed_gate.command.index("--tolerance") + 1
         ] == "0.02"
-        and stage_speed_gate.command[
-            stage_speed_gate.command.index("--accepted-slowdown-floor") + 1
-        ] == "0.96"
+        # 21f125e intentionally retired the slowdown floor and set the
+        # accepted slow stages to exactly {1,2,3,5}=0.95.
+        and "--accepted-slowdown-floor" not in stage_speed_gate.command
         and {
             stage_speed_gate.command[index + 1]
             for index, argument in enumerate(stage_speed_gate.command[:-1])
             if argument == "--accepted-slow-stage"
-        } == {"1=0.959", "5=0.95"}
+        } == {"1=0.95", "2=0.95", "3=0.95", "5=0.95"}
         and boss_speed_gate.command[
             boss_speed_gate.command.index("--frames") + 1
         ] == "1800"
