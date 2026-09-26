@@ -75,8 +75,8 @@ def _header_checksum(data: bytes) -> int:
 
 
 def _global_checksum(data: bytes) -> int:
-    # 16-bit sum over all bytes; typically stored at 0x14E-0x14F (and included in the sum)
-    return sum(data) & 0xFFFF
+    # 16-bit sum of every byte except the stored checksum at 0x014E-0x014F.
+    return (sum(data[:0x014E]) + sum(data[0x0150:])) & 0xFFFF
 
 
 def parse_header(data: bytes) -> dict:
