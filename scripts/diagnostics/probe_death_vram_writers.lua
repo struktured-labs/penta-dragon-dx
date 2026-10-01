@@ -4,6 +4,18 @@
 -- ROM-bound boss state, reduces the native HP byte at a fixed frame, and
 -- records the stock/DX writer PCs which touch either physical BG map. Run it
 -- only through the project single-flight launcher.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("DEATH_WRITERS_OUT"),
   "DEATH_WRITERS_OUT is required")
@@ -115,7 +127,7 @@ callbacks:add("frame", function()
   end
   frame = frame + 1
   emu:setKeys(0)
-  if frame == KILL_FRAME then emu:write8(0xDCBB, 0) end
+  if frame == KILL_FRAME then native_assistance.write(0xDCBB, 0) end
   if entered < 0 and emu:read8(0xD880) == 0x17 then entered = frame end
   if entered >= 0 and frame - entered >= HOLD_FRAMES then
     finish("ok", "death-art-hold-observed")

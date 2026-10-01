@@ -2,6 +2,18 @@
 -- TOP 3 / 9999 SEC"). PICK=0 -> A on OPENING START; PICK=1 -> DOWN then A on
 -- GAME START. Force DCFD=1. After selecting, HOLD (no input) and log
 -- D880 + screenshot until a screen with score text (rows >=7 populated) appears.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local OUT = os.getenv("OUT") or "/tmp/ls2"
 local PICK = tonumber(os.getenv("PICK") or "1")
 local f, prevd, dumped = 0, -1, false
@@ -27,7 +39,7 @@ local function dumpall(tag)
 end
 callbacks:add("frame", function()
   f = f + 1
-  emu:write8(0xDCFD, 0x01)
+  native_assistance.write(0xDCFD, 0x01)
   local k = 0
   if PICK==1 then k = press(180,186,0x80) | press(210,216,0x01)   -- GAME START
   else            k = press(210,216,0x01) end                    -- OPENING START

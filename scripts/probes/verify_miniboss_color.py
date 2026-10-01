@@ -86,7 +86,8 @@ callbacks:add("frame", function()
     -- During gameplay: walk right + fire + godmode to live long enough
     -- to reach the gargoyle mini-boss section
     emu:setKeys(KEY_RIGHT + (f % 4 == 0 and KEY_A or 0))
-    game_write(0xDCDD, 0x17); game_write(0xDCDC, 0xFF); game_write(0xDCBB, 0xFF)
+    -- #37: DCBB is health; DCDD/DCDC are native inventory/cursor state.
+    game_write(0xDCBB, 0xFF)
 
     -- Force DCB8 to advance into mini-boss section by writing it directly.
     -- DCB8=2 spawns the gargoyle, DCB8=5 spawns the spider.

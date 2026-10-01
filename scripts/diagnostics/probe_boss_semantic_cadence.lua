@@ -1,6 +1,18 @@
 -- Measure whether consecutive boss map publications actually change the
 -- palette plane. The Python/shell owner must launch this through the project
 -- single-flight wrapper and terminate only after this probe calls emu:stop().
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BOSS_SEMANTIC_OUT"),
   "BOSS_SEMANTIC_OUT is required")
@@ -243,9 +255,7 @@ callbacks:add("frame", function()
   -- D-range reads/writes until the runtime restores bank 0/1.
   local svbk = emu:read8(0xFF70) & 0x07
   if svbk ~= 0 and svbk ~= 1 then return end
-  emu:write8(0xDCBB, 0xF0)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCDD, 0xFF)
+  native_assistance.write(0xDCBB, 0xF0)
   -- Synthetic entry states can retain the stock post-boss exit latches.
   -- Hold the same neutral arena state used by the speed, trajectory, and
   -- publication probes; these bytes do not select a pose or publication.

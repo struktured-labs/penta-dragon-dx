@@ -11,6 +11,18 @@
 --   Level 6: Boss11 + Boss12 (16 entries)
 --   Level 7: Boss13 + Boss14 + all prev bosses (24 entries)
 --   Level 8: Boss15 + Boss16 (6 entries)
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local BASE = "/home/struktured/projects/penta-dragon-dx-claude"
 local LOG_PATH = BASE .. "/tmp/game_start_test/autoplay_full_log.txt"
@@ -108,7 +120,7 @@ local function switchToLevel(lvl)
     local level = LEVELS[lvl]
     emu:write8(0xFFAC, level.ffac)
     emu:write8(0xFFAD, level.ffad)
-    emu:write8(0xDCB8, 0)  -- reset section counter to start of new level
+    native_assistance.write(0xDCB8, 0)  -- reset section counter to start of new level
     currentLevel = lvl
     levelBossKills = 0
     logMsg(string.format("=== LEVEL SWITCH → %d: %s ===", lvl, level.name))
@@ -287,8 +299,6 @@ callbacks:add("frame", function()
     end
 
     -- Infinite HP
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
 
     local boss = emu:read8(0xFFBF)
     local ffc1 = emu:read8(0xFFC1)
@@ -296,7 +306,7 @@ callbacks:add("frame", function()
     -- Section forcing: keep DCBA armed and entity slots clear
     if f <= sectionForceEnd and boss == 0 then
         if emu:read8(0xFFD6) < 0x1E then emu:write8(0xFFD6, 0x1E) end
-        emu:write8(0xDCBA, 0x01)
+        native_assistance.write(0xDCBA, 0x01)
         if f % 15 == 0 then
             for _, addr in ipairs(ENTITY_SLOT_ADDRS) do
                 emu:write8(addr, 0x00)
@@ -358,7 +368,7 @@ callbacks:add("frame", function()
             -- Activate section forcing for next boss spawn
             sectionForceEnd = f + 36000
             -- Reset DCB8 to ensure we hit boss entries quickly
-            emu:write8(0xDCB8, 1)
+            native_assistance.write(0xDCB8, 1)
 
             -- Screenshot LAST
             takeScreenshot("kill_" .. bName .. "_L" .. currentLevel .. "_" .. bossKillCount)

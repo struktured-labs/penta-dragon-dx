@@ -129,7 +129,8 @@ callbacks:add("frame", function()
 
     -- Sustained scroll: walk right + godmode
     emu:setKeys(KEY_RIGHT)
-    emu:write8(0xDCDD, 0x17); emu:write8(0xDCDC, 0xFF); emu:write8(0xDCBB, 0xFF)
+    -- #37/#41: physical bank1 health only; DCDD/DCDC are native menu state.
+    emu.memory.wram:write8(0x1CBB, 0xFF)
 
     local elapsed = f - gameplay_at
     -- Capture pal RAM + attr histogram every frame for the measurement window

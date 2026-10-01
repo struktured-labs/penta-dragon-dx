@@ -8,6 +8,18 @@
 -- actions (move + fire) for the measurement window. Count D887 transitions
 -- only during the gameplay window. Idle title-screen comparison is useless
 -- because the sound engine produces nothing on the title menu.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = os.getenv("STATE_PATH") or "tmp/penta_d887.txt"
 local MEASURE_FRAMES = tonumber(os.getenv("MEASURE_FRAMES") or "600")
@@ -133,9 +145,7 @@ callbacks:add("frame", function()
     emu:setKeys(input)
 
     -- Godmode HP so we don't die mid-test
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCBB, 0xFF)
+    native_assistance.write(0xDCBB, 0xFF)
 
     local sampled_pc = register("PC")
     local d887 = emu:read8(0xD887)

@@ -1,6 +1,18 @@
 -- Trace D880/FFBA/scene-cache/active-table over time in an arena, to see if
 -- D880 oscillates (sound-state) and makes scene_detect load the wrong table.
 -- Target from /tmp/alt_target.txt. Logs every 10 frames for ~150 frames.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local TITLE={{180,185,0x80},{193,198,0x01},{241,246,0x01},{291,296,0x01},{341,346,0x08},{391,396,0x01}}
 local function log(m) local h=io.open("/tmp/ttrace.log","a"); if h then h:write(m.."\n");h:close() end end
 do local h=io.open("/tmp/ttrace.log","w"); if h then h:write("table trace\n");h:close() end end
@@ -21,11 +33,11 @@ callbacks:add("frame",function()
   emu:write8(0xFFBA,pre);emu:write8(0xDF0C,0);emu:write8(0xDF1D,0);sub="pr";pf=0
  elseif sub=="pr" then emu:setKeys(0x0C);pf=pf+1;if pf>=10 then emu:setKeys(0);sub="rl";pf=0 end
  elseif sub=="rl" then emu:setKeys(0);pf=pf+1;if pf>=10 then sub="w";pf=0 end
- elseif sub=="w" then pf=pf+1;emu:write8(0xDCDC,0xFF);emu:write8(0xDCDD,0xFF)
+ elseif sub=="w" then pf=pf+1
   if emu:read8(0xD880)==TGT then sub="trace";pf=0;cf=0;log("reached arena f"..f)
   elseif pf>400 then at=at+1; if at>=8 then log("giveup");done=true else sub="pre" end end
  elseif sub=="trace" then
-  emu:write8(0xDCDC,0xFF);emu:write8(0xDCDD,0xFF); cf=cf+1
+   cf=cf+1
   local d=emu:read8(0xD880)
   seen[d]=(seen[d] or 0)+1
   if cf<=70 then

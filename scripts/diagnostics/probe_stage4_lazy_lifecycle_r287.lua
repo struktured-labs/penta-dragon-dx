@@ -12,6 +12,18 @@
 -- Harness writes are limited to the established level-select/alive controls,
 -- temporary stage identity for the two deterministic departure calls, one
 -- cache-byte mismatch used to force the Stage-7 dirty route, and CPU input.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("STAGE4_LIFECYCLE_OUT"),
   "STAGE4_LIFECYCLE_OUT required")
@@ -660,7 +672,7 @@ local function route_frame()
   end
 
   if route_phase == "level-select" and not route_confirmed then
-    emu:write8(0xDCFD, 0x01)
+    native_assistance.write(0xDCFD, 0x01)
     emu:write8(0xFFBA, route_target)
     seed_sram()
     if route_tick % 60 >= 10 and route_tick % 60 < 16 then emu:setKeys(KEY_A)
@@ -675,9 +687,7 @@ local function route_frame()
   end
 
   emu:setKeys(0)
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xF0)
+  native_assistance.write(0xDCBB, 0xF0)
   emu:write8(0xFFBA, route_target)
   if emu:read8(0xD880) == route_scene and emu:read8(0xFFC1) == 1 then
     route_stable = route_stable + 1
@@ -950,9 +960,7 @@ callbacks:add("frame", function()
 
   if phase == "wait-armed-state" then
     emu:setKeys(0)
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCBB, 0xF0)
+    native_assistance.write(0xDCBB, 0xF0)
     emu:write8(0xFFBA, STAGE4_TARGET)
     if state_stable(ARMED_STATE) then
       if not require_live(complete_state_size(COLD_STATE) ~= nil,

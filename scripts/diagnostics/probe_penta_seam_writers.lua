@@ -1,6 +1,18 @@
 -- Trace the one Penta Dragon physical-map seam cell which can momentarily
 -- retain palette 0 while its tile already requires palette 1. The owner must
 -- launch this through the project single-flight wrapper.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("PENTA_SEAM_OUT"), "PENTA_SEAM_OUT is required")
 local FRAMES = tonumber(os.getenv("PENTA_SEAM_FRAMES") or "750")
@@ -108,9 +120,7 @@ callbacks:add("frame", function()
     install_probes()
   end
   started = true
-  emu:write8(0xDCBB, 0xF0)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCDD, 0xFF)
+  native_assistance.write(0xDCBB, 0xF0)
   frame = frame + 1
   cell_snapshot("frame")
   if frame >= FRAMES then

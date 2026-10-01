@@ -281,7 +281,7 @@ PROBE_CONSTANTS = {
 PROBE_REQUIRED_SNIPPETS = (
     'local OUT = assert(os.getenv("STAGE4_MENU_OUT"),',
     "local raw_vram = assert(emu.memory.vram)",
-    "emu:write8(0xDCFD, 0x01)",
+    "native_assistance.write(0xDCFD, 0x01)",
     "emu:write8(0xFFBA, TARGET)",
     'phase = "level_select"',
     'phase = "loading"',

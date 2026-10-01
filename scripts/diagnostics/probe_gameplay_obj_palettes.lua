@@ -95,8 +95,7 @@ callbacks:add("frame", function()
     emu:setKeys(0)
 
     -- Keep old combat anchors alive while their original state settles.
-    game_write(0xDCDD, 0x17)
-    game_write(0xDCDC, 0xFF)
+    -- #37: DCBB is health; DCDD/DCDC are native inventory/cursor state.
     game_write(0xDCBB, 0xFF)
 
     if frame <= SETTLE then return end

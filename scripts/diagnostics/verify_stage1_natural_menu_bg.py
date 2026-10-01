@@ -758,7 +758,7 @@ def main() -> int:
             "report_path": str(output), "report_sha256": digest(output.read_bytes()),
             "blank_sram": args.blank_sram,
             "final_state": report.get("final_state"),
-            "fixture_writes": "DCDD=17,DCDC=FF,DCBB=FF each active frame",
+            "fixture_writes": "physical bank1 DCBB=FF each active frame (#37/#41); native inventory/cursor DCDC/DCDD untouched",
             "qualification": "export provenance only; not a scene0B or readiness pass",
         }, indent=2) + "\n")
     obj_evidence = None

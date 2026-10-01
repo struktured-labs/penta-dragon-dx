@@ -3,6 +3,18 @@
 -- The probe loads the requested state itself after its callbacks are attached.
 -- Setting the arena HP byte to zero takes the game's original transition into
 -- D880=$17; no PC, stack, scene, or rendering state is patched.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("DEATH_OUT"), "DEATH_OUT is required")
 local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
@@ -255,7 +267,7 @@ callbacks:add("frame", function()
     emu:setKeys(0)
 
     if frame == KILL_FRAME then
-        emu:write8(0xDCBB, 0)
+        native_assistance.write(0xDCBB, 0)
     end
 
     local scene = emu:read8(0xD880)

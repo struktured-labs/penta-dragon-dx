@@ -1,6 +1,18 @@
 -- Traverse the verified secret-jet state with controller input and retain
 -- phase/room/miniboss screenshots. Only player survivability is assisted;
 -- progression, enemy HP, room changes, and boss flags remain game-owned.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("HIDDEN_SHMUP_OUT"), "HIDDEN_SHMUP_OUT required")
 local SHOT_PREFIX = assert(os.getenv("HIDDEN_SHMUP_SHOT_PREFIX"),
@@ -53,9 +65,7 @@ callbacks:add("frame", function()
 
     -- Keep Sara alive. DCBB is game-owned during minibosses, so only refresh
     -- its corridor-timer role while no miniboss is active.
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    if emu:read8(0xFFBF) == 0 then emu:write8(0xDCBB, 0xFF) end
+    if emu:read8(0xFFBF) == 0 then native_assistance.write(0xDCBB, 0xFF) end
 
     -- Sweep a wide rectangle while firing. This is controller input, not a
     -- scene/state redirect, and lets native collision/progression logic run.

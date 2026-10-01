@@ -4,6 +4,18 @@
 -- NATURAL_MODE: When true, disables ROM patching and DCB8 resets.
 -- Lets the game advance naturally through sections and levels.
 -- Monitors FFAC/FFAD for level transitions.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local NATURAL_MODE = true  -- Set to true for natural progression
 --
 -- Features:
@@ -734,7 +746,7 @@ local function detectEvents(state, ents)
                 -- CRITICAL: Do all ROM/memory writes BEFORE screenshot (which corrupts IO)
                 local nextBoss = (bossKillCount % 16) + 1  -- cycle through ALL 16 bosses
                 patchEntry2(nextBoss)
-                emu:write8(0xDCB8, 1)  -- set DCB8 to 1 so next advance → 2 (boss entry)
+                native_assistance.write(0xDCB8, 1)  -- set DCB8 to 1 so next advance → 2 (boss entry)
                 activateEntityCheckNOP()
                 sectionForceEnd = f + 36000  -- 10 minutes: effectively permanent forcing
                 -- Now log and screenshot (IO may be corrupted after screenshot)
@@ -989,8 +1001,6 @@ callbacks:add("frame", function()
     end
 
     -- Infinite HP
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
 
     -- v9.4: 1-frame entity check NOP for section forcing
     -- After boss kill: NOP was written in prev frame → this frame's game loop uses NOP'd check
@@ -1021,7 +1031,7 @@ callbacks:add("frame", function()
         if emu:read8(0xFFD6) < 0x1E then
             emu:write8(0xFFD6, 0x1E)
         end
-        emu:write8(0xDCBA, 0x01)  -- keep DCBA armed
+        native_assistance.write(0xDCBA, 0x01)  -- keep DCBA armed
         -- Every 15 frames, zero entity slots to help section advance fire
         if f % 15 == 0 then
             for _, addr in ipairs(ENTITY_SLOT_ADDRS) do

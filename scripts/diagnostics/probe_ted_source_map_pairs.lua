@@ -1,6 +1,18 @@
 -- Capture Ted's packed 24x24 source beside both native physical BG maps.
 -- This establishes the renderer's source-to-map transform without embedding
 -- or guessing any stock graphics in the Python-side contract.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("TED_SOURCE_MAP_OUT"))
 local FRAMES = tonumber(os.getenv("TED_SOURCE_MAP_FRAMES") or "600")
@@ -32,9 +44,7 @@ callbacks:add("frame", function()
         local svbk = emu:read8(0xFF70) & 0x07
         if svbk ~= 0 and svbk ~= 1 then return end
     end
-    emu:write8(0xDCBB, 0xF0)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    native_assistance.write(0xDCBB, 0xF0)
     emu:write8(0xD888, 0)
     emu:write8(0xDD06, 0)
     if emu:read8(0xD880) ~= SCENE then finish("wrong-scene"); return end

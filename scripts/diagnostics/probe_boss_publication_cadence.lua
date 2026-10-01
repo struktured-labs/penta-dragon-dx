@@ -1,5 +1,17 @@
 -- Record native 24x24 map publications without changing boss animation.
 -- The Python owner launches this only through mgba-qt-singleflight.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BOSS_CADENCE_OUT"), "BOSS_CADENCE_OUT required")
 local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
@@ -189,9 +201,7 @@ callbacks:add("frame", function()
   if emu:read8(0xD880) == EXPECTED_SCENE then
     scene_drift_frames = 0
     -- Keep the contestants alive without writing pose, animation, or timing.
-    emu:write8(0xDCBB, 0xF0)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    native_assistance.write(0xDCBB, 0xF0)
     -- Synthetic boss-entry states can inherit the one-shot arena-exit latches
     -- used after a defeated/finished attack phase.  HP refresh alone does not
     -- clear them: Ted advances D880 to $FF shortly after reload and the probe

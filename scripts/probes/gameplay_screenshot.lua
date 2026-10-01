@@ -1,5 +1,17 @@
 -- Capture screenshot during gameplay. Auto-press start, get to dungeon, save N
 -- screenshots at fixed game frames.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local PREFIX = os.getenv("STATE_PREFIX") or "/tmp/penta_gp"
 local SHOTS_AT = {1500, 1800, 2100, 2400, 2700}  -- gameplay frames to snap
 local MAX_FRAMES = 3000
@@ -32,7 +44,7 @@ callbacks:add("frame", function()
     -- During gameplay: walk right + fire
     if emu:read8(0xFFC1) == 1 then
         emu:setKeys(KEY_RIGHT + (f % 4 == 0 and KEY_A or 0))
-        emu:write8(0xDCDD, 0x17); emu:write8(0xDCDC, 0xFF); emu:write8(0xDCBB, 0xFF)
+          native_assistance.write(0xDCBB, 0xFF)
     end
 
     if shot_idx <= #SHOTS_AT and f >= SHOTS_AT[shot_idx] then

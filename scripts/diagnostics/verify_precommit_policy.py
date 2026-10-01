@@ -64,6 +64,8 @@ def main() -> int:
         (sys.executable, "-m", "compileall", "-q", "scripts/diagnostics", "scripts/probes"),
         (sys.executable, "scripts/diagnostics/test_precommit_artifact_policy.py"),
         (sys.executable, "scripts/diagnostics/verify_live_regression.py", "--check-contract"),
+        # #37/#41: no new mapped/banked or fake-health assistance writes.
+        (sys.executable, "scripts/diagnostics/verify_physical_assistance_inventory.py"),
         (
             sys.executable,
             "scripts/diagnostics/verify_ted_contract_controls.py",

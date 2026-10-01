@@ -1,6 +1,18 @@
 -- Verify current-ROM BG attributes and CRAM for every pickup signature in one
 -- real Stage 1 savestate. The caller supplies a tab-separated specification:
 -- name<TAB>palette<TAB>tile0,tile1,tile2,tile3.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("PICKUP_LIVE_OUT"), "PICKUP_LIVE_OUT required")
 local SCREENSHOT = assert(
@@ -456,9 +468,7 @@ callbacks:add("frame", function()
     end
 
     -- Keep Sara alive while stationary enemy-heavy captures settle.
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCBB, 0xFF)
+    native_assistance.write(0xDCBB, 0xFF)
 
     if frame >= SETTLE and frame < SETTLE + CAPTURE_PUBLICATION_FRAMES then
         -- screenshot() captures the framebuffer produced before this callback.

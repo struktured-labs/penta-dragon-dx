@@ -6,6 +6,18 @@
 -- buffer renders stale dungeon tiles as walls/gaps, with the native fixed HUD
 -- sprite at the lower left. This probe checks both planes on every visible
 -- frame, including the first frame of SELECT entry and the final exit edge.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("MENU_WINDOW_ORDER_OUT"))
 local SCREENSHOT = assert(os.getenv("MENU_WINDOW_ORDER_SCREENSHOT"))
@@ -494,9 +506,7 @@ callbacks:add("frame", function()
 
   if emu:read8(0xFFC1) == 1 then
     -- Keep the route alive without changing room/window state.
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCBB, 0xFF)
+    native_assistance.write(0xDCBB, 0xFF)
   end
 
   local lcdc = emu:read8(0xFF40)

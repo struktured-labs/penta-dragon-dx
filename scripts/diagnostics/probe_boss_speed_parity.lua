@@ -13,6 +13,18 @@
 -- Scene holding is copied verbatim in intent from probe_boss_publication_
 -- cadence.lua so OG and DX are pinned identically; these bytes are HP and
 -- arena-exit latches, not the publication clock or pose selector.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BOSS_SPEED_OUT"), "BOSS_SPEED_OUT required")
 local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
@@ -151,7 +163,7 @@ callbacks:add("frame", function()
     in_scene = true
     scene_drift_frames = 0
     -- Keep the contestants alive without writing pose, animation, or timing.
-    emu:write8(0xDCBB, 0xF0)
+    native_assistance.write(0xDCBB, 0xF0)
     -- #37: DCDC/DCDD belong to native inventory state, not health.
     -- Leave them untouched; the remaining arena-hold writes are deliberate.
     emu:write8(0xD888, 0x00)

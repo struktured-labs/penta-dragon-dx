@@ -4,6 +4,18 @@
 -- this probe twice through the checked-in single-flight launcher.  This Lua
 -- owns no emulator launch and writes only below the verifier's repo tmp/
 -- replay directory.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local TARGET = 3
 local EXPECTED_SCENE = 0x05
@@ -690,7 +702,7 @@ callbacks:add("frame", function()
     elseif frame >= 391 and frame < 397 then keys = KEY_A end
     if frame >= 450 then phase = "level_select"; phase_frame = 0 end
   elseif phase == "level_select" and not confirmed then
-    emu:write8(0xDCFD, 0x01)
+    native_assistance.write(0xDCFD, 0x01)
     emu:write8(0xFFBA, TARGET)
     seed_sram()
     if frame % 60 >= 10 and frame % 60 < 16 then keys = KEY_A end
@@ -746,9 +758,7 @@ callbacks:add("frame", function()
   if stage_seen then
     -- Standard stationary/invincibility fixture writes used by the checked-in
     -- later-stage integrity and speed routes. They do not touch renderer state.
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCBB, 0xF0)
+    native_assistance.write(0xDCBB, 0xF0)
     if not stage4_identity() then
       counters.stage_context_violations =
         counters.stage_context_violations + 1

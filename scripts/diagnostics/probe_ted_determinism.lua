@@ -1,5 +1,17 @@
 -- Deterministic full-plane Ted trace. Capture both 32x32 physical BG maps on
 -- every consecutive frame; Python owns all interpretation and comparison.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("TED_DETERMINISM_OUT"))
 local FRAMES = tonumber(os.getenv("TED_DETERMINISM_FRAMES") or "900")
@@ -228,9 +240,7 @@ callbacks:add("frame", function()
     emu:setKeys(0)
     local svbk = emu:read8(0xFF70) & 0x07
     if svbk ~= 0 and svbk ~= 1 then return end
-    emu:write8(0xDCBB, 0xF0)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    native_assistance.write(0xDCBB, 0xF0)
     -- D888/DD06 participate in Ted's native animation/publication state.
     -- Clearing them every frame produced a perfectly deterministic frozen
     -- pose and let stale serialized WRAM pass as if it were live coverage.

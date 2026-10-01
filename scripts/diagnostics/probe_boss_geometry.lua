@@ -1,6 +1,18 @@
 -- Sample a live boss arena's BG tile IDs and CGB attributes from an mGBA
 -- state. The Python verifier owns boss-specific interpretation and terminates
 -- the exact guarded emulator process after this probe publishes its marker.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BOSS_GEOMETRY_OUT"),
   "BOSS_GEOMETRY_OUT is required")
@@ -133,9 +145,7 @@ callbacks:add("frame", function()
 
   -- Hold both combatants alive long enough to cover multiple animation
   -- phases without changing the boss state machine itself.
-  emu:write8(0xDCBB, 0xF0)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCDD, 0xFF)
+  native_assistance.write(0xDCBB, 0xF0)
   emu:setKeys(0)
 
   -- A restored state can expose the map that was inactive when serialized.

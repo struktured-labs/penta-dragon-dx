@@ -1,4 +1,16 @@
 -- Natural cold GAME START followed by 600 consecutive hardware-OAM samples.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("FLASH_ATTR_OUT"))
 local LIMIT = tonumber(os.getenv("FLASH_ATTR_MAX_FRAMES") or "4000")
@@ -73,15 +85,11 @@ callbacks:add("frame", function()
   elseif phase == "seek" then
     keys = KEY_RIGHT
     visible_wait = visible_wait + 1
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0x17)
     if visible(0) and visible(2) then
       phase = "capture"
       keys = 0
     end
   else
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0x17)
     sample(0, 1)
     sample(2, 2)
     capture_frames = capture_frames + 1

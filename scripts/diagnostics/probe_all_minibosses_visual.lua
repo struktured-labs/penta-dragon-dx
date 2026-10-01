@@ -1,6 +1,18 @@
 -- Capture one complete temporary-descriptor miniboss through the real game
 -- spawn path.  DC04:DC08 must be the native five-entity group; checking only
 -- DC04 allowed deterministic but visually corrupt mixed-boss composites.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local OUT = assert(os.getenv("PENTA_MINIBOSS_REPORT"))
 local SCREENSHOT = assert(os.getenv("PENTA_MINIBOSS_SCREENSHOT"))
 local TARGET = tonumber(assert(os.getenv("PENTA_MINIBOSS_INDEX")))
@@ -127,19 +139,17 @@ callbacks:add("frame", function()
   end
 
   emu:setKeys(spawn_at < 0 and (KEY_RIGHT + ((frame % 8 < 2) and KEY_A or 0)) or 0)
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xFF)
+  native_assistance.write(0xDCBB, 0xFF)
   local elapsed = frame - gameplay_at
   if frame >= 560 and not armed then
-    emu:write8(0xDCB8, 0)
-    emu:write8(0xDCBA, 1)
+    native_assistance.write(0xDCB8, 0)
+    native_assistance.write(0xDCBA, 1)
     emu:write8(0xFFD6, 0x1E)
     for _, address in ipairs(ENTITY_SLOTS) do emu:write8(address, 0) end
     armed = true
   end
   if armed and emu:read8(0xFFBF) == 0 then
-    emu:write8(0xDCBA, 1)
+    native_assistance.write(0xDCBA, 1)
     emu:write8(0xFFD6, 0x1E)
     for _, address in ipairs(ENTITY_SLOTS) do emu:write8(address, 0) end
   end

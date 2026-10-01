@@ -1,6 +1,18 @@
 -- Verify lava colorization: reach stage 5 (force FFBA only in level-select),
 -- then in the dungeon read WRAM 0xDA00[molten IDs] (should be 5 = pal5),
 -- dump BG pal5 CRAM, and screenshot. TARGET via env or default 4 (stage 5).
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local TARGET = tonumber(os.getenv("LAVA_TARGET") or "4")
 local OUT = os.getenv("LAVA_OUT") or "/tmp/lava_verify"
 local KEY_A, KEY_START = 0x01, 0x08
@@ -20,7 +32,7 @@ local function rdbg(p,c) local i=p*8+c*2; emu:write8(0xFF68,i); local lo=emu:rea
 callbacks:add("frame", function()
   if done then return end
   f = f + 1
-  emu:write8(0xDCFD, 0x01)
+  native_assistance.write(0xDCFD, 0x01)
   if not seeded and f >= 100 then seedSRAM(); seeded = true end
   local d880, ffc1 = emu:read8(0xD880), emu:read8(0xFFC1)
   if phase == "title" then
@@ -37,7 +49,7 @@ callbacks:add("frame", function()
     return
   end
   if phase == "play" then
-    emu:write8(0xDCDD,0x17); emu:write8(0xDCDC,0xFF); emu:write8(0xDCBB,0xF0)
+      native_assistance.write(0xDCBB, 0xF0)
     emu:setKeys(0x10 + ((f % 4 < 2) and KEY_A or 0))
     local dt = f - conf
     -- periodic log of palette + molten-entry state during stable gameplay

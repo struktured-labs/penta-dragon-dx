@@ -18,6 +18,18 @@
 --   STAGE1_TILEMAP_ROM_SHA256  exact candidate digest
 --   STAGE1_TILEMAP_COPIER_SHA256  reviewed fixed-bank copier digest
 --   STAGE1_TILEMAP_ORACLE_SCHEMA  expected-plane contract identifier
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("STAGE1_TILEMAP_OUT"))
 local DONE = assert(os.getenv("STAGE1_TILEMAP_DONE"))
@@ -705,9 +717,7 @@ callbacks:add("frame", function()
 
   play_frame = play_frame + 1
   -- Preserve normal room logic but keep this diagnostic route alive.
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xFF)
+  native_assistance.write(0xDCBB, 0xFF)
   local leg = math.floor((play_frame % 480) / 120)
   local movement
   if leg == 0 then movement = KEY_RIGHT

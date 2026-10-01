@@ -1,4 +1,17 @@
 -- Prove the reviewed Stage-1 spike material split is live in both BG maps.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+-- Global, not local: this chunk is already at Lua's 200-local limit.
+native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("STAGE1_SPIKE_OUT"))
 -- Open the startup trace before any reviewed-ROM contract checks.  A failed
@@ -2067,7 +2080,7 @@ callbacks:add("frame", function()
   if frame == force_miniboss_frame then
     emu:write8(0xD880, 0x0A)
     emu:write8(0xFFBF, 0x01)
-    emu:write8(0xDCB8, 0x02)
+    native_assistance.write(0xDCB8, 0x02)
   end
 
   if focus_start >= 0 and frame >= focus_start and frame <= focus_end then
@@ -2245,8 +2258,8 @@ callbacks:add("frame", function()
     -- Reproduce the hardware report as one uninterrupted state sequence:
     -- use an item, close the menu without moving, then enter the warning
     -- band while the same hazard rows remain visible.
-    emu:write8(0xDCDD, 0x00)
-    emu:write8(0xDCDC, 0x0C)
+    native_assistance.write(0xDCDD, 0x00)
+    native_assistance.write(0xDCDC, 0x0C)
     low_health_forced_frames = low_health_forced_frames + 1
     if emu:read8(0xD880) == 0x0A then
       low_health_scene_frames = low_health_scene_frames + 1
@@ -2255,13 +2268,11 @@ callbacks:add("frame", function()
       and frame < effective_menu_use_frame then
     -- Make the selected healing item usable; the historical fixture is at
     -- full health, so an A pulse otherwise exercises no redraw at all.
-    emu:write8(0xDCDD, 0x01)
-    emu:write8(0xDCDC, 0x20)
+    native_assistance.write(0xDCDD, 0x01)
+    native_assistance.write(0xDCDC, 0x20)
   elseif effective_menu_use_frame < 0 or menu_closed_frame >= 0 then
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
   end
-  emu:write8(0xDCBB, 0xFF)
+  native_assistance.write(0xDCBB, 0xFF)
   if frame >= 80 then
     if frame >= transient_check_start then
       local bg5_text = words_text(palette_words(5))

@@ -1,5 +1,17 @@
 -- Capture a long, native-animation boss receipt without changing its motion.
 -- The Python owner launches this only through mgba-qt-singleflight.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BOSS_ANIMATION_OUT"), "BOSS_ANIMATION_OUT required")
 local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
@@ -281,9 +293,7 @@ callbacks:add("frame", function()
     if game_wram_visible then
         -- Keep both contestants alive so the receipt observes animation
         -- rather than a boss-exit cut. These do not alter pose or timing.
-        emu:write8(0xDCBB, 0xF0)
-        emu:write8(0xDCDC, 0xFF)
-        emu:write8(0xDCDD, 0xFF)
+        native_assistance.write(0xDCBB, 0xF0)
     end
     -- D888/DD06 participate in Ted's native animation/publication state.
     -- Writing them here previously forced the boss out of scene $10 after
