@@ -45,6 +45,18 @@ if env.get('ENTRY_NATIVE_TAP'):
  capture=bulk/('penta-'+out.name+'-av')
  capture.mkdir(exist_ok=False)
  env.update(LD_PRELOAD=str(tap),PENTA_NATIVE_AV_PREFIX=str(capture/'native'),ENTRY_AUDIO_ENABLED='1')
+# #43 adoption: a restored native capture always uses the pre-first-CPU
+# startup barrier, so pre-restore PCM/video can never enter the epoch. The
+# ungated path survives only as an explicitly labeled negative control.
+native_start_gate=None
+if capture and not cold:
+ if env.get('ENTRY_NATIVE_START_GATE'):
+  native_start_gate='barrier'
+ elif env.get('ENTRY_NATIVE_UNGATED_NEGATIVE_CONTROL')=='1':
+  native_start_gate='ungated-negative-control'
+ else:
+  env['ENTRY_NATIVE_START_GATE']=str(out/'native-start-gate')
+  native_start_gate='barrier'
 audio_options=[]
 if env.get('ENTRY_AUDIO_ENABLED')=='1':
  # This Qt build's overrideMute(false) treats any nonnegative fastForwardMute
@@ -68,6 +80,7 @@ receipt['probe_sha256']=hashlib.sha256((out/'probe.lua').read_bytes()).hexdigest
 receipt['runner_sha256']=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 receipt['guard_sha256']=hashlib.sha256((root/'scripts/mgba-qt-singleflight').read_bytes()).hexdigest()
 receipt['audio_options']=audio_options
+receipt['native_start_gate']=native_start_gate
 if capture and result.returncode == 0:
  from finalize_native_av_capture import finalize
  receipt['native_capture']=finalize(capture)
