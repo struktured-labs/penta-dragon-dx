@@ -1155,7 +1155,65 @@ def recapture_from_fixtures(
     return results
 
 
-def cached(output: Path, rom_md5: str) -> bool:
+SINGLEFLIGHT_WRAPPERS = frozenset(
+    (ROOT / "scripts" / name).resolve()
+    for name in ("mgba-qt-singleflight", "mgba-headless-singleflight")
+)
+
+
+def runtime_fingerprint(snapshot: dict | None) -> list[dict] | None:
+    """#32: the emulator-library identity that produced a cached state.
+
+    The blank-Ted failure came from a runtime library, not ROM bytes, so a
+    ROM-md5-only cache would keep serving states captured under the broken
+    library after the runtime was corrected (or vice versa).
+    """
+    if snapshot is None:
+        return None
+    return sorted(
+        ({"mode": mode, "sha256": library["sha256"]}
+         for mode in ("qt", "headless")
+         for library in snapshot[mode]["libraries"]
+         if "mgba" in Path(library["path"]).name),
+        key=lambda item: (item["mode"], item["sha256"]),
+    )
+
+
+def cgb_runtime_preflight(rom: Path, mgba: str) -> list[dict] | None:
+    """Reject the known-broken CGB latch runtime before any capture or reuse.
+
+    The snapshot inspects the binary the checked-in single-flight guard
+    resolves, so a different --mgba would bypass it; refuse that instead of
+    silently checking the wrong executable. DMG stock controls do not touch
+    the CGB-only FF72..FF74 latches and are exempt.
+    """
+    if not rom.read_bytes()[0x143] & 0x80:
+        return None
+    if Path(mgba).resolve() not in SINGLEFLIGHT_WRAPPERS:
+        raise RuntimeError(
+            f"--mgba {mgba} is not a checked-in single-flight wrapper; the "
+            "#32 CGB runtime preflight only covers the guard-resolved binary. "
+            "No emulator tests were started."
+        )
+    snapshot = emulator_runtime_snapshot()
+    reject_known_broken_cgb_runtime(snapshot)
+    return runtime_fingerprint(snapshot)
+
+
+def stamp_runtime(output: Path, rom_md5: str, runtime: list[dict] | None) -> None:
+    manifest = output / "manifest.json"
+    if runtime is None or not manifest.is_file():
+        return
+    data = json.loads(manifest.read_text())
+    if data.get("rom_md5") != rom_md5:
+        return
+    data["runtime_mgba_libraries"] = runtime
+    temporary = output / "manifest.json.tmp"
+    temporary.write_text(json.dumps(data, indent=2) + "\n")
+    temporary.replace(manifest)
+
+
+def cached(output: Path, rom_md5: str, runtime: list[dict] | None = None) -> bool:
     manifest = output / "manifest.json"
     if not manifest.is_file():
         return False
@@ -1165,6 +1223,7 @@ def cached(output: Path, rom_md5: str) -> bool:
         return False
     return (
         data.get("rom_md5") == rom_md5
+        and (runtime is None or data.get("runtime_mgba_libraries") == runtime)
         and all(
             (output / f"boss{target}_{name}.ss0").is_file()
             and (output / f"boss{target}_{name}.ss0").stat().st_size >= 1024
@@ -1215,14 +1274,18 @@ def main() -> int:
     # #32: the installed library can silently discard FF72–FF74 writes.
     # Apply the existing release-runner preflight before even reusing states.
     # Stock DMG controls do not depend on those CGB-only registers.
-    if args.rom.read_bytes()[0x143] & 0x80:
-        reject_known_broken_cgb_runtime(emulator_runtime_snapshot())
+    try:
+        runtime = cgb_runtime_preflight(args.rom, args.mgba)
+    except RuntimeError as error:
+        print(f"FAIL: runtime preflight: {error}")
+        return 2
 
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     rom_md5 = md5(args.rom)
     targets = args.target or list(range(len(BOSS_NAMES)))
-    if args.target is None and not args.force and cached(output, rom_md5):
+    if (args.target is None and not args.force
+            and cached(output, rom_md5, runtime)):
         print(f"Stream boss states are current for {rom_md5}.")
         return 0
 
@@ -1241,6 +1304,7 @@ def main() -> int:
         except Exception as error:
             print(f"FAIL: boss fixture recapture: {error}")
             return 1
+        stamp_runtime(output, rom_md5, runtime)
         for target, detail in results:
             print(f"Boss {target} {BOSS_NAMES[target]}: PASS | {detail}")
         print(
@@ -1336,6 +1400,8 @@ def main() -> int:
         ],
     }
     if args.target is None:
+        if runtime is not None:
+            manifest["runtime_mgba_libraries"] = runtime
         temporary = output / "manifest.json.tmp"
         temporary.write_text(json.dumps(manifest, indent=2) + "\n")
         temporary.replace(output / "manifest.json")
