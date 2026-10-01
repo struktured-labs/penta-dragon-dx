@@ -37,6 +37,41 @@ def parse_report(path: Path) -> dict[str, str]:
     )
 
 
+# Reviewed title selector cursor (r536 title-cursor gate, OPENING row at
+# x24,y64): an orange right-pointing triangle on the title BG. #35 delays the
+# cold footer capture (f35 -> f52+), so the blinking cursor can be visible.
+# Only an exact full-cell match at a menu-row cursor slot is excluded; any
+# other red pixel, or any differing cursor pixel, still fails.
+CURSOR_ROWS = ("00000000", "11000000", "11110000", "11111100",
+               "11111111", "11111100", "11110000", "11000000")
+CURSOR_COLORS = {"0": (24, 33, 99), "1": (255, 99, 33)}
+CURSOR_SLOTS = ((24, 64), (24, 80))
+
+
+def reviewed_cursor_slots(path: Path) -> list[tuple[int, int]]:
+    image = Image.open(path).convert("RGB")
+    found = []
+    for x0, y0 in CURSOR_SLOTS:
+        if all(image.getpixel((x0 + dx, y0 + dy)) == CURSOR_COLORS[row[dx]]
+               for dy, row in enumerate(CURSOR_ROWS) for dx in range(8)):
+            found.append((x0, y0))
+    return found
+
+
+def red_outside_cursor(path: Path, slots: list[tuple[int, int]]) -> int:
+    image = Image.open(path).convert("RGB")
+    width, height = image.size
+    count = 0
+    for y in range(height):
+        for x in range(width):
+            if any(x0 <= x < x0 + 8 and y0 <= y < y0 + 8 for x0, y0 in slots):
+                continue
+            red, green, blue = image.getpixel((x, y))
+            if red > 96 and red > green * 1.4 and red > blue * 1.4:
+                count += 1
+    return count
+
+
 def red_dominant_pixels(path: Path) -> int:
     with Image.open(path) as image:
         return sum(
@@ -176,7 +211,14 @@ def main() -> int:
                 failures.append(f"{key} attributes={value['attribute_palettes']}")
             if value["unsafe_attributes"] != 0:
                 failures.append(f"{key} unsafe attrs={value['unsafe_attributes']}")
-        if value["red_dominant_pixels"] != 0:
+        if key == "cold_footer" and value["red_dominant_pixels"]:
+            slots = reviewed_cursor_slots(screenshot)
+            value["reviewed_cursor_slots"] = [list(slot) for slot in slots]
+            value["red_outside_cursor"] = red_outside_cursor(screenshot, slots)
+            if value["red_outside_cursor"] != 0:
+                failures.append(f"{key} has {value['red_outside_cursor']} red pixels "
+                                "outside the reviewed cursor glyph")
+        elif value["red_dominant_pixels"] != 0:
             failures.append(f"{key} has {value['red_dominant_pixels']} red pixels")
         if value["visible_oam"]:
             failures.append(f"{key} retained visible OAM")

@@ -1,4 +1,4 @@
-"""Revalidate retained 126dd stream deterministic-suite evidence without an emulator."""
+"""Revalidate retained release-lock stream deterministic-suite evidence without an emulator."""
 from __future__ import annotations
 
 import json

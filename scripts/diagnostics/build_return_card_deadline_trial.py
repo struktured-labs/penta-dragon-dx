@@ -7,6 +7,12 @@ from pathlib import Path
 PARENT = 'f938ae85785b4bc30133dad1c39e5f45ee0bcbea249d94f160132970ce22be29'
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 2992a8a2... yields byte-identical
+# changes (same offsets, preimages and values) as on the original f938ae85...
+REPINNED_PARENT = '2992a8a2dbef89d5070afd97c498c1db0ab1d8f6cc46f65cd0ecd4f6937415ed'
+
+
 def payload():
     # Preserve the original private entry stack and include backup in interval1.
     code = bytearray.fromhex('E1 F1 E5 D5 C5 AF E0 D4 CD 0A 57')
@@ -22,7 +28,7 @@ def payload():
 
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact trial10 parent required')
     site, cave = 0x516ae, 0x51c20
     code = payload()

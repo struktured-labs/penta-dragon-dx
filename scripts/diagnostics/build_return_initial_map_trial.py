@@ -12,8 +12,14 @@ OLD = bytes.fromhex('F0 CE B7 28 09 7C C6 03 67 11 E0 C3 0E 00 3E 01 C9')
 PREFIX = bytes.fromhex('F0 C1 B7 20 03 3E 01 C9')
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent f23d6d09... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 2b797a6a...
+REPINNED_PARENT = 'f23d6d091211a754aff9eaab0694b59e258a89de5e2e1569c53d6d50008214bc'
+
+
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact 2b797 parent required')
     body = PREFIX + OLD
     if parent[OFFSET:OFFSET+len(body)] != OLD + b'\xff' * len(PREFIX):

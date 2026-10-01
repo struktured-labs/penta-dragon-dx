@@ -8,8 +8,14 @@ from build_return_palette_compact_trial import body
 PARENT = '8ac7fbe3b290f4743280961541fb81746046e89bbdabde6f2b914e73fd60888c'
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 3540f75e... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 8ac7fbe3...
+REPINNED_PARENT = '3540f75e14b7634d0dda6afb5199e4abc6c9a47c03fbb09eb2b610dd23ac7241'
+
+
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact deadline trial14 required')
     result = bytearray(parent)
     cursor = 0x5083

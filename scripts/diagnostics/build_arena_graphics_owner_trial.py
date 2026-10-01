@@ -16,8 +16,14 @@ SITES = ((0x7C7A, 'FA80D8D603FE06'),
          (0x563A, 'FA80D8FE102809FE0C'))
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 35b71de0... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 4eff32d4...
+REPINNED_PARENT = '35b71de0fea498e208e521d74e0dcd8abf0b11117f6f8bfd573b433487ef732e'
+
+
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact sound-alias scene-cache parent required')
     result = bytearray(parent)
     for bank in (13, 16):

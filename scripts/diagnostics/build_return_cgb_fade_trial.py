@@ -14,6 +14,12 @@ PARENT = '916ebb1858c6b9e91491081d82e93d00d283180ef44323f1f29c37a033e48deb'
 BASE = 0x551c
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 4d8f3fad... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 916ebb18...
+REPINNED_PARENT = '4d8f3fad9cb57f24cdd442402a5b4d2a67f9aeea683e20328d4ed8fd02645f8e'
+
+
 def payload(return_scoped=False, isolated=False, combined_entry=False, scheduled_write=False, fused_setup=False, card_tail=False):
     if card_tail and not fused_setup:
         raise ValueError('card tail requires fused setup')
@@ -221,7 +227,7 @@ def build(parent, return_scoped=False, isolated=False, combined_entry=False, sch
         raise ValueError('scheduled write requires combined entry')
     if combined_entry and not (return_scoped and isolated):
         raise ValueError('combined entry requires scoped isolated dispatch')
-    if hashlib.sha256(parent).hexdigest()!=PARENT: raise ValueError('exact916e parent required')
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT): raise ValueError('exact916e parent required')
     result=bytearray(parent)
     shade_hook=(0x15da,'CD7A0F','CD8942') if return_scoped else (0xf8f,'2AE047','CD8942')
     hooks=[shade_hook] if combined_entry else [(0x15d7,'CD0E0A','CD8942'),shade_hook]

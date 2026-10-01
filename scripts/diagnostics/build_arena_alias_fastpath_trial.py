@@ -14,6 +14,12 @@ PARENT = '35a8d40bc9ed8cf3d967d0c01df0674bcf119a0ec0364ef1bcb60493a9448af7'
 OLD_DETECTOR = '0097866f0577915fb02cadc5154f44d45214ba6d31748b9acc08e21140044cfd'
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 64732610... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 35a8d40b...
+REPINNED_PARENT = '6473261065407bc4e4c1d42bb49356f89bc04ce3031415896e4f4b6d13dcd0ab'
+
+
 def detector():
     a = Asm(0x6F90)
     a.db(*bytes.fromhex('FA80D8 210DDF BE C8'))  # original hot path bytewise
@@ -62,7 +68,7 @@ def detector():
 
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest()!=PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact graphics-owner parent required')
     if hashlib.sha256(parent[0x36F90:0x37000]).hexdigest()!=OLD_DETECTOR:
         raise ValueError('detector preimage differs')

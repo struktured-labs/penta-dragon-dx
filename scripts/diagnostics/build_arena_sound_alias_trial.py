@@ -14,6 +14,12 @@ PARENT = 'd744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5'
 ENTRY = 0x6DA7
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 9ca97f86... yields byte-identical
+# changes (same offsets, preimages and values) as on the original d744124d...
+REPINNED_PARENT = '9ca97f860289a3d1a0e420ff4a7243ddb56550a23d8608d0f055781e24c8a05b'
+
+
 def offset(bank, address):
     return bank * 0x4000 + address - 0x4000
 
@@ -36,7 +42,7 @@ def payload():
 
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact combined presentation parent required')
     start = offset(13, 0x6F90)
     if parent[start:start+8] != bytes.fromhex('FA80D8 210DDF BE C8'):

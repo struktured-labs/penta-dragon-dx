@@ -98,6 +98,7 @@ FIXED_INPUTS = (
     "pyproject.toml",
     "rom/penta_dragon_dx.ips",
     "uv.lock",
+    "scripts/arena_bg_palettes.py",
     "scripts/arena_position.py",
     "scripts/arena_semantic_key.py",
     "scripts/arena_tables_data.py",

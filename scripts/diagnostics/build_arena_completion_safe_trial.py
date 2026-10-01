@@ -16,8 +16,14 @@ NEW_GUARD = bytes.fromhex('C9 00 F0BA B7 CAE210 AF E001 C9')
 LEGACY = bytes.fromhex('F0E1 B7 CA9734 F3 3E15 EA0021 C30040 C39734')
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 1b3bbf84... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 585f5830...
+REPINNED_PARENT = '1b3bbf845a096dd5e5818b4f98fe68cb00f95468ad1a7ad8926c4946d3f2ed4e'
+
+
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact fastpath parent required')
     result = bytearray(parent)
 

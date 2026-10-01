@@ -53,7 +53,9 @@ class StarBossProfile(unittest.TestCase):
             probe=(ROOT/'scripts/diagnostics'/name).read_text()
             self.assertNotIn('write8(0xDCDC',probe)
             self.assertNotIn('write8(0xDCDD',probe)
-            self.assertIn('write8(0xDCBB, 0xF0)',probe)
+            # #41: physical bank1 helper, never the SVBK-selected bus alias.
+            self.assertIn('native_assistance.write(0xDCBB, 0xF0)',probe)
+            self.assertNotIn('emu:write8(0xDCBB',probe)
 
     def test_unescaped_ted_failure_matches_parent(self):
         import json

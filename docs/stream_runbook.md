@@ -121,11 +121,70 @@ The 42-button Stream Scene Deck is arranged to make comparison quick:
 5. Pre-final Penta/Sara; post-final dragon/Lisa/Sara; credits, END, epilogue.
 6. Spiral, Shield, jet forms, and item menu.
 
-Edits reach mGBA in about half a second. Boss bodies reuse global BG palette
-indices, so changing one boss can affect another that shares that BG row.
-Revisit every affected boss button before locking a shared color. Story
-artwork colors only the top artwork region; separator, border, and dialogue
-must remain neutral.
+Edits reach mGBA in about half a second. Boss bodies use global BG palette
+rows, so a **global** BG edit on one boss also changes every other boss that
+shares that row. Use the per-arena panel below to tune one boss without
+touching the others. Story artwork colors only the top artwork region;
+separator, border, and dialogue must remain neutral.
+
+## Per-arena boss colors (`arena_bg_palettes`)
+
+The editor's **Boss Arena BG Palettes (per arena)** panel lists all nine
+arenas. Each one shows the BG rows its tile table actually produces, derived
+from `scripts/arena_tables_data.py`, and names the other arenas that share each
+global row:
+
+| Row | Arenas using it |
+|---|---|
+| BG0 | every arena (backdrop / unmapped cells) |
+| BG1 | Cameo, Ted (shell), Penta Dragon |
+| BG2 | Riff, Ted (tendrils), Faze, Angela |
+| BG4 | Shalamar, Crystal Dragon |
+| BG5 | Ted (gold scales) |
+| BG6 | Ted (floor tiles) |
+| BG7 | Ted (floor tiles), Troop (whole body) |
+
+No arena uses BG3.
+
+- To edit one boss, load its scene button, expand that arena, and pick
+  colors. The first edit to a row copies the current global row, so only the
+  color you changed differs. The row is then marked **ARENA OVERRIDE**.
+- The Lua bridge applies an arena row only while `D880` equals that arena's
+  scene id: `$0C` Shalamar, `$0D` Riff, `$0E` Crystal Dragon, `$0F` Cameo,
+  `$10` Ted, `$11` Troop, `$12` Faze, `$13` Angela, `$14` Penta Dragon.
+  Everywhere else, including the death screen (`$17`) and the post-boss
+  reload (`$16`), the global rows stay in effect. Inside the arena, an arena
+  row wins over a global edit of the same row.
+- The **global** button on a row, or **Revert all … rows to global**, drops the
+  override and immediately re-asserts the global row in CRAM.
+- **Save to YAML** writes the global rows exactly as before. It also writes
+  the editor-managed block `arena_bg_palettes.<Boss>.BG<n>`, with the same
+  hash-named pre-save backup. If no arena overrides exist and the YAML has no
+  such block, the saved YAML is byte-identical to what the old editor wrote.
+  Missing arenas or rows always fall back to `bg_palettes`.
+- **Reset live colors from YAML** reloads saved arena rows too, and discards
+  unsaved ones.
+
+**Until the builder compiles `arena_bg_palettes`, per-arena rows are only a
+live preview.** The current stream candidate does not contain them. A rebuild
+from a YAML that has only arena overrides produces the same ROM, so
+`record_palette_approval.py --verify-only` would pass without those colors
+being in the patch. Record which boss got which arena row, and do not treat
+arena rows as approved until a builder with `arena_bg_palettes` support has
+rebuilt and requalified the ROM. Global-row picks follow the normal flow
+below.
+
+### Running the session from a worktree
+
+`palette_session.sh` now derives its project directory from its own
+location, and exports it to `live_palettes.lua` as `PENTA_PROJECT_DIR`.
+Running `scripts/palette_session.sh` inside a git worktree therefore uses
+that worktree's editor, YAML, backups, `tmp/palette_session` states, and PID
+files. The historical checkout path keeps working unchanged. Pass the ROM as
+an absolute path when it lives in another checkout. `status` and `stop`
+only see sessions started from the same checkout, but the global
+single-flight lock still refuses a second emulator. Set
+`PENTA_PALETTE_NO_BROWSER=1` to skip opening the browser tab.
 
 An on-screen live change proves the tuning bridge only; it does not alter the
 ROM file. **Save to YAML** followed by a fresh build proves that the chosen

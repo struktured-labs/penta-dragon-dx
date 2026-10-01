@@ -10,6 +10,12 @@ BASE = 38 * 0x4000
 GATE = 28 * 0x4000
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent e4809147... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 665a33b6...
+REPINNED_PARENT = 'e48091478df6248fca9b45fa25aa8d9402daf18981bb26840a6ffaf1a3d62eed'
+
+
 def gate():
     old = old_gate()
     result = bytearray(old)
@@ -22,7 +28,7 @@ def gate():
 
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact665a parent required')
     old, new = old_gate(), gate()
     if parent[GATE:GATE + len(new)] != old + b'\xff' * (len(new) - len(old)):

@@ -9,6 +9,12 @@ from build_menu_timer_yield_trial import PARENT, COMBINED_PARENT, ROOT
 ENTRY = 0x7E00
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 88648550... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 00f26298...
+REPINNED_PARENT = '886485509bc0fd33f6515b139e8ab78d5e4e0f940339b9120e22f42a0c3a9c05'
+
+
 def payload(direct_lookup=False):
     a = Asm(ENTRY)
     a.db(0x0E, 5)  # five quartets per 20-cell row
@@ -81,7 +87,7 @@ def staged_payload(fast_compile=False):
 def build(parent, direct_lookup=False, stage_row=False, fast_compile=False):
     if fast_compile and not stage_row:
         raise ValueError('fast compile requires staged rows')
-    if hashlib.sha256(parent).hexdigest() not in (PARENT, COMBINED_PARENT):
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, COMBINED_PARENT, REPINNED_PARENT):
         raise ValueError('exact source07 or ceiling-secret composition required')
     base = 20 * 0x4000
     if parent[base+0x4A:base+0x4D] != bytes.fromhex('0E0AC5'):

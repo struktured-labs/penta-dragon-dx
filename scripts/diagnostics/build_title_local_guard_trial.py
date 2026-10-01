@@ -10,6 +10,12 @@ ENTRY = 0x6B80
 DATA = 0x6C20
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 40381cbf... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 106c2e01...
+REPINNED_PARENT = '40381cbfc7fceb5ff02323f95f6bf44db902468357693ceeeb4d80867207690a'
+
+
 def offset(address):
     return 20 * 0x4000 + address - 0x4000
 
@@ -47,7 +53,7 @@ def payload():
 
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact handheld parent required')
     if parent[OFFSET:OFFSET+9] != OLD:
         raise ValueError('title helper differs')

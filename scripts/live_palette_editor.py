@@ -22,7 +22,14 @@ comments and structure.
 Color format in rom/working/live_palettes.txt:
   BG<n>:<idx>=<hex>,<idx>=<hex>,...
   OBJ<n>:<idx>=<hex>,<idx>=<hex>,...
+  ARENA<d880>.BG<n>:<idx>=<hex>,...   (per-boss-arena BG row; the Lua bridge
+                                       applies it only while D880 == <d880>)
 where <hex> is 4-char BGR555 (e.g. "7FFF") or 6-char RGB hex.
+
+Per-arena rows live in the optional YAML section `arena_bg_palettes`
+(see scripts/arena_bg_palettes.py). Rows that are not overridden for an arena
+fall back to the global `bg_palettes` rows, so global behavior is unchanged
+when that section is absent.
 
 Default palettes are loaded from palettes/penta_palettes_v097.yaml.
 """
@@ -43,6 +50,9 @@ try:
 except ImportError:
     print("Install: pip install pyyaml")
     sys.exit(1)
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import arena_bg_palettes as abp  # noqa: E402
 
 ROOT = Path(__file__).parent.parent
 LIVE_FILE = Path(os.environ.get(
@@ -178,53 +188,20 @@ SCENE_KEYS = {key for key, _label, _state in SCENE_PRESETS}
 STATE_LOCK = threading.RLock()
 SCENE_REQUEST_ID = 0
 
-# Per-stage-boss BG palette assignments — mirrors the _bg_table_<boss>()
-# functions in scripts/build_v301_teleport.py. Each boss's body tiles map
-# to a set of BG palette indices; the indices below are the ones the
-# user actually sees on screen when that boss's arena is loaded (via
-# the per-arena bg_table swapped into WRAM 0xDA00 by scene_detect).
-#
-# Editing the listed BG palette's colors live tunes that body region on
-# the named boss. Palette CRAM is shared globally, so changing BG3 also
-# affects every other boss whose body uses BG3 — for true per-arena
-# CRAM, the build pipeline would need per-arena palette tables (next
-# phase). The "body part" labels below are guidance for tuning intent.
-STAGE_BOSS_BODY_PALETTES = [
-    # (FFBA, name, [(BG pal idx, body part label), ...])
-    # Labels reflect ACTUAL CRAM colors per BG palette index:
-    #   BG1 gold, BG2 purple, BG3 green, BG4 ice cyan,
-    #   BG5 fire (yellow/orange/red), BG6 stone gray, BG7 navy blue.
-    (0, "Shalamar (Stage 1)", [
-        (4, "head crest (ice)"), (6, "shell (stone)"),
-        (5, "upper claws (fire)"), (3, "lower claws (green)"),
-    ]),
-    (1, "Riff (Stage 2)", [
-        (5, "skull (fire)"), (1, "body (gold)"), (6, "limbs (stone)"),
-    ]),
-    (2, "Crystal Dragon (Stage 3)", [
-        (4, "dome (ice)"), (7, "body (navy)"), (1, "sparkle core (gold)"),
-    ]),
-    (3, "Cameo (Stage 4)", [
-        (2, "crown (purple)"), (6, "face (stone)"), (1, "ribbon (gold)"),
-    ]),
-    (4, "Ted (Stage 5)", [
-        (5, "eyes (fire)"), (6, "body (stone)"), (7, "tendrils (navy)"),
-    ]),
-    (5, "Troop (Stage 6)", [
-        (2, "heads (purple)"), (6, "body (stone)"), (1, "glow (gold)"),
-    ]),
-    (6, "Faze (Stage 7)", [
-        (4, "horns (ice)"), (5, "body (fire)"),
-        (2, "torso (purple)"), (7, "accents (navy)"),
-    ]),
-    (7, "Angela", [
-        (6, "head (stone)"), (2, "body (purple)"), (4, "tentacles (ice)"),
-    ]),
-    (8, "Penta Dragon (Final)", [
-        (4, "heads (ice)"), (1, "body/wings (gold)"),
-        (5, "banner (fire)"), (7, "base (navy)"),
-    ]),
+# Per-boss-arena BG rows. The rows each arena can actually show are derived
+# from the same tile->palette tables the builder compiles into bank 13
+# (scripts/arena_tables_data.py → build_v301_teleport._table_from_dict), so
+# this panel cannot drift from the ROM the way the old hand-written list did.
+# BG0 is always included: it is every arena's backdrop/unmapped cells.
+ARENA_ROWS_USED = {key: abp.arena_rows_used(key) for key in abp.ARENA_KEYS}
+BG_ROW_NAMES = [
+    "Dungeon/floor", "cherry red", "purple", "green",
+    "ice cyan", "yellow/red", "blue-gray", "steel/navy",
 ]
+
+
+def arenas_sharing_row(row: int) -> list[str]:
+    return [key for key in abp.ARENA_KEYS if row in ARENA_ROWS_USED[key]]
 
 
 # Boss-palette YAML entries (FFBF 1-8 → boss-palette CRAM override).
@@ -233,6 +210,9 @@ STAGE_BOSS_BODY_PALETTES = [
 # (replacing the OBJ slot from the boss_slot_table). The names below
 # are the YAML keys. FFBF 1/2 are verified Gargoyle/Spider minibosses;
 # the legacy names for 3-8 remain builder-facing identifiers.
+# The OBJ slot must equal the YAML `slot:` that bg_experiment.py compiles into
+# the boss_slot_table at bank13:$68C0 (Knight=6, Angela=7). The editor used
+# to preview FFBF 7/8 on OBJ4/OBJ5, i.e. on the wrong hardware row.
 BOSS_PAL_ENTRIES = [
     # (FFBF value, YAML key, OBJ slot from boss_slot_table)
     (1, "Gargoyle",       6),
@@ -241,8 +221,8 @@ BOSS_PAL_ENTRIES = [
     (4, "Boss4_Ice",      7),
     (5, "Boss5_Void",     6),
     (6, "Boss6_Poison",   7),
-    (7, "Boss7_Knight",   4),
-    (8, "Angela",         5),
+    (7, "Boss7_Knight",   6),
+    (8, "Angela",         7),
 ]
 
 JET_PAL_ENTRIES = [
@@ -309,9 +289,32 @@ def load_yaml_palettes() -> dict:
         palettes["POWER"][power] = entry.get(
             'colors', ["0000", "03FF", "02BF", "019F"]
         )
+    # Optional per-arena BG rows (absent section == no overrides).
+    palettes["ARENA"] = abp.parse_arena_bg_palettes(data)
     palettes["BG_labels"] = bg_keys
     palettes["OBJ_labels"] = obj_keys
     return palettes
+
+
+def arena_live_lines(state: dict) -> list[str]:
+    """Every per-arena override, D880-scoped for the Lua bridge.
+
+    All overrides (not only rows edited this session) are emitted: the stream
+    ROM may predate ROM support for `arena_bg_palettes`, so the live preview
+    must supply saved arena rows itself. When the ROM does contain them the
+    writes are identical and harmless.
+    """
+    lines = []
+    for arena in abp.ARENA_KEYS:
+        rows = state.get("ARENA", {}).get(arena) or {}
+        for row in sorted(rows):
+            entries = ",".join(
+                f"{ci}={color.upper()}" for ci, color in enumerate(rows[row])
+            )
+            lines.append(
+                f"ARENA{abp.ARENA_D880[arena]:02X}.BG{row}:{entries}"
+            )
+    return lines
 
 
 def write_live_file(
@@ -366,6 +369,10 @@ def write_live_file(
                 for ci, color in enumerate(colors)
             )
             lines.append(f"POWER{power}:{entries}")
+        # Arena rows come after the global BG rows: Lua applies writes in
+        # file order, so inside the matching arena they win over a global
+        # edit of the same row, and outside it only the global row applies.
+        lines.extend(arena_live_lines(state))
         if scene is not None:
             if scene not in SCENE_KEYS:
                 raise ValueError(f"unknown scene preset: {scene}")
@@ -389,6 +396,35 @@ DIRTY: dict[str, set[int]] = {
     "POWER": set(),
 }
 write_live_file(STATE, DIRTY)
+
+
+def update_arena_color(arena: str, pal: int, color: int, bgr: str) -> None:
+    """Create/extend one arena row override (caller holds STATE_LOCK)."""
+    rows = STATE.setdefault("ARENA", {}).setdefault(arena, {})
+    if pal not in rows:
+        # Start from the global row currently shown so the other three
+        # colors keep matching what the host sees.
+        rows[pal] = list(STATE["BG"][pal])
+    rows[pal][color] = bgr
+    STATE["ARENA"] = {
+        key: dict(sorted(STATE["ARENA"][key].items()))
+        for key in abp.ARENA_KEYS
+        if STATE["ARENA"].get(key)
+    }
+
+
+def clear_arena_rows(arena: str, pal: int | None) -> list[int]:
+    """Drop arena overrides; returns the rows that fell back to global."""
+    rows = STATE.setdefault("ARENA", {}).get(arena) or {}
+    cleared = sorted(rows) if pal is None else ([pal] if pal in rows else [])
+    for row in cleared:
+        rows.pop(row, None)
+        # Re-assert the global row so CRAM leaves the arena color at once
+        # instead of waiting for the ROM loader to repaint it.
+        DIRTY["BG"].add(row)
+    if not rows:
+        STATE["ARENA"].pop(arena, None)
+    return cleared
 
 
 def render_index():
@@ -445,38 +481,87 @@ Make sure mGBA was launched with <code>--script scripts/lua/live_palettes.lua</c
         )
     html_parts.append("</div></div>")
 
-    # ─── Per-stage-boss body palette editor ───
-    # Shows the BG palette indices each boss's bg_table assigns to body
-    # regions (mirrors _bg_table_<boss>() in build_v301_teleport.py).
-    # Editing the colors here writes selected overrides to live CRAM.
-    html_parts.append('<div class="section"><h2>Stage Boss Body Palettes</h2>')
-    html_parts.append('<p style="font-size:0.85em;color:#888;">'
-                      'Each boss\'s body is drawn with a few BG palette indices (assigned by '
-                      'the per-arena <code>bg_table</code> in bank 13, swapped into WRAM 0xDA00 '
-                      'when D880 changes). Click a boss to expand and edit the palettes that '
-                      'cover its body. <strong>Note:</strong> BG palette CRAM is shared across all '
-                      'bosses, so editing pal 3 here also affects every other boss whose body uses '
-                      'pal 3. Per-arena CRAM is a future phase.</p>')
-    for ffba, name, parts in STAGE_BOSS_BODY_PALETTES:
-        html_parts.append(f'<details style="margin:0.4em 0;border:1px solid #333;padding:0.4em;">')
-        html_parts.append(f'<summary style="cursor:pointer;font-weight:bold;">{name} '
-                          f'<span style="font-weight:normal;color:#aaa;">'
-                          f'(uses BG ' + ', '.join(str(p) for p, _ in parts) + ')</span></summary>')
-        for pal_idx, body_part in parts:
-            colors = STATE["BG"].get(pal_idx, ["0000"] * 4)
-            html_parts.append('<div class="pal" style="margin:0.3em 0;padding:0.3em;background:#1a1a1a;">')
-            html_parts.append(f'<div class="pal-name">BG{pal_idx} — <em>{body_part}</em></div>')
+    # ─── Per-boss-arena BG row editor ───
+    html_parts.append('<div class="section"><h2>Boss Arena BG Palettes (per arena)</h2>')
+    html_parts.append(
+        '<p style="font-size:0.85em;color:#888;">'
+        'Pick a boss arena and edit the BG rows its tile table really uses '
+        '(derived from <code>arena_tables_data.py</code>). Edits here are '
+        '<strong>arena-scoped</strong>: the Lua bridge applies them only while '
+        '<code>D880</code> equals that arena ($0C Shalamar … $14 Penta Dragon), '
+        'so another boss sharing the same row keeps its own colors. Rows without '
+        'an arena override show the global row (edited in "BG Palettes" below). '
+        'Save writes <code>arena_bg_palettes.&lt;boss&gt;</code>. The current '
+        'release ROM does not compile these rows yet: they are a live preview '
+        'until the builder support lands and the ROM is rebuilt.</p>'
+    )
+    arena_state = STATE.get("ARENA", {})
+    for arena, label, d880, _table in abp.ARENAS:
+        used = ARENA_ROWS_USED[arena]
+        overrides = arena_state.get(arena) or {}
+        summary_rows = ", ".join(
+            f"BG{row}{'*' if row in overrides else ''}" for row in used
+        )
+        html_parts.append(
+            '<details style="margin:0.4em 0;border:1px solid #333;padding:0.4em;">'
+        )
+        html_parts.append(
+            f'<summary style="cursor:pointer;font-weight:bold;">{label} '
+            f'<span style="font-weight:normal;color:#aaa;">(D880=${d880:02X}; '
+            f'uses {summary_rows}; * = arena override)</span></summary>'
+        )
+        html_parts.append(
+            f'<button onclick="clearArena(\'{arena}\', null)">'
+            f'Revert all {arena} rows to global</button>'
+        )
+
+        def arena_row(row: int) -> None:
+            overridden = row in overrides
+            colors = overrides.get(row) or STATE["BG"].get(row, ["0000"] * 4)
+            sharing = [
+                key for key in arenas_sharing_row(row) if key != arena
+            ]
+            share_text = (
+                "global row also used by " + ", ".join(sharing)
+                if sharing else "no other arena uses this row"
+            )
+            state_text = "ARENA OVERRIDE" if overridden else "global"
+            html_parts.append(
+                '<div class="pal" style="margin:0.3em 0;padding:0.3em;background:#1a1a1a;">'
+            )
+            html_parts.append(
+                f'<div class="pal-name">BG{row} ({BG_ROW_NAMES[row]}) — '
+                f'<strong id="arena-state-{arena}-{row}">{state_text}</strong>'
+                f'<br><span style="font-size:0.8em;">{share_text}</span></div>'
+            )
             html_parts.append('<div class="color-row" style="margin-top:0.3em;">')
             for ci, c in enumerate(colors):
-                val15 = int(c, 16)
-                rgb = bgr555_to_rgb888(val15)
+                rgb = bgr555_to_rgb888(int(c, 16))
                 html_parts.append(
                     f'<div><input type="color" value="{rgb}" '
-                    f'data-kind="BG" data-pal="{pal_idx}" data-color="{ci}" '
-                    f'onchange="updateColor(this)">'
-                    f'<div class="bgr" id="bgr-BG-{pal_idx}-{ci}-boss{ffba}">{c.upper()}</div></div>'
+                    f'data-kind="ARENA" data-arena="{arena}" data-pal="{row}" '
+                    f'data-color="{ci}" data-overridden="{1 if overridden else 0}" '
+                    f'onchange="updateArenaColor(this)">'
+                    f'<div class="bgr" id="bgr-ARENA-{arena}-{row}-{ci}">'
+                    f'{c.upper()}</div></div>'
                 )
+            html_parts.append(
+                f'<button style="padding:0.1em 0.4em;font-size:0.8em;" '
+                f'onclick="clearArena(\'{arena}\', {row})">global</button>'
+            )
             html_parts.append("</div></div>")
+
+        for row in used:
+            arena_row(row)
+        others = [row for row in range(8) if row not in used]
+        html_parts.append(
+            '<details style="margin-left:1em;"><summary style="cursor:pointer;'
+            'color:#888;">Other rows (not produced by this arena\'s tile table)'
+            '</summary>'
+        )
+        for row in others:
+            arena_row(row)
+        html_parts.append("</details>")
         html_parts.append("</details>")
     html_parts.append("</div>")
 
@@ -614,11 +699,45 @@ function updateColor(input) {
     document.querySelectorAll(
         `input[type="color"][data-kind="${kind}"][data-pal="${pal}"][data-color="${color}"]`
     ).forEach(el => { if (el !== input) el.value = input.value; });
+    if (kind === 'BG') {
+        document.querySelectorAll(
+            `input[data-kind="ARENA"][data-pal="${pal}"][data-color="${color}"][data-overridden="0"]`
+        ).forEach(el => {
+            el.value = input.value;
+            const label = document.getElementById(
+                `bgr-ARENA-${el.dataset.arena}-${pal}-${color}`);
+            if (label) label.textContent = bgr;
+        });
+    }
     fetch('/update', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({kind, pal, color, bgr})
     });
+}
+function updateArenaColor(input) {
+    const arena = input.dataset.arena;
+    const pal = parseInt(input.dataset.pal);
+    const color = parseInt(input.dataset.color);
+    const bgr = rgb888_to_bgr555(input.value);
+    document.getElementById(`bgr-ARENA-${arena}-${pal}-${color}`).textContent = bgr;
+    document.querySelectorAll(
+        `input[data-kind="ARENA"][data-arena="${arena}"][data-pal="${pal}"]`
+    ).forEach(el => { el.dataset.overridden = "1"; });
+    const badge = document.getElementById(`arena-state-${arena}-${pal}`);
+    if (badge) badge.textContent = "ARENA OVERRIDE";
+    fetch('/update', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({kind: 'ARENA', arena, pal, color, bgr})
+    });
+}
+function clearArena(arena, pal) {
+    fetch('/arena_clear', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({arena, pal})
+    }).then(() => location.reload());
 }
 function loadScene(scene) {
     fetch('/load_scene', {
@@ -682,17 +801,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pal = int(data["pal"])
                 color = int(data["color"])
                 bgr = data["bgr"].upper()
-                if kind not in ("BG", "OBJ", "BOSS", "JET", "POWER"):
+                if kind not in ("BG", "OBJ", "BOSS", "JET", "POWER", "ARENA"):
                     raise ValueError(
-                        "kind must be BG, OBJ, BOSS, JET, or POWER, "
+                        "kind must be BG, OBJ, BOSS, JET, POWER, or ARENA, "
                         f"got {kind!r}"
                     )
+                arena = None
+                if kind == "ARENA":
+                    arena = str(data.get("arena", ""))
+                    if arena not in abp.ARENA_D880:
+                        raise ValueError(f"unknown arena: {arena!r}")
                 valid_palettes = {
                     "BG": range(8),
                     "OBJ": range(8),
                     "BOSS": range(1, 9),
                     "JET": range(1, 3),
                     "POWER": range(1, 4),
+                    "ARENA": range(8),
                 }[kind]
                 if pal not in valid_palettes:
                     expected = {
@@ -701,6 +826,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "BOSS": "1-8",
                         "JET": "1-2",
                         "POWER": "1-3",
+                        "ARENA": "0-7",
                     }[kind]
                     raise ValueError(f"{kind} palette must be {expected}, got {pal}")
                 if color not in range(4):
@@ -708,8 +834,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not re.fullmatch(r"[0-7][0-9A-F]{3}", bgr):
                     raise ValueError(f"invalid BGR555 value: {bgr!r}")
                 with STATE_LOCK:
-                    STATE[kind][pal][color] = bgr
-                    DIRTY[kind].add(pal)
+                    if kind == "ARENA":
+                        update_arena_color(arena, pal, color, bgr)
+                    else:
+                        STATE[kind][pal][color] = bgr
+                        DIRTY[kind].add(pal)
                     write_live_file(STATE, DIRTY)
                 self.send_response(200)
                 self.end_headers()
@@ -739,9 +868,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
                 self.wfile.write(f"error: {e}".encode())
+        elif url.path == "/arena_clear":
+            try:
+                data = json.loads(body)
+                arena = str(data.get("arena", ""))
+                if arena not in abp.ARENA_D880:
+                    raise ValueError(f"unknown arena: {arena!r}")
+                pal = data.get("pal")
+                if pal is not None:
+                    pal = int(pal)
+                    if pal not in range(8):
+                        raise ValueError(f"ARENA palette must be 0-7, got {pal}")
+                with STATE_LOCK:
+                    cleared = clear_arena_rows(arena, pal)
+                    write_live_file(STATE, DIRTY)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(
+                    f"{arena}: reverted rows {cleared} to global".encode()
+                )
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(f"error: {e}".encode())
         elif url.path == "/reload":
             with STATE_LOCK:
+                previous_arena = STATE.get("ARENA", {})
                 STATE = load_yaml_palettes()
+                # Rows that had a session-only arena override must be
+                # re-asserted from the global row so CRAM does not keep the
+                # discarded arena color.
+                for arena, rows in previous_arena.items():
+                    for row in rows:
+                        if row not in (STATE["ARENA"].get(arena) or {}):
+                            DIRTY["BG"].add(row)
                 # Reset only palettes overridden during this session. Unrelated
                 # scene/boss CRAM remains owned by the game.
                 write_live_file(STATE, DIRTY)
@@ -819,6 +980,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             raise RuntimeError(f"palette entries not found in YAML: {names}")
 
         updated = "".join(lines)
+        arena_state = STATE.get("ARENA", {})
+        updated = abp.replace_section(updated, arena_state)
+        # Refuse to write a file that would not read back as exactly the
+        # state on screen (both the arena section and every global row).
+        document = yaml.safe_load(updated)
+        if abp.parse_arena_bg_palettes(document) != {
+            key: dict(sorted(rows.items()))
+            for key, rows in arena_state.items() if rows
+        }:
+            raise RuntimeError("arena_bg_palettes did not round-trip; not saved")
+        for index, key in enumerate(STATE.get("BG_labels", [])):
+            saved = [c.upper() for c in document["bg_palettes"][key]["colors"]]
+            if saved != [c.upper() for c in STATE["BG"][index]]:
+                raise RuntimeError(f"bg_palettes.{key} did not round-trip")
         original_bytes = text.encode()
         updated_bytes = updated.encode()
         if updated_bytes == original_bytes:
