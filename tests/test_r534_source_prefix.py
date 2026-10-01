@@ -53,6 +53,25 @@ class SourcePrefixTests(unittest.TestCase):
             self.assertIs(receipt[key], False)
             self.assertIs(receipt["phase"][key], False)
 
+    def test_atomic_factory_reconstructs_exact_historical_baseline(self):
+        modern = bytearray(self.factory)
+        production = prefix.baseline.production
+        for offset in (0x37B21, 0x43B21):
+            self.assertEqual(modern[offset:offset + 60], production.TORN_SARA_EMITTER)
+            modern[offset:offset + 60] = production.ATOMIC_SARA_EMITTER
+        modern[0x14E:0x150] = (
+            (sum(modern[:0x14E]) + sum(modern[0x150:])) & 0xFFFF
+        ).to_bytes(2, "big")
+        self.assertEqual(prefix.baseline.digest(modern), prefix.baseline.ATOMIC_FACTORY_SHA256)
+        result, receipt = prefix.baseline.build(bytes(modern))
+        self.assertEqual(result, self.r120)
+        self.assertTrue(receipt["normalized_atomic_emitter"])
+        self.assertEqual(receipt["factory_sha256"], prefix.baseline.ATOMIC_FACTORY_SHA256)
+        self.assertEqual(receipt["historical_factory_sha256"], prefix.baseline.FACTORY_SHA256)
+        modern[0x200] ^= 1
+        with self.assertRaisesRegex(ValueError, "factory identity"):
+            prefix.baseline.build(bytes(modern))
+
     def test_both_phase_entrypoints_agree_without_archives(self):
         early, _ = prefix.phase.construct(self.r120)
         later, receipt = prefix.phase.construct(self.r199)

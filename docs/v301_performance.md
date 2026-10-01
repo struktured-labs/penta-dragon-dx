@@ -1,5 +1,47 @@
 # v3.01 Performance Characteristics
 
+> **Dungeon release compromise (approved 2026-08-27; r120 measured
+> 2026-08-28).** The strict ±2% target remains visible in every receipt, while
+> individually named dungeon stages may ship at a fail-closed floor of
+> **0.95**. Exact r120 (`029a413b…`) measures Stage 1 **0.988**, Stage 2
+> **0.988**, Stage 3 **0.976**, Stage 4 **0.990**, Stage 5 **0.962**, Stage 6
+> **0.992**, and Stage 7 **0.974** on the 2,800-frame right route. Only Stages
+> 3/5/7 currently consume their named 0.95 exceptions; 1/2/4/6 meet the strict
+> target. A separate bounded Stage-7 patrol measures **0.924** and is retained
+> as an explicit movement-stress debt with a fail-closed 0.92 floor; it does
+> not replace the normal-route release measurement.
+> Deterministic replay, scene continuity, cold/warm GAME START, terrain,
+> menu/item hazards, low-health flicker, and mutation controls remain mandatory.
+> This exception changes throughput only; optimization continues after release.
+
+> **2026-08-28 optimization boundary.** On that Stage-7 patrol, an
+> ABI-preserving control which skips the complete attribute compiler and
+> publication reaches **0.996** (778/781), proving the color plane owns the
+> remaining movement tax. It is visually invalid and cannot ship. Complete
+> active-LCD GDMA (**0.951**), asynchronous HBlank DMA (**0.949**), and the
+> dormant row-precomputed atomic copier (**0.835**) all fail the same patrol;
+> none is promoted. This receipt-backed rejection prevents a faster-looking
+> architecture from reintroducing partial planes, trails, or hazard artifacts.
+
+> **2026-08-28 follow-up controls.** Removing later-dungeon room identity from
+> the two-byte content cache reduced publications but regressed the Stage-7
+> patrol to **0.919**, so it is rejected. Palette-service phase variants
+> reached at best **774/790 = 0.9797** on Stage 5 but moved Stage 2 to 0.963
+> and Stage 7 to 0.959; they are also rejected. A Stage-2 sparse pickup writer
+> reached **747/754 = 0.991**, then correctly failed the 8,000-frame active-map
+> gate with 38 displayed semantic mismatches: the old two-row capture envelope
+> omitted valid pickups in packed rows 2/3. A complete four-row compile avoids
+> that omission but measures only **738/754 = 0.979**. None of these controls
+> is deployed; exact r120 remains the release baseline.
+
+> **Current release policy (verified 2026-08-23).** The arena-loop instrument
+> still exposes a strict ±2% target. Ted deterministically measures 307 DX
+> iterations versus 314 stock iterations over 1800 arena frames: ratio
+> **0.9777**, or **2.23%** slower. Per the operator-approved performance
+> compromise, Ted has a narrow fail-closed exception floor of **0.975**;
+> results below it still fail. Crystal Dragon retains its separate 0.95 floor
+> for the intentional ghost effect. Both misses remain explicit in receipts.
+
 > **⚠️ CORRECTION (verified 2026-06-07).** The cycle estimates in the
 > "v3.01 colorize handler" table below describe the **attr_computation +
 > GDMA** path, which **is NOT what ships**. `build_v301_gdma.py` writes

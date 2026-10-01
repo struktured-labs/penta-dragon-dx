@@ -36,6 +36,9 @@ def expected_parts():
 
 
 def authenticate(rom):
+    from build_sara_atomic_pose import CANDIDATE_SHA as SARA_SHA, authenticated_parent as sara_parent
+    if hashlib.sha256(rom).hexdigest() == SARA_SHA:
+        rom = sara_parent(rom)
     from build_spike_death_trial import CANDIDATE_SHA, authenticated_parent
     if hashlib.sha256(rom).hexdigest() == CANDIDATE_SHA:
         # The successor owns two disjoint private bank-25 spans. Reverse and

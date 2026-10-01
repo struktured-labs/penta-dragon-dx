@@ -62,6 +62,9 @@ MENU_RESERVED_HAZARDS = {
 
 
 def menu_oracle(data: bytes) -> tuple[bytes, frozenset[int]]:
+    from build_sara_atomic_pose import CANDIDATE_SHA as SARA_SHA, authenticated_parent as sara_parent
+    if hashlib.sha256(data).hexdigest() == SARA_SHA:
+        return menu_oracle(sara_parent(data))
     expected = bytearray(build_menu_lut(data[BANK13_LUT:BANK13_LUT+0x100]))
     reserved = frozenset()
     if hashlib.sha256(data).hexdigest() in {R441_SHA256, R442_SHA256, TITLE_V5_SHA256, TITLE_V6_R445C_SHA256, TITLE_V6_R449F_SHA256, TITLE_V6_R449F_PREHELPER_SHA256, TITLE_V6_R451C_SHA256, R455_SHA256, R456C_SHA256, R456D_SHA256, R527_SHA256, R528_SHA256, R529_SHA256, R530_SHA256, R531_SHA256, R532_SHA256, R533_SHA256, R534_SHA256, R535_TILE_RETIRE_SHA256, R535_STAGE_CARD_BLACK_SHA256, R536_PENTA_SEAM_SHA256, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", SPIKE_DEATH_SHA256, R535_STAGE1_ONLY_CARD_BLACK_SHA256, R536_STAGE1_ONLY_CARD_BLACK_SHA256}:

@@ -41,7 +41,7 @@ image before reporting a game bug.
 
 Verification
 ------------
-The packaged patch reconstructs the exact ROM that passed all 90 serial
+The packaged patch reconstructs the exact ROM that passed all 92 serial
 emulator release gates. Those gates cover the complete title cycle, GAME START
 route, stage-card timing and sound, item menu, ordinary enemies, later stages,
 all bosses, death/GAME OVER, title-idle reel, both story paths, ending phases,

@@ -21,7 +21,8 @@ def rgb_frame(path: Path) -> Image.Image:
 
 
 def validate_sequence(output: Path) -> dict[str, int]:
-    from verify_death_gameover import GAMEOVER_RGB_SHA256
+    from verify_death_gameover import gameover_rgb_sha256_for_rom
+    expected_gameover = gameover_rgb_sha256_for_rom((output / 'runtime/candidate.gb').read_bytes())
     from verify_gameover_restart import compare_images
     # Read every required capture explicitly: an empty glob is never a pass.
     title_checks = gameover_checks = 0
@@ -36,7 +37,7 @@ def validate_sequence(output: Path) -> dict[str, int]:
         for age in GAMEOVER_AGES:
             path = output / f'sequence-gameover-{cycle}-{age:04d}.png'
             image = rgb_frame(path)
-            if hashlib.sha256(image.tobytes()).hexdigest() != GAMEOVER_RGB_SHA256:
+            if hashlib.sha256(image.tobytes()).hexdigest() != expected_gameover:
                 raise ValueError(f'Game Over sequence corrupted: {path.name}')
             gameover_checks += 1
     return {'title_frame_pairs': title_checks, 'gameover_frames': gameover_checks}

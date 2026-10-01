@@ -25,6 +25,52 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACTS = ROOT / "docs/audit/boss_silhouette_contracts.json"
+# Captured native tile $4F, independently identical in stock, the qualified
+# restart parent and the Sara candidate. Unknown CHR is never exempted (#15).
+PENTA_PROJECTILE_CHR = bytes.fromhex("007a7a85265942bd42bd649a5ea1005e")
+
+
+def native_projectile_pixels(evidence: dict[str, object]) -> list[dict]:
+    """Reconstruct only authenticated 8x8 CGB projectiles, not arbitrary OAM.
+
+    These are semantic component labels, not edited/masked comparison images.
+    An entire component must match both position and every opaque RGB pixel.
+    DMG colors and 8x16 sprites are unsupported and receive no exemption.
+    """
+    if evidence.get("schema") != "penta-projectile-phase-v1":
+        raise ValueError("unsupported projectile receipt schema")
+    oam = bytes.fromhex(str(evidence["oam"]))
+    tiles = [bytes.fromhex(str(evidence[key])) for key in ("tile0", "tile1")]
+    cram = bytes.fromhex(str(evidence["obj_cram"]))
+    if len(oam) != 160 or any(len(tile) != 16 for tile in tiles):
+        raise ValueError("incomplete projectile OAM/CHR evidence")
+    if evidence["cgb"] and len(cram) != 64:
+        raise ValueError("incomplete projectile palette evidence")
+    lcdc = int(evidence["lcdc"])
+    if not evidence["cgb"] or lcdc & 4 or lcdc & 0x82 != 0x82:
+        return []
+    projectiles = []
+    for slot in range(40):
+        y, x, tile, attr = oam[slot * 4:slot * 4 + 4]
+        art = tiles[bool(attr & 8)]
+        if tile != 0x4F or art != PENTA_PROJECTILE_CHR:
+            continue
+        pixels = {}
+        for dy in range(8):
+            sy = 7 - dy if attr & 0x40 else dy
+            lo, hi = art[sy * 2:sy * 2 + 2]
+            for dx in range(8):
+                bit = dx if attr & 0x20 else 7 - dx
+                index = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1)
+                px, py = x - 8 + dx, y - 16 + dy
+                if index and 0 <= px < 160 and 0 <= py < 144:
+                    offset = (attr & 7) * 8 + index * 2
+                    word = int.from_bytes(cram[offset:offset + 2], "little")
+                    values = [(word >> shift) & 31 for shift in (0, 5, 10)]
+                    pixels[px, py] = tuple((v << 3) | (v >> 2) for v in values)
+        if pixels:
+            projectiles.append({"slot": slot, "pixels": pixels})
+    return projectiles
 
 
 def normalized_cell_signature(image: Image.Image, row: int, col: int,
@@ -114,7 +160,8 @@ def foreground_components(image: Image.Image, background: tuple[int, int, int],
     return sorted(components, key=len, reverse=True)
 
 
-def analyze_penta(image: Image.Image, contract: dict[str, object]) -> dict[str, object]:
+def analyze_penta(image: Image.Image, contract: dict[str, object],
+                  evidence: dict[str, object] | None = None) -> dict[str, object]:
     if image.size != (160, 144):
         raise ValueError(f"Penta Dragon receipt must be 160x144, got {image.size}")
     background = Counter(image.getdata()).most_common(1)[0][0]
@@ -125,7 +172,19 @@ def analyze_penta(image: Image.Image, contract: dict[str, object]) -> dict[str, 
     high = int(contract["maximum_fragment_pixels"])
     # The largest component is the dragon. Medium independent islands are the
     # observed copied-head/confetti failure; tiny raster islands are tolerated.
-    fragments = [component for component in components[1:] if low <= len(component) <= high]
+    raw_fragments = [component for component in components[1:] if low <= len(component) <= high]
+    projectiles = native_projectile_pixels(evidence) if evidence is not None else []
+    fragments, classified = [], []
+    for component in raw_fragments:
+        matches = [p for p in projectiles
+                   if set(component) == p["pixels"].keys()
+                   and all(image.getpixel(point) == color
+                           for point, color in p["pixels"].items())]
+        if matches:
+            classified.append({"oam_slots": [p["slot"] for p in matches],
+                               "pixels": len(component), "tile": "4F"})
+        else:
+            fragments.append(component)
     examples = []
     for component in fragments[:16]:
         xs = [point[0] for point in component]
@@ -142,6 +201,9 @@ def analyze_penta(image: Image.Image, contract: dict[str, object]) -> dict[str, 
         "foreground_components": len(components),
         "largest_component_pixels": len(components[0]) if components else 0,
         "detached_fragments": len(fragments),
+        "raw_detached_fragments": len(raw_fragments),
+        "native_projectile_components": classified,
+        "projectile_evidence": "present" if evidence is not None else "absent-no-exemptions",
         "fragment_examples": examples,
         "limit": limit,
     }
@@ -157,11 +219,22 @@ def load_contract(path: Path, boss: str) -> dict[str, object]:
 def analyze_image(image_path: Path, boss: str, contract_path: Path) -> dict[str, object]:
     image = Image.open(image_path).convert("RGB")
     contract = load_contract(contract_path, boss)
-    result = analyze_troop(image, contract) if boss == "troop" else analyze_penta(image, contract)
+    evidence = None
+    evidence_path = Path(f"{image_path}.sprites.json")
+    image_hash = hashlib.sha256(image_path.read_bytes()).hexdigest()
+    if boss == "penta_dragon" and evidence_path.is_file():
+        evidence = json.loads(evidence_path.read_text())
+        if evidence.get("image_sha256") != image_hash:
+            raise ValueError("projectile evidence does not match image SHA-256")
+    result = analyze_troop(image, contract) if boss == "troop" else analyze_penta(image, contract, evidence)
     result.update({
         "image": str(image_path.resolve()),
-        "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
+        "image_sha256": image_hash,
     })
+    if evidence is not None:
+        result["projectile_receipt"] = str(evidence_path.resolve())
+        result["projectile_receipt_sha256"] = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        result["projectile_frame"] = evidence["frame"]
     return result
 
 
@@ -232,12 +305,19 @@ def analyze_gallery(
                     "image": str(image.resolve()), "error": "missing image",
                 })
                 continue
-            row = analyze_image(image, boss, contract_path)
+            try:
+                row = analyze_image(image, boss, contract_path)
+                if "projectile_frame" in row and row["projectile_frame"] != frame:
+                    raise ValueError("projectile evidence does not match gallery phase")
+            except (ValueError, KeyError) as error:
+                rows.append({"status": "fail", "boss": boss, "frame": frame,
+                             "image": str(image.resolve()), "error": str(error)})
+                continue
             row["strict_phase_status"] = row.pop("status")
             row["frame"] = frame
             rows.append(row)
         boss_rows = [row for row in rows if row.get("boss") == boss]
-        if len(boss_rows) == len(selected_frames):
+        if len(boss_rows) == len(selected_frames) and not any(row.get("error") for row in boss_rows):
             aggregates.append(aggregate_gallery_rows(boss, boss_rows, contract))
     expected_images = sum(phase_counts.values())
     passed = (

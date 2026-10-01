@@ -1,0 +1,396 @@
+# Historical source profile for authenticated restart-parent reconstruction.
+# Current release palette lives in penta_palettes_v097.yaml.
+# Penta Dragon DX Palettes
+# v2.33: Multi-boss palette system (8 bosses) + turbo powerup
+# v2.32: Per-entity projectile colors + powerup support
+# v2.29: Projectile colorization with dynamic Palette 0
+# v0.98: Stage detection + Jet form palettes + Tile-based colorization
+#
+# Colors are BGR555 hex format: 0bBBBBBGGGGGRRRRR (5 bits each)
+# Common colors:
+#   0x0000=Transparent, 0x7FFF=White, 0x001F=Red, 0x03E0=Green
+#   0x7C00=Blue, 0x03FF=Yellow, 0x7C1F=Magenta, 0x7FE0=Cyan
+
+# ============================================
+# STAGE DETECTION (v0.98) - Address 0xFFD0
+# ============================================
+# stage_flag=0x00: Level 1 (main dungeon) -> BG palette 0 (Dungeon)
+# stage_flag=0x01: Bonus stage (jet/spaceship) -> BG palette 7 (BG7)
+#                  + Use jet form OBJ palettes (SaraWitchJet, SaraDragonJet)
+# stage_flag=0x02-0x04: Levels 2-5 (not yet implemented)
+#
+# ============================================
+# TILE-BASED PALETTE MAPPING (v0.97)
+# ============================================
+# Sara W: tiles 0x20-0x27 -> Palette 2 (skin/pink) OR SaraWitchJet in bonus stage
+# Sara D: tiles 0x28-0x2F -> Palette 1 (green) OR SaraDragonJet in bonus stage
+#
+# Boss detection via boss_flag at 0xFFBF (v2.33: 8 bosses):
+#   boss_flag=0: Normal mode (tile-based palettes)
+#   boss_flag=1: Gargoyle miniboss -> Palette 6
+#   boss_flag=2: Spider miniboss -> Palette 7
+#   boss_flag=3: Crimson boss -> Palette 6
+#   boss_flag=4: Ice boss -> Palette 7
+#   boss_flag=5: Void boss -> Palette 6
+#   boss_flag=6: Poison boss -> Palette 7
+#   boss_flag=7: Knight boss -> Palette 6
+#   boss_flag=8: Angela (secret boss) -> Palette 7
+#
+# Normal mode tile ranges (VERIFIED via gameplay):
+#   0x00-0x07: Sara W projectiles (tile 0x01) -> Palette 3 (red, shared with Crow)
+#   0x08-0x0F: Enemy projectiles (tile 0x0F) -> Palette 0 (blue)
+#   0x10-0x1F: Effects/explosions -> Palette 0
+#   0x30-0x3F: Crow/flying -> Palette 3 (shared with Sara W projectiles)
+#   0x40-0x4F: Hornets/flying -> Palette 4
+#   0x50-0x5F: Ground (orc) -> Palette 5
+#   0x60-0x6F: Humanoid (soldier/moth/mage) -> Palette 6
+#   0x70-0x7F: Special (catfish) -> Palette 3
+
+# ============================================
+# BACKGROUND PALETTES (8 palettes, 4 colors each)
+# ============================================
+# v0.98: Multiple BG palettes for distinct areas
+#
+# Palette 0: Main floor tiles (blue castle stone)
+# Palette 1: Items/pickups (gold/yellow glow)
+# Palette 2: Walls/void (darker blue-gray)
+# Palette 3-7: Reserved for other levels/areas
+#
+# BGR555 color reference:
+#   0x7F1B = Light sky blue
+#   0x6210 = Royal blue
+#   0x3D08 = Deep navy
+#   0x03FF = Gold/Yellow
+#   0x01BF = Dark gold
+
+bg_palettes:
+  # Palette 0 - Main floor/platform (vibrant blue-white)
+  Dungeon:
+    colors: ["7FFF", "7E94", "3D4A", "0000"]  # White, Light blue, Deep teal, Black
+
+  # Palette 1 - Items/pickups (Cherry Red - high contrast, makes health pop!)
+  BG1:
+    # Stock pickup art uses shade 2 for its cast shadow / pedestal.  Keeping
+    # that shade neutral prevents the large red "second pickup" blocks seen
+    # beside health items while shade 1 still carries the semantic class red.
+    colors: ["7FFF", "001F", "294A", "0000"]  # White, cherry red, neutral shadow, black
+
+  # Palette 2 - Decorative elements (purple/magenta)
+  BG2:
+    # The same stock shade is the shadow around rare pickups.  A neutral
+    # secondary shade keeps the purple item itself vivid without painting its
+    # square backing purple; it also softens stock clipped credit remnants.
+    colors: ["7FFF", "7E1F", "294A", "0000"]  # White, purple, neutral shadow, black
+
+  # Palette 3 - Nature/organic (green tones)
+  BG3:
+    colors: ["7FFF", "3AC9", "2143", "0000"]  # White, emerald, deep forest, black
+
+  # Palette 4 - Water/ice (cyan/teal)
+  BG4:
+    colors: ["7FFF", "7FE0", "3D80", "0000"]  # White background, Cyan, Dark teal, Black
+
+  # Palette 5 - Fire/lava (red/orange)
+  BG5:
+    colors: ["7FFF", "03FF", "001F", "0000"]  # White background, Yellow, Red, Black
+
+  # Palette 6 - Stone/castle (blue-gray)
+  BG6:
+    colors: ["7FFF", "7F1B", "3D08", "0000"]  # White, Light sky blue, Deep navy, Black
+
+  # Palette 7 - Mystery/special (deep blue)
+  BG7:
+    colors: ["7FFF", "7E10", "3800", "0000"]  # White background, Royal blue, Navy, Black
+
+# The title, selector, and sliding PENTA DRAGON banner intentionally share one
+# artifact-safe row because the stock artwork does not carry semantic attrs.
+# Keeping the identity here makes the treatment visible and live-tuneable
+# without introducing red bleed or a scene-specific hard-coded color table.
+# This row remains the fallback for any title cell the colorized scheme below
+# does not claim.
+title_bg_palette: BG4
+
+# ============================================
+# TITLE SCREEN SCHEME - six roles, one per BG slot
+# ============================================
+# The colorized title assigns one BG slot per element instead of sharing a
+# single row, so the logo, wordmark, menu, credits and cursor can be tuned
+# independently -- the same live loop as the sprite and boss palettes below.
+#
+# `slot` is authoritative; the role names are documentation. Index 0 of every
+# slot is the shared field colour, so a stale attribute on a blank cell renders
+# as field rather than a bright square. Indices 1-3 carry the role ink and are
+# normally identical, but all four are editable if a role wants a real ramp.
+#
+# Switch schemes by changing `active_scheme`; add a new named block to try one
+# on stream without disturbing the two reviewed options.
+title_palettes:
+  active_scheme: Nightfall
+  schemes:
+    # Deep indigo night sky. Gold wordmark reads as deliberate DX branding.
+    Nightfall:
+      field:    {slot: 1, colors: ["3083", "3083", "3083", "3083"]}  # indigo field
+      emblem:   {slot: 2, colors: ["3083", "7F98", "7F98", "7F98"]}  # ice blue JAM mark
+      menu:     {slot: 3, colors: ["3083", "5BDF", "5BDF", "5BDF"]}  # parchment menu text
+      credit:   {slot: 4, colors: ["3083", "6A92", "6A92", "6A92"]}  # slate 1992 credit
+      cursor:   {slot: 5, colors: ["3083", "119F", "119F", "119F"]}  # amber selector
+      wordmark: {slot: 6, colors: ["3083", "0B7F", "0B7F", "0B7F"]}  # gold PENTA DRAGON DX
+    # Conservative option: keeps the light field of the 1992 original.
+    Parchment:
+      field:    {slot: 1, colors: ["53BF", "53BF", "53BF", "53BF"]}  # warm cream field
+      emblem:   {slot: 2, colors: ["53BF", "3942", "3942", "3942"]}  # deep teal JAM mark
+      menu:     {slot: 3, colors: ["53BF", "10A7", "10A7", "10A7"]}  # near-black menu text
+      credit:   {slot: 4, colors: ["53BF", "216F", "216F", "216F"]}  # mid brown credit
+      cursor:   {slot: 5, colors: ["53BF", "0C9A", "0C9A", "0C9A"]}  # crimson selector
+      wordmark: {slot: 6, colors: ["53BF", "60C2", "60C2", "60C2"]}  # royal blue wordmark
+
+# Base world ramp selected for each later dungeon. These names reference the
+# tuneable rows above; Stage 1 keeps Dungeon. Stage 5/7 retain Dungeon because
+# their lava tile classifiers already layer BG5 over the base world.
+later_stage_bg0_palettes:
+  Stage2: BG4       # icy cyan / teal
+  Stage3: Dungeon   # native base
+  Stage4: BG6       # blue-gray stone; stage-local floor/bridge attrs add color
+  Stage5: Dungeon   # native base + red/orange lava attrs
+  Stage6: BG3       # green / dark green
+  Stage7: Dungeon   # native base + red/orange lava attrs
+
+# The stock defeated-boss illustration and GAME OVER window contain a mix of
+# safe palette IDs inherited from the arena. During this cinematic all eight
+# hardware BG rows resolve to this one spectral ramp, keeping the stock art
+# coherent and chromatic without repainting either tilemap. Color 1 stays white
+# because the stock art uses alternating shade-0/shade-1 cells that otherwise
+# resemble a checker. This row remains independent for live audience tuning.
+death_gameover_palette:
+  # Color 3 intentionally shares GAME OVER's charcoal high byte: the stock
+  # 64-byte burst repairs BG4's final byte from this row at the HBlank seam.
+  colors: ["7FFF", "7FFF", "7E1F", "294A"]  # White, white, spectral purple, charcoal
+  gameover_colors: ["7FFF", "7FFF", "56B5", "294A"]  # Historical restart-parent neutral identity
+
+# Stage-local BG rows. These are loaded only for the named scene and do not
+# replace the normal BG palette with the same hardware slot in title, bonus,
+# story, or later-stage play. Edit this row during the livestream to tune the
+# rotating tooth/drill material without changing Python or patching ROM bytes.
+stage1_hazard_palettes:
+  # Experimental: affects Stage 1 and its Gargoyle overlay only. Still shared
+  # with Stage-1 power pickups. Keep disabled until transition timing and
+  # death/restart/savestate regressions pass; not supported by the browser yet.
+  RotatingSpikeBody:
+    enabled: false
+    slot: 5
+    colors: ["7FFF", "03FF", "001F", "0000"]
+  RotatingSpikeTeeth:
+    slot: 7
+    # Tooth cells share opaque pixels with the Stage-1 floor and cast shadow.
+    # Reserve index 2 for gold and make index 3 the exact Dungeon shadow color
+    # so those background pixels blend. The four-color tradeoff is that tooth
+    # outlines use dark lavender instead of black.
+    colors: ["7FFF", "7E94", "03FF", "3D4A"]  # White, floor blue, gold, floor shadow
+
+# Crystal Dragon's body/projectile animation crosses the generic OBJ4-OBJ7
+# monster families and intentionally disappears on selected frames to mimic a
+# translucent ghost in the DMG game. Letting those generic families through
+# produced yellow/green/blue bands and made the native cadence read as a hard
+# strobe. This scene-local override keeps all four material slots on the same
+# frost ramp, tuneable below under boss_palettes.Boss4_Ice.
+arena_obj_palette_overrides:
+  CrystalDragonGhost:
+    scene: 0x0E
+    slots: [4, 5, 6, 7]
+    source_boss_palette: Boss4_Ice
+
+# Story illustrations occupy the top 20x8 cells; the lower 20x10 dialogue
+# area always stays neutral BG0. These rectangles select the named tuneable
+# BG rows without baking palette numbers into Python or assembly. Coordinates
+# are inclusive tile-cell bounds, with (0,0) at the illustration's top-left.
+cutscene_region_palettes:
+  OpeningBook:
+    art_ids: [1]
+    default: BG6
+    regions:
+      - {x: [6, 13], y: [1, 5], palette: BG5}  # warm open pages
+      - {x: [7, 12], y: [6, 6], palette: BG5}
+
+  SaraPortrait:
+    art_ids: [2, 7]
+    default: BG2
+    regions:
+      - {x: [0, 5], y: [0, 0], palette: BG7}
+      - {x: [14, 19], y: [0, 0], palette: BG7}
+      - {x: [0, 4], y: [1, 1], palette: BG7}
+      - {x: [15, 19], y: [1, 1], palette: BG7}
+      - {x: [0, 3], y: [2, 7], palette: BG7}
+      - {x: [16, 19], y: [2, 7], palette: BG7}
+      # Taper the costume into the portrait instead of publishing one flat
+      # six-cell stripe across Sara's neckline.
+      # Blue-gray costume highlights blend into the purple portrait without
+      # the old ruler-straight saturated-cyan neckline.
+      - {x: [9, 10], y: [6, 6], palette: BG6}
+      - {x: [8, 11], y: [7, 7], palette: BG6}
+
+  DragonEye:
+    art_ids: [3]
+    default: BG7
+    regions:
+      - {x: [13, 16], y: [1, 1], palette: BG6}  # stone eye socket
+      - {x: [16, 17], y: [2, 2], palette: BG3}  # upper iris
+      - {x: [15, 18], y: [3, 3], palette: BG3}  # widest eye row
+      - {x: [15, 17], y: [4, 4], palette: BG3}
+      - {x: [16, 17], y: [5, 5], palette: BG3}  # lower iris
+
+  PreFinalPenta:
+    art_ids: [4]
+    default: BG4
+    regions:
+      - {x: [7, 12], y: [0, 7], palette: BG5}  # center head
+      - {x: [13, 19], y: [0, 7], palette: BG3} # right head
+
+  PostFinalDragon:
+    art_ids: [5]
+    # The old lower BG2 rectangle began on one ruler-straight tile row through
+    # the dragon's face.  Make purple the coherent body material and retain
+    # only the tapered blue crest accent.
+    default: BG2
+    regions:
+      # Taper the hot crest around the forehead instead of recoloring one
+      # rectangular block of adjacent armor.
+      - {x: [9, 10], y: [0, 0], palette: BG7}
+      - {x: [8, 11], y: [1, 1], palette: BG7}
+      - {x: [9, 10], y: [2, 2], palette: BG7}
+
+  LisaDragonPortrait:
+    art_ids: [6]
+    default: BG7
+    regions:
+      # One contiguous tapered purple silhouette replaces the alternating
+      # purple/cyan/purple bands that cut horizontally through the portrait.
+      - {x: [8, 14], y: [0, 0], palette: BG2}
+      - {x: [7, 14], y: [1, 1], palette: BG2}
+      - {x: [5, 14], y: [2, 4], palette: BG2}
+      # Keep the projecting snout on the body palette through rows 5-6. The
+      # former x=7/8 taper cut a ruler-straight blue strip across its nose.
+      - {x: [5, 14], y: [5, 6], palette: BG2}
+      - {x: [9, 14], y: [7, 7], palette: BG2}
+
+# ============================================
+# SPRITE PALETTES - VERIFIED MAPPINGS
+# ============================================
+# Palette 0: ENEMY PROJECTILES (tile 0x0F) + Effects - blue by default
+# Palette 1: Sara D sprite (green) OR Sara D Jet (cyan) in bonus stage
+# Palette 2: Sara W sprite (skin/pink) OR Sara W Jet (magenta) in bonus stage
+# Palette 3: SARA W PROJECTILES (tile 0x01) + Crow enemies (tiles 0x30-0x3F) - red
+#            NOTE: Changing Palette 3 affects BOTH Sara's shots AND Crow sprites!
+# Palette 4: Hornets (yellow/orange)
+# Palette 5: Orc/Ground (green/brown)
+# Palette 6: Humanoid (purple) OR Gargoyle boss (boss_flag=1)
+# Palette 7: Catfish (cyan) OR Spider boss (boss_flag=2)
+# ============================================
+
+obj_palettes:
+  # Palette 0 - ENEMY PROJECTILES (tile 0x0F) + Effects
+  # This palette colors enemy-fired projectiles (blue by default)
+  EnemyProjectile:
+    colors: ["0000", "7C00", "5800", "3000"]  # Trans, Bright blue, Medium blue, Dark blue
+
+  # NOTE: SaraProjectileDragon is loaded dynamically into Palette 0 when Sara D is active
+  # This makes enemy projectiles green when playing as Sara D
+  SaraProjectileDragon:
+    colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Bright green, Dark green, Black
+
+  # Palette 1 - SARA D (Dragon form - green/black)
+  SaraDragon:
+    colors: ["0000", "03E0", "01C0", "0000"]  # Trans, Bright green, Dark green, Black
+
+  # Palette 2 - SARA W (Witch form - skin/pink-red/black)
+  SaraWitch:
+    colors: ["0000", "2EBE", "511F", "0842"]  # Trans, Skin (peach), Pink-red, Near-black
+
+  # Palette 2 (Alt) - SARA W JET (Spaceship form - magenta/purple)
+  # Used in bonus stage (stage_flag=0x01) instead of SaraWitch
+  SaraWitchJet:
+    colors: ["0000", "7C1F", "5817", "3010"]  # Trans, Magenta, Purple, Dark purple
+
+  # Palette 1 (Alt) - SARA D JET (Spaceship form - cyan/electric blue)
+  # Used in bonus stage (stage_flag=0x01) instead of SaraDragon
+  SaraDragonJet:
+    colors: ["0000", "7FE0", "4EC0", "2D80"]  # Trans, Bright cyan, Blue, Dark blue
+
+  # Palette 3 - SARA W PROJECTILE (tile 0x01) + CROW enemies (tiles 0x30-0x3F)
+  # Changing this affects both Sara's shots AND crow enemy sprites
+  SaraProjectileAndCrow:
+    colors: ["0000", "001F", "0017", "000F"]  # Trans, Bright red, Medium red, Dark red
+
+  # Palette 4 - HORNETS (yellow/orange - insects)
+  Hornets:
+    colors: ["0000", "03FF", "00DF", "0000"]  # Trans, Yellow, Orange, Black
+
+  # Palette 5 - ORC/GROUND (green/brown - earthy)
+  OrcGround:
+    colors: ["0000", "02A0", "0160", "0000"]  # Trans, Forest green, Dark green, Black
+
+  # Palette 6 - HUMANOID: Soldier, Moth, Spike (purple)
+  # In boss mode (boss_flag=1), this becomes Gargoyle
+  Humanoid:
+    colors: ["0000", "7C1F", "4C0F", "0000"]  # Trans, Magenta, Dark purple, Black
+
+  # Palette 7 - CATFISH/SPECIAL (cyan/teal)
+  # In boss mode (boss_flag=2), this becomes Spider
+  Catfish:
+    colors: ["0000", "7FE0", "3CC0", "0000"]  # Trans, Cyan, Dark cyan, Black
+
+# Boss override palettes (loaded when boss_flag is set)
+# v2.33: Table-based system supporting 8 bosses
+# Each boss has a target palette slot (6 or 7) and 4 colors
+boss_palettes:
+  # Boss 1: Gargoyle (replaces palette 6 when boss_flag=1)
+  Gargoyle:
+    slot: 6
+    colors: ["0000", "601F", "400F", "0000"]  # Trans, Dark magenta, Darker purple, Black
+
+  # Boss 2: Spider (replaces palette 7 when boss_flag=2)
+  Spider:
+    slot: 7
+    colors: ["0000", "001F", "00BF", "0000"]  # Trans, Red, Orange, Black
+
+  # Boss 3: Crimson/Dragon boss (boss_flag=3)
+  Boss3_Crimson:
+    slot: 6
+    colors: ["0000", "0CBF", "0859", "040F"]  # Trans, Crimson, Dark crimson, Blood red
+
+  # Boss 4: Ice/Frost boss (boss_flag=4)
+  Boss4_Ice:
+    slot: 7
+    colors: ["0000", "7F94", "668A", "4940"]  # Trans, Ice blue, Frost blue, Deep blue
+
+  # Boss 5: Void/Dark boss (boss_flag=5)
+  Boss5_Void:
+    slot: 6
+    colors: ["0000", "70B4", "584F", "3C08"]  # Trans, Violet, Dark violet, Void purple
+
+  # Boss 6: Poison/Serpent boss (boss_flag=6)
+  Boss6_Poison:
+    slot: 7
+    colors: ["0000", "0BC8", "06C4", "01C0"]  # Trans, Toxic green, Poison, Dark green
+
+  # Boss 7: Knight/Gold boss (boss_flag=7)
+  Boss7_Knight:
+    slot: 6
+    colors: ["0000", "0F1F", "0A58", "0150"]  # Trans, Gold, Bronze, Dark bronze
+
+  # Boss 8: Angela - secret boss (boss_flag=8)
+  Angela:
+    slot: 7
+    colors: ["0000", "7FFF", "5AD6", "318C"]  # Trans, White, Silver, Dark gray
+
+# Powerup projectile palettes (loaded into Palette 0 when powerup active)
+# Read from 0xFFC0: 0=none, 1=spiral, 2=shield, 3=turbo
+powerup_palettes:
+  SpiralProjectile:
+    colors: ["0000", "7FE0", "5EC0", "3E80"]  # Trans, Cyan, Teal, Dark teal
+
+  ShieldProjectile:
+    colors: ["0000", "03FF", "02BF", "019F"]  # Trans, Gold, Dark gold, Deep gold
+
+  TurboProjectile:
+    colors: ["0000", "00FF", "00BF", "005F"]  # Trans, Orange, Dark orange, Red-orange
+

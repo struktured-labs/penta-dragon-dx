@@ -37,6 +37,24 @@ FADE_WHITE_RGB_SHA256 = (
 GAMEOVER_RGB_SHA256 = (
     "ab12ada8f36574e0c3600ed93ae5ba910afbc87faee8d98d045a6fcf6a24ef4e"
 )
+GAMEOVER_PURPLE_RGB_SHA256 = (
+    "d2f6b153ad3069aead0ca07fde2900b0e8d46f51ee8d728bb621e9621fd055ab"
+)
+
+
+def gameover_rgb_sha256_for_rom(rom: bytes) -> str:
+    """Select a reviewed exact image by the ROM's explicit palette row.
+
+    Issue #18's purple identity was verified against the gray control by exact
+    per-pixel substitution in 102 frames; glyphs/background remain unchanged.
+    Unknown palettes fail closed, never fall back to a generic color count.
+    """
+    row = rom[0x37C34:0x37C3C]
+    if row == bytes.fromhex('ff7fff7fb5564a29'):
+        return GAMEOVER_RGB_SHA256
+    if row == bytes.fromhex('ff7fff7f1f7e4a29'):
+        return GAMEOVER_PURPLE_RGB_SHA256
+    raise ValueError('GAME OVER palette has no reviewed rendered identity')
 # The stable 18x20 GAME OVER window tile crop is stock-authored and invariant.
 STOCK_GAMEOVER_SHA256 = (
     "fd1816cae5ef387012671754377cb0294e42780eeefcb76b2ed4d87f60a26a02"
@@ -429,7 +447,7 @@ def main() -> int:
                     or not 2 <= art_visual["colors"] <= 4
                     or art_visual["dark"] < MIN_DEATH_ART_DARK_PIXELS
                     or fade_visual["rgb_sha256"] != FADE_WHITE_RGB_SHA256
-                    or gameover_visual["rgb_sha256"] != GAMEOVER_RGB_SHA256
+                    or gameover_visual["rgb_sha256"] != gameover_rgb_sha256_for_rom(rom.read_bytes())
                 ):
                     failures.append(
                         f"{state.name}: death/GAME OVER lost full source "

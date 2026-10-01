@@ -19,9 +19,35 @@ local watched = false
 -- A frame callback can interrupt the compiler while SVBK3 is selected.
 -- Observe native bank1 state physically, without changing the game's SVBK.
 local wram = assert(emu.memory.wram)
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  -- #41: setup flags and accelerated health belong to physical bank1.
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local function game(address) return wram:read8(address - 0xC000) end
 local trace = assert(io.open(out .. "/trace.tsv", "w"))
 trace:write("frame\tphase\tscene\tactive\tlcdc\tvbk\tsvbk\thp\n")
+-- Issue #24 diagnostic only: preserve the normal route and observe palette
+-- publication at stage entry. Never repair palette state from the observer.
+local palette_trace
+if os.getenv("PENTA_RESTART_PALETTE_TRACE") == "1" then
+  palette_trace = assert(io.open(out .. "/palette-writes.tsv", "w"))
+  palette_trace:write("frame\tcycle\tage\tpc\tbank\tindex\tvalue\tly\tstat\n")
+  emu:setWatchpoint(function(info)
+    if phase == "stage" and age <= 120 then
+      palette_trace:write(string.format("%d\t%d\t%d\t%04X\t%02X\t%02X\t%02X\t%d\t%02X\n",
+        frame, cycles, age, emu:readRegister("PC"), emu:read8(0xFF99),
+        emu:read8(0xFF68), (info.newValue or info.value or 0) & 255,
+        emu:read8(0xFF44), emu:read8(0xFF41)))
+      palette_trace:flush()
+    end
+  end, 0xFF69, C.WATCHPOINT_TYPE.WRITE)
+end
 if natural_damage or hazard_death then
   emu:setWatchpoint(function(info)
     trace:write(string.format("prelude-flag frame=%d pc=%04X bank=%02X old=%02X new=%02X scene=%02X\n",
@@ -54,9 +80,16 @@ local function snapshot(name)
 end
 local function finish(status)
   emu:setKeys(0)
+  if palette_trace then palette_trace:close() end
   local f = assert(io.open(out .. "/route.txt", "w"))
   f:write(string.format("%s %d %d %d\n", status, cycles, deaths, gameovers))
-  f:close(); trace:close(); os.exit(status == "ok" and 0 or 2)
+  f:close()
+  trace:write(string.format("native_assistance_writes=%d\n", native_assistance.writes))
+  for bank=0,7 do
+    trace:write(string.format("native_assistance_svbk_%d=%d\n", bank,
+      native_assistance.bank_shadow_counts[bank] or 0))
+  end
+  trace:close(); os.exit(status == "ok" and 0 or 2)
 end
 local function change(next_phase)
   phase, age = next_phase, 0
@@ -109,7 +142,7 @@ callbacks:add("frame", function()
   elseif phase == "start" then
     -- Fixture precondition only: expose native saved-game stage selection.
     -- Stop before the selector runs; never repair scene/rendering state.
-    if saved_game and age <= 40 then emu:write8(0xDCFD, 1) end
+    if saved_game and age <= 40 then native_assistance.write(0xDCFD, 1) end
     -- Issue #9 reports both the score/level selector (scene 0) and the
     -- plain Stage 01 splash (scene $18). Capture each on every restart.
     if saved_game and scene == 0 then
@@ -155,7 +188,7 @@ callbacks:add("frame", function()
         change("await-damage")
       else
         deaths = deaths + 1
-        wram:write8(0x1CBB, 0)
+        native_assistance.write(0xDCBB, 0)
         change("death")
       end
     end
@@ -167,12 +200,20 @@ callbacks:add("frame", function()
     if os.getenv("PENTA_RESTART_SPIKE_OSCILLATE") == "1" and age > approach then
       keys = (age - approach) % 240 < 120 and 0x40 or 0x80
     end
+    -- #38: native bank1:5060 opens inventory at low health. Directions alone
+    -- never dismiss it. Use normal B pulses; do not change HP or menu state.
+    if natural_damage and emu:read8(0xFFE4) == 1 and game(0xDD06) == 3 then
+      keys = age % 60 < 6 and 2 or 0
+      if keys == 2 then
+        trace:write(string.format("low-health-menu-dismiss frame=%d key=02\n", frame))
+      end
+    end
     if age % 120 == 0 then snapshot("spike-route-" .. cycles .. "-" .. age) end
     local wait_disarm = os.getenv("PENTA_RESTART_WAIT_DISARM") == "1"
     if hazard_death and ((not wait_disarm and age == approach + 30)
         or (wait_disarm and age > approach and emu:read8(0xFF91) == 0)) then
       snapshot("hazard-before-death-" .. cycles)
-      wram:write8(0x1CBB, 0)
+      native_assistance.write(0xDCBB, 0)
       deaths = deaths + 1
       change("death")
     end

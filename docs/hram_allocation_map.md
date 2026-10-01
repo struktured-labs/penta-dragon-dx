@@ -36,7 +36,7 @@ are the hottest game-state bytes the engine touches.
 | FFBA   | 14R/4W  | Level/boss counter (0-8) — indexes stage boss tables     |
 | FFCA   | 12R/3W  | Flag byte — high bit checked via `BIT 7, A` after read  |
 | FFE4   | 1R/12W  | **Death cinematic flag** — set to 1 with `RST 28; CALL 0x4944` (per memory + context). Cleared after cleanup. |
-| FFC4   | -       | **CENSUS FALSE POSITIVE.** The "writes" counted were operand bytes from `LD DE, $C4xx` immediates (e.g., `11 E0 C4` is `LD DE, $C4E0`, not `LDH (FFC4), A`). Likely unused by vanilla. |
+| FFC4   | banked writes + indirect read | **Occupied by vanilla Sara priority flag.** Bank 1 `$50C5` and `$50CA` are real `LDH ($FFC4),A` stores. The original `$1188` helper indexes `$FFC2-$FFC5` indirectly. Some bank-0 census hits are operand bytes, but that does not make this byte free. |
 | FFCE   | 3R/9W   | Next-room value (set from 0x0BBF table, consumed at 0x0B78) |
 | FFDC   | 9R/2W   | Counter compared against memory (`INC A; CP (HL)` after read) |
 | FFEB   | 8R/3W   | Scroll phase toggle (0=normal, 1=alternate/bonus)        |
@@ -75,10 +75,27 @@ are the hottest game-state bytes the engine touches.
 | FFE0   | (used as scratch by attr_computation row counter; reused in handler)|
 | FFE1   | Used by build_v301_iemask test scripts                              |
 
-Both are in the "TBD" range from the census — no vanilla writes/reads to
-these addresses appeared in the bank-0 scan. Safe scratch.
+Both are already claimed by patch code. The absence of vanilla accesses in
+the bank-0 census is not a free-space or interrupt-safety proof; do not reuse
+either for persistent input buffering without auditing all existing owners.
 
 ## Census methodology
+
+### Confirmed allocation collision (2026-09-05)
+
+The r353 map-target allocation relied on the incomplete bank-0 census below.
+Live trace `tmp/astra-r380-native-ffc4-profile-20260905/candidate/pipeline-profile.tsv`
+shows bank 1 `$50CA` clearing a completed target `$9B` at frame 718, LY 133,
+while `$DF5C=1` requests publication. The following VBlank takes the relative
+fallback instead of publishing that completed page. The north viewport oracle
+rejects the resulting frame. This is an executable native store, not data.
+
+r381 experimentally removes these two stores only after authenticating the
+r368 priority helper (`RES 7,A; RET`), which no longer consumes the flags.
+It is not a general allocation proof: native bulk clears of `$FFC2-$FFC5`
+at lifecycle boundaries still require auditing and live regression tests.
+Do not allocate HRAM from raw bank-0 opcode counts alone; account for banked
+code, indexed access, initialization and bulk clears.
 
 Counts unique `LDH (n), A` (0xE0 nn) writes and `LDH A, (n)` (0xF0 nn)
 reads in bank-0 ROM (0x0000-0x3FFF). Doesn't include accesses from

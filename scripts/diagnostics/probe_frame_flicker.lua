@@ -9,6 +9,10 @@ local OUT = assert(os.getenv("FLICKER_OUT"), "FLICKER_OUT is required")
 local MODE = os.getenv("FLICKER_MODE") or "demo"
 local SAMPLE_FRAMES = tonumber(os.getenv("FLICKER_SAMPLE_FRAMES") or "300")
 local MAX_FRAMES = tonumber(os.getenv("FLICKER_MAX_FRAMES") or "16000")
+local ROUTE = os.getenv("FLICKER_ROUTE") or "right-fire"
+local TURN_PERIOD = tonumber(os.getenv("FLICKER_TURN_PERIOD") or "45")
+assert(ROUTE == "right-fire" or ROUTE == "sara-turns" or ROUTE == "sara-turns-fire")
+assert(TURN_PERIOD >= 1 and TURN_PERIOD % 1 == 0)
 
 local KEY_A, KEY_START, KEY_DOWN = 0x01, 0x08, 0x80
 local frame, target_frame, samples = 0, nil, 0
@@ -37,6 +41,14 @@ local function scheduled_keys()
         if frame >= row[1] and frame <= row[2] then return row[3] end
     end
     if target_frame and frame - target_frame > 30 then
+        if ROUTE ~= "right-fire" then
+            local directions = {0x10, 0x40, 0x20, 0x80}
+            local keys = directions[(math.floor((frame - target_frame - 31) / TURN_PERIOD) % 4) + 1]
+            if ROUTE == "sara-turns-fire" and (frame-target_frame) % 60 < 6 then
+                keys = keys | KEY_A
+            end
+            return keys
+        end
         -- Exercise scrolling and firing so gameplay uses more than Sara's
         -- standing sprite palettes.
         return 0x10 | (((frame - target_frame) % 60 < 6) and KEY_A or 0)

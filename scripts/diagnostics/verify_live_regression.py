@@ -112,6 +112,8 @@ LIVE_GATES = (
     "boss_silhouette_gallery",
     "boss_material_side_by_side",
     "death_gameover",
+    "sara_walking_pose_atomicity",
+    "sara_firing_pose_atomicity",
     "gameover_restart",
     "gameover_spike_restart",
     "gameover_saved_spike_restart",

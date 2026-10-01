@@ -72,6 +72,32 @@ def arena_palette_table(rom: bytes, target: int) -> bytes:
         "b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350",  # r536: inherited observer/data ABI
         "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b",  # title row guard: unchanged gameplay observer/data ABI
         "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d",  # death/restart successor: unchanged arena storage
+        "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5",  # #6: unchanged arena storage
+        # #30/#27 trial08: complete banks13/23 equal recognized4f5a parent;
+        # loader/dispatcher and captured Crystal table independently checked.
+        "f02af88218fb6ae2fa12f7548549e9a5250c0bbb20cea5a8d2e77443ddad9379",
+        # trial09 changes only bank20 window threshold and ROM checksum.
+        "06e0b6552cbc0517ed9a2fd3611dec4e08c765c20c53c538aa75b3e937d54d35",
+        # trial10: private bank20 fade-window change; banks13/23 unchanged.
+        "75d5bcd5b79e8e0c060c60740ca663a132ecc438ae23e63eecb25153df19f9bf",
+        # #30/#34 Select trial02: entire bank23 equals reconstructed source;
+        # selector6FD5..6FE0 and all nine LUTs equal recognized4f5a parent.
+        "7c5afca573b80fefacfa057338ae8847bb86590f057a188112773076841972ec",
+        # #30/#36: bank23 and selector13:6FD5..6FE0 are byte-identical
+        # to recognized4f5a; independent table-builder equality still applies.
+        "4731248ad2d28f56539197ddfa38fcb8f79713832b7997905647caf35d34f903",
+        # #30: authenticated #23/#18 descendants. Stock graphics bank alias,
+        # secret BG0 lookup and Game Over accent do not touch bank23 or its
+        # arena loader. Retain the independent builder equality check below.
+        "22b3909b5ef3653abb1a40d227c2f9f0d6d6a276010ca08299af1c688eb15e6c",
+        "e2473cbaf4060896afaa7f30b5fc250729887ae02cc12cb15f183ea3bfa09405",
+        "7130c04a3ef9ad9239ae693dad9d5d61953437fa3eccc0c137071b79faeacc23",
+        # #31/#28: verified banks16..31 identical to7130; independent LUT
+        # builder equality below remains mandatory.
+        "3c5951bf86f429f2d6299ea68704514672b5e90d4726572b8c2981bd2963b73e",
+        "b902240052bcdf743dbf4583edcc52b4584b5eae3757c613100238c934483df9",
+        "d270fe0fa2359ac86cd4df0d06dca1071ef821e325a4a3cc51a44f698b21b8b6",
+        "eebf3f190d9d307cb1d3fa714fa2e68b7890fc5309d5da26682ce38cce0134fc",
         "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
         "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
     } and target in (1, 2, 5)

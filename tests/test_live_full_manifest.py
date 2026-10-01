@@ -17,15 +17,16 @@ import runtime_tools
 
 
 class LiveFullManifestTests(unittest.TestCase):
-    def test_current_r534_contract_includes_all_90_gates_without_emulator(self):
+    def test_current_r534_contract_includes_all_92_gates_without_emulator(self):
         with patch.object(live.subprocess, "run", side_effect=AssertionError("unexpected subprocess")):
             gates, errors = live.profile_gates(ROOT / "tmp/stage4-cache-key-r534/candidate.gb")
         self.assertEqual(errors, [])
-        self.assertEqual(len(gates), 90)
+        self.assertEqual(len(gates), 92)
         for name in ("gameplay_movement_stress", "low_health_scene0b_publication",
                      "pocket_stage1_visual_incident", "stage1_current_pickup_state",
                      "stage1_current_pickup_host_palettes", "gameover_restart",
-                     "gameover_spike_restart", "gameover_saved_spike_restart"):
+                     "gameover_spike_restart", "gameover_saved_spike_restart",
+                     "sara_walking_pose_atomicity", "sara_firing_pose_atomicity"):
             self.assertIn(name, gates)
 
     def test_inventory_still_rejects_future_omissions(self):

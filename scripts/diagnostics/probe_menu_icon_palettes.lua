@@ -4,6 +4,17 @@
 -- release menu publication-order gate.
 
 local OUT = assert(os.getenv("MENU_ICON_PALETTE_OUT"))
+-- #41: inventory, cursor and HP fixtures belong to physical native bank1,
+-- even when a frame callback interrupts a graphics routine using SVBK2/3/7.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local LIMIT = tonumber(os.getenv("MENU_ICON_PALETTE_FRAMES") or "1510")
 local frame = 0
 local finished = false
@@ -76,6 +87,11 @@ local function finish()
   local handle = assert(io.open(OUT, "w"))
   handle:write(string.format("frames=%d\n", frame))
   handle:write(string.format("pages=%d\n", #pages))
+  handle:write(string.format("native_assistance_writes=%d\n", native_assistance.writes))
+  for bank = 0, 7 do
+    handle:write(string.format("native_assistance_svbk_%d=%d\n", bank,
+      native_assistance.bank_shadow_counts[bank] or 0))
+  end
   for _, page in ipairs(pages) do
     handle:write(string.format(
       "page%d_meta=frame:%d,scene:%02X,menu:%02X,lcdc:%02X,map:%04X\n",
@@ -109,13 +125,13 @@ callbacks:add("frame", function()
     -- ordinary input loop; this fixture only makes every canonical icon
     -- class observable without depending on a months-old cross-ROM state.
     for group = 0, 2 do
-      for slot = 0, 9 do emu:write8(0xDCBD + group * 10 + slot, 0) end
+      for slot = 0, 9 do native_assistance.write(0xDCBD + group * 10 + slot, 0) end
       for slot, item in ipairs(INVENTORY_GROUPS[group + 1]) do
-        emu:write8(0xDCBD + group * 10 + slot - 1, item)
+        native_assistance.write(0xDCBD + group * 10 + slot - 1, item)
       end
     end
-    emu:write8(0xDCDB, 0)
-    emu:write8(0xDCDD, 0)
+    native_assistance.write(0xDCDB, 0)
+    native_assistance.write(0xDCDD, 0)
   end
   keys = keys | pulse(1200, 1206, KEY_SELECT)
   for page = 0, 3 do
@@ -126,9 +142,9 @@ callbacks:add("frame", function()
 
   if emu:read8(0xFFC1) == 1 then
     -- Keep the cold route alive without changing menu or Window state.
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCBB, 0xFF)
+    -- #37: DCDD is the ten-slot native item cursor, not a health byte.
+    -- Preserve it after the explicit initial cursor setup above.
+    native_assistance.write(0xDCBB, 0xFF)
   end
 
   for index, snapshot in ipairs(SNAPSHOTS) do

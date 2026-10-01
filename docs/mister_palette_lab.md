@@ -1,13 +1,22 @@
 # Rivalmage palette lab — experimental first version
 
+Offline compatibility update: the bridge explicitly accepts experimental
+late-return build `46eb95a0c0f770fb3cf8c3211b8030a9e881f59077e558b93703ba08da71d3fb`
+for primary-row editing (#19). All15 rows match the126dd parent, and actual-ROM
+tests constrain each edit to its row/checksum and matching active state row.
+This does not change the default ROM, qualify live Apply/Resume, or declare the
+experimental ROM release-ready. Running services are not automatically updated.
+
 Run on Blackmage:
 
 ```sh
 python3 scripts/mister_palette_bridge.py
 ```
 
-Open <http://127.0.0.1:8078>. Rivalmage must already be running
-`Penta-Dragon-DX-b93ebc46ed4a.gbc` in GBC. Do not change games manually while
+Open <http://127.0.0.1:8078>. Rivalmage must already be running the exact
+selected source as `Penta-Dragon-DX-<first12 SHA256 digits>.gbc` in GBC
+(the original default uses `Penta-Dragon-DX-b93ebc46ed4a.gbc`).
+Do not change games manually while
 the controller is running. The SSH hostname is fixed to `rivalmage`; this
 does not use misterclaw discovery or Redmage.
 
@@ -15,7 +24,9 @@ Choose a primary palette and click **Apply & Resume**. The controller backs
 up any existing slot-4 file, saves a fresh checkpoint, patches only the
 selected primary ROM palette and global checksum, converts matching active
 palette rows in a copy of the checkpoint, uploads a uniquely named candidate,
-reloads GBC, and restores slot 4. It saves again to check palette readback.
+verifies the uploaded ROM, savestate and MGL launcher hashes, then reloads
+GBC and restores slot 4. A hash mismatch prevents reload. It saves again
+to check palette readback.
 **Undo & Resume** returns to the prior ROM and pre-edit checkpoint, not to
 the position reached after the edit. Slot 4 is reserved by this workflow;
 slots 1–3 are not written.
@@ -36,9 +47,41 @@ namespaces; the checkpoint carries cartridge RAM for resumption.
   the operation refuses before uploading/reloading. A scene override may
   subsequently replace the colors; readback catches immediate replacement.
 - OBJ transparent color zero cannot change. RGB picks quantize to BGR555.
-- Fixed r536 initial ROM SHA-256:
+- On the exact experimental `46eb95a0…` layout (including palette-only edits),
+  settled ordinary Stages 1 and 2 have checked fixed-slot ownership maps. Equal primary
+  rows remain independently editable there; a coincidentally equal private BG7
+  row is not changed. This requires the complete primary palette installation,
+  no menu/boss/jet/projectile override, and no pending palette-load phase.
+  In Stage 2, BG4 owns both the scenery copy in BG0 and its normal pickup slot;
+  an edit updates both. The Stage-1 Dungeon row is inactive there and cannot
+  recolor those slots merely by having equal colors. Later stages remain pending.
+  This is offline-tested, not yet hardware-qualified or enabled in a running server.
+- Elsewhere, equal primary rows in the same BG/OBJ group are refused (#39).
+  Undo the edit that made them identical or return to a supported context.
+  Older layouts reject ambiguity before checkpointing. The `46eb95a0…` layout
+  can require a checkpoint to resolve ownership; unresolved aliases still fail
+  before upload/reload. Receipts identify which ownership method was used.
+  No-op quantized colors and invalid OBJ transparency changes also fail in
+  this preflight. Checking whether a unique row is currently active still
+  requires a fresh checkpoint and may reject afterward.
+  Multiple active copies of one uniquely defined primary row remain supported.
+- Supported initial ROMs are exact pins, not arbitrary same-layout files:
+  original r536 SHA-256
   `b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350`.
-  Later candidates derive only from the controller's palette edits.
+  The row-guard `e709869c85ed…`, Sara-atomic `4f5a67b8a9af…`, and experimental
+  Ted-menu `4731248ad2d28f56539197ddfa38fcb8f79713832b7997905647caf35d34f903`
+  and combined star `d744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5`
+  pins are also supported via `--source PATH`. Later session candidates derive
+  only from the controller's palette edits. Unknown initial hashes are rejected.
+- The experimental Ted-menu and combined star candidates are1MiB MBC5.
+  The star build also routes the five-point pickup through BG5; editing BG5
+  therefore changes that pickup as well as its other documented uses.
+  Exact-pin support does not promote either build or change the default source.
+  Offline tests cover all15
+  primary rows, global checksum, unchanged expansion/private overrides, and
+  unchanged non-palette savestate bytes. Its hardware Apply/Resume remains
+  unverified; support is not deployment or release approval. Default source is
+  unchanged. Do not point the editor at it while another ROM is running.
 - State conversion recognizes the observed 181040-byte Gameboy state with
   header format `0xB0CA`. Palette registers occupy offsets 96–223. CPU and
   other memory bytes are preserved verbatim in the converted state.

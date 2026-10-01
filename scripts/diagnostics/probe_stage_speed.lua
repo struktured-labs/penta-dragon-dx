@@ -24,7 +24,7 @@ local DONE = assert(os.getenv("STAGE_SPEED_DONE"))
 local copy_trace = os.getenv("STAGE_SPEED_COPY_TRACE") == "1"
   and assert(io.open(OUT .. ".copies.tsv", "w")) or nil
 if copy_trace then
-  copy_trace:write("frame\tloop\tevent\tbank\treturn_pc\thl\troom\tscene\tlatch\tdc0b\tx\ty\topcodes\tff01\n")
+  copy_trace:write("frame\tloop\tevent\tbank\treturn_pc\thl\troom\tscene\tlatch\tdc0b\tx\ty\topcodes\tff01\tcycle\tly\tdiv\ttima\tiflag\tie\tslot0\tslot1\tslot2\tslot3\tslot4\thost_frame\tphase\ta\trng_index\tchoice0\tchoice1\tchoice2\tchoice3\tchoice4\n")
 end
 local TRACE = os.getenv("STAGE_SPEED_TRACE")
 local LIFECYCLE = os.getenv("STAGE_SPEED_LIFECYCLE")
@@ -38,7 +38,7 @@ local camera_trace = os.getenv("STAGE_SPEED_CAMERA_TRACE") == "1"
   and assert(io.open(OUT .. ".camera.tsv", "w")) or nil
 local loop_trace = camera_trace and assert(io.open(OUT .. ".loops.tsv", "w")) or nil
 if loop_trace then
-  loop_trace:write("loop\tframe\tscene\troom\tworld_x\tworld_y\tsection_cycle\tarena\tlast_polled_keys\tffc8\tffc9\tffca\tffd3\tffeb\tffe4\n")
+  loop_trace:write("loop\tframe\tscene\troom\tworld_x\tworld_y\tsection_cycle\tarena\tlast_polled_keys\tffc8\tffc9\tffca\tffd3\tffeb\tffe4\tcycle\tly\tdiv\ttima\tiflag\tie\n")
 end
 if camera_trace then
   camera_trace:write("frame\tphase\tscene\tstage\troom\tscx\tscy\tworld_x\tworld_y\tpending_map\tlatched_x\tlcdc\tmode97\tmain_loop_hits\ttile_copy_hits\tsection_cycle\n")
@@ -102,7 +102,7 @@ local central_attr_samples = 0
 local central_xflip_changes, central_yflip_changes = 0, 0
 local central_any_flip_changes = 0
 local central_y_low_slot_samples, central_y_low_control_set = 0, 0
-local central_x_entry_11a2, central_x_entry_11a5 = 0, 0
+local central_x_entries = {at11a2=0, at11a5=0, atdb40=0}
 local pending_central_attr, pending_central_x_attr = nil, nil
 local last_main_loop_frame, max_main_loop_gap = -1, 0
 local tile_copy_hits, atomic_attr_passes = 0, 0
@@ -127,6 +127,16 @@ end
 local atomic_call_indices = {}
 local trace_addr_hits, trace_addr_samples, trace_readiness_samples, trace_addrs = {}, {}, {}, {}
 local pc_sample_counts = {}
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  -- #41: physical bank1, not whichever bank a graphics routine selected.
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local ff_scan_hits, ff_scan_trace = 0, {}
 local stage4_parser_trace = {}
 for raw in string.gmatch(TRACE_ADDRS_RAW, "[^,]+") do
@@ -134,7 +144,7 @@ for raw in string.gmatch(TRACE_ADDRS_RAW, "[^,]+") do
   if address then
     trace_addrs[#trace_addrs + 1] = address
     trace_addr_hits[address] = 0
-    trace_addr_samples[address] = {}
+    trace_addr_samples[address] = {bank_shadow_hits = {}}
     trace_readiness_samples[address] = {}
   end
 end
@@ -499,25 +509,36 @@ end
 breakpoints_available = pcall(function()
   if copy_trace then
     local function trace_copy(event)
-      if phase ~= "play" then return end
+      if phase ~= "play" and event ~= "native-spawn" then return end
       local w = assert(emu.memory.wram)
       local sp = read_register("SP") & 0xFFFF
       local pc=read_register("PC") & 0xFFFF
-      copy_trace:write(string.format("%d\t%d\t%s\t%d\t%04X\t%04X\t%d\t%d\t%d\t%d\t%d\t%d\t%02X%02X%02X\t%d\n",
+      copy_trace:write(string.format("%d\t%d\t%s\t%d\t%04X\t%04X\t%d\t%d\t%d\t%d\t%d\t%d\t%02X%02X%02X\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
         play_frames, main_loop_hits, event, emu:read8(0xFF99),
         emu:read8(sp) + 256 * emu:read8((sp+1)&0xFFFF),
         read_register("HL") & 0xFFFF, emu:read8(0xFFBD), w:read8(0x1880),
         emu:read8(0xFFC4), w:read8(0x1C0B),
         w:read8(0x1C00) + 256*w:read8(0x1C01),
         w:read8(0x1C02) + 256*w:read8(0x1C03),
-        emu:read8(pc),emu:read8((pc+1)&0xFFFF),emu:read8((pc+2)&0xFFFF),emu:read8(0xFF01)))
+        emu:read8(pc),emu:read8((pc+1)&0xFFFF),emu:read8((pc+2)&0xFFFF),emu:read8(0xFF01),
+        emu:currentCycle(),emu:read8(0xFF44),emu:read8(0xFF04),
+        emu:read8(0xFF05),emu:read8(0xFF0F),emu:read8(0xFFFF),
+        w:read8(0x1C85),w:read8(0x1C8D),w:read8(0x1C95),
+        w:read8(0x1C9D),w:read8(0x1CA5),
+        frame,phase,read_register("A") & 255,emu:read8(0xFFD1),
+        w:read8(0x1C04),w:read8(0x1C05),w:read8(0x1C06),
+        w:read8(0x1C07),w:read8(0x1C08)))
       copy_trace:flush()
     end
     for _, site in ipairs({{0x4295,"full-entry"},{0x435A,"partial-entry"},{0x42A7,"copy"},
-                          {0x42BB,"loop-entry"},{0x42ED,"copy-done"},{0x4302,"compile"}}) do
+                          {0x42BB,"loop-entry"},{0x42ED,"copy-done"},{0x4302,"compile"},
+                          {0x3497,"complete"},{0x12E0,"native-return"},
+                          {0x01F0,"map-caller-return"},{0x0181,"service-55bb"},
+                          {0x0184,"service-2222"},{0x0187,"service-4f5d"},
+                          {0x018A,"loop-tail"},{0x2317,"native-spawn"}}) do
       local address,event=site[1],site[2]
       emu:setBreakpoint(function()
-        if in_fixed_bank1_cave() or penta_in_stage1_native_copy()
+        if address < 0x4000 or in_fixed_bank1_cave() or penta_in_stage1_native_copy()
             or penta_in_stage5_wide_copy()
             or penta_in_stage7_private_copy() then
           trace_copy(event)
@@ -569,13 +590,15 @@ breakpoints_available = pcall(function()
       main_loop_hits = main_loop_hits + 1
       if loop_trace then
         local wram = assert(emu.memory.wram)
-        loop_trace:write(string.format("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+        loop_trace:write(string.format("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
           main_loop_hits, play_frames, wram:read8(0x1880), emu:read8(0xFFBD),
           wram:read8(0x1C00) + 256 * wram:read8(0x1C01),
           wram:read8(0x1C02) + 256 * wram:read8(0x1C03),
           wram:read8(0x1CB8), emu:read8(0xFFBF), emu:read8(0xFF93),
           emu:read8(0xFFC8), emu:read8(0xFFC9), emu:read8(0xFFCA),
-          emu:read8(0xFFD3), emu:read8(0xFFEB), emu:read8(0xFFE4)))
+          emu:read8(0xFFD3), emu:read8(0xFFEB), emu:read8(0xFFE4),
+          emu:currentCycle(),emu:read8(0xFF44),emu:read8(0xFF04),
+          emu:read8(0xFF05),emu:read8(0xFF0F),emu:read8(0xFFFF)))
       end
       -- Separate diagnostic routes: choose input at the CPU loop anchor,
       -- not at a host-frame boundary. Keep the original timed routes intact.
@@ -622,12 +645,24 @@ breakpoints_available = pcall(function()
   -- Filter by their synthetic return addresses so these counters describe
   -- only the WRAM-hot $DA21 path.  The emitter is DI-bounded, so one pending
   -- sample cannot be interleaved with another sprite emission.
+  local function atomic_sara_layout()
+    -- Issue #6 retains the priority helper and relocates its call site.
+    -- Fail closed on any unrecognized relocation rather than accepting lost
+    -- telemetry. The new helper's exact CALL / fold / store is authenticated.
+    local bytes = {0x2A,0xCD,0xA2,0x11,0xCD,0x88,0x11,0xE6,0xF8,0xB1,0x12,0x13}
+    for i, value in ipairs(bytes) do
+      if emu:read8(0xDA40+i) ~= value then return false end
+    end
+    return true
+  end
   local function sample_central_x(entry)
-    if phase == "play" and entry_return() == 0xDA3E then
+    local caller = entry_return()
+    if phase == "play" and (caller == 0xDA3E
+        or (caller == 0xDA45 and atomic_sara_layout())) then
       if entry == 0x11A2 then
-        central_x_entry_11a2 = central_x_entry_11a2 + 1
+        central_x_entries.at11a2 = central_x_entries.at11a2 + 1
       else
-        central_x_entry_11a5 = central_x_entry_11a5 + 1
+        central_x_entries.at11a5 = central_x_entries.at11a5 + 1
       end
       pending_central_attr = read_register("A") & 0xFF
       pending_central_x_attr = nil
@@ -639,8 +674,29 @@ breakpoints_available = pcall(function()
   -- otherwise a faster candidate can silently lose all output telemetry.
   emu:setBreakpoint(function() sample_central_x(0x11A2) end, 0x11A2)
   emu:setBreakpoint(function() sample_central_x(0x11A5) end, 0x11A5)
+  local function combined_sara_layout()
+    -- #40: authenticate both the relocated caller and the entire combined
+    -- flash/priority helper before accepting its different observation points.
+    local function matches(address, hex)
+      local index = 0
+      for byte in hex:gmatch('%x%x') do
+        if emu:read8(address+index) ~= tonumber(byte,16) then return false end
+        index = index+1
+      end
+      return true
+    end
+    return matches(0xDA41, '2ACD40DB000000E6F8B11213')
+      and matches(0xDB40, 'E5F57BCB3FCB3FE0DDC6C06F26AB7EA728073D77F1CBE71803F1CBA7F5F0DDFE043016FE022005FA3EDB180521C2FFD77EA72805F1CBFFE1C9F1CBBFE1C9')
+  end
   emu:setBreakpoint(function()
-    if phase == "play" and entry_return() == 0xDA41
+    if phase == 'play' and entry_return() == 0xDA45 and combined_sara_layout() then
+      central_x_entries.atdb40 = central_x_entries.atdb40+1
+      pending_central_attr = read_register('A') & 0xFF
+      pending_central_x_attr = nil
+    end
+  end, 0xDB40)
+  local function sample_central_y(qualified)
+    if phase == "play" and qualified
         and pending_central_attr ~= nil then
       pending_central_x_attr = read_register("A") & 0xFF
       local slot = emu:read8(0xFFDD)
@@ -654,8 +710,15 @@ breakpoints_available = pcall(function()
         central_xflip_changes = central_xflip_changes + 1
       end
     end
+  end
+  emu:setBreakpoint(function()
+    local caller = entry_return()
+    sample_central_y(caller == 0xDA41 or (caller == 0xDA48 and atomic_sara_layout()))
   end, 0x1188)
   emu:setBreakpoint(function()
+    sample_central_y(combined_sara_layout())
+  end, 0xDB5C)
+  local function sample_central_output()
     if phase == "play" and pending_central_attr ~= nil
         and pending_central_x_attr ~= nil then
       local final_attr = read_register("A") & 0xFF
@@ -668,7 +731,14 @@ breakpoints_available = pcall(function()
       end
       pending_central_attr, pending_central_x_attr = nil, nil
     end
-  end, 0xDA41)
+  end
+  emu:setBreakpoint(sample_central_output, 0xDA41)
+  emu:setBreakpoint(function()
+    if combined_sara_layout() then sample_central_output() end
+  end, 0xDA45)
+  emu:setBreakpoint(function()
+    if atomic_sara_layout() then sample_central_output() end
+  end, 0xDA48)
   emu:setBreakpoint(function()
     if phase == "play" then free_emitter_hits = free_emitter_hits + 1 end
   end, 0x346F)
@@ -812,6 +882,11 @@ breakpoints_available = pcall(function()
       if phase == "play" then
         trace_addr_hits[address] = trace_addr_hits[address] + 1
         local samples = trace_addr_samples[address]
+        -- FF99 is the mapper shadow, not proof of the physical ROM bank.
+        -- Keep all counts; never mistake another bank's same CPU address
+        -- for execution of the scene detector under investigation (#27).
+        samples.bank_shadow_hits[emu:read8(0xFF99)] =
+          (samples.bank_shadow_hits[emu:read8(0xFF99)] or 0) + 1
         if #samples < 64 then
           -- FFA5 is the exact completed-map destination/dirty latch. Keeping
           -- it in generic trace samples lets carry-signal experiments prove
@@ -1233,9 +1308,11 @@ finish = function()
   handle:write(string.format(
     '  "central_y_low_control_set": %d,\n', central_y_low_control_set))
   handle:write(string.format(
-    '  "central_x_entry_11a2": %d,\n', central_x_entry_11a2))
+    '  "central_x_entry_11a2": %d,\n', central_x_entries.at11a2))
   handle:write(string.format(
-    '  "central_x_entry_11a5": %d,\n', central_x_entry_11a5))
+    '  "central_x_entry_11a5": %d,\n', central_x_entries.at11a5))
+  handle:write(string.format(
+    '  "central_x_entry_db40": %d,\n', central_x_entries.atdb40))
   handle:write(string.format('  "free_emitter_hits": %d,\n', free_emitter_hits))
   handle:write(string.format('  "tile_copy_hits": %d,\n', tile_copy_hits))
   handle:write(string.format(
@@ -1350,6 +1427,13 @@ finish = function()
   handle:write(string.format(
     '  "abi_violation_examples": [%s],\n',
     table.concat(abi_violation_parts, ",")))
+  handle:write(string.format('  "native_assistance_writes": %d,\n', native_assistance.writes))
+  handle:write('  "native_assistance_svbk_counts": {')
+  for bank = 0, 7 do
+    handle:write(string.format('"%d":%d%s', bank,
+      native_assistance.bank_shadow_counts[bank] or 0, bank < 7 and ',' or ''))
+  end
+  handle:write('},\n')
   local trace_parts = {}
   for _, address in ipairs(trace_addrs) do
     trace_parts[#trace_parts + 1] = string.format(
@@ -1357,6 +1441,18 @@ finish = function()
   end
   handle:write(string.format(
     '  "trace_addr_hits": {%s},\n', table.concat(trace_parts, ",")))
+  trace_parts = {}
+  for _, address in ipairs(trace_addrs) do
+    for bank = 0, 255 do
+      if trace_addr_samples[address].bank_shadow_hits[bank] then
+        trace_parts[#trace_parts + 1] = string.format(
+          '"0x%04X/FF99=%02X":%d', address, bank,
+          trace_addr_samples[address].bank_shadow_hits[bank])
+      end
+    end
+  end
+  handle:write(string.format(
+    '  "trace_addr_bank_shadow_hits": {%s},\n', table.concat(trace_parts, ",")))
   local trace_sample_parts = {}
   for _, address in ipairs(trace_addrs) do
     local samples = trace_addr_samples[address]
@@ -1515,7 +1611,7 @@ callbacks:add("frame", function()
       wram:read8(0x1F5C), emu:read8(0xFF40), emu:read8(0xFF97),
       main_loop_hits, tile_copy_hits, wram:read8(0x1CB8)))
   end
-  emu:write8(0xDCFD, 0x01)
+  native_assistance.write(0xDCFD, 0x01)
   if not seeded and frame >= 100 then seed_sram(); seeded = true end
 
   if lifecycle then
@@ -1557,9 +1653,8 @@ callbacks:add("frame", function()
     return
   end
 
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xFF)
+  -- #37: inventory cursor/state are not health; keep them native.
+  native_assistance.write(0xDCBB, 0xFF)
 
   if phase == "loading" then
     emu:write8(0xFFBA, TARGET)

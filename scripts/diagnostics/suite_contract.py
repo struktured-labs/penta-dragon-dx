@@ -47,6 +47,7 @@ GUARDED_ENTRYPOINTS = (
     "scripts/diagnostics/verify_final_cutscene_mgba.py",
     "scripts/diagnostics/inventory_final_cutscene_mgba.py",
     "scripts/diagnostics/verify_frame_flicker.py",
+    "scripts/diagnostics/verify_sara_pose.py",
     "scripts/diagnostics/verify_game_start_routes.py",
     "scripts/diagnostics/verify_gameplay_obj_palettes.py",
     "scripts/diagnostics/verify_later_stage_integrity.py",

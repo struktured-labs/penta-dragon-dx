@@ -19,6 +19,7 @@ import stage_card_palette_handoff as handoff
 import build_v302_title_fix as production
 
 FACTORY_SHA256 = "e5601c68ee050ae2fadf67cef5da6d04baae90cbe75ea2ea52964e5151924c90"
+ATOMIC_FACTORY_SHA256 = "a5dc175b3d9f74208a3e068c07751786e6ab307b827e379707c2c93faa5bc01d"
 BASELINE_SHA256 = "029a413b4ef5c0d3fdb6d9d39902821e8b0d9f35a36bed20ab82973f2ab10742"
 
 # Source-owned historical fragments not exposed as variants by current
@@ -60,6 +61,21 @@ def digest(data: bytes | bytearray) -> str:
 
 
 def build(factory: bytes) -> tuple[bytes, dict]:
+    input_sha256 = digest(factory)
+    normalized_atomic_emitter = False
+    if input_sha256 == ATOMIC_FACTORY_SHA256:
+        # #6 source integration: reconstruct the historical parent only.
+        # The successor chain reapplies the reviewed atomic emitter later.
+        historical = bytearray(factory)
+        for offset in (0x37B21, 0x43B21):
+            if historical[offset:offset + 60] != production.ATOMIC_SARA_EMITTER:
+                raise ValueError("atomic factory emitter preimage differs")
+            historical[offset:offset + 60] = production.TORN_SARA_EMITTER
+        historical[0x14E:0x150] = (
+            (sum(historical[:0x14E]) + sum(historical[0x150:])) & 0xFFFF
+        ).to_bytes(2, "big")
+        factory = bytes(historical)
+        normalized_atomic_emitter = True
     if digest(factory) != FACTORY_SHA256:
         raise ValueError("r120 profile requires the exact freshly generated factory identity")
     result = bytearray(factory)
@@ -112,7 +128,9 @@ def build(factory: bytes) -> tuple[bytes, dict]:
     return candidate, {
         "schema": "penta-r120-historical-source-profile-v1",
         "experimental": True, "promotable": False,
-        "factory_sha256": digest(factory), "candidate_sha256": digest(candidate),
+        "factory_sha256": input_sha256, "candidate_sha256": digest(candidate),
+        "historical_factory_sha256": digest(factory),
+        "normalized_atomic_emitter": normalized_atomic_emitter,
         "retained_roms_read": False, "fresh_live_qualification": False,
         "changed_bytes": len(changed), "fragments": records,
     }

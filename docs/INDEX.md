@@ -77,7 +77,7 @@ then dive into the specific subsystem you care about.
   vanilla and v3.00.
 - [`FINDINGS_2026_08_16_boss_speed_instrumentation.md`](FINDINGS_2026_08_16_boss_speed_instrumentation.md)
   — **HISTORICAL instrumentation diagnosis.** Established the arena-loop
-  anchor and exposed phase-confounded percentages. The current 78-gate
+  anchor and exposed phase-confounded percentages. The current 79-gate
   receipt adds deterministic transition-aligned timing; see
   [`release/known_deviations.md`](release/known_deviations.md).
 - [`speed_optimization_plan_v3.md`](speed_optimization_plan_v3.md) —

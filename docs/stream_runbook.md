@@ -6,44 +6,97 @@ editor. Live tuning is external tooling: the browser/Lua bridge may load
 curated emulator states and write mGBA's CGB palette RAM without adding those
 controls to the ROM. It does not enable the retired SELECT+START teleport.
 
+## September 27 regression work — experimental source build
+
+The later recorded-playthrough bugs remain under investigation. The historical
+r536 qualification below does not certify the newer experimental builds or
+resolve those reports. Do not deploy an experimental ROM based on this page.
+
+To reconstruct the current combined experimental fixes from original ROM and
+palette sources, choose a fresh ignored output directory:
+
+```bash
+uv run --with pyyaml python scripts/build_stream_regression_candidate.py \
+  --presentation --output tmp/stream-presentation-local
+```
+
+The expected result is SHA-256
+`d744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5`.
+The build checks exact intermediate identities and records loaded project
+Python source hashes. It uses no archived candidate ROM as an input. Omitting
+`--presentation` preserves the earlier source07 construction. Neither mode
+runs acceptance tests, deploys, changes the default ROM, or grants readiness.
+See [the regression audit](audit/recorded_stream_regressions_20260927.md) for
+tested scope and unresolved reports, including persistent yellow trails.
+
+## Historical pinned r536 profile
+
+Tonight's qualified gameplay build is r536, SHA-256
+`b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350`.
+The convenient local copy is
+`tmp/stream-tonight/Penta Dragon DX v3.01.gbc`; it is byte-identical to both
+independent source builds retained under
+`tmp/r536-restored-suite-current721/build/`.
+
+The fresh deterministic receipt is
+`docs/release/verification/latest.json`, and its complete 87-gate matrix is
+`tmp/r536-restored-suite-current721/matrix/manifest.json`. Use those
+exact paths together. Do not substitute an older ROM merely because its
+filename is familiar.
+
+The normal gameplay-stream entrypoint is `scripts/launch_mgba.sh CANDIDATE`.
+It requires an explicit ROM, records its SHA-256, and keeps the headed emulator
+under the project single-flight wrapper. Use
+`scripts/palette_session.sh start CANDIDATE` only when the browser palette
+editor is actually needed.
+
+A live color preview does not alter the ROM. If YAML is saved during a palette
+session, rebuild and qualify the resulting r536 identity before treating those
+colors as part of the patch. Ted's stabilized whip/orb animation remains a
+documented taste choice under item 6 of `release/known_deviations.md`; it is not
+a gameplay-stream blocker.
+
 ## Before going live
 
-1. Confirm that no old owned session is running:
+1. Confirm that no emulator already owns the single-flight slot:
 
    ```bash
-   scripts/palette_session.sh status
+   scripts/check_emulator_processes.sh --require-none
    ```
 
-2. Run the stream workflow gate against the candidate:
+2. Revalidate the fresh receipt and its exact complete matrix without starting
+   another emulator:
 
    ```bash
-   STREAM_ROM="tmp/menu-icons-candidate-r5/penta-dragon-dx-menu-icons-r5.gb"
-   python3 scripts/diagnostics/verify_live_palette_session.py \
-     "$STREAM_ROM"
+   env LD_LIBRARY_PATH="$PWD/tmp/mgba-cgb-latches-r454/build" \
+     TMPDIR="$PWD/tmp" PYTHONDONTWRITEBYTECODE=1 \
+     python3 scripts/diagnostics/verify_suite_receipt.py \
+       --receipt docs/release/verification/latest.json
+
+   env LD_LIBRARY_PATH="$PWD/tmp/mgba-cgb-latches-r454/build" \
+     TMPDIR="$PWD/tmp" PYTHONDONTWRITEBYTECODE=1 \
+     python3 scripts/diagnostics/verify_live_regression.py \
+       "tmp/stream-tonight/Penta Dragon DX v3.01.gbc" \
+       --verify-manifest \
+       tmp/r536-restored-suite-current721/matrix/manifest.json
    ```
 
-   Prove that the current YAML also rebuilds that exact expanded candidate,
-   without creating an approval record:
+3. Start the guarded gameplay build:
 
    ```bash
-   STREAM_ROM="tmp/menu-icons-candidate-r5/penta-dragon-dx-menu-icons-r5.gb"
-   python3 scripts/record_palette_approval.py \
-     --rom "$STREAM_ROM" \
-     --expanded-ted \
-     --menu-icon-colors \
-     --verify-only
+   scripts/launch_mgba.sh \
+     "tmp/stream-tonight/Penta Dragon DX v3.01.gbc"
    ```
 
-3. Start the headed mGBA/editor pair:
+   For an audience palette-tuning stream instead, start the editor pair with:
 
    ```bash
    scripts/palette_session.sh start \
-     tmp/menu-icons-candidate-r5/penta-dragon-dx-menu-icons-r5.gb
+     "tmp/stream-tonight/Penta Dragon DX v3.01.gbc"
    ```
 
-   The launcher uses the required XWayland/NVIDIA `xcb` path, verifies that
-   both owned processes survive startup, opens `http://localhost:8077`, and
-   refreshes all ROM-matched stage, boss, and story states when needed.
+   That launcher also opens `http://localhost:8077` and refreshes the
+   ROM-matched stage, boss, and story states when needed.
 
 4. Capture the mGBA window in OBS. Keep the browser editor available to the
    host; show it on stream only if desired.
@@ -97,8 +150,7 @@ Then build and prove the exact audience-tuned candidate in this order:
 STREAM_SUITE="tmp/palette-stream-final"
 
 python3 scripts/diagnostics/run_deterministic_suite.py \
-  --expanded-ted \
-  --menu-icon-colors \
+  --r536-source \
   --output "$STREAM_SUITE" \
   --receipt "$STREAM_SUITE/deterministic-receipt.json"
 ```
@@ -115,7 +167,7 @@ copy—for the patch and approval:
 
 ```bash
 STREAM_SUITE="tmp/palette-stream-final"
-STREAM_ROM="$STREAM_SUITE/build/candidate-a.gb"
+STREAM_ROM="$STREAM_SUITE/build/source-a/candidate.gb"
 
 uv run penta-colorize build-patch \
   --original "rom/Penta Dragon (J).gb" \
@@ -127,12 +179,12 @@ Only after that proof, record the audience decision:
 
 ```bash
 STREAM_SUITE="tmp/palette-stream-final"
-STREAM_ROM="$STREAM_SUITE/build/candidate-a.gb"
+STREAM_ROM="$STREAM_SUITE/build/source-a/candidate.gb"
 
 python3 scripts/record_palette_approval.py \
+  --r536-source \
   --rom "$STREAM_ROM" \
-  --expanded-ted \
-  --menu-icon-colors \
+  --source-output "$STREAM_SUITE/palette-source-proof" \
   --output "$STREAM_SUITE/palette-approval.json" \
   --confirm "AUDIENCE APPROVED" \
   --notes "Final colors selected during the Twitch stream"
@@ -142,12 +194,9 @@ The recorder independently rebuilds the same expanded profile in repo-local
 temporary storage and refuses approval unless the saved YAML reproduces the
 exact suite ROM byte-for-byte.
 
-Finally, acquire the shared MiSTer reservation and run the physical checkpoint
-sweep documented in `README.md`. The final ROM-free archive can be built only
-when the hardware manifest, emulator matrix, IPS, and palette approval all
-match that same ROM. `scripts/build_release_bundle.py` derives the expanded
-gate roster from the authoritative matrix definition and rejects a 256 KiB or
-menu-less ROM.
+For a public release, the optional hardware and approval workflow remains
+documented in `README.md`. It is separate from launching the qualified ROM for
+a gameplay stream.
 
 ## Recovery
 

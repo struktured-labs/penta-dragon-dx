@@ -38,9 +38,12 @@ EXPECTED_TABLE_HISTOGRAM = dict(sorted(Counter(EXPECTED_TABLE).items()))
 
 
 def expected_stage1_table(rom: bytes) -> bytes:
-    """YAML palette ownership plus r438's exact reviewed tooth-art bank."""
+    """YAML ownership plus exact, source-built tooth/star data profiles."""
     expected = bytearray(EXPECTED_TABLE)
-    if hashlib.sha256(rom).hexdigest() in {
+    pin = hashlib.sha256(rom).hexdigest()
+    if pin in {
+        '46eb95a0c0f770fb3cf8c3211b8030a9e881f59077e558b93703ba08da71d3fb',  # #24/#45: source-built successor, identical authored tooth/star table
+        'd744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5',  # #22 combined source build
         '44ac932aca17701ae97596fd511f77fa0eae8f98761d61e618262a7f71bf9702',
         'ea53ebb1f8cef8480b6ad3b4472b74f11bab6b0ea9f03660ea8e5ca7bcde1a46',
         '6b375a8080df3c982f63a92ea0a679241d8c77cf370776d38bd5b4be8c101e35',
@@ -62,6 +65,7 @@ def expected_stage1_table(rom: bytes) -> bytes:
         'b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350',  # r536: inherited observer/data ABI
         'e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b',  # title row guard: unchanged gameplay observer/data ABI
         'c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d',  # death/restart successor: unchanged semantic table
+        '4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5',  # #6: unchanged semantic table
         'b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96',
         'ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63',
         'd82f563d856995fc1844d48cdd317b12f2ac9218f023eec376ee73bc24308074',
@@ -70,6 +74,15 @@ def expected_stage1_table(rom: bytes) -> bytes:
         for tile in (*range(0x64, 0x6A), *range(0x74, 0x7A)):
             assert expected[tile] == 7
             expected[tile] |= 8
+    if pin in {
+        'd744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5',
+        '46eb95a0c0f770fb3cf8c3211b8030a9e881f59077e558b93703ba08da71d3fb',
+    }:
+        # #22's data-only overlay assigns only the four five-point-star tiles
+        # to BG5. Do not infer expectations from the candidate LUT itself.
+        for tile in (0x82, 0x83, 0x92, 0x93):
+            assert expected[tile] == 0
+            expected[tile] = 5
     return bytes(expected)
 
 # emu:screenshot() queues the image from Lua's frame callback; guarded Qt can
@@ -895,6 +908,9 @@ def main() -> int:
         "rom": str(rom),
         "rom_md5": digest(rom, "md5"),
         "rom_sha256": digest(rom),
+        "probe_sha256": digest(PROBE),
+        "verifier_sha256": digest(Path(__file__)),
+        "assistance": "SRAM/Stage1 selection fixture; continuous physical bank1 DCBB=FF only (#37/#41), SVBK write counts in probe; inventory cursor left native",
         "route": {
             "source": (
                 "settled diagnostic Stage-1 fixture; candidate Stage-1 WRAM "

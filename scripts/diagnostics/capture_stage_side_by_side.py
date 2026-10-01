@@ -207,6 +207,18 @@ def capture(rom: Path, target: int, frames: int, step: int, audit_step: int,
     return rows, audits
 
 
+def assistance_summary(prefix: Path) -> dict:
+    """#41 retain the physical-bank assistance totals, including scratch selection."""
+    fields = dict(re.findall(r'^(native_assistance_\w+)=(\d+)$',
+                             Path(str(prefix)+'.trace').read_text(), re.MULTILINE))
+    total = int(fields['native_assistance_writes'])
+    counts = {str(bank): int(fields[f'native_assistance_svbk_{bank}'])
+              for bank in range(8)}
+    if sum(counts.values()) != total:
+        raise ValueError('inconsistent native assistance counters')
+    return dict(physical_bank=1, writes=total, selected_svbk_counts=counts)
+
+
 def build_sheet(og: list[dict], dx: list[dict], out: Path, stage: int) -> None:
     frames = sorted({r["frame"] for r in og} & {r["frame"] for r in dx})
     og_by = {r["frame"]: r for r in og}
@@ -257,6 +269,9 @@ def main() -> int:
     manifest = {
         "schema": "penta-stage-side-by-side-v1",
         "status": "pass",
+        "probe_sha256": sha256(PROBE),
+        "verifier_sha256": sha256(Path(__file__)),
+        "assistance": "SRAM level select and stage setup; physical bank1 DCFD save flag and DCBB health (#41); no DCDD/DCDC refill (#37)",
         "original_rom_sha256": sha256(args.original.resolve()),
         "dx_rom_sha256": sha256(args.dx_rom.resolve()),
         "frames": args.frames, "step": args.step,
@@ -284,6 +299,8 @@ def main() -> int:
         sheet = args.output / f"stage{target + 1}-side-by-side.png"
         build_sheet(og, dx, sheet, target)
         manifest["stages"][f"stage{target + 1}"] = {
+            "native_assistance": {side: assistance_summary(stage_dir/side/'run')
+                                  for side in ('og', 'dx')},
             "og_shots": len(og), "dx_shots": len(dx),
             "og_image_sha256": [row["png_sha256"] for row in og],
             "dx_image_sha256": [row["png_sha256"] for row in dx],

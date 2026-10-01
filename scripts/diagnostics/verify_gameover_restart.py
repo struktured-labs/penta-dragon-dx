@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -25,6 +26,16 @@ GUARD = ROOT / "scripts/mgba-qt-singleflight"
 
 def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def assistance_summary(output: Path) -> dict:
+    fields = dict(re.findall(r'^(native_assistance_\w+)=(\d+)$',
+                            (output/'trace.tsv').read_text(), re.MULTILINE))
+    total = int(fields['native_assistance_writes'])
+    counts = {str(bank): int(fields[f'native_assistance_svbk_{bank}']) for bank in range(8)}
+    if sum(counts.values()) != total:
+        raise ValueError('inconsistent native assistance counts')
+    return dict(writes=total, physical_bank=1, selected_svbk_counts=counts)
 
 
 def compare_images(before: Path, after: Path, region: tuple[int, int, int, int]) -> None:
@@ -81,10 +92,11 @@ def validate(output: Path, traverse: bool = False) -> None:
     if int(route[2]) < 2:
         raise ValueError("no verified death stimulus for both cycles")
     # Known native GAME OVER window from the existing death verifier.
-    from verify_death_gameover import GAMEOVER_RGB_SHA256
+    from verify_death_gameover import gameover_rgb_sha256_for_rom
+    expected_gameover = gameover_rgb_sha256_for_rom((output / 'runtime/candidate.gb').read_bytes())
     for i in range(1, int(route[3]) + 1):
         with Image.open(output / f"gameover-{i}.png") as image:
-            if image.size != (160, 144) or hashlib.sha256(image.convert("RGB").tobytes()).hexdigest() != GAMEOVER_RGB_SHA256:
+            if image.size != (160, 144) or hashlib.sha256(image.convert("RGB").tobytes()).hexdigest() != expected_gameover:
                 raise ValueError(f"Game Over rendering corrupted in capture {i}")
     for i in (1, 2):
         labels = ("title", "stage") + (("travel-0668", "travel-05AC", "travel-03A4") if traverse else ())
@@ -145,6 +157,9 @@ def main() -> int:
     runtime.mkdir()
     tested_rom = runtime / "candidate.gb"
     shutil.copy2(rom, tested_rom)
+    # Keep source-bound evidence usable after later harness corrections.
+    shutil.copy2(PROBE, output/'probe.lua')
+    shutil.copy2(Path(__file__), output/'verifier.py')
     environment = os.environ.copy()
     environment.pop("PENTA_MGBA_QT_BIN", None)
     environment.update(QT_QPA_PLATFORM="offscreen", SDL_AUDIODRIVER="dummy",
@@ -158,7 +173,7 @@ def main() -> int:
     receipt = {"schema": "penta-gameover-restart-v1", "rom_sha256": identity,
                "probe_sha256": sha(PROBE), "verifier_sha256": sha(Path(__file__)),
                "scope": "emulator", "status": "failed",
-               "stimulus": ("movement-only native damage" if args.natural_damage else
+               "stimulus": ("movement-driven native damage; B dismisses native low-health inventory (#38)" if args.natural_damage else
                             "hazard-area movement followed by HP=0 once per life" if args.hazard_death else
                             "HP=0 once per life")}
     receipt["traverse"] = args.traverse
@@ -169,6 +184,7 @@ def main() -> int:
     receipt["blank_sram_at_launch"] = True
     receipt["wait_disarm"] = args.wait_disarm
     receipt["hazard_walk_frames"] = int(environment.get("PENTA_RESTART_SPIKE_WALK", "1600"))
+    receipt["hazard_oscillate"] = environment.get("PENTA_RESTART_SPIKE_OSCILLATE") == "1"
     if args.sequence:
         receipt["sequence_oracle_sha256"] = sha(Path(__file__).with_name('gameover_sequence.py'))
     receipt["terrain_oracle_sha256"] = sha(Path(__file__).with_name('restart_terrain.py'))
@@ -185,6 +201,7 @@ def main() -> int:
             raise ValueError(f"route failed: exit {result.returncode}; inspect emulator.log and trace.tsv")
         if sha(rom) != identity or sha(tested_rom) != identity:
             raise ValueError("ROM changed during test")
+        receipt['native_assistance'] = assistance_summary(output)
         validate(output, args.traverse)
         if args.hazard_death or args.saved_game:
             validate_stage_cards(output, args.saved_game)

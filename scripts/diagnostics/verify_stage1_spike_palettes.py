@@ -871,6 +871,11 @@ if SEMANTIC_LEGACY_CONTEXT_TRAMPOLINE != bytes.fromhex(
 
 
 def semantic_expansion_is_exact(rom: bytes) -> bool:
+    from build_sara_atomic_pose import CANDIDATE_SHA as SARA_SHA, authenticated_parent as sara_parent
+    if hashlib.sha256(rom).hexdigest() == SARA_SHA:
+        # Issue #6 changes only the two OAM emitters and checksum. Authenticate
+        # that whole delta before inspecting the unchanged hazard publisher.
+        return semantic_expansion_is_exact(sara_parent(rom))
     from build_spike_death_trial import (
         CANDIDATE_SHA as SPIKE_DEATH_SHA,
         authenticated_parent as spike_death_parent,
@@ -1392,6 +1397,9 @@ def parse_live_report(path: Path) -> dict[str, str]:
 
 def publication_boundary(rom: bytes) -> dict[str, int | str]:
     """Return the one reviewed physical-page LCDC publication site."""
+    from build_sara_atomic_pose import CANDIDATE_SHA as SARA_SHA, authenticated_parent as sara_parent
+    if hashlib.sha256(rom).hexdigest() == SARA_SHA:
+        return publication_boundary(sara_parent(rom))
     from build_spike_death_trial import (
         CANDIDATE_SHA as SPIKE_DEATH_SHA,
         authenticated_parent as spike_death_parent,

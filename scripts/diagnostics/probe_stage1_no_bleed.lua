@@ -25,6 +25,16 @@ for value in string.gmatch(
     assert(os.getenv("STAGE1_BLEED_PICKUP_TILES")), "[^,]+") do
   pickup_tiles[tonumber(value, 16)] = true
 end
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  -- #41: health belongs to physical bank1 even while graphics selects SVBK2/3.
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local LIMIT = tonumber(os.getenv("STAGE1_BLEED_FRAMES") or "1200")
 local INPUT_MODE = os.getenv("STAGE1_BLEED_MODE") or "box"
 -- Optional read-only diagnostic snapshots; no restored state or gameplay writes.
@@ -501,6 +511,11 @@ local function finish()
   table.sort(runtime_pairs)
   local handle = assert(io.open(RESULT, "w"))
   handle:write(string.format("frames=%d\n", play_frames))
+  handle:write(string.format("native_assistance_writes=%d\n", native_assistance.writes))
+  for bank = 0, 7 do
+    handle:write(string.format("native_assistance_svbk_%d=%d\n", bank,
+      native_assistance.bank_shadow_counts[bank] or 0))
+  end
   handle:write(string.format("sampled_frames=%d\n", sampled_frames))
   handle:write(string.format("checked_cells=%d\n", checked_cells))
   handle:write(string.format("pal1_cells=%d\n", pal1_cells))
@@ -720,10 +735,9 @@ callbacks:add("frame", function()
     return
   end
 
-  -- Keep the route alive while still letting the stock stage run normally.
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xFF)
+  -- #37: health assistance only. DCDD is the ten-slot inventory cursor,
+  -- not health; DCDC also belongs to native inventory handling.
+  native_assistance.write(0xDCBB, 0xFF)
 
   if phase == "loading" then
     emu:write8(0xFFBA, 0)

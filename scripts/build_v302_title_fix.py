@@ -11711,48 +11711,97 @@ def _emit_semantic_attr_merge(a: _Asm, *, mirror_alternate: bool) -> None:
     a.db(0xC1, 0x13)                       # restore BC; advance DE
 
 
+# Issue #6. $10B1 writes Sara as four back-to-back entries (three CALLs plus
+# a fall-through into $10D1). The previous image enabled interrupts after
+# every entry, so VBlank could DMA a quartet with three new tiles and one
+# stale quadrant. Slots 0-2 now return while IME is still off; slot 3 and
+# every later slot enable interrupts. Same 60-byte image as the reviewed
+# trial whose walking and firing routes passed. CALL $11A2/$1188 stay, so
+# the current priority helper is unchanged.
+TORN_SARA_EMITTER = bytes.fromhex(
+    "3E0AEAFF1F781213791213C52A1213474F06D90AFEFF281A"
+    "4F2ACDA211CD8811E6F8B11213C179C6084F3E00EAFF1FFB"
+    "79C9F0BEB70E0228E00D18DD"
+)
+ATOMIC_SARA_EMITTER = bytes.fromhex(
+    "3E0AEAFF1F781213791213C52A12134F06D90AFEFF2008"
+    "F0BEFE013E01CE004F2ACDA211CD8811E6F8B11213"
+    "AFEAFF1F7BFE103801FBC179C6084FC9"
+)
+
+
 def build_oam_central_emitter() -> bytes:
     """WRAM-hot replacement for stock sprite emitter $10D1.
 
-    Palette selection is a page-aligned D900 lookup generated from the monster
-    YAML. This removes the old CP cascade as well as a resolver CALL/RET pair.
-    The stock $09CE/$09D6 helpers only preserve A around one write to $1FFF;
-    A is dead at entry and replaced with C before return, so emit those exact
-    flag-preserving writes inline on this 3,900+-calls-per-route hot path.
+    Palette selection is a page-aligned D900 lookup. Sara's $FF marker becomes
+    palette 2 when FFBE is 0 and palette 1 otherwise. The stock $09CE/$09D6
+    SRAM writes are inlined. SRAM is off before the EI decision, and the
+    native ADD A,8 is the last flag-setting instruction so the A=C return
+    contract matches the torn image.
     """
     a = _Asm()
     a.db(0x3E, 0x0A, 0xEA, 0xFF, 0x1F)     # inline stock $09CE effect
     a.db(0x78, 0x12, 0x13)                  # Y
     a.db(0x79, 0x12, 0x13)                  # X
     a.db(0xC5)                              # preserve stock Y/X in BC
-    a.db(0x2A, 0x12, 0x13, 0x47)            # tile; B = tile
+    a.db(0x2A, 0x12, 0x13)                  # tile
     a.db(
         0x4F,                               # C = tile
         0x06, OAM_PALETTE_LUT_WRAM >> 8,   # BC = D900 + tile
         0x0A,                               # A = YAML LUT[tile]
         0xFE, 0xFF,
     )
-    a.jr(0x28, "sara_palette")
-    a.db(0x4F)                              # C = resolved palette
-    a.label("palette_ready")
+    a.jr(0x20, "palette_in_c")              # not Sara: keep LUT value
+    a.db(0xF0, 0xBE, 0xFE, 0x01, 0x3E, 0x01, 0xCE, 0x00)
+    a.label("palette_in_c")
+    a.db(0x4F)                              # C = palette
     a.db(0x2A, 0xCD, 0xA2, 0x11, 0xCD, 0x88, 0x11)
     a.db(0xE6, 0xF8, 0xB1, 0x12, 0x13)     # merge/store attr
-    a.db(0xC1)                              # restore stock Y/X
-    a.db(0x79, 0xC6, 0x08, 0x4F)
-    a.db(
-        0x3E, 0x00, 0xEA, 0xFF, 0x1F,     # inline stock $09D6 effect
-        0xFB,                               # EI after atomic tile+attr emission
-        0x79,                               # stock contract: return A=C
-        0xC9,
-    )
+    a.db(0xAF, 0xEA, 0xFF, 0x1F)           # SRAM off before EI
+    a.db(0x7B, 0xFE, 0x10)                  # E is the next entry offset
+    a.jr(0x38, "restore_bc")                # slots 0-2: leave IME off
+    a.db(0xFB)                              # slot >= 3: EI after this entry
+    a.label("restore_bc")
+    a.db(0xC1, 0x79, 0xC6, 0x08, 0x4F, 0xC9)
+    code = a.finish()
+    assert code == ATOMIC_SARA_EMITTER, code.hex()
+    assert len(code) == len(TORN_SARA_EMITTER) == 60
+    return code
 
-    # The only dynamic LUT value is Sara's $FF marker.
-    a.label("sara_palette")
-    a.db(0xF0, 0xBE, 0xB7, 0x0E, 0x02)
-    a.jr(0x28, "palette_ready")
-    a.db(0x0D)
-    a.jr(0x18, "palette_ready")
-    return a.finish()
+
+def install_atomic_sara_emitters(rom: bytearray) -> tuple[int, ...]:
+    """Replace every torn central-emitter image, including the bank-16 mirror.
+
+    The cold installer copies bank-relative $7B00, so a stale bank-16 image
+    republishes the tearing emitter whenever bank 16 is mapped. Diagnostic
+    builds that restore the native $10D1 wrapper are left untouched.
+    """
+    if rom[0x10D1:0x10D5] != bytes.fromhex("F3C321DA"):
+        return ()
+    image = build_oam_central_emitter()
+    replaced: list[int] = []
+    width = len(image)
+    for bank in range(len(rom) // 0x4000):
+        off = bank * 0x4000 + (OAM_CENTRAL_EMITTER_ADDR - 0x4000)
+        if rom[off:off + width] == TORN_SARA_EMITTER:
+            rom[off:off + width] = image
+            replaced.append(bank)
+    required = [13]
+    if len(rom) >= 17 * 0x4000:
+        required.append(16)
+    for bank in required:
+        off = bank * 0x4000 + (OAM_CENTRAL_EMITTER_ADDR - 0x4000)
+        if rom[off:off + width] != image:
+            raise AssertionError(
+                f"bank {bank} Sara emitter is not the atomic image"
+            )
+    return tuple(replaced)
+
+
+def write_global_checksum(rom: bytearray) -> None:
+    """Store the cartridge global checksum, excluding its own two bytes."""
+    total = (sum(rom[:0x14E]) + sum(rom[0x150:])) & 0xFFFF
+    rom[0x14E:0x150] = total.to_bytes(2, "big")
 
 
 def build_oam_free_emitter() -> bytes:
@@ -13132,7 +13181,7 @@ def load_death_gameover_palette(path: Path) -> bytes:
 
 
 def load_death_gameover_text_palette(path: Path) -> bytes:
-    """Compile the independent neutral GAME OVER palette row."""
+    """Compile the independent GAME OVER palette row (purple accent, issue #18)."""
     document = yaml.safe_load(Path(path).read_text())
     entry = document.get("death_gameover_palette", {})
     colors = entry.get("gameover_colors", ())
@@ -16598,11 +16647,19 @@ def main(
             f"JP NZ at 0x{LEVELSEL_PATCH_ADDR:04X} remains native $7393"
         )
 
+    replaced_sara_banks = install_atomic_sara_emitters(rom)
+    if replaced_sara_banks:
+        print(
+            "  Sara pose atomicity: deferred EI through quadrant 3 in banks "
+            + ", ".join(str(bank) for bank in replaced_sara_banks)
+        )
+
     # Header checksum
     chk = 0
     for b in rom[0x134:0x14D]:
         chk = (chk - b - 1) & 0xFF
     rom[0x14D] = chk
+    write_global_checksum(rom)
 
     # Final dispatcher/identity-map verification.
     _dispatch = rom[

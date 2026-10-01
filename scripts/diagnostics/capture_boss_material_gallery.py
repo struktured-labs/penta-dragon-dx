@@ -11,6 +11,7 @@ valid cross-build comparison into synthetic corruption.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -62,6 +63,9 @@ def capture(
         Path(f"{prefix}{suffix}").unlink(missing_ok=True)
     for fraction in (frames // 4, frames // 2, frames * 3 // 4):
         Path(f"{prefix}.f{fraction:03d}.png").unlink(missing_ok=True)
+    for phase in (frames // 4, frames // 2, frames * 3 // 4, frames):
+        suffix = f".f{phase:03d}.png" if phase != frames else ".png"
+        Path(f"{prefix}{suffix}.sprites.json").unlink(missing_ok=True)
 
     rom_bytes = rom.read_bytes()
     env = os.environ.copy()
@@ -111,6 +115,21 @@ def capture(
 
     if marker.read_text().strip() != "ok":
         raise RuntimeError(f"boss {target}: capture probe rejected state")
+    if target == 8:
+        for phase in (frames // 4, frames // 2, frames * 3 // 4, frames):
+            suffix = f".f{phase:03d}.png" if phase != frames else ".png"
+            image = Path(f"{prefix}{suffix}")
+            receipt = Path(f"{image}.sprites.json")
+            payload = json.loads(receipt.read_text())
+            if payload["frame"] != phase:
+                raise ValueError("projectile receipt phase mismatch")
+            payload.update({
+                "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
+                "rom_sha256": hashlib.sha256(rom_bytes).hexdigest(),
+                "state_sha256": hashlib.sha256(state.read_bytes()).hexdigest(),
+                "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
+            })
+            receipt.write_text(json.dumps(payload, indent=2) + "\n")
     return report_fields(Path(f"{prefix}.audit.report"))
 
 

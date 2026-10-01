@@ -21,6 +21,17 @@ local stable_frames = 0
 local max_stable_frames = 0
 local expected_scene = TARGET + 2
 
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  -- #41: health/resource assistance belongs to physical bank1.
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
+
 local function reg(name)
   for _, reader in ipairs({
     function() return emu:getRegister(name) end,
@@ -140,6 +151,11 @@ local function capture()
     emu:readRegister("PC") & 0xFFFF, emu:readRegister("SP") & 0xFFFF,
     emu:read8(0xFF43), emu:read8(0xFF42), active_base, visible, unsafe))
   meta:write("visible_attr_hist=" .. table.concat(parts, ",") .. "\n")
+  meta:write(string.format("native_assistance_writes=%d\n", native_assistance.writes))
+  for bank = 0, 7 do
+    meta:write(string.format("native_assistance_svbk_%d=%d\n", bank,
+      native_assistance.bank_shadow_counts[bank] or 0))
+  end
   meta:close()
 
   emu:write8(0xFF4F, old_vbk)
@@ -177,7 +193,7 @@ callbacks:add("frame", function()
   end
 
   if phase == "level_select" and not confirmed then
-    emu:write8(0xDCFD, 0x01)
+    native_assistance.write(0xDCFD, 0x01)
     emu:write8(0xFFBA, TARGET)
     seed_sram()
     if f % 60 >= 10 and f % 60 < 16 then emu:setKeys(KEY_A)
@@ -192,9 +208,8 @@ callbacks:add("frame", function()
   end
 
   emu:setKeys(0)
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xF0)
+  -- #37: health is DCBB; leave native inventory state DCDC/DCDD alone.
+  native_assistance.write(0xDCBB, 0xF0)
   emu:write8(0xFFBA, TARGET)
 
   if emu:read8(0xD880) == expected_scene and emu:read8(0xFFC1) == 1 then

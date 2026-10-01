@@ -163,7 +163,7 @@ death_gameover_palette:
   # Color 3 intentionally shares GAME OVER's charcoal high byte: the stock
   # 64-byte burst repairs BG4's final byte from this row at the HBlank seam.
   colors: ["7FFF", "7FFF", "7E1F", "294A"]  # White, white, spectral purple, charcoal
-  gameover_colors: ["7FFF", "7FFF", "56B5", "294A"]  # Exact neutral GAME OVER ramp
+  gameover_colors: ["7FFF", "7FFF", "7E1F", "294A"]  # #18: purple accent; retain shared charcoal fade seam
 
 # Stage-local BG rows. These are loaded only for the named scene and do not
 # replace the normal BG palette with the same hardware slot in title, bonus,

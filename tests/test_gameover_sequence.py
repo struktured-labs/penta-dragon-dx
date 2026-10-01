@@ -15,6 +15,12 @@ class SequenceTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=ROOT / 'tmp')
         self.addCleanup(self.temp.cleanup)
         self.out = Path(self.temp.name)
+        # Asset-free palette-source fixture for the ROM-selected image oracle.
+        runtime = self.out / 'runtime'
+        runtime.mkdir()
+        rom = bytearray(0x40000)
+        rom[0x37C34:0x37C3C] = bytes.fromhex('ff7fff7fb5564a29')
+        (runtime / 'candidate.gb').write_bytes(rom)
         for cycle in (0, 1, 2):
             for age in (60, 61):
                 Image.new('RGB', (160, 144), (45, 90, 150)).save(

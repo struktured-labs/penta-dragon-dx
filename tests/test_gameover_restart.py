@@ -65,7 +65,8 @@ class TitleRetirementPatch(unittest.TestCase):
     def test_probe_uses_physical_scene_and_hp(self):
         probe = (ROOT / 'scripts/diagnostics/probe_gameover_restart.lua').read_text()
         self.assertIn('wram:read8(address - 0xC000)', probe)
-        self.assertIn('wram:write8(0x1CBB, 0)', probe)
+        self.assertIn('native_assistance.write(0xDCBB, 0)', probe)
+        self.assertIn(':write8(address - 0xC000, value)', probe)
         self.assertNotIn('emu:read8(0xD880)', probe)
         self.assertNotIn('emu:write8(0xDCBB', probe)
 

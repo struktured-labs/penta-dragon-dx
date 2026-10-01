@@ -288,6 +288,48 @@ local function visible_oam()
     return (#rows > 0) and table.concat(rows, ",") or "none"
 end
 
+-- Issue #15: a disconnected native projectile is not detached boss artwork.
+-- Bind each Penta raster to its own hardware OAM/CHR receipt, not the final
+-- phase's state. Restore VBK and any palette selector after receipt reads.
+local function screenshot_with_sprites(path)
+    emu:screenshot(path)
+    if TARGET ~= 8 then return end
+    local old_vbk = emu:read8(0xFF4F)
+    emu:write8(0xFF4F, 0)
+    local tile0 = hex_range(0x84F0, 16)
+    emu:write8(0xFF4F, 1)
+    local tile1 = hex_range(0x84F0, 16)
+    emu:write8(0xFF4F, old_vbk)
+    local cram = ""
+    if BANKED_RUNTIME then
+        local accessor = emu.memory.cgbObjPalette
+        local raw
+        if accessor then
+            raw = accessor:readRange(0, 64)
+        else
+            local old_index = emu:read8(0xFF6A)
+            local bytes = {}
+            for index = 0, 63 do
+                emu:write8(0xFF6A, index)
+                bytes[#bytes + 1] = string.char(emu:read8(0xFF6B))
+            end
+            emu:write8(0xFF6A, old_index)
+            raw = table.concat(bytes)
+        end
+        cram = raw:gsub(".", function(char)
+            return string.format("%02X", string.byte(char))
+        end)
+    end
+    local handle = assert(io.open(path .. ".sprites.json", "w"))
+    handle:write(string.format(
+        '{"schema":"penta-projectile-phase-v1","frame":%d,' ..
+        '"cgb":%s,"lcdc":%d,"oam":"%s","tile0":"%s",' ..
+        '"tile1":"%s","obj_cram":"%s"}\n',
+        frame, tostring(BANKED_RUNTIME), emu:read8(0xFF40),
+        hex_range(0xFE00, 160), tile0, tile1, cram))
+    handle:close()
+end
+
 local function finish(status, message)
     if done then return end
     done = true
@@ -454,7 +496,7 @@ callbacks:add("frame", function()
     if frame == math.floor(RECEIPT_FRAME / 4)
         or frame == math.floor(RECEIPT_FRAME / 2)
         or frame == math.floor(RECEIPT_FRAME * 3 / 4) then
-        emu:screenshot(OUT .. string.format(".f%03d.png", frame))
+        screenshot_with_sprites(OUT .. string.format(".f%03d.png", frame))
     end
     if frame == RECEIPT_FRAME then
         -- Saving on a phase-zero frame is sufficient: the receipt has already
@@ -466,7 +508,7 @@ callbacks:add("frame", function()
             finish("error", "palette-loader-not-settled")
             return
         end
-        emu:screenshot(OUT .. ".png")
+        screenshot_with_sprites(OUT .. ".png")
         if STATE_OUT then
             local save_ok, result = pcall(function()
                 return emu:saveStateFile(STATE_OUT)

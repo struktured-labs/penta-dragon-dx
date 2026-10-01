@@ -152,8 +152,8 @@ callbacks:add("frame", function()
     scene_drift_frames = 0
     -- Keep the contestants alive without writing pose, animation, or timing.
     emu:write8(0xDCBB, 0xF0)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    -- #37: DCDC/DCDD belong to native inventory state, not health.
+    -- Leave them untouched; the remaining arena-hold writes are deliberate.
     emu:write8(0xD888, 0x00)
     emu:write8(0xDD06, 0x00)
     if measuring then scene_frames = scene_frames + 1 end

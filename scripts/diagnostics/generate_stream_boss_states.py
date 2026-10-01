@@ -27,6 +27,7 @@ from PIL import Image
 
 from boss_geometry_contract import BOSSES, NAMES as BOSS_NAMES
 from normalize_mgba_state_pc import normalize, retarget_rom_identity
+from runtime_tools import emulator_runtime_snapshot, reject_known_broken_cgb_runtime
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -173,16 +174,48 @@ PENTA_SYNC_INHERITORS_SHA256 = {
     "b93ebc46ed4ac23ec7d2c44d80fae1ae1538b38c038bab0ba8173b93fe252350",  # r536: inherited observer/data ABI
     "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b",  # title row guard: unchanged gameplay observer/data ABI
     "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d",  # death/restart successor: unchanged boss sync ABI
+    "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5",  # #6: unchanged boss sync ABI
+    # #30: secret CHR/BG0 and GAME OVER palette descendants leave the entire
+    # banks16-31 boss/runtime region byte-identical to the recognized parent.
+    "22b3909b5ef3653abb1a40d227c2f9f0d6d6a276010ca08299af1c688eb15e6c",
+    "e2473cbaf4060896afaa7f30b5fc250729887ae02cc12cb15f183ea3bfa09405",
+    "7130c04a3ef9ad9239ae693dad9d5d61953437fa3eccc0c137071b79faeacc23",
+    # #31/#28: banks16..31 remain byte-identical to7130 (including latch ABI).
+    "3c5951bf86f429f2d6299ea68704514672b5e90d4726572b8c2981bd2963b73e",
+    "b902240052bcdf743dbf4583edcc52b4584b5eae3757c613100238c934483df9",
+    "d270fe0fa2359ac86cd4df0d06dca1071ef821e325a4a3cc51a44f698b21b8b6",
+    "eebf3f190d9d307cb1d3fa714fa2e68b7890fc5309d5da26682ce38cce0134fc",
     "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
     "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
     # Private bank-20 loading entry; synchronous boss/latch bytes unchanged.
     "f2339ff5161ab6e80a948ab37cb4205b8cd53f372cb50c4436219457d2e825e3",
+    # #30/#36: authenticated Ted guard successor; banks17/24..27/29..31
+    # and fixed dispatcher match4f5a (bank28 has the secret-area overlay).
+    # Select cold Penta generation plus its
+    # independent live replay, not historical machine-state retargeting.
+    "4731248ad2d28f56539197ddfa38fcb8f79713832b7997905647caf35d34f903",
+    # #22/#36: data-only star overlay; all boss/runtime banks equal4731248a.
+    "d744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5",
 }
 
 
 def relocated_ted_latches(rom: bytes) -> bool:
     if hashlib.sha256(rom).hexdigest() not in {
+        # #30/#34 trial02: entire Ted bank17 equals recognized4f5a; this
+        # identifies latch storage only, not a Penta fixture-retarget approval.
+        "7c5afca573b80fefacfa057338ae8847bb86590f057a188112773076841972ec",
         "15ab73c3c04a3caf1c4186335a073ca49b5dc21199335ca9d85eca56ad7da21b",
+        # #27 completion-preserving trial: bank17 byte-identical to d744
+        # (SHA256 6aa4f5f8105b300176429bfe69b7dce4688720f915982e3a6243202acc9ce8d7).
+        # Latch-storage recognition only; NOT a cold-Penta/retarget approval.
+        "d901357a105036469b8debbff138fb63e87afb3a0cfbe5a24eeaafa91353910a",
+        # #32/#36 return-fade candidate: bank17 equals d744 (6aa4f5f8...),
+        # fixed-bank changes are only the return-fade call at 15DB..15DC.
+        # Ted latch recognition only, not Penta fixture-retarget approval.
+        "126dd0b7fff1e03eb6b224f818b85398593c7109ffb676cc538c1bd90742304b",
+        # #32/#45 late-return experiment: bank17 remains byte-identical to
+        #126dd (6aa4f5f8...). Recognize latch locations only; no retargeting.
+        "46eb95a0c0f770fb3cf8c3211b8030a9e881f59077e558b93703ba08da71d3fb",
         PENTA_SYNC_DMA_SHA256,
         PALETTE_STORAGE_SHA256,
         *ENTRY_WHITE_SHA256,
@@ -1178,6 +1211,12 @@ def main() -> int:
         parser.error(f"ROM not found: {args.rom}")
     if not args.mgba:
         parser.error("mgba-qt was not found")
+
+    # #32: the installed library can silently discard FF72–FF74 writes.
+    # Apply the existing release-runner preflight before even reusing states.
+    # Stock DMG controls do not depend on those CGB-only registers.
+    if args.rom.read_bytes()[0x143] & 0x80:
+        reject_known_broken_cgb_runtime(emulator_runtime_snapshot())
 
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)

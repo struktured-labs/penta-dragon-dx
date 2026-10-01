@@ -62,6 +62,29 @@ local function read16(address)
     return emu:read8(address) | (emu:read8((address + 1) & 0xFFFF) << 8)
 end
 
+-- Issue #16 diagnostic only: frame samples can miss a command that the
+-- timer-driven engine reads and clears between frames. Observe bank-3's
+-- actual nonzero mailbox read and its accept/reject branches. This does not
+-- alter the existing acceptance rule and is not an acoustic-fidelity test.
+local ENGINE_TRACE = os.getenv("PENTA_PHANTOM_ENGINE_TRACE")
+local engine_trace
+if ENGINE_TRACE then
+    engine_trace = assert(io.open(ENGINE_TRACE, "w"))
+    engine_trace:write("event\tframe\tcommand\tactive\tpc\tsvbk\n")
+    local function observe(event, command_register)
+        if gameplay_at < 0 or fired then return end
+        engine_trace:write(string.format("%s\t%d\t%02X\t%02X\t%04X\t%02X\n",
+            event, f, register(command_register) & 0xFF,
+            emu:read8(0xD888), register("PC"), emu:read8(0xFF70)))
+        engine_trace:flush()
+    end
+    -- $45B6 follows LD A,[$D887]; OR A; RET Z.
+    -- $45C2 drops a lower-priority command; $45C7 starts/restarts the effect.
+    emu:setBreakpoint(function() observe("read", "A") end, 0x45B6, 3)
+    emu:setBreakpoint(function() observe("reject", "C") end, 0x45C2, 3)
+    emu:setBreakpoint(function() observe("accept", "C") end, 0x45C7, 3)
+end
+
 -- Attribute every sound command to the real RST $38 caller. This is receipt
 -- telemetry only; it never modifies the emulated machine.
 pcall(function()
@@ -183,8 +206,16 @@ callbacks:add("frame", function()
         fh:write("\n--- first 200 RST38 calls ---\n")
         for _, l in ipairs(rst_log) do fh:write(l .. "\n") end
         fh:close()
+        if engine_trace then engine_trace:close() end
+        local marker = assert(io.open(OUT .. ".done", "w"))
+        marker:write("complete\n")
+        marker:close()
         console:log(string.format("phantom_d887: %d transitions in %d gameplay frames",
             transitions, MEASURE_FRAMES))
-        os.exit(0)
+        -- Ordinary verification is stopped by its owning Python launcher once
+        -- the complete marker exists. os.exit from the CPU thread races Qt's
+        -- GUI destructors. The native AV tap supplies its own synchronous
+        -- finalizer/exit path so native captures can end at this exact frame.
+        if os.getenv("PENTA_NATIVE_AV_PREFIX") then os.exit(0) end
     end
 end)

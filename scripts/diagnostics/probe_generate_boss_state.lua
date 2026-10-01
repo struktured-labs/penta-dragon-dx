@@ -177,6 +177,71 @@ local function route_hex(address, length)
     return table.concat(result)
 end
 
+-- Issue32: optional read-only counts at the native publication call/return.
+-- No bank-register writes and no source/scene/cache mutations. Keep this off
+-- in qualification runs; breakpoint neutrality is not assumed.
+local blank_trace = os.getenv("TED_BLANK_TRACE")
+if TARGET == 4 and blank_trace then
+    local log = assert(io.open(blank_trace, "w"))
+    emu:setRangeWatchpoint(function(info)
+        if game_ram(0xD880) ~= 0x10 then return end
+        log:write(string.format(
+            "dma frame=%d pc=%04X bank=%02X regs=%s svbk=%02X vbk=%02X value=%02X\n",
+            f,register("PC"),emu:read8(0xFF99),route_hex(0xFF51,4),
+            emu:read8(0xFF70),emu:read8(0xFF4F),
+            (info.newValue or info.value or 0)&0xFF))
+        log:flush()
+    end,0xFF55,0xFF55,C.WATCHPOINT_TYPE.WRITE)
+    local function count(domain, first, size)
+        local n = 0
+        for i = first, first + size - 1 do
+            if domain:read8(i) ~= 0 then n = n + 1 end
+        end
+        return n
+    end
+    for _, pc in ipairs({0x700B,0x700F}) do
+        emu:setBreakpoint(function()
+            log:write(string.format(
+                "commit frame=%d pc=%04X regs=%s target=%02X svbk=%02X vbk=%02X cache=%d map98=%d map9c=%d\n",
+                f,pc,route_hex(0xFF51,5),emu:read8(0xFF73),
+                emu:read8(0xFF70),emu:read8(0xFF4F),
+                count(emu.memory.wram,0x2000,1024),
+                count(emu.memory.vram,0x1800,1024),count(emu.memory.vram,0x1C00,1024)))
+            log:flush()
+        end,pc,16)
+    end
+    for _, site in ipairs({0x028A, 0x028D, 0xC4F5, 0xC536, 0xC545, 0xC5D1, 0xC5D4, 0xC5D7}) do
+        emu:setBreakpoint(function()
+            if game_ram(0xD880) ~= 0x10 then return end
+            if site == 0xC545 then
+                log:write(string.format("target-store frame=%d af=%04X bytes=%s\n",
+                    f,register("AF"),route_hex(0xC536,17)))
+            end
+            if site == 0xC5D4 then
+                log:write(string.format("publisher frame=%d front=%s commit=%s\n",
+                    f,route_hex(0x5CE5,24),route_hex(0x700B,9)))
+            end
+            local crown = -1
+            for i=0,571 do
+                local matches=true
+                for j=0,4 do
+                    if emu.memory.wram:read8(0x1A0+i+j)~=2+j then matches=false; break end
+                end
+                if matches then crown=i; break end
+            end
+            log:write(string.format(
+                "frame=%d site=%04X bank=%02X svbk=%02X ie=%02X source=%d map98=%d map9c=%d ready=%02X de=%04X hl=%04X bc=%04X crown=%d target=%02X\n",
+                f, site, emu:read8(0xFF99), emu:read8(0xFF70),
+                emu:read8(0xFFFF), count(emu.memory.wram,0x1A0,576),
+                count(emu.memory.vram,0x1800,1024),
+                count(emu.memory.vram,0x1C00,1024),
+                emu.memory.wram:read8(0x5FF),
+                register("DE"),register("HL"),register("BC"),crown,emu:read8(0xFF73)))
+            log:flush()
+        end, site)
+    end
+end
+
 local function ted_pose_marker()
     local old = emu:read8(0xFF70)
     emu:write8(0xFF70, 0x02)
@@ -765,11 +830,8 @@ callbacks:add("frame", function()
     -- plane; wait until the runtime restores bank 1.
     local svbk = emu:read8(0xFF70) & 0x07
     local game_wram_visible = STOCK_ROM or svbk == 0 or svbk == 1
-    -- Keep Sara alive while the arena settles.
-    if game_wram_visible then
-        emu:write8(0xDCDC, 0xFF)
-        emu:write8(0xDCDD, 0xFF)
-    end
+    -- #37: DCDC/DCDD are inventory state, not health. Leave them native;
+    -- only the explicitly assisted DCBB health refill below keeps Sara alive.
     -- The synthetic Stage-1 dispatcher route can inherit an attack phase that
     -- decrements DCBB before serialization (Troop arms D888/DD06; Ted and
     -- Penta can leave for the splash shortly after reload). Keep every visual

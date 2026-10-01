@@ -25,6 +25,17 @@ local EXPECTED_SCENE = TARGET + 2
 local KEY_A, KEY_START = 0x01, 0x08
 local KEY_RIGHT, KEY_LEFT = 0x10, 0x20
 
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  -- #41: save flag and health belong to native physical bank1, not scratch.
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
+
 local frame, phase, seeded, confirmed = 0, "title", false, false
 local stable_frames, play_frames = 0, 0
 local finished = false
@@ -143,6 +154,12 @@ local function finish(status)
     emu:screenshot(OUT .. ".stuck.png")
   end
   trace:write(string.format(
+    "native_assistance_writes=%d\n", native_assistance.writes))
+  for bank = 0, 7 do
+    trace:write(string.format("native_assistance_svbk_%d=%d\n", bank,
+      native_assistance.bank_shadow_counts[bank] or 0))
+  end
+  trace:write(string.format(
     "complete status=%s frames=%d play_frames=%d shots=%d " ..
     "d880=%02X ffc1=%02X ffba=%02X ffbd=%02X lcdc=%02X\n",
     status, frame, play_frames, shots, emu:read8(0xD880), emu:read8(0xFFC1),
@@ -158,7 +175,7 @@ end
 callbacks:add("frame", function()
   if finished then return end
   frame = frame + 1
-  emu:write8(0xDCFD, 0x01)
+  native_assistance.write(0xDCFD, 0x01)
   if not seeded and frame >= 100 then seed_sram(); seeded = true end
 
   if phase == "title" then
@@ -196,9 +213,9 @@ callbacks:add("frame", function()
     return
   end
 
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xFF)
+  -- #37: DCDD is the native inventory cursor, not a health resource.
+  -- Keep the route alive without overwriting cursor or adjacent state.
+  native_assistance.write(0xDCBB, 0xFF)
 
   if phase == "loading" then
     emu:write8(0xFFBA, TARGET)

@@ -130,6 +130,11 @@ operand bytes from `LD DE/HL/BC, $C4xx` instructions (e.g., `11 E0 C4`
 = `LD DE, $C4E0`, not `LDH (FFC4), A`). FFC4 is not actually a HUD
 buffer in the game.
 
+Correction (2026-09-05): this only explains the bank-0 false positives.
+Bank 1 `$50C5/$50CA` really write `$FFC4`, a Sara priority flag read through
+the original `$1188` helper's `$FFC2-$FFC5` table. It is not unused HRAM;
+see [the confirmed collision](hram_allocation_map.md#confirmed-allocation-collision-2026-09-05).
+
 ## RST 30 + 0x42A5 = ?
 
 `0x42A5` is in bank 1, right before our tile-copy modification at 0x42A7.

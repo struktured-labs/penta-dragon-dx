@@ -1,47 +1,27 @@
-"""Phantom-sound verification.
+"""Verify native Stage-1 sound requests and engine consumption (issue #16).
 
-Runs phantom_d887.lua against ROM, then compares D887 transition count to the
-vanilla baseline. Vanilla coalesces D887 writes via the original game's sound
-engine; modded builds with bank-switch bugs (FF99 / trampoline / VBlank
-overrun) lose coalescence, producing many more transitions.
-
-The vanilla baseline is cached on disk (keyed by ROM mtime+size) so we don't
-re-measure it on every invocation. Use --rebaseline to force a fresh measure.
-
-Usage:
-    python verify_phantom_d887.py <rom> [--baseline-rom <vanilla>]
-                                        [--frames N] [--tolerance 1.5]
-                                        [--rebaseline]
-
-Exit 0 = PASS (transitions <= tolerance × baseline)
-Exit 1 = FAIL (more transitions than allowed)
-Exit 2 = harness error
+Frame-sampled D887 transitions are retained as diagnostics, not used as a
+command counter: requests can be consumed between samples. Both ROMs are
+freshly measured with the checked-in single-flight launcher. This gate is
+not a claim of PCM/acoustic equivalence.
 """
 from __future__ import annotations
+import argparse
+import hashlib
 import json
 import os
-import sys
+from pathlib import Path
 import subprocess
 import tempfile
-import argparse
 import time
-from pathlib import Path
 
+from sound_command_oracle import CALLERS, inspect_commands, compare_commands
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MGBA_QT = PROJECT_ROOT / "scripts/mgba-qt-singleflight"
 PROBE = Path(__file__).with_name("phantom_d887.lua")
-# These are the two intentional commands reachable on this deterministic
-# Stage-1 route. Both are direct vanilla call sites:
-#   $57AF: LD A,$26; RST $38
-#   $799F: LD A,$0C; RST $38
-ROUTE_COMMAND_VALUES = {0x0C, 0x26}
-BASELINE_CACHE = Path(
-    os.environ.get(
-        "PENTA_PHANTOM_BASELINE_CACHE",
-        str(PROJECT_ROOT / "tmp" / "penta_phantom_d887_baseline.json"),
-    )
-)
+ROUTE_COMMAND_VALUES = set(CALLERS)
+ENGINE_BYTES = bytes.fromhex("fa87d8b7c84ffa88d8b7280ab928073005afea87d8c9cd7b45")
 
 
 def parse_probe_metrics(text: str) -> dict:
@@ -51,11 +31,8 @@ def parse_probe_metrics(text: str) -> dict:
             continue
         key, value = line.split("=", 1)
         if key == "command_values":
-            parsed = {}
-            for item in filter(None, value.split(",")):
-                command, count = item.split(":", 1)
-                parsed[int(command, 16)] = int(count)
-            metrics[key] = parsed
+            metrics[key] = {int(k, 16): int(v) for k, v in
+                            (item.split(":", 1) for item in value.split(",") if item)}
         elif key == "transitions_per_second":
             metrics[key] = float(value)
         else:
@@ -66,201 +43,115 @@ def parse_probe_metrics(text: str) -> dict:
     return metrics
 
 
-def run_d887(rom_path: str, frames: int) -> dict:
+def run_d887(rom_path: str, frames: int, *, engine_trace: bool = False) -> dict:
+    rom = Path(rom_path).resolve()
+    data = rom.read_bytes()
+    if engine_trace and data[0xC5B1:0xC5CA] != ENGINE_BYTES:
+        raise ValueError("unauthenticated bank-3 sound-engine observation sites")
     scratch_root = PROJECT_ROOT / "tmp"
     scratch_root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="penta-phantom-", dir=scratch_root
-    ) as temp:
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="penta-phantom-", dir=scratch_root) as temp:
         out = Path(temp) / "result.txt"
+        marker = Path(str(out) + ".done")
         env = os.environ.copy()
-        env["STATE_PATH"] = str(out)
-        env["MEASURE_FRAMES"] = str(frames)
-        env["QT_QPA_PLATFORM"] = "offscreen"
-        env["SDL_AUDIODRIVER"] = "dummy"
-        cmd = [
-            str(MGBA_QT),
-            "-C",
-            f"savegamePath={temp}",
-            "-C",
-            f"savestatePath={temp}",
-            str(Path(rom_path).resolve()),
-            "--script",
-            str(PROBE),
-            "-l",
-            "0",
-        ]
-        try:
-            proc = subprocess.run(
-                cmd,
-                cwd=temp,
-                env=env,
-                capture_output=True,
-                timeout=180,
-            )
-        except subprocess.TimeoutExpired as error:
-            raise RuntimeError(
-                f"phantom_d887 timed out after 180s for {rom_path}"
-            ) from error
-
-        # mGBA-Qt can briefly retain its application lock after a scripted
-        # instance exits. This matters when --raw-output-dir measures vanilla
-        # and the candidate back-to-back in one Python process.
-        if not out.is_file() or out.stat().st_size < 10:
-            time.sleep(0.5)
-            proc = subprocess.run(
-                cmd,
-                cwd=temp,
-                env=env,
-                capture_output=True,
-                timeout=180,
-            )
-
-        if not out.is_file() or out.stat().st_size < 10:
-            raise RuntimeError(
-                f"phantom_d887 produced no output for {rom_path}\n"
-                f"  exit code: {proc.returncode}\n"
-                f"  cmd: {' '.join(cmd)}\n"
-                f"  stdout: {proc.stdout.decode(errors='replace')[:500]}\n"
-                f"  stderr: {proc.stderr.decode(errors='replace')[:500]}"
-            )
-        text = out.read_text()
-
-    metrics = parse_probe_metrics(text)
-    transitions = metrics.get("transitions")
-    if transitions is None:
-        raise RuntimeError(
-            f"could not parse transitions from phantom_d887 output:\n{text[:500]}"
-        )
-    return {"transitions": transitions, "metrics": metrics, "raw": text}
-
-
-def _baseline_key(rom_path: str, frames: int) -> str:
-    st = os.stat(rom_path)
-    return f"{os.path.abspath(rom_path)}|{st.st_size}|{int(st.st_mtime)}|{frames}"
-
-
-def get_baseline(rom_path: str, frames: int, force: bool = False) -> int:
-    BASELINE_CACHE.parent.mkdir(parents=True, exist_ok=True)
-    key = _baseline_key(rom_path, frames)
-    if not force and BASELINE_CACHE.exists():
-        try:
-            cache = json.loads(BASELINE_CACHE.read_text())
-        except (OSError, ValueError):
-            cache = {}
-        if key in cache:
-            print(f"  baseline (cached): {cache[key]} D887 transitions")
-            return cache[key]
-    else:
-        cache = {}
-        if BASELINE_CACHE.exists():
+        env.update(STATE_PATH=str(out), MEASURE_FRAMES=str(frames),
+                   QT_QPA_PLATFORM="offscreen", SDL_AUDIODRIVER="dummy")
+        if engine_trace:
+            env["PENTA_PHANTOM_ENGINE_TRACE"] = str(Path(temp) / "engine.tsv")
+        command = [str(MGBA_QT), "-C", f"savegamePath={temp}", "-C",
+                   f"savestatePath={temp}", str(rom), "--script", str(PROBE), "-l", "0"]
+        native_capture = bool(env.get("PENTA_NATIVE_AV_PREFIX"))
+        with (Path(temp) / "process.log").open("w+") as log:
+            process = subprocess.Popen(command, cwd=temp, env=env,
+                                       stdout=log, stderr=subprocess.STDOUT)
+            stopped_on_marker = False
             try:
-                cache = json.loads(BASELINE_CACHE.read_text())
-            except (OSError, ValueError):
-                cache = {}
+                deadline = time.monotonic() + 180
+                while process.poll() is None:
+                    if not native_capture and marker.is_file() and marker.read_text() == "complete\n":
+                        stopped_on_marker = True
+                        break
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError(f"phantom_d887 timed out for {rom}")
+                    time.sleep(0.02)
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
+            log.seek(0)
+            error_log = log.read()
+        if (not marker.is_file() or marker.read_text() != "complete\n"
+                or not out.is_file()
+                or (not stopped_on_marker and process.returncode != 0)):
+            raise RuntimeError(f"phantom_d887 incomplete: exit={process.returncode}\n{error_log[-3000:]}")
+        text = out.read_text()
+        engine = ""
+        if env.get("PENTA_PHANTOM_ENGINE_TRACE"):
+            engine = Path(env["PENTA_PHANTOM_ENGINE_TRACE"]).read_text()
+    if rom.read_bytes() != data:
+        raise ValueError("ROM changed during replay")
+    metrics = parse_probe_metrics(text)
+    if metrics.get("transitions", -1) < 0:
+        raise RuntimeError("missing gameplay/transition receipt")
+    return {"transitions": metrics["transitions"], "metrics": metrics, "raw": text,
+            "engine": engine, "elapsed_seconds": time.monotonic() - started}
 
-    print(f"  measuring baseline ({rom_path}, {frames} frames)...")
-    baseline = run_d887(rom_path, frames)
-    cache[key] = baseline['transitions']
-    try:
-        BASELINE_CACHE.write_text(json.dumps(cache, indent=2))
-    except OSError as e:
-        sys.stderr.write(f"  warning: could not write baseline cache: {e}\n")
-    print(f"  baseline: {baseline['transitions']} D887 transitions")
-    return baseline['transitions']
+
+def identity(path: Path) -> dict:
+    return {"path": str(path.resolve()), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("rom")
-    ap.add_argument("--baseline-rom",
-                    default="rom/Penta Dragon (J).gb",
-                    help="Vanilla ROM for D887 baseline (default: vanilla)")
-    ap.add_argument("--frames", type=int, default=600,
-                    help="Total frames to monitor (default 600 ≈ 10s)")
-    ap.add_argument("--tolerance", type=float, default=1.5,
-                    help="PASS if rom transitions <= tolerance × baseline (default 1.5)")
-    ap.add_argument("--clean-pulse-tolerance", type=float, default=2.0,
-                    help="Hard ceiling for structurally clean, route-valid command pulses")
-    ap.add_argument("--rebaseline", action="store_true",
-                    help="Force fresh baseline measurement (ignore cache)")
-    ap.add_argument("--raw-output-dir", type=Path,
-                    help="Write the candidate transition trace here")
-    args = ap.parse_args()
-
-    print(f"Baseline ({args.baseline_rom}):")
-    baseline_transitions = get_baseline(
-        args.baseline_rom, args.frames, force=args.rebaseline
-    )
-
-    print(f"Measuring {args.rom}...")
-    candidate = run_d887(args.rom, args.frames)
-    print(f"  candidate: {candidate['transitions']} D887 transitions")
-    metrics = candidate["metrics"]
-    print(
-        "  pulse shape: "
-        f"commands={metrics.get('command_pulses', '?')}, "
-        f"clears={metrics.get('clear_pulses', '?')}, "
-        f"chained={metrics.get('chained_commands', '?')}, "
-        f"unpaired={metrics.get('unpaired_commands', '?')}, "
-        f"max_nonzero_run={metrics.get('max_nonzero_run', '?')}, "
-        f"dma_unreadable={metrics.get('dma_unreadable_samples', '?')}"
-    )
-    values = metrics.get("command_values", {})
-    if values:
-        print(
-            "  command values: "
-            + ", ".join(f"{value:02X}×{count}" for value, count in sorted(values.items()))
-        )
-    if args.raw_output_dir:
-        args.raw_output_dir.mkdir(parents=True, exist_ok=True)
-        (args.raw_output_dir / "candidate.txt").write_text(candidate["raw"])
-
-    threshold = max(int(baseline_transitions * args.tolerance), 5)
-    print(f"\nThreshold: {threshold} (= {args.tolerance} × baseline, min 5)")
-
-    semantic_metrics_present = all(
-        key in metrics
-        for key in (
-            "command_pulses",
-            "clear_pulses",
-            "chained_commands",
-            "unpaired_commands",
-            "max_nonzero_run",
-            "command_values",
-            "dma_unreadable_samples",
-        )
-    )
-    structurally_clean = (
-        semantic_metrics_present
-        and metrics["chained_commands"] == 0
-        and metrics["unpaired_commands"] == 0
-        and metrics["max_nonzero_run"] <= 1
-        and set(metrics["command_values"]).issubset(ROUTE_COMMAND_VALUES)
-    )
-    clean_ceiling = max(
-        int(baseline_transitions * args.clean_pulse_tolerance),
-        8,
-    )
-
-    if candidate["transitions"] <= threshold:
-        print(f"\nPASS: candidate {candidate['transitions']} ≤ threshold {threshold} "
-              f"(baseline-equivalent D887 behavior).")
-        sys.exit(0)
-    elif structurally_clean and candidate["transitions"] <= clean_ceiling:
-        print(
-            f"\nPASS: candidate exceeds the raw progress-sensitive threshold "
-            f"({candidate['transitions']} > {threshold}) but all commands are "
-            f"one-frame, paired, route-valid pulses and remain below the clean "
-            f"hard ceiling {clean_ceiling}."
-        )
-        sys.exit(0)
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("rom", type=Path)
+    parser.add_argument("--baseline-rom", type=Path, default=PROJECT_ROOT / "rom/Penta Dragon (J).gb")
+    parser.add_argument("--frames", type=int, default=600)
+    parser.add_argument("--tolerance", type=float, default=1.5)
+    parser.add_argument("--rebaseline", action="store_true", help="compatibility flag; baselines are always fresh")
+    parser.add_argument("--raw-output-dir", type=Path)
+    args = parser.parse_args()
+    if args.raw_output_dir is None:
+        (PROJECT_ROOT / "tmp").mkdir(exist_ok=True)
+        args.raw_output_dir = Path(tempfile.mkdtemp(prefix="phantom-sound-", dir=PROJECT_ROOT / "tmp"))
     else:
-        print(f"\nFAIL: candidate {candidate['transitions']} > threshold {threshold}\n"
-              f"      Extra D887 churn suggests phantom-sound regression "
-              f"(+{candidate['transitions']-baseline_transitions} vs baseline).")
-        sys.exit(1)
+        args.raw_output_dir.mkdir(parents=True, exist_ok=False)
+    # Never reuse the old mtime/size-only baseline cache. Resolve the exact
+    # guarded binary and linked core without launching an emulator.
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+    from mgba_singleflight import resolve_binary
+    binary = resolve_binary("qt").resolve()
+    linked = subprocess.run(["ldd", str(binary)], capture_output=True, text=True, check=True).stdout
+    libraries = [Path(line.split("=>", 1)[1].strip().split()[0]) for line in linked.splitlines()
+                 if "libmgba.so" in line and "=>" in line]
+    if len(libraries) != 1 or not libraries[0].is_file():
+        raise RuntimeError("cannot resolve the active libmgba identity")
+    bound_paths = [args.rom, args.baseline_rom, PROBE, Path(__file__),
+                   Path(__file__).with_name("sound_command_oracle.py"), MGBA_QT,
+                   PROJECT_ROOT / "scripts/mgba_singleflight.py", binary, libraries[0]]
+    before = [identity(path) for path in bound_paths]
+    records = {}
+    for name, rom in (("baseline", args.baseline_rom), ("candidate", args.rom)):
+        print(f"Measuring fresh {name}: {rom}", flush=True)
+        result = run_d887(str(rom), args.frames, engine_trace=True)
+        (args.raw_output_dir / f"{name}.txt").write_text(result["raw"])
+        (args.raw_output_dir / f"{name}.engine.tsv").write_text(result["engine"])
+        records[name] = inspect_commands(result["raw"], result["engine"], result["metrics"],
+                                         args.frames, bool(rom.read_bytes()[0x143] & 0x80))
+        print(json.dumps(records[name]), flush=True)
+    if before != [identity(path) for path in bound_paths]:
+        raise RuntimeError("bound ROM/tool/core changed during verification")
+    receipt = compare_commands(records["baseline"], records["candidate"], args.tolerance)
+    receipt.update(identities=before, baseline_reused=False)
+    (args.raw_output_dir / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    print(json.dumps(receipt, indent=2))
+    return 0 if receipt["status"] == "pass" else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
