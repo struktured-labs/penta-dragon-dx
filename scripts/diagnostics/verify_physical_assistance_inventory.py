@@ -31,19 +31,8 @@ MAPPED = re.compile(
 FAKE_HEALTH = re.compile(
     r"(?:write8|write|game_write)\(\s*0x(?:1CD[CD]|DCD[CD])\s*,\s*"
     r"(?:0x17|0xFF|23|255)\s*\)", re.IGNORECASE)
-# Probes whose source text is pinned by tests/ assertions; converting them is
-# a production-path change batched with its test updates (#37/#41 follow-up).
-PENDING = {
-    "scripts/diagnostics/probe_generate_boss_state.lua":
-        "pinned by tests/test_star_boss_profile.py source assertion",
-    "scripts/diagnostics/probe_low_health_flicker.lua":
-        "pinned by tests/test_low_health_scene0b_gate.py source assertion",
-    "scripts/diagnostics/probe_stage1_death_continue_chr_reload.lua":
-        "pinned by tests/test_stage1_death_continue_chr_reload.py and "
-        "verify_stage1_death_continue_chr_reload.py source assertions",
-    "scripts/diagnostics/verify_stage1_death_continue_chr_reload.py":
-        "source-snippet check for the pending death/continue probe above",
-}
+# Files allowed to keep a finding while a conversion is staged elsewhere.
+PENDING: dict[str, str] = {}
 SELF = Path(__file__).resolve()
 
 

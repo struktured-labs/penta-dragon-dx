@@ -1,4 +1,16 @@
 -- Consecutive-frame receipt for the Stage 1 low-health warning state.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("LOW_HEALTH_OUT"), "LOW_HEALTH_OUT is required")
 local BOOT_STATE = os.getenv("LOW_HEALTH_BOOT_STATE") == "1"
@@ -1450,27 +1462,27 @@ callbacks:add("frame", function()
   local stimulus_phase = "legacy"
   if REQUIRE_SCENE0B then
     if post_trigger_frame <= 0 then
-      emu:write8(0xDCBB, 0xFF)
+      native_assistance.write(0xDCBB, 0xFF)
       stimulus_phase = "pre"
     elseif post_trigger_frame <= SCENE0B_FRAMES then
       -- DCBB is the native health pool consumed by bank1:$5050.  Do not
       -- inject DD06 or D880. $40 selects the warning tier, so the native
       -- evaluator must publish DD06=$01 and D880=$0B before the movement-
       -- driven room copy begins, then clear both after DCBB is restored.
-      emu:write8(0xDCBB, SCENE0B_HEALTH)
+      native_assistance.write(0xDCBB, SCENE0B_HEALTH)
       stimulus_phase = "scene0b"
     else
-      emu:write8(0xDCBB, 0xFF)
+      native_assistance.write(0xDCBB, 0xFF)
       stimulus_phase = "recovered"
     end
   elseif frame <= SETTLE + PRE_TRIGGER then
-    emu:write8(0xDCDD, HEALTHY_MAIN)
+    native_assistance.write(0xDCDD, HEALTHY_MAIN)
     stimulus_phase = "pre"
   elseif frame >= SETTLE + PRE_TRIGGER + 1 then
     -- Legacy warning/music profile.  It controls the displayed health pair;
     -- the distinct scene-$0B profile above owns the real DCBB state machine.
-    emu:write8(0xDCDC, LOW_SUB)
-    emu:write8(0xDCDD, 0)
+    native_assistance.write(0xDCDC, LOW_SUB)
+    native_assistance.write(0xDCDD, 0)
     stimulus_phase = "low"
   end
   if frame <= SETTLE then return end

@@ -5,6 +5,18 @@
 -- (DCBB := 0), holds neutral controller input throughout, and observes the
 -- native bank1:$4AF2 -> $4AFB -> fixed:$0C9C -> bank1:$4AFE route.  It never
 -- repairs selectors, CHR, scene state, or any other gameplay byte.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("PENTA_DEATH_RELOAD_OUT"))
 local STATE_FILE = assert(os.getenv("PENTA_DEATH_RELOAD_STATE"))
@@ -455,7 +467,7 @@ callbacks:add("frame", function()
     return
   end
   if frame == STIMULUS_FRAME then
-    emu:write8(0xDCBB, 0)
+    native_assistance.write(0xDCBB, 0)
     stimulus_writes = stimulus_writes + 1
     stimulus_written = true
     trace_state("dcbb-zero-stimulus", true)

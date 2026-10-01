@@ -10,6 +10,18 @@
 --   BOSS_STATE_OUT  output .ss0 path
 --   BOSS_OUT        output prefix for .report/.png
 --   BOSS_STABLE_FRAMES frames to render after the arena appears (default 240)
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local TARGET = tonumber(os.getenv("BOSS_TARGET") or "0")
 local STATE_OUT = assert(os.getenv("BOSS_STATE_OUT"), "BOSS_STATE_OUT required")
@@ -837,7 +849,7 @@ callbacks:add("frame", function()
     -- Penta can leave for the splash shortly after reload). Keep every visual
     -- fixture in its arena; boss-exit behavior has a separate death/game-over
     -- gate.
-    if game_wram_visible then emu:write8(0xDCBB, 0xF0) end
+    if game_wram_visible then native_assistance.write(0xDCBB, 0xF0) end
 
     local scene = game_ram(0xD880)
     if game_wram_visible and f <= ENTRY_TIMEOUT and (not reached or stable < 80) then

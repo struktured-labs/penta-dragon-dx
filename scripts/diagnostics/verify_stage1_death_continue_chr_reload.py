@@ -181,8 +181,10 @@ def validate_candidate_contract(rom: bytes) -> dict[str, Any]:
 
 def audit_probe_source(source: str) -> dict[str, Any]:
     require(
-        source.count("emu:write8(") == 1
-        and "emu:write8(0xDCBB, 0)" in source,
+        # #41: the single stimulus goes through the physical-bank1 helper.
+        source.count("emu:write8(") == 0
+        and source.count("native_assistance.write(0x") == 1
+        and "native_assistance.write(0xDCBB, 0)" in source,
         "probe must perform only the one DCBB-zero gameplay write",
     )
     set_keys = [
