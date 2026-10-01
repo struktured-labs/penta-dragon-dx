@@ -521,14 +521,17 @@ def main() -> int:
                         help="build exact r536 from original source and retain both traced source proofs")
     parser.add_argument("--restart-source", action="store_true",
                         help="build the exact Game Over/restart fix from original source")
+    parser.add_argument("--stream-source", action="store_true",
+                        help="build the exact 126dd stream-regression chain from original source")
     args = parser.parse_args()
     if args.timeout_scale <= 0:
         parser.error("--timeout-scale must be positive")
-    if sum((args.r534_source, args.r536_source, args.restart_source)) > 1:
+    if sum((args.r534_source, args.r536_source, args.restart_source, args.stream_source)) > 1:
         parser.error("select only one original-source profile")
-    source_profile = args.r534_source or args.r536_source or args.restart_source
+    source_profile = (args.r534_source or args.r536_source or args.restart_source
+                      or args.stream_source)
     if source_profile and (args.expanded_ted or args.menu_icon_colors or args.resume):
-        label = "restart" if args.restart_source else "r536" if args.r536_source else "r534"
+        label = "stream" if args.stream_source else "restart" if args.restart_source else "r536" if args.r536_source else "r534"
         parser.error(f"{label} source is a distinct fresh profile; no legacy flags or resume")
     if source_profile:
         selected_output = args.output.resolve()
@@ -549,7 +552,10 @@ def main() -> int:
         "native_pose_table": args.expanded_ted,
         "menu_icon_colors": args.menu_icon_colors,
     }
-    if args.restart_source:
+    if args.stream_source:
+        from stream_source_profile import PROFILE
+        build_profile = dict(PROFILE)
+    elif args.restart_source:
         from restart_source_profile import PROFILE
         build_profile = dict(PROFILE)
     elif args.r536_source:
@@ -608,7 +614,8 @@ def main() -> int:
     ):
         if source_profile:
             source_builder = (
-                "build_restart_candidate.py" if args.restart_source
+                "diagnostics/build_stream_source_candidate.py" if args.stream_source
+                else "build_restart_candidate.py" if args.restart_source
                 else "build_r536_candidate.py" if args.r536_source
                 else "build_r534_candidate.py"
             )
@@ -657,7 +664,9 @@ def main() -> int:
 
     source_bindings = []
     if source_profile:
-        if args.restart_source:
+        if args.stream_source:
+            from stream_source_profile import builder, verify_binding
+        elif args.restart_source:
             from restart_source_profile import builder, verify_binding
         elif args.r536_source:
             from r536_source_profile import builder, verify_binding
@@ -808,7 +817,9 @@ def main() -> int:
         for result in matrix_value["results"]
     ]
     if source_profile:
-        if args.restart_source:
+        if args.stream_source:
+            from stream_suite_evidence import matrix_evidence
+        elif args.restart_source:
             from restart_suite_evidence import matrix_evidence
         elif args.r536_source:
             from r536_suite_evidence import matrix_evidence
@@ -862,7 +873,9 @@ def main() -> int:
         "hardware_status": "pending-reservation-backed-mister",
     }
     if source_profile:
-        if args.restart_source:
+        if args.stream_source:
+            from stream_suite_evidence import verify
+        elif args.restart_source:
             from restart_suite_evidence import verify
         elif args.r536_source:
             from r536_suite_evidence import verify

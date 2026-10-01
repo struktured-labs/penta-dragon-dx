@@ -245,6 +245,7 @@ def main() -> int:
             "r534-original-source-v1",
             "r536-original-source-v1",
             "restart-original-source-v1",
+            "stream-126dd-original-source-v1",
         }
         else None
     )
@@ -286,6 +287,17 @@ def main() -> int:
             verify(receipt)
         except (ValueError, OSError, KeyError, TypeError, RuntimeError) as error:
             return fail(f"invalid restart suite evidence: {error}")
+
+    from stream_source_profile import PROFILE as STREAM_PROFILE, builder as stream_builder
+    if (
+        profile.get("name") == STREAM_PROFILE["name"]
+        or candidate.get("sha256") == stream_builder.CONTRACT["candidate_sha256"]
+    ):
+        from stream_suite_evidence import verify
+        try:
+            verify(receipt)
+        except (ValueError, OSError, KeyError, TypeError, RuntimeError) as error:
+            return fail(f"invalid stream suite evidence: {error}")
 
     if args.staged:
         try:
