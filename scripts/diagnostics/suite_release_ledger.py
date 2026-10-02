@@ -18,6 +18,13 @@ SCHEMA = "penta-release-ledger-v1"
 HEX64 = set("0123456789abcdef")
 
 
+# v3 is the current equal-start combined-seed gate; v2 receipts remain valid
+# historical evidence inside retained matrices built under the old policy.
+# The suite receipt still binds the current verifier hash for new runs.
+STAGE7_PATROL_SCHEMAS = frozenset({
+    "penta-stage7-state-patrol-v2", "penta-stage7-state-patrol-v3",
+})
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -135,10 +142,10 @@ def collect_release_ledger(
             })
 
     movement = documents["gameplay_movement_stress"]
-    if source_bound and (movement.get("schema") != "penta-stage7-state-patrol-v2"
+    if source_bound and (movement.get("schema") not in STAGE7_PATROL_SCHEMAS
                  or movement.get("status") != "PASS"
                  or movement.get("metric", {}).get("strict_target_met") is not True):
-        raise RuntimeError("source-bound ledger requires the strict world-position Stage-7 patrol pass")
+        raise RuntimeError("source-bound ledger requires the equal-start combined-seed Stage-7 patrol pass")
     for row in movement.get("rows", []):
         if (
             row.get("target_met") is False

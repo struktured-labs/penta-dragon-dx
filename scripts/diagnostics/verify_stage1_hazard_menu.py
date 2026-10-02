@@ -217,6 +217,7 @@ def stable_summary(receipt: dict) -> dict:
             "phase_floor_attr_mismatch_cells"
         ],
         "temporal_raster": temporal_raster,
+        "recurring_phase_raster": receipt.get("recurring_phase_raster"),
         "low_health_forced_frames": receipt["low_health_forced_frames"],
         "low_health_scene_frames": receipt["low_health_scene_frames"],
         "rendered_wrong_palette0_tooth_cells": receipt[

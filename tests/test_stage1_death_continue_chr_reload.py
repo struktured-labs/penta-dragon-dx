@@ -24,15 +24,20 @@ class DeathContinueChrReloadTests(unittest.TestCase):
         contract = gate.audit_probe_source(source)
         self.assertEqual(contract["gameplay_memory_writes"], 1)
         self.assertEqual(contract["gameplay_memory_write"], "$DCBB=00")
-        self.assertEqual(source.count("emu:write8("), 1)
-        self.assertIn("emu:write8(0xDCBB, 0)", source)
+        self.assertEqual(source.count("emu:write8("), 0)
+        self.assertEqual(source.count("native_assistance.write(0x"), 1)
+        self.assertIn("native_assistance.write(0xDCBB, 0)", source)
 
         extra_write = source.replace(
-            "emu:write8(0xDCBB, 0)",
-            "emu:write8(0xDCBB, 0)\n    emu:write8(0xFF94, 1)",
+            "native_assistance.write(0xDCBB, 0)",
+            "native_assistance.write(0xDCBB, 0)\n    emu:write8(0xFF94, 1)",
         )
         with self.assertRaises(gate.GateError):
             gate.audit_probe_source(extra_write)
+        mapped = source.replace("native_assistance.write(0xDCBB, 0)",
+                                "emu:write8(0xDCBB, 0)")
+        with self.assertRaises(gate.GateError):
+            gate.audit_probe_source(mapped)
 
         active_keys = source.replace("emu:setKeys(0)", "emu:setKeys(1)", 1)
         with self.assertRaises(gate.GateError):

@@ -1,9 +1,9 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-09-16T11:28:16.817651+00:00",
-  "git_head_at_run": "151d84c21622471ce3c3b8e33531a4d05975779f",
-  "source_fingerprint": "0cb070141e8e753d0ad9b5a435e32c5266c010d2973d27d45834166397ecead9",
+  "generated_at": "2026-10-02T17:29:54.177823+00:00",
+  "git_head_at_run": "f8f24e63e05c4f15d68acb70d1842cb2f4c84037",
+  "source_fingerprint": "908e6a69edbe8654b9af33e7a8d3c67974110a2d3f499448ef0bbdf0c7a3c0b4",
   "source_inputs": [
     {
       "path": ".claude/settings.json",
@@ -67,8 +67,8 @@
     },
     {
       "path": "palettes/monster_palette_map.yaml",
-      "sha256": "238f5c37236141321778cedd4559a8a1622d725b58ca3ca25565abc9e2452328",
-      "size": 758
+      "sha256": "05a6a46a36644a2da710b36e87bf26ac6dd64ae2e1909622f2726209d60da496",
+      "size": 964
     },
     {
       "path": "palettes/penta_palettes.yaml",
@@ -76,9 +76,14 @@
       "size": 3473
     },
     {
+      "path": "palettes/penta_palettes_restart_parent.yaml",
+      "sha256": "b39cd1a1d4eaa702813e65a44e28a2a573a008c145452e2cbc9f2cae962a0cc6",
+      "size": 17796
+    },
+    {
       "path": "palettes/penta_palettes_v097.yaml",
-      "sha256": "ac4e5c1c741a0fa6cc13d514dbd8b9934ea4f6db700cc043459f1f61bd1dbbbe",
-      "size": 17643
+      "sha256": "67e4615a8d8909b9ec21fcbd9d307d781afac77b433206be8807977b53277a57",
+      "size": 17667
     },
     {
       "path": "palettes/spotlight_palette_map.yaml",
@@ -106,9 +111,19 @@
       "size": 272009
     },
     {
+      "path": "scripts/arena_bg_palettes.py",
+      "sha256": "f56d99d3d03980024456241d24b11656af4c8944c88d2ecc1ed54a5a914ce3a1",
+      "size": 8295
+    },
+    {
       "path": "scripts/arena_position.py",
       "sha256": "ce1a1b78ccf8d0506971d210ecda1090310834b5838667c776f2b38225bc8048",
       "size": 11680
+    },
+    {
+      "path": "scripts/arena_semantic_key.py",
+      "sha256": "be513080c331ea683d0396dad7150850f70a18a9d6857b2c9e3c0f4e4b155afb",
+      "size": 17014
     },
     {
       "path": "scripts/arena_tables_data.py",
@@ -141,6 +156,11 @@
       "size": 8501
     },
     {
+      "path": "scripts/build_stream_regression_candidate.py",
+      "sha256": "f2e6ab45573b1150ffa896b621ab0ff9b66fd01efdfe91eac22bd1ec4a2ac68d",
+      "size": 18593
+    },
+    {
       "path": "scripts/build_ted_expanded_candidate.py",
       "sha256": "36d4000401328f2456f9ef1c740825e91c3482273512fea8ec96f1f54041cd38",
       "size": 19822
@@ -162,8 +182,8 @@
     },
     {
       "path": "scripts/build_v302_title_fix.py",
-      "sha256": "21cdebf21cd368ded691396072e61cc9c2f4547a3b13e7398dd7ef7c8f3a41e1",
-      "size": 695835
+      "sha256": "fc386e9e25d40984f957ed1173f61134192bb1856b8e29fc7cf5f9152460cd71",
+      "size": 698321
     },
     {
       "path": "scripts/check_emulator_processes.sh",
@@ -182,8 +202,8 @@
     },
     {
       "path": "scripts/deploy_pocket_rom.py",
-      "sha256": "ec50406328bcb8f78b12344960367e79fe28fe84196641965c02bc712c3fbf1a",
-      "size": 55663
+      "sha256": "93151840de7107b929cd2dbf297ddbd40895ad3bad5df66ba9c1a6957d203b7c",
+      "size": 55661
     },
     {
       "path": "scripts/diagnostics/analyze_ending_page_discriminators.py",
@@ -222,13 +242,13 @@
     },
     {
       "path": "scripts/diagnostics/arena_bank20_r455.py",
-      "sha256": "c4cee20d5e051e484191a3967f8f747b91098cebd9d8e635ccc989eda57bda10",
-      "size": 4583
+      "sha256": "97a2f3f72239808476dfc33c1daf56ddb96bd927a41f093b871aa045686e0a84",
+      "size": 5384
     },
     {
       "path": "scripts/diagnostics/arena_palette_storage.py",
-      "sha256": "353bdc2fc21f68dde2ed444e9eb3b583bf44344a991455cd57ecb21696e2847b",
-      "size": 6046
+      "sha256": "b872ee446231db90812826935ba1d3010efe77434199110cb61713a233170383",
+      "size": 8478
     },
     {
       "path": "scripts/diagnostics/audit_later_generation_cache_r264.py",
@@ -262,8 +282,8 @@
     },
     {
       "path": "scripts/diagnostics/boss_dispatch_execution.py",
-      "sha256": "0b03a1bbaf0beaddd06811203e4fe2c3b117c0a3b3e6c81d3baf490b5ef25452",
-      "size": 3344
+      "sha256": "f3595e1adc6a57f1d3ab9bf086098043fb29f9fa193d8cc1be02b64d90b9f3be",
+      "size": 3902
     },
     {
       "path": "scripts/diagnostics/boss_geometry_contract.py",
@@ -276,9 +296,54 @@
       "size": 3357
     },
     {
+      "path": "scripts/diagnostics/build_arena_alias_fastpath_trial.py",
+      "sha256": "740b695f0540d25bc082512dec8565a3b5f5cbcfe227918dfbd8ff4627db4e03",
+      "size": 4406
+    },
+    {
+      "path": "scripts/diagnostics/build_arena_alias_only_miss_trial.py",
+      "sha256": "f57ecd6acec4e42f8f773e79344723027c03f5e39befff54841dfc41fe4f9dc6",
+      "size": 2628
+    },
+    {
+      "path": "scripts/diagnostics/build_arena_completion_safe_trial.py",
+      "sha256": "e671702bbdf039c9e0c8b3116725f96e73c79bb98a3ad2f81616a07de6861931",
+      "size": 4166
+    },
+    {
+      "path": "scripts/diagnostics/build_arena_direct_scene_trial.py",
+      "sha256": "0f64ade4962b18dc2421e2adfdc868a07591c62a29ecaf460d62dea84fa7aa7d",
+      "size": 3718
+    },
+    {
+      "path": "scripts/diagnostics/build_arena_graphics_owner_trial.py",
+      "sha256": "831a53d042c6a2c4c97986a007a781e3ba8f18dca3e33cfdff20ae597e3e0e15",
+      "size": 2649
+    },
+    {
+      "path": "scripts/diagnostics/build_arena_sound_alias_trial.py",
+      "sha256": "66f365d5fb400f93c8af88b2c3e3520449ec06b6d641483424ea7b490ce21723",
+      "size": 3539
+    },
+    {
       "path": "scripts/diagnostics/build_art_done_inline_r396.py",
       "sha256": "c2152cea4c7105fd45bdda0a62102db065bc1ce110dad74b8ea90d0c3e769496",
       "size": 1987
+    },
+    {
+      "path": "scripts/diagnostics/build_boss_menu_black_trial.py",
+      "sha256": "0cd7eadf3d492629b614341f748a0337c826d5a1a0bce701eb3a8cf14c84b753",
+      "size": 10020
+    },
+    {
+      "path": "scripts/diagnostics/build_boss_shadow_atomic.py",
+      "sha256": "29ed119afd61b8eaf3ea4ca354033d577b0a2f7a1679071eb57abd91c673ee34",
+      "size": 1948
+    },
+    {
+      "path": "scripts/diagnostics/build_boss_vblank_guard.py",
+      "sha256": "81023429bb7e9179652bf4c33a25e628ade2583279b9f95e7d8794ed5e8ff0d5",
+      "size": 2489
     },
     {
       "path": "scripts/diagnostics/build_bulk_attributes_r410.py",
@@ -289,6 +354,11 @@
       "path": "scripts/diagnostics/build_cached_only_normalize_r411.py",
       "sha256": "1a0bc31d2853d7dce5f6fe4f03ec865ca57a0406b77bba16ccf36d64af53c6fc",
       "size": 1257
+    },
+    {
+      "path": "scripts/diagnostics/build_card_route_ablation.py",
+      "sha256": "7d84c976fd88a9b5344e8d76dfa2d5fddf11f47eabcd8a444d748648890064f6",
+      "size": 2183
     },
     {
       "path": "scripts/diagnostics/build_cold_art_vblank_guard_r392.py",
@@ -331,6 +401,11 @@
       "size": 2368
     },
     {
+      "path": "scripts/diagnostics/build_continue_input.py",
+      "sha256": "c3ff360ec83f53ee14ed73946a6ac3a7360789dbf7106e58c083665516ff842f",
+      "size": 4206
+    },
+    {
       "path": "scripts/diagnostics/build_corrected_source_reuse_r390.py",
       "sha256": "a1c731992c3e51e940c08f25c09b261aff03d6157f1c4328f98aaadb4a77fdb6",
       "size": 1425
@@ -366,6 +441,11 @@
       "size": 4211
     },
     {
+      "path": "scripts/diagnostics/build_final_fade_late_window_trial.py",
+      "sha256": "4606a91e18eca6cab730f60610526ef8622da3a8a17c7dfe5a91a5e80b0d8bfe",
+      "size": 2559
+    },
+    {
       "path": "scripts/diagnostics/build_first_dirty_isolated_r398.py",
       "sha256": "259d7d8470aedc11c0df09500d09e9880eced10e3021d00a49849ed936e7b7d2",
       "size": 1341
@@ -376,9 +456,34 @@
       "size": 2703
     },
     {
+      "path": "scripts/diagnostics/build_five_point_star_trial.py",
+      "sha256": "1921bc505c828ff42608784a7ee4d9d70a4d8dde23eefa81b1183499a6b9b412",
+      "size": 2942
+    },
+    {
       "path": "scripts/diagnostics/build_five_tile_groups_r402.py",
       "sha256": "c17410174d0a79c857637be3307e463cf05749df74e6c428c4f46f9eba5c6881",
       "size": 2099
+    },
+    {
+      "path": "scripts/diagnostics/build_fixed_fade_compact_trial.py",
+      "sha256": "31f3abdac3ec0a9d4fdc393d38704f9f75a5dead7f2b77a10cdfb45fed56dab8",
+      "size": 2280
+    },
+    {
+      "path": "scripts/diagnostics/build_fixed_fade_read_control.py",
+      "sha256": "aeca8835cd4b3ea4a2ef80bd114da5924100a2411f8ac9ae3d6fb5ac16c17989",
+      "size": 2152
+    },
+    {
+      "path": "scripts/diagnostics/build_fixed_fade_route_trial.py",
+      "sha256": "2f7325fb44ee8f943d74889385c955c2fc61f072a0f5083465642b0c3a2c15e9",
+      "size": 2542
+    },
+    {
+      "path": "scripts/diagnostics/build_gameover_color.py",
+      "sha256": "8751ff510d4346a05f18f227587b71bdfa6a8315d3908852f27f497304806790",
+      "size": 2228
     },
     {
       "path": "scripts/diagnostics/build_gameover_exit_reset_trial.py",
@@ -421,9 +526,19 @@
       "size": 6282
     },
     {
+      "path": "scripts/diagnostics/build_handheld_palette_trial.py",
+      "sha256": "76457d9a07bd1f49a6191346ff7062cb36d72d8fa338a9cd70f1d620d767701f",
+      "size": 4262
+    },
+    {
       "path": "scripts/diagnostics/build_idempotent_latched_publication_r384.py",
       "sha256": "c6ddcd4d0674fb254f82681cd0371166e8f225bd8597175492ef73cf1a6ba0ec",
       "size": 1558
+    },
+    {
+      "path": "scripts/diagnostics/build_initial_map_fastpath_trial.py",
+      "sha256": "2b012b7f7ff0e967690a5885c9c72c38f2336d33d34b7c7c2bef5d2b74781330",
+      "size": 2502
     },
     {
       "path": "scripts/diagnostics/build_inline_hazard_scanner_r379.py",
@@ -546,9 +661,19 @@
       "size": 1942
     },
     {
+      "path": "scripts/diagnostics/build_menu_quartet_trial.py",
+      "sha256": "e35552df5faabd3a651340d66a3e809eee325c16560b6cf482c53c1327a5d94a",
+      "size": 5225
+    },
+    {
       "path": "scripts/diagnostics/build_menu_timer_wait_r369.py",
       "sha256": "4516792da92ce31d499306579830bbbd9005e4c1d3621e6c0a68ed195bfa9289",
       "size": 2528
+    },
+    {
+      "path": "scripts/diagnostics/build_menu_timer_yield_trial.py",
+      "sha256": "14e09fcd98a1051a0a5fe2621c74336937d2aa923b61a33f34623a62a620a6fa",
+      "size": 4213
     },
     {
       "path": "scripts/diagnostics/build_menu_title_trial_r535.py",
@@ -581,6 +706,11 @@
       "size": 1244
     },
     {
+      "path": "scripts/diagnostics/build_native_fade_dispatch_trial.py",
+      "sha256": "7048b0fbc8f3ab8d652d5a7f7812a8961b38fd5655051c007d94562cd5af8576",
+      "size": 2490
+    },
+    {
       "path": "scripts/diagnostics/build_native_increment_r416.py",
       "sha256": "dde9a228aa1626ca3984bc8c29703faadb1708a85d90ec859175d703fca19bc5",
       "size": 1111
@@ -599,6 +729,11 @@
       "path": "scripts/diagnostics/build_native_priority_collision_r381.py",
       "sha256": "56979a8319fc1580c8b84ab9e38d21a1fd73c4aca601b1c53f19593d42a2ab41",
       "size": 2193
+    },
+    {
+      "path": "scripts/diagnostics/build_native_projectile_templates.py",
+      "sha256": "26b6a71e01f05bb2e3eba8913101efa4d47e2986f2cb32136c36b8a5009f4ad6",
+      "size": 2733
     },
     {
       "path": "scripts/diagnostics/build_oam_flip_pair_fast_r232.py",
@@ -629,6 +764,11 @@
       "path": "scripts/diagnostics/build_obj_priority_fast_r368.py",
       "sha256": "8ebe6d832ada2b65524f7f18a493c175d4beedad9cd9248f8357fce23b09d9eb",
       "size": 1895
+    },
+    {
+      "path": "scripts/diagnostics/build_palette_window_trial.py",
+      "sha256": "64f85150edd57be242aae5c587b01a8c08b6ce971b8039dd17dabc12ae9f2e13",
+      "size": 3133
     },
     {
       "path": "scripts/diagnostics/build_penta_seam_vram_trial_r536.py",
@@ -691,6 +831,46 @@
       "size": 1314
     },
     {
+      "path": "scripts/diagnostics/build_return_card_compact_trial.py",
+      "sha256": "e3503eceb74c6e46770d077516f9847038980637ad7cc2c9025aeaaedb46ee04",
+      "size": 2646
+    },
+    {
+      "path": "scripts/diagnostics/build_return_card_deadline_trial.py",
+      "sha256": "b7db655a001f589c4278c7433bcf1f2162c996f7c101676cc19a9880686fa8bf",
+      "size": 2733
+    },
+    {
+      "path": "scripts/diagnostics/build_return_card_identity_trial.py",
+      "sha256": "ac4d32d743fe3fe1c07077efbb3350396d9ba0c19ce754f14419b5ce8ce499a3",
+      "size": 2175
+    },
+    {
+      "path": "scripts/diagnostics/build_return_card_timer_trial.py",
+      "sha256": "c5f018740bde53c001c3507ff673f9f158a8ae02cddada1881388305c756afea",
+      "size": 1740
+    },
+    {
+      "path": "scripts/diagnostics/build_return_cgb_fade_trial.py",
+      "sha256": "a879d5a4f999993b4cab822f97d4029b8cfe6077e77f98ce9be88240d3209a8b",
+      "size": 13352
+    },
+    {
+      "path": "scripts/diagnostics/build_return_initial_map_trial.py",
+      "sha256": "e3d84ccf86b008c3e5c092c2784d774d9efa02ebdff77b82da3923c1c905b3a5",
+      "size": 2543
+    },
+    {
+      "path": "scripts/diagnostics/build_return_only_fade_trial.py",
+      "sha256": "1ae80089ec575e0f8e22afc1e1a5564a471bd9d35e8a2a7b823d3b79d55242b1",
+      "size": 8149
+    },
+    {
+      "path": "scripts/diagnostics/build_return_palette_compact_trial.py",
+      "sha256": "98ea62589e23e4af76802978efb0a5e907cf68252baf56220c26e78b4d24869a",
+      "size": 2882
+    },
+    {
       "path": "scripts/diagnostics/build_room03_animation_envelope_r440.py",
       "sha256": "bd338b57d6e2fde963bfba86c26736d4e9a6725dc8dbbc5341a0606c367fbb2c",
       "size": 1788
@@ -706,6 +886,21 @@
       "size": 2143
     },
     {
+      "path": "scripts/diagnostics/build_sara_atomic_pose.py",
+      "sha256": "78dbad61eb3a3600422d524498affd1f3f6becb814bcdc00109ad7b514754332",
+      "size": 5061
+    },
+    {
+      "path": "scripts/diagnostics/build_sara_doorway_priority.py",
+      "sha256": "8589741bd9210a26f20bb9c615fbe30b36751e52fa0046f3c04ddf4fa195f06a",
+      "size": 7076
+    },
+    {
+      "path": "scripts/diagnostics/build_sara_priority_negative_control.py",
+      "sha256": "988554bd4194b0ada651b288718010824a2350313dd0f0ddca6b72d8c0bc99e8",
+      "size": 2277
+    },
+    {
       "path": "scripts/diagnostics/build_scanner_source_increment_r429.py",
       "sha256": "01044844fa7f74c79747dede3375fd17da5ea3e7d32b531f4424285f449e9828",
       "size": 1251
@@ -714,6 +909,66 @@
       "path": "scripts/diagnostics/build_scanner_timing_control_r378.py",
       "sha256": "43870abb4edb21784d78f915425adcc9970ae1a933695391adfdb140b06bb48d",
       "size": 1657
+    },
+    {
+      "path": "scripts/diagnostics/build_scene_table_clear_trial.py",
+      "sha256": "b7a43dd468aab3c615bad5eaa4fe01045fa6075b6b21b7ef0ff63559ce4e520c",
+      "size": 1903
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_alias_chunk_trial.py",
+      "sha256": "83c235d3054d81be4ca8c17c4d9bdeed9cad40d3ff08bd4feea3ac5219c0bf2c",
+      "size": 2740
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_attributes_trial.py",
+      "sha256": "ad75ca303108998027845cc74a04e4a179dfaf2438420ae8083c97a319773c0a",
+      "size": 4226
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_bg0_dedup_trial.py",
+      "sha256": "ea3bea547da9487efd8f5ed2c9e4ccea023f9875a6d1ca86024c2b3a8d6ffc9a",
+      "size": 1793
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_chr_restore.py",
+      "sha256": "5f60fcd5ef9d34c201a6bf9270484968a3a41ca7e17e48fb19ba64d75d5a575b",
+      "size": 3440
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_chunk_yield_trial.py",
+      "sha256": "a772b1dbf66af9a9957f72394d4fd3ba0ec06b8328ae26c4da5e5bc5c250273d",
+      "size": 2713
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_combined_copy_trial.py",
+      "sha256": "10bc8d1b52f455b8c04bf295a8c71d31f2ba6a1e5db3c8b53b552694dac3b68b",
+      "size": 4865
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_native_pipeline_trial.py",
+      "sha256": "a909a90efaad131c0169eb6e1f6730efbf9d838f33a95bade76956a7d72b8730",
+      "size": 2933
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_palette_sources.py",
+      "sha256": "bbde89922d74db9b8596c967ca26408252a718576619ecf335098c0e5b1436b2",
+      "size": 2874
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_sound_alias_fast_trial.py",
+      "sha256": "7e390e4b53a370f026d847cc6fce5e04a1e7f7f18209c913521bc403844c28d8",
+      "size": 2587
+    },
+    {
+      "path": "scripts/diagnostics/build_secret_sound_alias_trial.py",
+      "sha256": "63b8b43531a7af6db2251aa36561901c2f83d1886cb9786f57be37d25c3a444d",
+      "size": 2458
+    },
+    {
+      "path": "scripts/diagnostics/build_select_buffer_trial.py",
+      "sha256": "2d973c7fdefe81625981194403529d2da8a2998da056c4ee40ef5456ab3ee473",
+      "size": 5308
     },
     {
       "path": "scripts/diagnostics/build_semantic_buffer_redirect_r393.py",
@@ -1676,9 +1931,19 @@
       "size": 1512
     },
     {
+      "path": "scripts/diagnostics/build_stream_source_candidate.py",
+      "sha256": "b2fdd233f64ecdcc81b2f718caf4cbb6240e680b355f635a8786ab3accb4f8b5",
+      "size": 10923
+    },
+    {
       "path": "scripts/diagnostics/build_tail_coordinate_wait_r433.py",
       "sha256": "ea764a4a731bbb1dba6b9b65df713a641f6f0d32be290f014113c7b94a52a7c0",
       "size": 1920
+    },
+    {
+      "path": "scripts/diagnostics/build_ted_menu_reinstall_trial.py",
+      "sha256": "7e341b8d59c541f3694841958700c7a8069db7891c2662284330a6280a023d63",
+      "size": 3072
     },
     {
       "path": "scripts/diagnostics/build_title_color_prototype.py",
@@ -1686,9 +1951,24 @@
       "size": 21324
     },
     {
+      "path": "scripts/diagnostics/build_title_cram_guard_trial.py",
+      "sha256": "ad30af08c2bbf608486080b75b4b9864741ce58c01dd6603cd559b10fba4fb07",
+      "size": 1855
+    },
+    {
       "path": "scripts/diagnostics/build_title_exit_defer_trial_r535.py",
       "sha256": "000ad88cd455e0120e13124bb3e101a5b796cf30b8aeeba0b998dafdaab58c86",
       "size": 6169
+    },
+    {
+      "path": "scripts/diagnostics/build_title_glyph_window_trial.py",
+      "sha256": "24667930a002a56e71074d55f0765a8412689b55c320557879f20ae30a327105",
+      "size": 4117
+    },
+    {
+      "path": "scripts/diagnostics/build_title_local_guard_trial.py",
+      "sha256": "95fc470e7169a502691fa029061c558c236cb1a79ce645b342848d5dc1fb2e48",
+      "size": 3831
     },
     {
       "path": "scripts/diagnostics/build_title_local_rearm_trial_r535.py",
@@ -1732,8 +2012,8 @@
     },
     {
       "path": "scripts/diagnostics/capture_boss_material_gallery.py",
-      "sha256": "578e675d0198fd53ac4ed88fbb37a7711e25b5f7b5b6ad8b7a3f3ffb3ce24a88",
-      "size": 11270
+      "sha256": "08043bd545e7da6401f1d5967533b4258ffacb2de8a83ce2ba131d289f7ca414",
+      "size": 12348
     },
     {
       "path": "scripts/diagnostics/capture_boss_side_by_side.py",
@@ -1752,8 +2032,8 @@
     },
     {
       "path": "scripts/diagnostics/capture_stage_side_by_side.py",
-      "sha256": "ba19ad343f8d6c9e2c014815e9745b8d9eeb101d0bf9e30f44322e9a7eb57925",
-      "size": 12014
+      "sha256": "e5017c49cadfda650f6e91935432d3e983ba7ae239f4ad2ff441993a6d14882a",
+      "size": 13010
     },
     {
       "path": "scripts/diagnostics/capture_stream_scene_deck.py",
@@ -1761,9 +2041,39 @@
       "size": 5854
     },
     {
+      "path": "scripts/diagnostics/check_boss_map_publication.py",
+      "sha256": "2521783ae37093a649e445cd51c74278fad89d8c7c685186125da081fcafc041",
+      "size": 2271
+    },
+    {
+      "path": "scripts/diagnostics/check_boss_menu_fades.py",
+      "sha256": "e583a19bb46b5f9477652249a19cd3fe993f09ee7fa1610664c8b4f7d933caf2",
+      "size": 12514
+    },
+    {
+      "path": "scripts/diagnostics/check_cram_timing.py",
+      "sha256": "79959c3e9b58f73b102f264f92cf8f3e17c5a8a35315938cab9576dadf78bb2e",
+      "size": 1471
+    },
+    {
+      "path": "scripts/diagnostics/check_final_fade_cram.py",
+      "sha256": "74217a8a3131cfbcb40db39cfd946e1ba7709d98feef1ad37f5dcbcb1bb00a6f",
+      "size": 861
+    },
+    {
+      "path": "scripts/diagnostics/check_gargoyle_geometry.py",
+      "sha256": "53cf3eb926db38b8c7c39f4c44c0540499bdad208482b9106973b91889b6ed7b",
+      "size": 2312
+    },
+    {
       "path": "scripts/diagnostics/check_low_health_semantic_hazards.py",
       "sha256": "e9376d4e1a62ea66864e87a99f470c994189bd02c5ca7a67f89eff3019947c72",
       "size": 2008
+    },
+    {
+      "path": "scripts/diagnostics/check_menu_row_stack.py",
+      "sha256": "af1b9fa1e991d24e291f2a03658470c0c5a71d78a962fef2ff794c6a9f9d4817",
+      "size": 2382
     },
     {
       "path": "scripts/diagnostics/check_natural_obj_pixels.py",
@@ -1774,6 +2084,41 @@
       "path": "scripts/diagnostics/check_pipeline_attribute_snapshots.py",
       "sha256": "ea281fb7c9ee9e06c03e58e162df556089e77ba21d6b6a304fa807c2c2a80f9f",
       "size": 1294
+    },
+    {
+      "path": "scripts/diagnostics/check_sara_runtime_pixels.py",
+      "sha256": "b617288f151486512cfac9aed98598c1b62148ed3ec44f0be4311bd3c100a3ed",
+      "size": 4641
+    },
+    {
+      "path": "scripts/diagnostics/check_secret_dma_safety.py",
+      "sha256": "aaf0fa18a0faf88f52fde86886a5d6978bf66bf927e476d4c97cd7d5505e0492",
+      "size": 2643
+    },
+    {
+      "path": "scripts/diagnostics/check_secret_pickup_attributes.py",
+      "sha256": "240ab74d89405705ab20eb344ee004f3ba23f0ecd676600a7dbcfa553951fc20",
+      "size": 3678
+    },
+    {
+      "path": "scripts/diagnostics/check_secret_publication.py",
+      "sha256": "c5b7bae9aa94f8553d7cb3eca900508e4d89d5ff28e365c6f68d2bafebad59d1",
+      "size": 2692
+    },
+    {
+      "path": "scripts/diagnostics/check_secret_sound_commands.py",
+      "sha256": "d632f81d54c7a1222f2134a85def7e7016f21ee48859a68427019dabbff7993d",
+      "size": 2500
+    },
+    {
+      "path": "scripts/diagnostics/check_secret_timer_spacing.py",
+      "sha256": "4116891fcf4873befe870f2bac7028f3721591f24266b037f2491ed22b671203",
+      "size": 2735
+    },
+    {
+      "path": "scripts/diagnostics/check_select_latch_writes.py",
+      "sha256": "bd5af5477761522ea848ca51b2d06716e83618929186461bd1e81dd5c318e8c9",
+      "size": 1032
     },
     {
       "path": "scripts/diagnostics/compose_arena_palette_storage_r455.py",
@@ -1966,6 +2311,11 @@
       "size": 2648
     },
     {
+      "path": "scripts/diagnostics/compose_stream_presentation_trial.py",
+      "sha256": "a6c3552b127f5930c1d9496d6014afb3d0e93c7182c241d2b5afa78d2de4f0f9",
+      "size": 3955
+    },
+    {
       "path": "scripts/diagnostics/compose_troop_repeat_r457c.py",
       "sha256": "289976b563465b87ab23f6aea65067bda0d6c6c488fe8ef3f9518841ccbfbe3e",
       "size": 1761
@@ -1992,8 +2342,8 @@
     },
     {
       "path": "scripts/diagnostics/dump_ted_vram_frame.lua",
-      "sha256": "c8a4a933d6e0076a986bd28bee13e4c9199d40f66b004d4dcc4bafc8bc3311e0",
-      "size": 1200
+      "sha256": "9b890a0fce59f2a03b073305c2002532d0710df76fbf35c759e14fbae8d31fc4",
+      "size": 1805
     },
     {
       "path": "scripts/diagnostics/expansion_bank21_r456.py",
@@ -2027,13 +2377,18 @@
     },
     {
       "path": "scripts/diagnostics/expansion_bank_ownership_r456.py",
-      "sha256": "69bccb5a257df56164f1b0bdd1c5cfb6e4eade1d1018beb76b489f8668ba7c3a",
-      "size": 5341
+      "sha256": "4748f470a71d6ee78e6835d95205d25ac62cf53fba52291495e5915c292b4778",
+      "size": 6489
     },
     {
       "path": "scripts/diagnostics/expansion_banks26_30_r456.py",
       "sha256": "00d3fe89836528e1f9d3933fe07506b58a8a531e8dcc9dcb1fcee8089de9345c",
       "size": 1726
+    },
+    {
+      "path": "scripts/diagnostics/finalize_native_av_capture.py",
+      "sha256": "97c960c288d6e71b9eea484143d2de36368d03fe4e5080ad4a336b56722caddb",
+      "size": 2464
     },
     {
       "path": "scripts/diagnostics/fixtures/stage1_room01_wall_oracle.json",
@@ -2052,8 +2407,8 @@
     },
     {
       "path": "scripts/diagnostics/gameover_sequence.py",
-      "sha256": "a10997f61a0a142ac5e0f1f238cb406582adfe323f0493d9750afc85cd1955f2",
-      "size": 1747
+      "sha256": "e856eda93294754f577299ba7fa0a9ffdcb402e9543ac0d282ebc2429d1d65e1",
+      "size": 1853
     },
     {
       "path": "scripts/diagnostics/gameplay_anchor_dma.py",
@@ -2082,8 +2437,8 @@
     },
     {
       "path": "scripts/diagnostics/generate_stream_boss_states.py",
-      "sha256": "a4ed7bb8d14e4440c69977149822f2a50983cdb9b2c310bbb1fe934c36b39790",
-      "size": 52053
+      "sha256": "556da4f6a03cb313c9aeea81af457552f619a0564c6d5aa70c4c5e6b576a517d",
+      "size": 57736
     },
     {
       "path": "scripts/diagnostics/generate_stream_stage_states.py",
@@ -2097,8 +2452,8 @@
     },
     {
       "path": "scripts/diagnostics/hazard_mutations_r442.py",
-      "sha256": "2f2b0abc0dbb2220fba334a5454593873e2acce6bf41650177f3c66b5f4fbf43",
-      "size": 5357
+      "sha256": "a043139acc01ebc1e666cb3d494eb45b4659afd1c6ac14983473fc2e92d72aeb",
+      "size": 5665
     },
     {
       "path": "scripts/diagnostics/inspect_ted_block_major_exact_fit.py",
@@ -2112,8 +2467,8 @@
     },
     {
       "path": "scripts/diagnostics/inventory_attract_reel.py",
-      "sha256": "3f87c38892586fe14c5f808aeb26352af0f332875d6aa0cd12aa80286481ee49",
-      "size": 18404
+      "sha256": "23c53fd16d74abb185c65583919393e74bbce381bce73dc98e89951e9c3b9f24",
+      "size": 21580
     },
     {
       "path": "scripts/diagnostics/inventory_final_cutscene.py",
@@ -2157,8 +2512,8 @@
     },
     {
       "path": "scripts/diagnostics/menu_commit_protocol.py",
-      "sha256": "d36af6409c589b8bf85aed46c509d52ea6cd6e7512273b2572876e4d7bcf5b56",
-      "size": 2675
+      "sha256": "57690bb608296b7648fcdad77503b6117960830569b1ab84efd55871a2b0999f",
+      "size": 3256
     },
     {
       "path": "scripts/diagnostics/montage.py",
@@ -2242,53 +2597,53 @@
     },
     {
       "path": "scripts/diagnostics/probe_all_minibosses_visual.lua",
-      "sha256": "944322d34a32b9e230e82a0478776c7df4c3b77af2331c19a514f69e4e1dfa16",
-      "size": 6465
+      "sha256": "ff4950ab6a1f50518f5ee2d643233e0b5f809057d7de51b338dcf6198e4c84f5",
+      "size": 7113
     },
     {
       "path": "scripts/diagnostics/probe_arena_alt_fullscan.lua",
-      "sha256": "9e7ed87bea8e14fa3e072d67895909d26ec90502c64ebc19653e1d5650fb223a",
-      "size": 4366
+      "sha256": "fccb633fa429b01b673a1ad5f5772f5ab3bd43ce150756a8f565ebf946ae7b34",
+      "size": 4873
     },
     {
       "path": "scripts/diagnostics/probe_arena_alternation_cause.lua",
-      "sha256": "e8814321dceaedc19ac4adbc2fa0636c7496a1d1d566525bf165367d06cda6ff",
-      "size": 2899
+      "sha256": "41385198007e96b5858a3d49010a0fa36a120a283ed72b21874a2d9329338542",
+      "size": 3453
     },
     {
       "path": "scripts/diagnostics/probe_arena_cache_ownership.lua",
-      "sha256": "65a8790d1ed5707900b2948cc3de68dc2403c4d55e83e346fa98cb8dac0a10f6",
-      "size": 2325
+      "sha256": "afd508ad443ad288c37b8a96fd39bca6b49b68607c05268f34fd04c860877031",
+      "size": 2934
     },
     {
       "path": "scripts/diagnostics/probe_arena_cycle.lua",
-      "sha256": "07283c5bb7098f91755f442b79fd98070cd16c70ed0d3f1c1e9d1fce19604198",
-      "size": 2576
+      "sha256": "38ea4e42006d2a694770ef1adc6e41e16b77a0f5dea0751f08c50c0abdefbf41",
+      "size": 3179
     },
     {
       "path": "scripts/diagnostics/probe_arena_dump.lua",
-      "sha256": "14bd44fc9ae306ffe8facb6874db2602424848cc589c2d44a71ed1b2c6ba4845",
-      "size": 3600
+      "sha256": "40082a6ac692ad9873a8482c60d35cc9f279b9aa8f37f8083802daa07fd01e0c",
+      "size": 4107
     },
     {
       "path": "scripts/diagnostics/probe_arena_footprint.lua",
-      "sha256": "6dc063eccc4979fec73a5dcadda1f8f8f268822e891fd8e43938eb5819a5d850",
-      "size": 2867
+      "sha256": "095ae2d241e610936f4b2faeca0de8345210844574ec8bff1a08559ef2d3037d",
+      "size": 3421
     },
     {
       "path": "scripts/diagnostics/probe_arena_longrun.lua",
-      "sha256": "7df0b10e10e4d5eef6b9936f85666325a0ea6c24b4cc8053e1a2659def0fa1ac",
-      "size": 3311
+      "sha256": "0a150a0e3d8699077845d7d8f0702c08579dd3398b25d2de626283f23ed5d56d",
+      "size": 3818
     },
     {
       "path": "scripts/diagnostics/probe_arena_posmap_gen.lua",
-      "sha256": "837a9ac93ab9eeef9c5a56b8ecada4016e9bd03248149cf46ccdfb709a624613",
-      "size": 4179
+      "sha256": "30244a93dcaf24b8863f691d9f649bd327b5751d3752fd01422d219fedfa143c",
+      "size": 4686
     },
     {
       "path": "scripts/diagnostics/probe_arena_timeseries.lua",
-      "sha256": "e475a2d80f95846e66d6afc3a0e8f085382a76d32b28abdf33f186fe450f42d1",
-      "size": 2850
+      "sha256": "38dee9a7750cd56bc74a502f603311486351507a8d2ae5bd40fa0bb7e1a9b8ae",
+      "size": 3404
     },
     {
       "path": "scripts/diagnostics/probe_attract.lua",
@@ -2327,8 +2682,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_bonus_stage_live.lua",
-      "sha256": "52251c4df4740493f8ff4d49519a3f8d1884454f6329d59fc9e4c767e8609a9e",
-      "size": 5223
+      "sha256": "e8ef12f9fb8c0d7cc31e159e2888b79a3bad6f2b7caa46bdf291c66ed395497d",
+      "size": 5828
     },
     {
       "path": "scripts/diagnostics/probe_boot_progress.lua",
@@ -2337,13 +2692,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_boss_animation.lua",
-      "sha256": "745f7a364fdb4446ce28732d7db6684a45568625379bc470a64526d84b69bf5b",
-      "size": 15471
+      "sha256": "b89a274376ef58519609a6df2a73475cc117273445ee52fab6b3aa6fbac119fb",
+      "size": 16068
     },
     {
       "path": "scripts/diagnostics/probe_boss_coord.lua",
-      "sha256": "c346071d4c1f6d34ff68ac1a0a9396a74172334e6a058bc0e1232da2a0b88219",
-      "size": 2087
+      "sha256": "f01d4d4c7cdea52c01f4b47bae42154e359805392732411afd5e384bec49b6c9",
+      "size": 2641
     },
     {
       "path": "scripts/diagnostics/probe_boss_entry_source_stages.lua",
@@ -2352,38 +2707,48 @@
     },
     {
       "path": "scripts/diagnostics/probe_boss_geometry.lua",
-      "sha256": "7dd4a3362e700c928dc17cd6da2f4ceaf9e7a6fcc9f6da787c14c8e0e9e798fc",
-      "size": 6270
+      "sha256": "6ebde7ba071c480f1c29a0b4cc69f61d8e708a65e02b2a7f4e91f16f425a8476",
+      "size": 6879
+    },
+    {
+      "path": "scripts/diagnostics/probe_boss_menu_roundtrips.lua",
+      "sha256": "91408a96c65396e13202e94aa3d098ace358cd1a86911551b4e4187d2fa93ed0",
+      "size": 6281
     },
     {
       "path": "scripts/diagnostics/probe_boss_publication_cadence.lua",
-      "sha256": "8628350f13d6830949c28f28a79903c57e9179ce2953eb7513873cee1dde4c22",
-      "size": 8641
+      "sha256": "e0ebe91803f9fc84e9a7b50fedbdaef9902f85faa1913fe1c681f8092709753d",
+      "size": 9246
     },
     {
       "path": "scripts/diagnostics/probe_boss_semantic_cadence.lua",
-      "sha256": "12c1b59c084e838fc5cd3a3f1c3e8458fb2d217c7849687c80a1676b0e467cbb",
-      "size": 11124
+      "sha256": "80c37f34b2267559b75c65b4761a0204f43d9bbad7f9e1df16280cbd33c23b66",
+      "size": 11733
     },
     {
       "path": "scripts/diagnostics/probe_boss_speed_parity.lua",
-      "sha256": "f3b2fa70ef45de0d96b6fdc5131823dc000b506d7e4b5f4483130f8291965764",
-      "size": 7407
+      "sha256": "ec285b0174615ae96c6390da78b7c23e924e364f804ef27ae79237bb035edffa",
+      "size": 8157
     },
     {
       "path": "scripts/diagnostics/probe_boss_state_receipt.lua",
-      "sha256": "d42f7e1b89fb258ed0f2d85c3fe1e4f512b416100fd61388bd186431f59e95e6",
-      "size": 19999
+      "sha256": "3b8a5aba3f706ffdff46d43670a2e4e552c0b72047a3c9e7112237ee0c29ce3b",
+      "size": 22197
     },
     {
       "path": "scripts/diagnostics/probe_boss_trajectory_pairing.lua",
-      "sha256": "ae3cf718d6baadd2a0bdfe567cfe7c8932c9aa98849b4dd081e064248a94dff7",
-      "size": 6209
+      "sha256": "76d4e7baa37c036d599b99ff9f4f1ed195c73989fb4bf1f92859bc83096608bc",
+      "size": 6814
     },
     {
       "path": "scripts/diagnostics/probe_capture_title_state.lua",
       "sha256": "161cf558d5dcb0b1e2296bc8cd233b76622812f1095088843163357918813aa1",
       "size": 557
+    },
+    {
+      "path": "scripts/diagnostics/probe_continue_input.lua",
+      "sha256": "fec273d24fbede41e16118293ce464821c890d000f4d662cf119564899177049",
+      "size": 3304
     },
     {
       "path": "scripts/diagnostics/probe_cram_accessor.lua",
@@ -2397,18 +2762,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_crystal_debug.lua",
-      "sha256": "0af5e542b6879b07eb1212a28b533ddead59f2a54e9b59cdd1874f24fe49bea2",
-      "size": 2697
+      "sha256": "47dc2f0c9d808fddfd7798a284e7fd1403371c70913d9f0841e32f08b2b92ab2",
+      "size": 3251
     },
     {
       "path": "scripts/diagnostics/probe_crystal_flicker.lua",
-      "sha256": "bf52af5d0dbdc4f8200ec4ad9c767e6308680480e893caab3cecd9b019ccebc6",
-      "size": 10711
+      "sha256": "84dc182a61e2f45a623b6e46fac86a00f8590c8a6184cc3dd5d25501a3db1ba8",
+      "size": 11308
     },
     {
       "path": "scripts/diagnostics/probe_crystal_oam_writers.lua",
-      "sha256": "e90fc99f6c2f4ad31ee74d118454d887108d8befc84939292685c424b9e8f8a1",
-      "size": 2806
+      "sha256": "dd959918d5e6d4051be829f57934991e8f851b1e6939df7fc8580eff7a5368ce",
+      "size": 3411
     },
     {
       "path": "scripts/diagnostics/probe_cutscene_verify.lua",
@@ -2417,18 +2782,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_da00_dump.lua",
-      "sha256": "4ff6fd0d64c87a90a212ba5a9da05f3e71e87455b54cbd3aafe2556ee4cf4d3a",
-      "size": 1713
+      "sha256": "e7a5d1ced2b9d3e9944ac64bf29550ea4f7aa3324c854edda50cbdbaf81ecb59",
+      "size": 2267
     },
     {
       "path": "scripts/diagnostics/probe_death_gameover.lua",
-      "sha256": "1882a57a394e5bb37ea4ef790afd5b48e28fcd919b7d565d1316cf1fe1274e4b",
-      "size": 11264
+      "sha256": "dd6e1656931ea47934d216cc7bf98fcb02bbccced289fd7ec26371d3d04bb836",
+      "size": 11927
     },
     {
       "path": "scripts/diagnostics/probe_death_vram_writers.lua",
-      "sha256": "c8682b6884afcd58f9b542adb3589156ff0f17f845349b36206a0ecd5909f1c1",
-      "size": 4624
+      "sha256": "e8a8fa00c3fd207f40c6328f5e57cc3284e66da4523ca9608a503ed13456c01d",
+      "size": 5287
     },
     {
       "path": "scripts/diagnostics/probe_dungeon_fonttiles.lua",
@@ -2477,8 +2842,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_frame_flicker.lua",
-      "sha256": "b0f6a62ed4d905777e92d54a15037392e842c4aedd21b6f29764f09e08cd4c25",
-      "size": 9127
+      "sha256": "8981096339ef769183db80e37a8fc18b25a6e58105dbb92b652b25739a6c7bdc",
+      "size": 10049
     },
     {
       "path": "scripts/diagnostics/probe_game_start_route.lua",
@@ -2487,8 +2852,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_gameover_restart.lua",
-      "sha256": "06b3b826c62190767a1da427788d84d2cdfe076d53ddca1d4f72870a167735dd",
-      "size": 9469
+      "sha256": "c9d82af11b26729ca7ae19d46c01c5054de21ff2f7ba3e7aaeecd6861ee4c81b",
+      "size": 11513
     },
     {
       "path": "scripts/diagnostics/probe_gameplay_cram.lua",
@@ -2512,13 +2877,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_gameplay_obj_palettes.lua",
-      "sha256": "d052dc409909fbc613f82932c795ee91bd6a6168c0d23c913ca207f2ff3143b8",
-      "size": 5901
+      "sha256": "135cd3f4a9750d501b5ba48f595cdde0a730dffacf6dc1631f3bd7345b2e4c5f",
+      "size": 5916
     },
     {
       "path": "scripts/diagnostics/probe_generate_boss_state.lua",
-      "sha256": "9a6abf7845e3bd6e785293b7c400e000a7ef9a370e2d32498ce83fdd40b071fc",
-      "size": 41505
+      "sha256": "7558286376d60a19fbf134373eb5e589621246234356332fb235684d1d9b1f86",
+      "size": 45202
     },
     {
       "path": "scripts/diagnostics/probe_generate_ending_tail_state.lua",
@@ -2537,8 +2902,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_hidden_shmup_gallery.lua",
-      "sha256": "74dc20f446785b8eea9a5009675133ec4f2e2175ab83f1d6b9029157bb22f233",
-      "size": 2972
+      "sha256": "b62bb0da3509cd6650e8fbefdaa8b4c0e9a76b7e92d4b1b3063ff0097ae06c74",
+      "size": 3577
     },
     {
       "path": "scripts/diagnostics/probe_item_menu.lua",
@@ -2547,28 +2912,28 @@
     },
     {
       "path": "scripts/diagnostics/probe_later_stage_soak.lua",
-      "sha256": "f4a6c6026cbd9abd62718c2f35951024f6f4580f6f9d243513b67560cf8710fa",
-      "size": 42328
+      "sha256": "f9692851987e08687536528f58d92a2947c81767622a92b46af298f4d706ffd1",
+      "size": 42937
     },
     {
       "path": "scripts/diagnostics/probe_lava_ffba.lua",
-      "sha256": "803ad227623cfe98cc668b251cc57eb49734a41156fe3cee438cba5e547f8775",
-      "size": 3045
+      "sha256": "19b94e54ec2e495f54bcf2cae976f1f1fd8c13606318d35f123c41e99a45fb71",
+      "size": 3674
     },
     {
       "path": "scripts/diagnostics/probe_lava_verify.lua",
-      "sha256": "54b63f700a28432f3d331f90ec140e8b4a01604de1fc396381ab00605bd4dcc9",
-      "size": 2831
+      "sha256": "3277ac65301c43808dff6dfc5a5ba27837a6288b0423d1dbe3c9785a719b3ba1",
+      "size": 3460
     },
     {
       "path": "scripts/diagnostics/probe_levelselect2.lua",
-      "sha256": "77b93443b42215ae2fd526a24f8a51bdaab1eeb6532043dc819d722db8ef454d",
-      "size": 2605
+      "sha256": "ad820385c390a126cd6776bdbdf72420d868e49a18945d6c721120e5f7005373",
+      "size": 3268
     },
     {
       "path": "scripts/diagnostics/probe_levelselect_attrs.lua",
-      "sha256": "48d296c891e3271add6db33697bf3e087f810698d9edbf5d3cf3f4eddfd53ea0",
-      "size": 2126
+      "sha256": "dfebfc1f34d3f63fefc679e9809cb06be7c61ea3765869689c3206a9e8df7440",
+      "size": 2789
     },
     {
       "path": "scripts/diagnostics/probe_loadstate_shot.lua",
@@ -2577,13 +2942,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_low_health_flicker.lua",
-      "sha256": "c6a22e27cd4ce7e22258896225b534f78e5a94320b3b22e796684625f3a5ad59",
-      "size": 72324
+      "sha256": "c065ab82f3b23a851ecbe26313405d9dc2119b9c30630534961e9048d0d7e533",
+      "size": 73052
     },
     {
       "path": "scripts/diagnostics/probe_low_health_transition_liveness.lua",
-      "sha256": "594de418f8030dba4b9e7e1fa93fc71b65d0e69cc4ff2b7760f07080e9370035",
-      "size": 1940
+      "sha256": "9ce21e9fa564db2bed2a4c96344d5003c86a0e9208e64ae63767f09dd16e2b46",
+      "size": 2629
     },
     {
       "path": "scripts/diagnostics/probe_manual_game_start.lua",
@@ -2602,13 +2967,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_menu_icon_palettes.lua",
-      "sha256": "4f172513ce956b6eb989e2beb20cd02e3339073ffb8df78c2622acb24422ccf6",
-      "size": 4173
+      "sha256": "2a4a95921e311e0f21f8295f61e5ea36b6c2fbabfd87e22064e8fd2e94c37e9e",
+      "size": 5149
     },
     {
       "path": "scripts/diagnostics/probe_menu_window_order.lua",
-      "sha256": "d3dc24ad7649897f1ae610e471920a313d142680898e6b122e2ec0eeb9e0e722",
-      "size": 25554
+      "sha256": "842f588413c5cf19b418bd31955d4a733c5bcb8ca07a1eaead1fc9fa24b1282c",
+      "size": 26159
     },
     {
       "path": "scripts/diagnostics/probe_monster_capture.lua",
@@ -2647,13 +3012,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_penta_seam_writers.lua",
-      "sha256": "fd97e2aa3df2264bccb2a7fda137164116a3f56231aa0a434ff56e869ebdd67a",
-      "size": 4357
+      "sha256": "c989bfea63c1f88d746ce7be2fb20c0308fd349b4fa3a7d0c1c5083e3301771d",
+      "size": 4966
     },
     {
       "path": "scripts/diagnostics/probe_pickup_live_palettes.lua",
-      "sha256": "8e540196dc7469f05ebdf71fd18c2880c67bfc908b654739a5048d8f8bae163d",
-      "size": 19442
+      "sha256": "dda29aaa6911ba462112cdd446677a47561852240231e97d23632ca19bbc6756",
+      "size": 20047
     },
     {
       "path": "scripts/diagnostics/probe_prepare_ted_forced_cold.lua",
@@ -2662,8 +3027,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_projectile_visual_audit.lua",
-      "sha256": "638dcc9178c9d89cff629ed1e5e4119113c964fb48ccfe93b6e7be796e81cdd8",
-      "size": 8030
+      "sha256": "b6d6d5f3609c2ad346371d0c4c44d94df322df0ec6a4725db321d3cfb9408956",
+      "size": 8678
     },
     {
       "path": "scripts/diagnostics/probe_resume_stage1_visual.lua",
@@ -2682,13 +3047,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_scorefix_diag.lua",
-      "sha256": "70b46bb7e789ddba136339f70e5cc3a065cb975599b5c4e963a9d8a8c6aae709",
-      "size": 2461
+      "sha256": "517aee7769700e47f29346a9c3b136b5bc93ccdd89864ad9abac81e4e34e9181",
+      "size": 3124
     },
     {
       "path": "scripts/diagnostics/probe_scorescreen.lua",
-      "sha256": "59ef43f98f08fe57b1f311a0ef05f4966177e194e01ea0b03153017c62aaf936",
-      "size": 2391
+      "sha256": "018766a52ea7631fab15c3a89fa4ac2f46f0c141b4fd288592c94a6c5fe2c0b9",
+      "size": 3054
     },
     {
       "path": "scripts/diagnostics/probe_screenshot.lua",
@@ -2696,9 +3061,19 @@
       "size": 840
     },
     {
+      "path": "scripts/diagnostics/probe_secret_chr_entry.lua",
+      "sha256": "6c4f55d2fa7110341bda63e9a707cca1b2526e74aa76a7f360cc5a80e7e6eb25",
+      "size": 1591
+    },
+    {
+      "path": "scripts/diagnostics/probe_secret_entry.lua",
+      "sha256": "352b1a77454e0b36163a32b72b18d6b1c013bf2705f7d5a0f57a42f3a1da3efd",
+      "size": 43667
+    },
+    {
       "path": "scripts/diagnostics/probe_shal_multishot.lua",
-      "sha256": "f7c749d6dc35deb80481b9dc9cabf20094c2070e1a1553c7acf6ae1b1ffdca69",
-      "size": 2826
+      "sha256": "1ee321cb15a3c89358d447232839c68370c6583c1be003e06614569a340e51b4",
+      "size": 3332
     },
     {
       "path": "scripts/diagnostics/probe_slot1_trace.lua",
@@ -2726,24 +3101,29 @@
       "size": 3036
     },
     {
+      "path": "scripts/diagnostics/probe_stage1_captured_menu_settle.lua",
+      "sha256": "003c1e7364e7a5f108ad3aa3cd5b5b9835443d061a92ca1d26eff8b6ed4afdd0",
+      "size": 983
+    },
+    {
       "path": "scripts/diagnostics/probe_stage1_death_continue_chr_reload.lua",
-      "sha256": "4144351209a579f629cb757fe4c0ab5fe67401be8923b95c5b074cb10abb8637",
-      "size": 17203
+      "sha256": "e851acc91c7d4fc8ed373848aeda1dc5dad3b269049babaf3efb5188a0bd2176",
+      "size": 17866
     },
     {
       "path": "scripts/diagnostics/probe_stage1_miniboss_transition.lua",
-      "sha256": "6b87824e79f339a31f7ce5b11823e3fac02850171eb680511ff40f9f096e3d1d",
-      "size": 1410
+      "sha256": "ddce1250a03ecb001f1976d190f590047c4f264ccb3614dddab8d1e60771f1aa",
+      "size": 2073
     },
     {
       "path": "scripts/diagnostics/probe_stage1_natural_menu_bg.lua",
-      "sha256": "93b1e2817bf7edfbc1d47e8fd675e48278ab5ea542151f2cade9df50e1f85aa1",
-      "size": 30660
+      "sha256": "2ff345f777d8790cb5f9092d2118508c1a6cb4471dc11f57e96adcf5d26bf161",
+      "size": 31265
     },
     {
       "path": "scripts/diagnostics/probe_stage1_no_bleed.lua",
-      "sha256": "92bce183ad464edd0b1bb246ec8403a98b45ddcd6d3d6ceafe35e63c8a34fd1b",
-      "size": 33883
+      "sha256": "1a7aac8d57e935344c44a514f6214f68e362221a37054d98e0534bdff19a7c5c",
+      "size": 34663
     },
     {
       "path": "scripts/diagnostics/probe_stage1_north_integrity.lua",
@@ -2777,13 +3157,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage1_spike_palettes.lua",
-      "sha256": "5c7ef4fd3dbe42dabff82ab07c781acc421f11692e3c38a4e4494b5d57caf973",
-      "size": 104133
+      "sha256": "99a56d933104e50f6675ea0914ef4a83f6f398922b8f310cce84b697eab1b45a",
+      "size": 105436
     },
     {
       "path": "scripts/diagnostics/probe_stage1_tilemap_copy.lua",
-      "sha256": "fed90fdce1e0c1380aefee3c07be15ef7fd161c1b08c91927df6d625b7acf716",
-      "size": 29670
+      "sha256": "7470c768d97443ec2c5f7a0c6b92fc3aa9024d4f246c45f8095f78752c4e39b2",
+      "size": 30279
     },
     {
       "path": "scripts/diagnostics/probe_stage1_transition_key.lua",
@@ -2797,13 +3177,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage4_lazy_lifecycle_r287.lua",
-      "sha256": "a7ac7ad782d543645899a3d47f52320740b54ba7f48d4eac26a2692840fa5c84",
-      "size": 38279
+      "sha256": "22966ea9cc2270fcd61cf5f491f2ab1e69fe11ff58e004bc55c3c89e84ba4609",
+      "size": 38856
     },
     {
       "path": "scripts/diagnostics/probe_stage4_select_roundtrip_r287.lua",
-      "sha256": "536a47b00776fe5bddd55bd11329124daaf0a9fd94626c31b4ed4c767be5ba22",
-      "size": 28653
+      "sha256": "43ee73a21e6c4424e174a1940c54a14386b2ed5834131d321905fc6286b3489b",
+      "size": 29271
     },
     {
       "path": "scripts/diagnostics/probe_stage7_crystal_containment.lua",
@@ -2822,18 +3202,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage7_state_patrol.lua",
-      "sha256": "5ab4ab41362e4f2da5f61ca8832034588991ad5a414207c429d36bf5507e564e",
-      "size": 3356
+      "sha256": "3901c46cb7c062fad5481a7d6d4b94d9e06a49f42b9084c31e91ed9c2a03d287",
+      "size": 5859
     },
     {
       "path": "scripts/diagnostics/probe_stage_card_stability.lua",
-      "sha256": "cfeb218c7f59c11861a6bef89e58ae8804b2f468c627e151c70b8fe22d35fcfb",
-      "size": 12496
+      "sha256": "666ba8a1fbb10df69e6596a031bb22f960645a77974ab5aa943b38964edc2574",
+      "size": 13159
     },
     {
       "path": "scripts/diagnostics/probe_stage_integrity.lua",
-      "sha256": "81c08ef03993d140484097f2e96503ac9d3464d4a38d0aa78efc7b72e5d78e3e",
-      "size": 8271
+      "sha256": "65ecb67f5f8d88c2d721cc0d6c6099148b382ce9633a157a49a93002872c4a89",
+      "size": 9055
     },
     {
       "path": "scripts/diagnostics/probe_stage_intro_menu.lua",
@@ -2842,13 +3222,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage_side_by_side.lua",
-      "sha256": "a3fdaa8f68a31393988bf62d2919bbd09d5f4d6a3437bb7d6dfad06f42e304d3",
-      "size": 10052
+      "sha256": "8684fc651a1127b93c269d48a2f8f4bd2c2f25d88a0147183839043eddb22a23",
+      "size": 10926
     },
     {
       "path": "scripts/diagnostics/probe_stage_speed.lua",
-      "sha256": "f96d191b54b95fee9f242fc62ecef555b7014f7b63d0981f24994581b9cb3ef4",
-      "size": 75970
+      "sha256": "5931f1161529c1782e25782fda7a90119523b8605597490cf76395d8ae1ac994",
+      "size": 80946
     },
     {
       "path": "scripts/diagnostics/probe_stale_window_state.lua",
@@ -2862,13 +3242,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_table_trace.lua",
-      "sha256": "7d9b884615858c1d0bc019f422a394858a825d959f442be288647e187a448eb4",
-      "size": 2303
+      "sha256": "7acd1f21dc41f34524b32f93a1527c4725e91c8c98fe6d8a518480500b48e291",
+      "size": 2857
     },
     {
       "path": "scripts/diagnostics/probe_ted_anchor_trace.lua",
-      "sha256": "b5aec0475931346e81643ff1efea8e21edcf5d55fb340c031ac2392bdfa71a17",
-      "size": 1756
+      "sha256": "06596cb3efb797f979ff126f4d8a8c25eed85e56a48072c910cef04e8b94c026",
+      "size": 2361
     },
     {
       "path": "scripts/diagnostics/probe_ted_block_major_runtime.lua",
@@ -2877,13 +3257,13 @@
     },
     {
       "path": "scripts/diagnostics/probe_ted_cache_planes.lua",
-      "sha256": "a115e51d311edc7ea29bea7f8cc66d0ddce49fdccc912e981fa73ef880c4a5f4",
-      "size": 3157
+      "sha256": "a717079537cfb00732d968bb10afdec39e7a2c54145c1e13538fe2157014a36a",
+      "size": 3766
     },
     {
       "path": "scripts/diagnostics/probe_ted_cached_publisher.lua",
-      "sha256": "0985309afc413cc1c5addc430550a049743f54913cc283687abbbbb00b4c6e4b",
-      "size": 5282
+      "sha256": "f8bfdc02dde1d45807d19d9d3a9f02e0b16b8966bf76bf0a283bb6c6da4fc115",
+      "size": 5887
     },
     {
       "path": "scripts/diagnostics/probe_ted_classifier.lua",
@@ -2892,18 +3272,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_ted_crown_candidates.lua",
-      "sha256": "98a4c1d0f13f6924e4132c42eee23a2f8007dc391548123f5eef935cda6a6c84",
-      "size": 2035
+      "sha256": "78c2d2de957ee56a5d22eefc4b12d90d9c59ff29796e39f97112cd847dc4c232",
+      "size": 2640
     },
     {
       "path": "scripts/diagnostics/probe_ted_determinism.lua",
-      "sha256": "5a74df8992144b3d004e82369b814cb844fa4ec17fc77f347451dfe1ce886d6e",
-      "size": 10087
+      "sha256": "0426343d4e57f3def48f2b9504a3f90832e5d752cf1ce2ae070c38dc9a323eea",
+      "size": 10692
     },
     {
       "path": "scripts/diagnostics/probe_ted_direct_plane_semantics.lua",
-      "sha256": "b721b906cc292009a0392422e97be88996b0336196fc0c020150ca4960a2b8f5",
-      "size": 8645
+      "sha256": "1f6dc9fbdf25e4fdfb40ad2f4d3cdcde5acd5538013d7ffe86a94ab39172c0d7",
+      "size": 9250
     },
     {
       "path": "scripts/diagnostics/probe_ted_first_ready_publication.lua",
@@ -2917,8 +3297,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_ted_foreign_source_writers.lua",
-      "sha256": "81150e47854ceca7b23a10a40e0e664fab0604fba865ebe0b79e7f3556ceb9e8",
-      "size": 3460
+      "sha256": "9951c9af68912f11d4f6e4e430c1a5758b9b0d512bb27e976853a0c3e4e08b99",
+      "size": 4072
     },
     {
       "path": "scripts/diagnostics/probe_ted_install_exact.lua",
@@ -2927,8 +3307,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_ted_inwindow_gdma.lua",
-      "sha256": "ce870a926c18dffac95db3b625de4926a1e8edb9cb744248b561161425534dff",
-      "size": 8531
+      "sha256": "cb1a2687d5dcbba6bc0992035101efd96243de7257e56849cd1c6ea35ab077e6",
+      "size": 9136
     },
     {
       "path": "scripts/diagnostics/probe_ted_materializer.lua",
@@ -2937,18 +3317,18 @@
     },
     {
       "path": "scripts/diagnostics/probe_ted_private_gap_ownership.lua",
-      "sha256": "85fdc215ea6488b856b95713ca5265a9fb3b5b8c37c9c64fce81d5ea4723e5ed",
-      "size": 3534
+      "sha256": "5222ff1260c2fe38ffd139613e6679fcbcad6b2ad4bf68967ad952f562c7fd0c",
+      "size": 4139
     },
     {
       "path": "scripts/diagnostics/probe_ted_publication_order.lua",
-      "sha256": "472bfef33b6dde90c96bf2bd9c0a5f8f2782a4c9b89e0246ec76b54c4ecb8aa5",
-      "size": 2005
+      "sha256": "0ee9900234da396f5a976c456203677a2cc65fa938c61d9fad7daa9bec3d500d",
+      "size": 2610
     },
     {
       "path": "scripts/diagnostics/probe_ted_publisher_route.lua",
-      "sha256": "b3908dde04c5c099d16cf33e18110d95d33ac22d72827638e03f79a513f24b7d",
-      "size": 2324
+      "sha256": "d3d46d268e5f03a52e1cdc4f1070ea09a96af906abc7cdcb87d379ce2a83ea60",
+      "size": 2934
     },
     {
       "path": "scripts/diagnostics/probe_ted_runtime.lua",
@@ -2962,38 +3342,38 @@
     },
     {
       "path": "scripts/diagnostics/probe_ted_source_layout.lua",
-      "sha256": "2ea6c6edd0a704abd35a9d4c70ee6a6fe221901cb9cf7d3ccd5af6a7073860d3",
-      "size": 1711
+      "sha256": "4126c36d2a363846cd115d0ab4ee83dc0f3b5a842b333afb93274e51f68c65f4",
+      "size": 2316
     },
     {
       "path": "scripts/diagnostics/probe_ted_source_map_pairs.lua",
-      "sha256": "0f22e17acefe4090c7eaf5df371ed9a97f1475d4fe0e6a8d5498d0caf8c9b855",
-      "size": 2779
+      "sha256": "158c10209564e66d2d0554a1840ebfdc36560da5f048913afa71b75b555f95db",
+      "size": 3384
     },
     {
       "path": "scripts/diagnostics/probe_ted_source_write_trace.lua",
-      "sha256": "d73334e082c8f0e2303c051af1e1311adf0119aebe1703dab4a6c244f5c05cb8",
-      "size": 2723
+      "sha256": "3a4800479feab2962679ed5fcc123ad2ab4f11595956ab5748820251f4ba91ad",
+      "size": 3320
     },
     {
       "path": "scripts/diagnostics/probe_ted_source_writers.lua",
-      "sha256": "0dd1cf41c9a05dcc68ec809700bef3f895e4541633f289ce41551dd428c0fd96",
-      "size": 5290
+      "sha256": "a0d635c2a808c9940b25ad187954a25210eb41ea26a9edd9032d7d0936cd2e46",
+      "size": 5895
     },
     {
       "path": "scripts/diagnostics/probe_ted_state_features.lua",
-      "sha256": "ce1aa3bac81bfa1c666ef661aef25ab89ce1ee04d471a5e6be4db8d7f72104c0",
-      "size": 1486
+      "sha256": "65f7ec3d8608683cb3c77e9b70647105600db3c7a0e6598920e18f6e96e1f81a",
+      "size": 2096
     },
     {
       "path": "scripts/diagnostics/probe_ted_vram_writers.lua",
-      "sha256": "c4cb691c9a0205a827108aab5a56c15f2b6b67ade3d4a870542dcde6009bd2d9",
-      "size": 2992
+      "sha256": "f050cec7d0bd6f5960a6f16db61d17ceb0583424e8ec58a47870ef69842558d5",
+      "size": 3602
     },
     {
       "path": "scripts/diagnostics/probe_ted_wram_trace.lua",
-      "sha256": "fdd174d6eee613c98a5d36e1795ec6e5cc43dc6fa43ee6caa8b70de13afb33c6",
-      "size": 905
+      "sha256": "94ec374b705e48b40c1307dd32965590b9c60d3ebfb42c80b07140b044a55bbe",
+      "size": 1510
     },
     {
       "path": "scripts/diagnostics/probe_title_attr.lua",
@@ -3042,8 +3422,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_window_count.lua",
-      "sha256": "bc70d5426e42819316ea8c32ba39861fdbc804dfdd7f08f9a7eb8bc19effe803",
-      "size": 4832
+      "sha256": "4ccefac636c00a50c2a0cc4c04023fbf0afd0571b315992b7d9a462c2660f67a",
+      "size": 5454
     },
     {
       "path": "scripts/diagnostics/probe_wram_canary.lua",
@@ -3052,8 +3432,8 @@
     },
     {
       "path": "scripts/diagnostics/proto_position_blit_relative.lua",
-      "sha256": "f35f59b1a33a2e0affdc59382fd83173da5b66ae00052adb3ffd6836f879d1d1",
-      "size": 2887
+      "sha256": "5f262b0cbba9dbd0212934865358b15a181f3e0d6821888ea0694cda821bdb6d",
+      "size": 3441
     },
     {
       "path": "scripts/diagnostics/prototype_arena_attr_only_cache.py",
@@ -3072,8 +3452,8 @@
     },
     {
       "path": "scripts/diagnostics/prototype_ted_containment.lua",
-      "sha256": "95a0be827e20218777d4b2df54e17b60eef0f53f46cfb0e625c2e6bb34e8f48b",
-      "size": 2972
+      "sha256": "393500fc8485ae7250df92e6bafdf7c7697dc62b52820880009e0502e3ff90ba",
+      "size": 3580
     },
     {
       "path": "scripts/diagnostics/prototype_ted_expanded_bank.py",
@@ -3082,8 +3462,8 @@
     },
     {
       "path": "scripts/diagnostics/r120_historical_profile.py",
-      "sha256": "bb20c98dd696ca08687739273bb4e1243768b2fc799f5466646aca4c2de3ee08",
-      "size": 6813
+      "sha256": "d3a8a96538b3aee661defa7803ca45bfef1ad1b12c78f3ca34eb0db5ffea3989",
+      "size": 7814
     },
     {
       "path": "scripts/diagnostics/r534_lineage_ancestry.py",
@@ -3161,9 +3541,19 @@
       "size": 13446
     },
     {
+      "path": "scripts/diagnostics/release_lock_lineage.py",
+      "sha256": "4f989990e61d1a2ff5ec30f470b182eba13a913b8e3256236d8e55f869e5d423",
+      "size": 10125
+    },
+    {
       "path": "scripts/diagnostics/render_stage_integrity.py",
       "sha256": "7bddf27545b1269b38e5d28bd3fd03439fb9f41822a3c9133dbde7d7540d3b45",
       "size": 3069
+    },
+    {
+      "path": "scripts/diagnostics/replay_boss_menu_roundtrips.py",
+      "sha256": "7cbf53a39c6142683d70b10efd05a2939c946b144ca0be4b3b0e54742dce6466",
+      "size": 7700
     },
     {
       "path": "scripts/diagnostics/restart_source_profile.py",
@@ -3181,9 +3571,19 @@
       "size": 3875
     },
     {
+      "path": "scripts/diagnostics/return_bank_call.py",
+      "sha256": "8f4630ca971058c841f6de1eef84d0eeed06e83bb291f0c92f70e56bb5a6f10a",
+      "size": 2645
+    },
+    {
+      "path": "scripts/diagnostics/run_continue_input.py",
+      "sha256": "acd9d7a86eea5ba395cd8b0d067ff65a2cab378d18f8442347cb3d0d7e201f81",
+      "size": 4534
+    },
+    {
       "path": "scripts/diagnostics/run_deterministic_suite.py",
-      "sha256": "13e8783ef913e1a1ae4edadb6b162771673b72e673035a8a83131891c7faad48",
-      "size": 30582
+      "sha256": "0595b6d2cb4977375dc807a78af134a7dc1c471749fc5875293e8c40663cf7a9",
+      "size": 31347
     },
     {
       "path": "scripts/diagnostics/run_scene_bg5_integration.py",
@@ -3191,9 +3591,19 @@
       "size": 3031
     },
     {
+      "path": "scripts/diagnostics/run_secret_entry_probe.py",
+      "sha256": "e64acf922a1ba618c4d329f20bdb04ba9d258a9f2a654289630a732a60d70687",
+      "size": 7121
+    },
+    {
       "path": "scripts/diagnostics/runtime_tools.py",
       "sha256": "239de002f625bd198bf51803e5800c18f3cce3dc65b9efb22be9a5b1e6fae8fa",
       "size": 4717
+    },
+    {
+      "path": "scripts/diagnostics/select_edge_model.py",
+      "sha256": "6bd7562d6644ef198f7808bf6ca1d9f470566845e9f230e25ac6fd689e186b64",
+      "size": 1343
     },
     {
       "path": "scripts/diagnostics/serve_visual_audit.py",
@@ -3216,14 +3626,24 @@
       "size": 46880
     },
     {
+      "path": "scripts/diagnostics/stream_source_profile.py",
+      "sha256": "75c80ca4249c59e6d3ca1cac0cdb5b18277b2952dfa1207fdf4e718f54873daa",
+      "size": 1830
+    },
+    {
+      "path": "scripts/diagnostics/stream_suite_evidence.py",
+      "sha256": "41566a6025ce68be4389910cfd9e91fdbb3bb73bebb493732fb393400d14d989",
+      "size": 3339
+    },
+    {
       "path": "scripts/diagnostics/suite_contract.py",
-      "sha256": "669d7d0700e2d058a377e925acfd16c66afc68bab59c97bbcff3623cfb9ada51",
-      "size": 7572
+      "sha256": "5f75cc8e537e5fc1897f0e5baae362a3de4574731fbe046f137706dceb4f08ed",
+      "size": 7834
     },
     {
       "path": "scripts/diagnostics/suite_release_ledger.py",
-      "sha256": "f4f0ff270dcb1ad08381b55f3e05f2233b77f820eda9f2422ede65b6dd58f66a",
-      "size": 21124
+      "sha256": "3ce2fd1717b32ed27db9a98d5c40742b2989656f6618c0eac297c46995f02842",
+      "size": 21455
     },
     {
       "path": "scripts/diagnostics/summarize_low_health_floor_trace.py",
@@ -3251,6 +3671,21 @@
       "size": 8661
     },
     {
+      "path": "scripts/diagnostics/test_generate_boss_runtime_preflight.py",
+      "sha256": "25e2bb6c2cffb2bb83120c677a7ae1890e1c05bf45e75a293694d4ed5cfa31dc",
+      "size": 4929
+    },
+    {
+      "path": "scripts/diagnostics/test_native_capture_barrier_adoption.py",
+      "sha256": "3737058857c08c7e0eb94eda27f32655eb8b286612327311a9fb68ec474b5194",
+      "size": 5080
+    },
+    {
+      "path": "scripts/diagnostics/test_precommit_artifact_policy.py",
+      "sha256": "571488d29323852e30eaf3b955ac3c93573f1a02b39d84ad3a681389ab7a37de",
+      "size": 2508
+    },
+    {
       "path": "scripts/diagnostics/test_stage7_state_patrol.py",
       "sha256": "de44b4b88b15e070b82d73ab53d52ed207c35f9feff9f733ff9f5bd7645ee257",
       "size": 4058
@@ -3259,6 +3694,11 @@
       "path": "scripts/diagnostics/test_stage_side_by_side_semantics.py",
       "sha256": "da8d0a17337cd58a1472ad926e0590906a38fc9401f53c9483abaafae7eef4ec",
       "size": 2377
+    },
+    {
+      "path": "scripts/diagnostics/test_stream_source_profile.py",
+      "sha256": "7c4545a92d3728d32ad80d8c343a3d6197a0215c8be558d8dbf248a4f4f95dfb",
+      "size": 3552
     },
     {
       "path": "scripts/diagnostics/title_color_shot.lua",
@@ -3297,8 +3737,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_boss_atomic_attr_contract.py",
-      "sha256": "80a8e2800af7c1d3e42441a1fb0ced41244dba72ea8b790cf51060bb133184aa",
-      "size": 11052
+      "sha256": "5ce3ff5f6f0daf1937ae567a8762305247098cb86e07d100ef1db6b0b300d40d",
+      "size": 12368
     },
     {
       "path": "scripts/diagnostics/verify_boss_geometry.py",
@@ -3317,8 +3757,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_boss_silhouette_offline.py",
-      "sha256": "eb3b7bdb1c508c34e8d07b36634f9a164d634c2a2b7af6c32e5d0e8de9f946fb",
-      "size": 14445
+      "sha256": "95bc9e50cc1b454b0cb0c8cc26d8cb40edfe7c1ae3425a0db091f8fb85945f59",
+      "size": 18706
     },
     {
       "path": "scripts/diagnostics/verify_boss_speed_parity.py",
@@ -3336,6 +3776,11 @@
       "size": 974
     },
     {
+      "path": "scripts/diagnostics/verify_continue_input.py",
+      "sha256": "57eccefbd5acaf453d45d8b46ac214fa4b67b6178ffd1c5c08cbdf05e8fecce3",
+      "size": 5291
+    },
+    {
       "path": "scripts/diagnostics/verify_cram_loading.py",
       "sha256": "3702dbf3d9f4ce1da8222477c9013fa446400edf53a1641f6b38a0956f032333",
       "size": 8518
@@ -3347,8 +3792,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_death_gameover.py",
-      "sha256": "286a83ae6aff43e53718d55bb065573a142ce5158c2102d07e796870b993a891",
-      "size": 17725
+      "sha256": "089288e2e2cdb109e4d301e9c0bf0e7e4ceeec6e9d1aee51054ac993cdcf669a",
+      "size": 18505
+    },
+    {
+      "path": "scripts/diagnostics/verify_doorway_occlusion.py",
+      "sha256": "499d0a905dfc410299d547ec8cdf7af0cb6eb2cffd602bb385d9ac06581e9303",
+      "size": 3431
     },
     {
       "path": "scripts/diagnostics/verify_ending_bgp_handoff_r515_static.py",
@@ -3386,9 +3836,14 @@
       "size": 9635
     },
     {
+      "path": "scripts/diagnostics/verify_five_point_star_pair.py",
+      "sha256": "7cf70188d11babdc176dbf8cbc5c74e69a1ee06ebd3bdb49e18eea32ce79d536",
+      "size": 2581
+    },
+    {
       "path": "scripts/diagnostics/verify_frame_flicker.py",
-      "sha256": "742b5a5f7865d8e1db33acdc0700ea530d2275ebdfe4d75440cf0db0a958b35f",
-      "size": 22228
+      "sha256": "2068aac5c0b46027cb5e359bc8fc86a8c9e64faa2352ed7700b0ea7da243de94",
+      "size": 22373
     },
     {
       "path": "scripts/diagnostics/verify_game_start_routes.py",
@@ -3396,9 +3851,14 @@
       "size": 18801
     },
     {
+      "path": "scripts/diagnostics/verify_gameover_color.py",
+      "sha256": "532a6f28222e2f60d7ae7d953daecc600649c289c1f085f0e86bfd4b2a409d89",
+      "size": 5105
+    },
+    {
       "path": "scripts/diagnostics/verify_gameover_restart.py",
-      "sha256": "d8a6d3bb035f83bea819cc9716fcf591d785c4b3973671be9453e3c7e668ea94",
-      "size": 11491
+      "sha256": "313c90f4e2301d60a538b0fe00229a670348da90e909c34feb3ff44ee97df8b5",
+      "size": 12499
     },
     {
       "path": "scripts/diagnostics/verify_gameplay_obj_palettes.py",
@@ -3417,8 +3877,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_later_stage_soak.py",
-      "sha256": "e720884b2ee88b8b6e5ff9f07a796bde2592e73910e230cf7afe3d0c6d0218a6",
-      "size": 36007
+      "sha256": "516b2f551d6649abbccec655ffd5781b20e4c018931fb668cb4e6de643d66ad0",
+      "size": 36278
     },
     {
       "path": "scripts/diagnostics/verify_levelselect_screen.py",
@@ -3432,13 +3892,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_live_regression.py",
-      "sha256": "3b400bae5b02ea3cf45946622efa2817a260581b845cb4bbe6b3191daf9fb11e",
-      "size": 12594
+      "sha256": "a3fd3896a654cdccd1a8650a172e614ef734e2a6b7b0bb9b47699499bc37da0d",
+      "size": 12663
     },
     {
       "path": "scripts/diagnostics/verify_low_health_flicker.py",
-      "sha256": "6f88bc0639dad09119d16e620b67b13fd68f85c8a8b597407c3cbaf487cc1743",
-      "size": 67866
+      "sha256": "6da7c8d1a5a1fee6612a044a4281b2e9a6467c0f98af46f0a40e4b966c0e2737",
+      "size": 68572
     },
     {
       "path": "scripts/diagnostics/verify_low_health_hazard_determinism.py",
@@ -3447,8 +3907,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_menu_icon_palettes.py",
-      "sha256": "7de9b967c31ab3655cd785f89654a0863d37869102853ef122c1f1b9b6f92624",
-      "size": 15421
+      "sha256": "f554920f0c00e07e2ae596ff095464a98c0c8675955d56195191191e8ebbbd5e",
+      "size": 15895
     },
     {
       "path": "scripts/diagnostics/verify_menu_phase_sweep.py",
@@ -3474,6 +3934,21 @@
       "path": "scripts/diagnostics/verify_mister_reservation_guard.py",
       "sha256": "6e63a4484dffcda0f80920922bdfb401179572526c9e0fe1250ea228e057c65c",
       "size": 5412
+    },
+    {
+      "path": "scripts/diagnostics/verify_native_audio_pair.py",
+      "sha256": "006d67d110c6246e937075329ec83e450582c637ea5535ea6340bcf1e5e42a25",
+      "size": 4672
+    },
+    {
+      "path": "scripts/diagnostics/verify_native_capture_epoch.py",
+      "sha256": "d472a062ffa1e2659d6413d48fc5b522dd9b331d725b7f6b1645e99d8345a4e6",
+      "size": 2088
+    },
+    {
+      "path": "scripts/diagnostics/verify_native_projectile_templates.py",
+      "sha256": "d688f10eb37a55847680195ace24b68b83f9ca7a47ed62b5dbde6f0d4eb48956",
+      "size": 4484
     },
     {
       "path": "scripts/diagnostics/verify_native_tile_copy_contract.py",
@@ -3516,19 +3991,24 @@
       "size": 6475
     },
     {
+      "path": "scripts/diagnostics/verify_physical_assistance_inventory.py",
+      "sha256": "fce877af645b32e37a9a9b95056db120dfe30292e3034542bdd31726c7c441ca",
+      "size": 4667
+    },
+    {
       "path": "scripts/diagnostics/verify_pickup_class_palettes.py",
-      "sha256": "5ee3bd007ce6b9a6f7033aaf8edecd5915ba806ba8bddae25ec366283131d628",
-      "size": 14495
+      "sha256": "52d483746f74969cea9d0df5711f938b3d99881a01f45660fdde31874c4cc449",
+      "size": 15400
     },
     {
       "path": "scripts/diagnostics/verify_pickup_current_host_palettes.py",
-      "sha256": "2770f6313a0149e6e2381d80b51e02d17089abef971f4b85b6681f56b4e9e475",
-      "size": 29379
+      "sha256": "7184c78a06b5ae2757b8bacf84948b7635f806bf842ffbc0beff7ef46b42dd27",
+      "size": 29467
     },
     {
       "path": "scripts/diagnostics/verify_pickup_live_palettes.py",
-      "sha256": "6fc557406ff4445c2b5b4d7bbadbc0c2fdbbdb17da2deb3dba1f09139d49226e",
-      "size": 32142
+      "sha256": "9b22921627956837cea89a3f16cd54c0812df9ae0108634b5835c223417e1ddc",
+      "size": 32946
     },
     {
       "path": "scripts/diagnostics/verify_pickup_live_retry.py",
@@ -3542,13 +4022,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_precommit_policy.py",
-      "sha256": "13c824bbb7e0931552ff2bac9bbee93d21bc1a4302cc9992e362ba40ab05e15a",
-      "size": 2677
+      "sha256": "5db090104c7bda904d25a76b67cc2da0f7303471c10d8dfcf3d40e22041c4f08",
+      "size": 3018
     },
     {
       "path": "scripts/diagnostics/verify_release_candidate.py",
-      "sha256": "41cfd9ca819752ed4066433d49a9b949a635f71993640d8246c769896f6be1cc",
-      "size": 69066
+      "sha256": "48e1b62aa7f57b931f9413c0bd442ccce6793d9942b06a7e1b75e671c156747a",
+      "size": 70157
     },
     {
       "path": "scripts/diagnostics/verify_release_matrix_resume_contract.py",
@@ -3566,9 +4046,19 @@
       "size": 7452
     },
     {
+      "path": "scripts/diagnostics/verify_sara_pose.py",
+      "sha256": "072915125745f871ff5d10c49e8748bc2cefcaee157cbbd45dcc1547de471205",
+      "size": 8679
+    },
+    {
+      "path": "scripts/diagnostics/verify_secret_chr_entry.py",
+      "sha256": "0d0022d2a15ab6b8f2baec05b45aea9a41d41d761e6637b83a074d823690f5e2",
+      "size": 6846
+    },
+    {
       "path": "scripts/diagnostics/verify_split_stage_speed_qualification.py",
-      "sha256": "56ac0af8ca15493ddcbea2584a21d04dad6505d85994a70d3eccb66ece72adc2",
-      "size": 24725
+      "sha256": "89a83af6b1a16d06a0db822f88f58f9dad015def649d91e6368d41b40cf0f162",
+      "size": 24711
     },
     {
       "path": "scripts/diagnostics/verify_sprite_flicker.py",
@@ -3577,8 +4067,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_captured_menu.py",
-      "sha256": "d29cd4a57b88a880f5ad5f48107624f2b1d7e0cbdcb216a8630b163e9ff528a6",
-      "size": 13213
+      "sha256": "4aa1f570317e8922ef38ec6d7e5ff65e5006ea46631e672f9e6d83b09057124e",
+      "size": 21647
     },
     {
       "path": "scripts/diagnostics/verify_stage1_carry_dirty_signal.py",
@@ -3607,13 +4097,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_death_continue_chr_reload.py",
-      "sha256": "d1231b708bf71dffd29f996d977b376e91ab3168146e8f50881f83997f748a06",
-      "size": 37881
+      "sha256": "699a5e655630ad571bb777ebd87bc8be194e205cdffd8048ba25f0c19fc9aaca",
+      "size": 38029
     },
     {
       "path": "scripts/diagnostics/verify_stage1_exact_destination_mutation.py",
-      "sha256": "31b39bcb798cf8bd23e52cdaa9e10b7175c9765ad69aec8f22e75f95715c972b",
-      "size": 12498
+      "sha256": "17d77bcd4518f22657c6dcc79cbbe74c338bcd1dc1b01703afd131ce9795e92d",
+      "size": 12925
     },
     {
       "path": "scripts/diagnostics/verify_stage1_hazard_batch_r103_static.py",
@@ -3632,8 +4122,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_hazard_menu.py",
-      "sha256": "c7d2b8fb38b408aecdfc2198a5b7ded910f36be7285222a480801aa3ef920457",
-      "size": 19356
+      "sha256": "d72d15fcddaa1a41a1c9389e708bf71cf2ac82554df3c8dbbd6beb31d74eadbd",
+      "size": 19429
     },
     {
       "path": "scripts/diagnostics/verify_stage1_hazard_menu_mutation.py",
@@ -3652,13 +4142,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_natural_menu_bg.py",
-      "sha256": "cde52c48e30177aa911676bf2b0c5ca41dfadd9e7450f93f03e4b0755b52d29c",
-      "size": 36371
+      "sha256": "299a1aa55d80e3bab4395836004aab3cfed14d83a4a86293bf88888374cb879c",
+      "size": 36425
     },
     {
       "path": "scripts/diagnostics/verify_stage1_no_bleed.py",
-      "sha256": "52ce06f629c849d7aedce0e62a01504b81440b87b43c2be8235952f1e1de7dd1",
-      "size": 36708
+      "sha256": "1b756624b493b3071e24d7d3b156fd3302d0fa37a06a509ef73021fa01be947f",
+      "size": 38009
     },
     {
       "path": "scripts/diagnostics/verify_stage1_north_integrity.py",
@@ -3672,8 +4162,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_pickup_art.py",
-      "sha256": "64dcf1ca1caf36ff81465bc510379378e26abe7b09f0ec9521012f88e8271e0c",
-      "size": 14514
+      "sha256": "4bd3bef52ad4ce52a26fadd8993034ecaa56537c72172283e45b4f65c5252a79",
+      "size": 15071
     },
     {
       "path": "scripts/diagnostics/verify_stage1_r265_hazard_menu_receipt.py",
@@ -3687,8 +4177,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_reported_regressions_ready.py",
-      "sha256": "ac3fc9b41cfc084ae573bdcd07fd594bef5b289a0ada3dbbf9f565313deb6ad8",
-      "size": 169068
+      "sha256": "fe8b39b92af961b1379444f27dbce4dca07e92401e3974b98512b9b1565c1c88",
+      "size": 169063
     },
     {
       "path": "scripts/diagnostics/verify_stage1_room03_fast.py",
@@ -3717,13 +4207,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_spike_palettes.py",
-      "sha256": "952a6666ca7fbc55e8c89bd4641cdafcca857bc5037afc21b26c34678cd8c10f",
-      "size": 178570
+      "sha256": "66d07457b4fb461d2ebcd8bd9f94883cfb0d979ae6524c0aad787b6cdc3f11fc",
+      "size": 181858
     },
     {
       "path": "scripts/diagnostics/verify_stage1_tilemap_copy.py",
-      "sha256": "1f65ee6cc404217a7a2964eb8b46734f9b1781ce30bca6e292f610d0b300b1ca",
-      "size": 55914
+      "sha256": "6e44b3273870394d2fb10e44bd014efd3378de8528b7db45c7d0ae63fee4e16d",
+      "size": 57022
     },
     {
       "path": "scripts/diagnostics/verify_stage1_transition_key.py",
@@ -3772,8 +4262,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage4_select_roundtrip_r287.py",
-      "sha256": "cd5cca23f74d2541a539a6fbb08b8a40feaaa9664e4e23b40ef9cf5b25777c17",
-      "size": 58652
+      "sha256": "e8b25e73980942768f9605d06329742377fe0d7f649c3c8f5d252cd25b43d8a2",
+      "size": 58665
     },
     {
       "path": "scripts/diagnostics/verify_stage7_block_pair_cache_static.py",
@@ -3847,8 +4337,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage7_state_patrol.py",
-      "sha256": "00a88368826305c8346b98ae964db6e6da47510018b76dfb8529612ae5bd4a5e",
-      "size": 26035
+      "sha256": "1ad5c61a2154f5b75f78832ea7ee6c7b06a693639fbe63da015e592cc9b46800",
+      "size": 34656
     },
     {
       "path": "scripts/diagnostics/verify_stage_card_stability.py",
@@ -3857,8 +4347,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage_speed_matrix.py",
-      "sha256": "837fcd6fb6bc613ffe525133337a440be5ca5491edd159c238941209d4086cb9",
-      "size": 62258
+      "sha256": "a9d0a701b413817046a5003eba839dab8a0b661f75e76858035c07c7b0877036",
+      "size": 62313
     },
     {
       "path": "scripts/diagnostics/verify_stale_window_state.py",
@@ -3877,8 +4367,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_suite_receipt.py",
-      "sha256": "baf1b9c5c5da2f72e93cb1ab2e16538701a2b2dc32b7e9cf95f15973dc8d1800",
-      "size": 9876
+      "sha256": "07c4abc855e365b95f1cad8be4185a3eac5e1caa0dfc32a8bf89fef0c0c11c0b",
+      "size": 11753
     },
     {
       "path": "scripts/diagnostics/verify_ted_block_major_mask_model.py",
@@ -3902,8 +4392,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_ted_contract_controls.py",
-      "sha256": "795afd428d5546c65a7e777b06fc576fd17bcce0dca3927ae5ba4035ff4d6f1d",
-      "size": 32009
+      "sha256": "ccdc52f37606eb825bb8620bfe84f83e5123c4fbc3d3e185f1fd2046e209e026",
+      "size": 32093
     },
     {
       "path": "scripts/diagnostics/verify_ted_determinism.py",
@@ -3922,8 +4412,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_ted_expanded_integration.py",
-      "sha256": "1beab9e38ef4ba7c1f3e0fc966d9b6684e7011f8f3620a6b1c7842e9471bff7e",
-      "size": 20448
+      "sha256": "45857e8368ef7c33cc2bc47c2c4304c19072910848abba9705a234df8741f121",
+      "size": 20639
     },
     {
       "path": "scripts/diagnostics/verify_ted_incremental_cell_contract.py",
@@ -4052,13 +4542,13 @@
     },
     {
       "path": "scripts/live_palette_editor.py",
-      "sha256": "48e5e8c8dc64b7ed05cadc88e7675fa955f33bbee6a9b70514f7650fcc478ba2",
-      "size": 35925
+      "sha256": "eb7000ce74b88cca53f1ea21b9afe6304ee6ebcfba57af6f0366027efe499629",
+      "size": 43557
     },
     {
       "path": "scripts/lua/live_palettes.lua",
-      "sha256": "5724becf4cf1817df114159f0a712a30c62bbd8dc3586e3c5165faa8085ec093",
-      "size": 25926
+      "sha256": "191f2a4faf2d960d5f77f316401d4dccd00a35adedfc34fb17dfec54be3789c3",
+      "size": 27697
     },
     {
       "path": "scripts/mgba-headless-singleflight",
@@ -4082,8 +4572,8 @@
     },
     {
       "path": "scripts/palette_session.sh",
-      "sha256": "d91d58faff4296b2d2f2424bcd644e799f64afd5c02f201e5e4c7188ed8532a1",
-      "size": 6701
+      "sha256": "91928eafd977eb0b6eb42fe90bac08559afe103364850bea1c83fb4f615e6e99",
+      "size": 7456
     },
     {
       "path": "scripts/play_record.sh",
@@ -4097,13 +4587,13 @@
     },
     {
       "path": "scripts/probes/autoplay_record.lua",
-      "sha256": "7d729d51ba8d0dcf0bb2ee20cdfd9ded266712a74bae9da07a7512e94e5970d8",
-      "size": 19185
+      "sha256": "013bd66c569a1562dbb2506e89a30ee64f8cf45058bac1d4b13f6a7e1a884f70",
+      "size": 19816
     },
     {
       "path": "scripts/probes/autoplay_v96_record.lua",
-      "sha256": "d853d0eaf5050d20a49f70d418fea12ff5e7c90f5080f14957d92ac4dcc32844",
-      "size": 47805
+      "sha256": "10f2b919fbfec449ba6dbd2b369db2af8572bc1f4511fffc4359f85bcafba2cc",
+      "size": 48423
     },
     {
       "path": "scripts/probes/dump_bg_palette.lua",
@@ -4132,8 +4622,8 @@
     },
     {
       "path": "scripts/probes/gameplay_screenshot.lua",
-      "sha256": "13a4138d198a7d2bb329d08fc08cd0b5d6a1814391c5138c49e41522a367f472",
-      "size": 1528
+      "sha256": "055d8e2902bf6dc35510a4417bacbe16481b2b36ee50df6a14c494e55216864a",
+      "size": 2141
     },
     {
       "path": "scripts/probes/inventory_probe.lua",
@@ -4142,13 +4632,13 @@
     },
     {
       "path": "scripts/probes/menu_hud_and_combo.lua",
-      "sha256": "0b10af1e730afa38634cf13b207ccb03b09d74fa2c10e39ba2dc25c424074a9d",
-      "size": 6341
+      "sha256": "9e96419c68fac0a9f8bccd8cc8a62c3ae6826f5a576b24c069bd56d9754b6e68",
+      "size": 6938
     },
     {
       "path": "scripts/probes/phantom_d887.lua",
-      "sha256": "a2bb0afc0e96e66aa68780c9a1758de1a2bad0cb64284acc17b93a4b4d2af39a",
-      "size": 7326
+      "sha256": "24162dcac88691e4edfd71be25d0f41cebb4f230b60ae8273f980eb8f7a53381",
+      "size": 9671
     },
     {
       "path": "scripts/probes/play_record.lua",
@@ -4162,13 +4652,18 @@
     },
     {
       "path": "scripts/probes/probe_flash_attribution_mgba.lua",
-      "sha256": "5abc944861d7355844277080b438901abb10aa162b3205c53d80955275883f7e",
-      "size": 3046
+      "sha256": "1d14cde387faab93d146a5ffeede0cc3473ae85f5c145aad6ebd752c533c8805",
+      "size": 3580
+    },
+    {
+      "path": "scripts/probes/sound_command_oracle.py",
+      "sha256": "a42badff53ff8ea85d01228c003b800f3329d868727774235a9ba0d503c79cd6",
+      "size": 5802
     },
     {
       "path": "scripts/probes/spin_shoot_test.lua",
-      "sha256": "b321e78318a83b591bf058259a74b0530ef7b3b2b31f1297e692c07f6cfa5617",
-      "size": 3496
+      "sha256": "2b9f5cf4e3e71bb345953aec2ed32965e73d1474df3e214a6f473c9f664d45e0",
+      "size": 4198
     },
     {
       "path": "scripts/probes/stage_intro_timing.lua",
@@ -4212,18 +4707,18 @@
     },
     {
       "path": "scripts/probes/verify_miniboss_color.py",
-      "sha256": "41700ff649de6a3308f0f536451f821caa67251e7135e4b3ee0d538b0f662d26",
-      "size": 11919
+      "sha256": "87f005d51e39197283e7303d62baf15ec5e5cd328ff2fb4fb49ef8140662fe96",
+      "size": 11940
     },
     {
       "path": "scripts/probes/verify_phantom_d887.py",
-      "sha256": "3e9446f3912e7411e134e0280238eda7cded9be373efde9bf53c429441344d59",
-      "size": 9793
+      "sha256": "d7ef0ce8a743a1c61bdd4be993662b3c746ea86b6fc0fc323c86a28d053f10db",
+      "size": 8278
     },
     {
       "path": "scripts/probes/verify_scroll_tearing.py",
-      "sha256": "fde6dc910ca667c0107147736979028ff384494510e7e8a50e640e487f7ff513",
-      "size": 12131
+      "sha256": "6ddf7d6b6bf221bb3c1e1de136a98233dedcfd2bb5d8f3e491ccaf740ba26bd0",
+      "size": 12168
     },
     {
       "path": "scripts/probes/verify_stage_intro_timing.py",
@@ -4254,6 +4749,16 @@
       "path": "scripts/stage1_hazard_art.py",
       "sha256": "76857c35ec0e487f4df9972e5197becca74c82a2249a09e47408b16a5d823058",
       "size": 14501
+    },
+    {
+      "path": "scripts/stage1_hazard_semantic_row.py",
+      "sha256": "6df4dbf7c6eef8d72f848aac492b273f1a38e79c1e967a34a7d053bab0747151",
+      "size": 7203
+    },
+    {
+      "path": "scripts/stage_card_palette_handoff.py",
+      "sha256": "61c3ddb341f4a4e9e3b08948513c38375957409b5517162867dde3d8342e8ce9",
+      "size": 47603
     },
     {
       "path": "src/penta_dragon_dx/__init__.py",
@@ -4312,35 +4817,35 @@
     }
   ],
   "build_profile": {
-    "name": "restart-original-source-v1",
+    "name": "stream-release-lock-original-source-v1",
     "expanded_ted": true,
     "native_sparse": true,
     "native_pose_table": true,
     "menu_icon_colors": true
   },
   "candidate": {
-    "size": 524288,
-    "md5": "6a46d1ab577457ba31bacc721f6994c3",
-    "sha256": "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d"
+    "size": 1048576,
+    "md5": "cce5beeb6b92af5163cd6b9c85540290",
+    "sha256": "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db"
   },
   "deterministic_build": {
     "passes": 2,
     "byte_identical": true,
-    "build_a_sha256": "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d",
-    "build_b_sha256": "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d"
+    "build_a_sha256": "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db",
+    "build_b_sha256": "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db"
   },
   "matrix": {
     "status": "emulator-pass",
     "scope": "full",
-    "gate_count": 90,
+    "gate_count": 92,
     "failures": 0,
-    "manifest_sha256": "656edb0c7f9fc35dd5d8d87e6d8ceaac60a3c7f83edd2ceff60279f3bd9ac09a",
+    "manifest_sha256": "4d6e3d8d4b8152f8d11fba3501ff247d905fa2bdfd3924187af9dd67b112e12e",
     "results": [
       {
         "name": "emulator_singleflight_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.315
+        "duration_seconds": 0.316
       },
       {
         "name": "stage1_visual_contract_controls",
@@ -4352,127 +4857,127 @@
         "name": "release_matrix_resume_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.065
+        "duration_seconds": 0.033
       },
       {
         "name": "title_footer_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.467
+        "duration_seconds": 0.466
       },
       {
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.017
+        "duration_seconds": 0.97
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.368
+        "duration_seconds": 0.366
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.19
+        "duration_seconds": 15.199
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.972
+        "duration_seconds": 2.822
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.922
+        "duration_seconds": 5.674
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.92
+        "duration_seconds": 1.819
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.274
+        "duration_seconds": 3.073
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.277
+        "duration_seconds": 5.025
       },
       {
         "name": "menu_icon_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.873
+        "duration_seconds": 3.472
       },
       {
         "name": "menu_window_publish_order",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.42
+        "duration_seconds": 2.123
       },
       {
         "name": "stage1_captured_menu_stationary",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.222
+        "duration_seconds": 3.571
       },
       {
         "name": "stale_gameplay_window",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.818
+        "duration_seconds": 1.718
       },
       {
         "name": "stage_card_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.608
+        "duration_seconds": 20.754
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 117.867
+        "duration_seconds": 115.645
       },
       {
         "name": "game_start_after_attract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.426
+        "duration_seconds": 5.224
       },
       {
         "name": "opening_to_stage1_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.64
+        "duration_seconds": 11.436
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 146.503
+        "duration_seconds": 154.945
       },
       {
         "name": "gameplay_movement_stress",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 30.22
+        "duration_seconds": 336.615
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 19.865
+        "duration_seconds": 20.158
       },
       {
         "name": "pickup_class_palettes",
@@ -4484,43 +4989,43 @@
         "name": "attract_pickup_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.079
+        "duration_seconds": 7.276
       },
       {
         "name": "stage1_current_hazard_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.574
+        "duration_seconds": 3.421
       },
       {
         "name": "stage1_current_hazard_menu",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 121.878
+        "duration_seconds": 75.957
       },
       {
         "name": "stage1_current_hazard_mutations",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.602
+        "duration_seconds": 12.039
       },
       {
         "name": "stage1_exact_destination_mutation",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.299
+        "duration_seconds": 15.345
       },
       {
         "name": "stage1_current_pickup_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.02
+        "duration_seconds": 1.868
       },
       {
         "name": "stage1_current_pickup_host_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 38.296
+        "duration_seconds": 29.886
       },
       {
         "name": "pickup_live_retry_contract",
@@ -4532,97 +5037,97 @@
         "name": "pickup_live_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 27.824
+        "duration_seconds": 26.178
       },
       {
         "name": "stage1_pickup_art",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.969
+        "duration_seconds": 1.868
       },
       {
         "name": "bonus_stage_live",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.821
+        "duration_seconds": 1.618
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 51.7
+        "duration_seconds": 62.212
       },
       {
         "name": "stage1_tilemap_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.768
+        "duration_seconds": 21.415
       },
       {
         "name": "stage1_north_route_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.081
+        "duration_seconds": 8.63
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 24.112
+        "duration_seconds": 21.419
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 65.741
+        "duration_seconds": 66.182
       },
       {
         "name": "low_health_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.98
+        "duration_seconds": 7.68
       },
       {
         "name": "low_health_scene0b_publication",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.832
+        "duration_seconds": 7.728
       },
       {
         "name": "pocket_stage1_visual_incident",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.968
+        "duration_seconds": 0.816
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.38
+        "duration_seconds": 8.382
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.376
+        "duration_seconds": 1.522
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 59.434
+        "duration_seconds": 57.06
       },
       {
         "name": "stage2_stream_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.941
+        "duration_seconds": 9.33
       },
       {
         "name": "stage_side_by_side_all7",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 44.312
+        "duration_seconds": 39.859
       },
       {
         "name": "boss_atomic_attr_contract",
@@ -4634,49 +5139,49 @@
         "name": "ted_expanded_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.77
+        "duration_seconds": 2.57
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 34.044
+        "duration_seconds": 34.71
       },
       {
         "name": "ted_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.677
+        "duration_seconds": 3.985
       },
       {
         "name": "ted_og_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.634
+        "duration_seconds": 3.534
       },
       {
         "name": "ted_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.8
+        "duration_seconds": 15.547
       },
       {
         "name": "boss_geometry_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.475
+        "duration_seconds": 21.348
       },
       {
         "name": "ted_determinism",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.695
+        "duration_seconds": 25.385
       },
       {
         "name": "ted_release_readiness_receipt",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.034
+        "duration_seconds": 0.066
       },
       {
         "name": "ted_candidate_delta",
@@ -4688,145 +5193,157 @@
         "name": "ted_release_readiness",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.033
+        "duration_seconds": 0.067
       },
       {
         "name": "boss_semantic_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.772
+        "duration_seconds": 27.035
       },
       {
         "name": "boss_og_states",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 16.399
+        "duration_seconds": 16.736
       },
       {
         "name": "boss_og_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 39.037
+        "duration_seconds": 39.444
       },
       {
         "name": "boss_og_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.116
+        "duration_seconds": 0.165
       },
       {
         "name": "boss_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 83.886
+        "duration_seconds": 78.095
       },
       {
         "name": "boss_trajectory_pairing_null",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.782
+        "duration_seconds": 8.238
       },
       {
         "name": "boss_trajectory_pairing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 94.015
+        "duration_seconds": 101.217
       },
       {
         "name": "boss_publication_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 82.31
+        "duration_seconds": 75.234
       },
       {
         "name": "crystal_dragon_ghost",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.434
+        "duration_seconds": 6.782
       },
       {
         "name": "boss_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 40.35
+        "duration_seconds": 39.495
       },
       {
         "name": "boss_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.115
+        "duration_seconds": 0.116
       },
       {
         "name": "boss_material_side_by_side",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.216
+        "duration_seconds": 0.166
       },
       {
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 33.941
+        "duration_seconds": 31.55
+      },
+      {
+        "name": "sara_walking_pose_atomicity",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 7.43
+      },
+      {
+        "name": "sara_firing_pose_atomicity",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 7.885
       },
       {
         "name": "gameover_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.329
+        "duration_seconds": 4.274
       },
       {
         "name": "gameover_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.925
+        "duration_seconds": 6.077
       },
       {
         "name": "gameover_saved_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.975
+        "duration_seconds": 5.926
       },
       {
         "name": "title_idle_reel",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.675
+        "duration_seconds": 5.278
       },
       {
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 40.809
+        "duration_seconds": 38.188
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.879
+        "duration_seconds": 3.975
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 10.897
+        "duration_seconds": 8.929
       },
       {
         "name": "pre_final_inventory",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.676
+        "duration_seconds": 5.226
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.034
+        "duration_seconds": 8.23
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.431
+        "duration_seconds": 8.332
       },
       {
         "name": "ending_discriminators",
@@ -4838,58 +5355,58 @@
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.392
+        "duration_seconds": 47.069
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.803
+        "duration_seconds": 46.062
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 95.037
+        "duration_seconds": 91.416
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.113
+        "duration_seconds": 17.104
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.046
+        "duration_seconds": 3.874
       },
       {
         "name": "candidate_ips_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.116
+        "duration_seconds": 0.166
       },
       {
         "name": "mister_reservation_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.317
+        "duration_seconds": 0.318
       }
     ],
-    "manifest_path": "/home/struktured/projects/penta-dragon-dx-claude/tmp/restart-publication-suite-20260916-03/matrix/manifest.json"
+    "manifest_path": "/home/struktured/projects/penta-dragon-dx-issues/tmp/rl-suite-20261002-01/matrix/manifest.json"
   },
   "release_ledger": {
     "schema": "penta-release-ledger-v1",
-    "accepted_deviation_count": 20,
+    "accepted_deviation_count": 19,
     "accepted_deviations": [
       {
         "id": "boss_angela_loop_speedup",
         "scope": "angela",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1704834605597965,
-        "deviation_percent": 17.048346055979646,
+        "ratio_dx_over_og": 1.1984732824427482,
+        "deviation_percent": 19.84732824427482,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -4899,8 +5416,8 @@
         "scope": "angela",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8414038205242115,
-        "deviation_percent": 15.859617947578853,
+        "ratio_dx_over_og": 0.8315905338470005,
+        "deviation_percent": 16.840946615299945,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -4911,8 +5428,8 @@
         "scope": "angela",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1789044289044288,
-        "deviation_percent": 17.89044289044288,
+        "ratio_dx_over_og": 1.1808924633545206,
+        "deviation_percent": 18.08924633545206,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -4922,8 +5439,8 @@
         "scope": "cameo",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.171830985915493,
-        "deviation_percent": 17.183098591549296,
+        "ratio_dx_over_og": 1.1774647887323944,
+        "deviation_percent": 17.746478873239436,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -4933,8 +5450,8 @@
         "scope": "cameo",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8363557858376512,
-        "deviation_percent": 16.364421416234876,
+        "ratio_dx_over_og": 0.836424957841484,
+        "deviation_percent": 16.357504215851606,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -4945,8 +5462,8 @@
         "scope": "cameo",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.2109209377727894,
-        "deviation_percent": 21.09209377727894,
+        "ratio_dx_over_og": 1.2068574446930151,
+        "deviation_percent": 20.685744469301515,
         "accepted_ceiling_ratio": 1.23,
         "policy": "operator_accepted_fast_boss_boundary",
         "evidence": "boss_publication"
@@ -4956,8 +5473,8 @@
         "scope": "faze",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1385041551246537,
-        "deviation_percent": 13.850415512465375,
+        "ratio_dx_over_og": 1.1274238227146816,
+        "deviation_percent": 12.742382271468156,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -4967,8 +5484,8 @@
         "scope": "faze",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8748381527837721,
-        "deviation_percent": 12.516184721622793,
+        "ratio_dx_over_og": 0.8795025728987993,
+        "deviation_percent": 12.049742710120071,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -4979,8 +5496,8 @@
         "scope": "faze",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1590623751640703,
-        "deviation_percent": 15.906237516407028,
+        "ratio_dx_over_og": 1.1564426854799392,
+        "deviation_percent": 15.644268547993923,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -4990,8 +5507,8 @@
         "scope": "penta_dragon",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.146551724137931,
-        "deviation_percent": 14.655172413793105,
+        "ratio_dx_over_og": 1.1408045977011494,
+        "deviation_percent": 14.080459770114938,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5001,8 +5518,8 @@
         "scope": "penta_dragon",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8695492854525467,
-        "deviation_percent": 13.045071454745328,
+        "ratio_dx_over_og": 0.8905674281503315,
+        "deviation_percent": 10.943257184966848,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5013,8 +5530,8 @@
         "scope": "penta_dragon",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1809607664642063,
-        "deviation_percent": 18.096076646420634,
+        "ratio_dx_over_og": 1.1244937753112343,
+        "deviation_percent": 12.449377531123428,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -5024,8 +5541,8 @@
         "scope": "riff",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1318051575931232,
-        "deviation_percent": 13.180515759312318,
+        "ratio_dx_over_og": 1.1432664756446993,
+        "deviation_percent": 14.32664756446993,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5035,8 +5552,8 @@
         "scope": "riff",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.9560975609756098,
-        "deviation_percent": 4.390243902439018,
+        "ratio_dx_over_og": 0.9234693877551021,
+        "deviation_percent": 7.653061224489788,
         "target_percent": 2.0,
         "pairing_confidence": "thin",
         "policy": "accepted_bounded_speedup",
@@ -5047,8 +5564,8 @@
         "scope": "riff",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.098983944336588,
-        "deviation_percent": 9.898394433658808,
+        "ratio_dx_over_og": 1.1036508721135512,
+        "deviation_percent": 10.365087211355117,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -5058,8 +5575,8 @@
         "scope": "shalamar",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.0356083086053411,
-        "deviation_percent": 3.5608308605341144,
+        "ratio_dx_over_og": 1.0563798219584568,
+        "deviation_percent": 5.637982195845681,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5069,8 +5586,8 @@
         "scope": "shalamar",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.9492170969107069,
-        "deviation_percent": 5.078290308929311,
+        "ratio_dx_over_og": 0.9416276097145292,
+        "deviation_percent": 5.837239028547081,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5081,31 +5598,19 @@
         "scope": "shalamar",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.0339781405771253,
-        "deviation_percent": 3.3978140577125338,
+        "ratio_dx_over_og": 1.032565228545128,
+        "deviation_percent": 3.256522854512811,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
-      },
-      {
-        "id": "stage_5_speed",
-        "scope": "stage_5",
-        "measurement": "input_identical_gameplay_throughput",
-        "direction": "slower",
-        "ratio_dx_over_og": 0.9785,
-        "deviation_percent": 2.1499999999999964,
-        "target_percent": 2.0,
-        "accepted_floor_ratio": 0.95,
-        "policy": "accepted_slowdown_floor",
-        "evidence": "gameplay_speed"
       },
       {
         "id": "title_attract_combined_duration",
         "scope": "title_attract_demo",
         "measurement": "combined_route_duration",
         "direction": "slower",
-        "ratio_dx_over_og": 1.0950688582852066,
-        "deviation_percent": 9.506885828520662,
+        "ratio_dx_over_og": 1.1066192803198578,
+        "deviation_percent": 10.661928031985779,
         "release_envelope_percent": 15.0,
         "policy": "accepted_combined_route_envelope",
         "evidence": "title_attract"
@@ -5115,12 +5620,12 @@
       {
         "boss": "angela",
         "classification": "paired",
-        "matched_transitions": 377,
-        "slip_aware_matched": 377,
-        "ratio_dx_over_og_frames_per_iter": 0.8431458574197067,
-        "slowdown_percent": -15.68541425802933,
+        "matched_transitions": 314,
+        "slip_aware_matched": 314,
+        "ratio_dx_over_og_frames_per_iter": 0.8315905338470007,
+        "slowdown_percent": -16.840946615299934,
         "within_two_percent": false,
-        "transition_slowdown_percent": -15.859617947578853,
+        "transition_slowdown_percent": -16.840946615299945,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5129,12 +5634,12 @@
       {
         "boss": "cameo",
         "classification": "paired",
-        "matched_transitions": 425,
-        "slip_aware_matched": 425,
-        "ratio_dx_over_og_frames_per_iter": 0.836355785837651,
-        "slowdown_percent": -16.364421416234897,
+        "matched_transitions": 435,
+        "slip_aware_matched": 435,
+        "ratio_dx_over_og_frames_per_iter": 0.834598702475018,
+        "slowdown_percent": -16.5401297524982,
         "within_two_percent": false,
-        "transition_slowdown_percent": -16.364421416234876,
+        "transition_slowdown_percent": -16.357504215851606,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5145,10 +5650,10 @@
         "classification": "paired",
         "matched_transitions": 288,
         "slip_aware_matched": 288,
-        "ratio_dx_over_og_frames_per_iter": 1.0217691627073529,
-        "slowdown_percent": 2.176916270735285,
+        "ratio_dx_over_og_frames_per_iter": 1.0272965879265092,
+        "slowdown_percent": 2.729658792650924,
         "within_two_percent": false,
-        "transition_slowdown_percent": 2.4671916010498673,
+        "transition_slowdown_percent": 2.729658792650902,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_operator_slowdown",
@@ -5157,12 +5662,12 @@
       {
         "boss": "faze",
         "classification": "paired",
-        "matched_transitions": 452,
-        "slip_aware_matched": 452,
-        "ratio_dx_over_og_frames_per_iter": 0.8767358494275547,
-        "slowdown_percent": -12.326415057244533,
+        "matched_transitions": 455,
+        "slip_aware_matched": 455,
+        "ratio_dx_over_og_frames_per_iter": 0.8813980525817708,
+        "slowdown_percent": -11.860194741822916,
         "within_two_percent": false,
-        "transition_slowdown_percent": -12.516184721622793,
+        "transition_slowdown_percent": -12.049742710120071,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5171,12 +5676,12 @@
       {
         "boss": "penta_dragon",
         "classification": "paired",
-        "matched_transitions": 488,
-        "slip_aware_matched": 488,
-        "ratio_dx_over_og_frames_per_iter": 0.871208730653792,
-        "slowdown_percent": -12.8791269346208,
+        "matched_transitions": 485,
+        "slip_aware_matched": 485,
+        "ratio_dx_over_og_frames_per_iter": 0.892276770622789,
+        "slowdown_percent": -10.772322937721102,
         "within_two_percent": false,
-        "transition_slowdown_percent": -13.045071454745328,
+        "transition_slowdown_percent": -10.943257184966848,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5185,12 +5690,12 @@
       {
         "boss": "riff",
         "classification": "paired",
-        "matched_transitions": 44,
-        "slip_aware_matched": 44,
-        "ratio_dx_over_og_frames_per_iter": 0.9560975609756096,
-        "slowdown_percent": -4.390243902439039,
+        "matched_transitions": 42,
+        "slip_aware_matched": 42,
+        "ratio_dx_over_og_frames_per_iter": 0.9234693877551019,
+        "slowdown_percent": -7.65306122448981,
         "within_two_percent": false,
-        "transition_slowdown_percent": -4.390243902439018,
+        "transition_slowdown_percent": -7.653061224489788,
         "transition_within_two_percent": false,
         "pairing_confidence": "thin",
         "policy_status": "accepted_bounded_speedup",
@@ -5199,12 +5704,12 @@
       {
         "boss": "shalamar",
         "classification": "paired",
-        "matched_transitions": 428,
-        "slip_aware_matched": 428,
-        "ratio_dx_over_og_frames_per_iter": 0.9492170969107067,
-        "slowdown_percent": -5.0782903089293345,
+        "matched_transitions": 425,
+        "slip_aware_matched": 425,
+        "ratio_dx_over_og_frames_per_iter": 0.9416276097145291,
+        "slowdown_percent": -5.837239028547092,
         "within_two_percent": false,
-        "transition_slowdown_percent": -5.078290308929311,
+        "transition_slowdown_percent": -5.837239028547081,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5215,10 +5720,10 @@
         "classification": "paired",
         "matched_transitions": 290,
         "slip_aware_matched": 290,
-        "ratio_dx_over_og_frames_per_iter": 1.0056497175141244,
-        "slowdown_percent": 0.5649717514124353,
+        "ratio_dx_over_og_frames_per_iter": 1.0103578154425612,
+        "slowdown_percent": 1.0357815442561202,
         "within_two_percent": true,
-        "transition_slowdown_percent": 0.5649717514124353,
+        "transition_slowdown_percent": 1.0357815442561202,
         "transition_within_two_percent": true,
         "pairing_confidence": "deep",
         "policy_status": "within_target",
@@ -5227,12 +5732,12 @@
       {
         "boss": "troop",
         "classification": "paired",
-        "matched_transitions": 426,
-        "slip_aware_matched": 426,
-        "ratio_dx_over_og_frames_per_iter": 1.0063357910424346,
-        "slowdown_percent": 0.6335791042434646,
+        "matched_transitions": 178,
+        "slip_aware_matched": 254,
+        "ratio_dx_over_og_frames_per_iter": 1.014800834052344,
+        "slowdown_percent": 1.4800834052344003,
         "within_two_percent": true,
-        "transition_slowdown_percent": 0.8628127696289845,
+        "transition_slowdown_percent": 0.1436781609195359,
         "transition_within_two_percent": true,
         "pairing_confidence": "deep",
         "policy_status": "within_target",
@@ -5250,125 +5755,340 @@
     "evidence": {
       "title_attract": {
         "path": "artifacts/title-idle-reel.summary.json",
-        "sha256": "325ffbfc8e13e435d9ba82f907011e3af5a36918956c3394501350a8acbf2e81"
+        "sha256": "1457396498e7a11d2e8e8f0ec53b3e0bfaa89eb506a8bfe10bc522fa2bf5804f"
       },
       "gameplay_speed": {
         "path": "artifacts/gameplay-speed/manifest.json",
-        "sha256": "9cf022e36c277f29dc98b0dd11efc2f5d43585e0d4e384a26dbdd91e6523f743"
+        "sha256": "85098f4403efa9827d7be24913f04c231421adb912e6c78b33da56108fc4d2af"
       },
       "gameplay_movement_stress": {
         "path": "artifacts/gameplay-movement-stress/receipt.json",
-        "sha256": "a82d1b877d33e008f6aeb9d4280277e94b1fa8880d1b752edc856987a83e02dd"
+        "sha256": "9775e6d59b2139fd2a2d3c939b23bed50b12de7b5e5b79f2d1809db659d4b1c0"
       },
       "boss_speed": {
         "path": "artifacts/boss-speed-parity.json",
-        "sha256": "826efeda1dc27a532ed8a076279407e1a9386879caddc607ef9be326825119de"
+        "sha256": "1507c16ba5c7cf4e3520295b6ccf8d6e79b31fa700b06f5f916a1d393b14eee4"
       },
       "boss_publication": {
         "path": "artifacts/boss-publication-cadence.json",
-        "sha256": "0c3b39724c539e3898a55a1b902deabe987de9aa14da3647eb6d0dbadbb861aa"
+        "sha256": "901754194ce0461cd322dcf42621fe0bcae2342233d812bc7420b0fde76be622"
       },
       "boss_trajectory": {
         "path": "artifacts/boss-trajectory-pairing.json",
-        "sha256": "54017a0872397d68477e47a8f54661f187dd36665fc0fb4acf2f1af261784602"
+        "sha256": "5f1c6caa2e2cca4c41dae1ac5b4c47a4e54da337751d8d60b2766eda52f33e0d"
       },
       "boss_trajectory_null": {
         "path": "artifacts/boss-trajectory-pairing-null.json",
-        "sha256": "db15de3cef00d70bb7c4ff3be058dfa6af39da1b931eedf96ed612bd12880e67"
+        "sha256": "ec96a5603da6006c02775a3dc6d18b373019289ad809a849e72d599184e63767"
       },
       "ted_readiness": {
         "path": "artifacts/ted-release-readiness/report.json",
-        "sha256": "d13490a17a8df214f5bc8002d922b66c8e9800e0ea697a025984ab63dac4dcdb"
+        "sha256": "ee4cc570e84808e6832de6adf92ef508e3db9df1fa0398c632ef2aff537c08f5"
       }
     },
-    "profile": "restart-original-source-v1",
+    "profile": "stream-release-lock-original-source-v1",
     "stage7_world_position": {
-      "classification": "EQUAL_WORLD_ENDPOINTS_AFTER_BOUNDED_VERTICAL_SETTLE",
+      "classification": "EQUAL_START_WORLD_COMBINED_SEEDS_FLOOR_97",
       "metric": {
-        "common_half_cycles": 51,
-        "settle_half_cycle_by_trace": {
-          "original_a": 22,
-          "original_b": 22,
-          "dx_a": 24,
-          "dx_b": 24
-        },
-        "measurement_start_half_cycle": 24,
-        "post_settle_half_cycles": 27,
-        "measured_half_cycles": 24,
-        "maximum_uncontested_loop_delta": 20,
-        "uncontested_half_cycles": [
-          25,
-          26,
-          27,
-          28,
-          29,
+        "seeds": [
+          0,
+          10,
+          20,
           30,
-          31,
-          32,
-          33,
-          34,
-          35,
-          36,
-          37,
-          38,
-          39,
-          40,
-          41,
-          42,
-          43,
-          44,
-          45,
-          46,
-          47,
-          48
-        ],
-        "contact_affected_half_cycles": [
-          49,
           50,
-          51
+          60,
+          70,
+          80,
+          90
         ],
+        "usable_seeds": [
+          0,
+          10,
+          20,
+          30,
+          50,
+          60,
+          70,
+          80,
+          90
+        ],
+        "minimum_usable_seeds": 7,
+        "minimum_combined_half_cycles": 120,
+        "measured_half_cycles": 220,
+        "maximum_uncontested_loop_delta": 20,
         "elapsed_frames": {
-          "original_a": 1429,
-          "original_b": 1429,
-          "dx_a": 1433,
-          "dx_b": 1433
+          "original_a": 12988,
+          "original_b": 12988,
+          "dx_a": 13230,
+          "dx_b": 13230
         },
         "throughput_ratio_by_replay": {
-          "a": 0.9972086531751571,
-          "b": 0.9972086531751571
+          "a": 0.981708238851096,
+          "b": 0.981708238851096
         },
-        "whole_route_elapsed_frames": {
-          "original_a": 1769,
-          "original_b": 1769,
-          "dx_a": 1612,
-          "dx_b": 1612
-        },
-        "whole_route_throughput_ratio_by_replay": {
-          "a": 1.097394540942928,
-          "b": 1.097394540942928
-        },
-        "target_floor": 0.98,
+        "target_floor": 0.97,
         "target_ceiling": 1.02,
+        "enough_measurement": true,
         "strict_target_met": true,
         "endpoint_route_exact": true,
-        "post_settle_vertical_exact": true
+        "post_settle_vertical_exact": true,
+        "per_seed": {
+          "0": {
+            "usable": true,
+            "measured_half_cycles": 21,
+            "elapsed_frames": {
+              "original_a": 1251,
+              "original_b": 1251,
+              "dx_a": 1251,
+              "dx_b": 1251
+            },
+            "throughput_ratio_by_replay": {
+              "a": 1.0,
+              "b": 1.0
+            },
+            "contact_affected_half_cycles": [
+              26,
+              27,
+              28,
+              29,
+              30,
+              31
+            ],
+            "settle_half_cycle_by_trace": {
+              "original_a": 22,
+              "original_b": 22,
+              "dx_a": 22,
+              "dx_b": 22
+            }
+          },
+          "10": {
+            "usable": true,
+            "measured_half_cycles": 37,
+            "elapsed_frames": {
+              "original_a": 2189,
+              "original_b": 2189,
+              "dx_a": 2208,
+              "dx_b": 2208
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9913949275362319,
+              "b": 0.9913949275362319
+            },
+            "contact_affected_half_cycles": [],
+            "settle_half_cycle_by_trace": {
+              "original_a": 20,
+              "original_b": 20,
+              "dx_a": 20,
+              "dx_b": 20
+            }
+          },
+          "20": {
+            "usable": true,
+            "measured_half_cycles": 16,
+            "elapsed_frames": {
+              "original_a": 942,
+              "original_b": 942,
+              "dx_a": 984,
+              "dx_b": 984
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9573170731707317,
+              "b": 0.9573170731707317
+            },
+            "contact_affected_half_cycles": [
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41
+            ],
+            "settle_half_cycle_by_trace": {
+              "original_a": 22,
+              "original_b": 22,
+              "dx_a": 20,
+              "dx_b": 20
+            }
+          },
+          "30": {
+            "usable": true,
+            "measured_half_cycles": 16,
+            "elapsed_frames": {
+              "original_a": 954,
+              "original_b": 954,
+              "dx_a": 1005,
+              "dx_b": 1005
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9492537313432836,
+              "b": 0.9492537313432836
+            },
+            "contact_affected_half_cycles": [
+              27,
+              28,
+              29,
+              30,
+              31,
+              44,
+              45,
+              46
+            ],
+            "settle_half_cycle_by_trace": {
+              "original_a": 22,
+              "original_b": 22,
+              "dx_a": 22,
+              "dx_b": 22
+            }
+          },
+          "50": {
+            "usable": true,
+            "measured_half_cycles": 32,
+            "elapsed_frames": {
+              "original_a": 1897,
+              "original_b": 1897,
+              "dx_a": 1911,
+              "dx_b": 1911
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9926739926739927,
+              "b": 0.9926739926739927
+            },
+            "contact_affected_half_cycles": [],
+            "settle_half_cycle_by_trace": {
+              "original_a": 20,
+              "original_b": 20,
+              "dx_a": 22,
+              "dx_b": 22
+            }
+          },
+          "60": {
+            "usable": true,
+            "measured_half_cycles": 34,
+            "elapsed_frames": {
+              "original_a": 2001,
+              "original_b": 2001,
+              "dx_a": 2031,
+              "dx_b": 2031
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9852289512555391,
+              "b": 0.9852289512555391
+            },
+            "contact_affected_half_cycles": [],
+            "settle_half_cycle_by_trace": {
+              "original_a": 22,
+              "original_b": 22,
+              "dx_a": 20,
+              "dx_b": 20
+            }
+          },
+          "70": {
+            "usable": true,
+            "measured_half_cycles": 26,
+            "elapsed_frames": {
+              "original_a": 1538,
+              "original_b": 1538,
+              "dx_a": 1553,
+              "dx_b": 1553
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9903412749517064,
+              "b": 0.9903412749517064
+            },
+            "contact_affected_half_cycles": [
+              29,
+              30,
+              31,
+              32,
+              33
+            ],
+            "settle_half_cycle_by_trace": {
+              "original_a": 20,
+              "original_b": 20,
+              "dx_a": 22,
+              "dx_b": 22
+            }
+          },
+          "80": {
+            "usable": true,
+            "measured_half_cycles": 33,
+            "elapsed_frames": {
+              "original_a": 1924,
+              "original_b": 1924,
+              "dx_a": 1970,
+              "dx_b": 1970
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9766497461928934,
+              "b": 0.9766497461928934
+            },
+            "contact_affected_half_cycles": [],
+            "settle_half_cycle_by_trace": {
+              "original_a": 22,
+              "original_b": 22,
+              "dx_a": 22,
+              "dx_b": 22
+            }
+          },
+          "90": {
+            "usable": true,
+            "measured_half_cycles": 5,
+            "elapsed_frames": {
+              "original_a": 292,
+              "original_b": 292,
+              "dx_a": 317,
+              "dx_b": 317
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9211356466876972,
+              "b": 0.9211356466876972
+            },
+            "contact_affected_half_cycles": [
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              41,
+              42
+            ],
+            "settle_half_cycle_by_trace": {
+              "original_a": 22,
+              "original_b": 22,
+              "dx_a": 22,
+              "dx_b": 22
+            }
+          }
+        }
       },
       "evidence": "gameplay_movement_stress"
     },
-    "ledger_sha256": "76526f73439bbc3186c29fb384e3c810638c7575d3757d82443df57b8b12f661"
+    "ledger_sha256": "9158acb02d4607c047403b16feccb66eab4b58b82ed7fbecec0972e8046aef19"
   },
   "rom_committed": false,
   "hardware_status": "pending-reservation-backed-mister",
   "source_builds": [
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-claude/tmp/restart-publication-suite-20260916-03/build/source-a/build-receipt.json",
-      "receipt_sha256": "8ecc9f3910edd391286901a02513ec6ea52c5f4d01fdfa90f285ea8a274237cc",
-      "source_fingerprint": "0cb070141e8e753d0ad9b5a435e32c5266c010d2973d27d45834166397ecead9"
+      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/rl-suite-20261002-01/build/source-a/build-receipt.json",
+      "receipt_sha256": "90f41c10d08a9dc435e07ecabab0fbab46cffc681e1ce1711354d40af0d9c0a9",
+      "source_fingerprint": "908e6a69edbe8654b9af33e7a8d3c67974110a2d3f499448ef0bbdf0c7a3c0b4"
     },
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-claude/tmp/restart-publication-suite-20260916-03/build/source-b/build-receipt.json",
-      "receipt_sha256": "b3aaed62037bd478f5bf8cbc7805e6998121dcf95ef5767d66fd1168e4cb6ab0",
-      "source_fingerprint": "0cb070141e8e753d0ad9b5a435e32c5266c010d2973d27d45834166397ecead9"
+      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/rl-suite-20261002-01/build/source-b/build-receipt.json",
+      "receipt_sha256": "79170d43dae12395ded8c4ba418276eac07e3441c1e4ed059289358524717e56",
+      "source_fingerprint": "908e6a69edbe8654b9af33e7a8d3c67974110a2d3f499448ef0bbdf0c7a3c0b4"
     }
   ]
 }

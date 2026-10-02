@@ -3,8 +3,16 @@
 -- The stock frame/loop patrols change direction as a function of time or loop
 -- count. A ROM with different renderer cadence therefore consumes a different
 -- movement sequence. This wrapper changes direction only at exact world-X
--- endpoints, while observing the native $0ABB input join. It never writes game
--- RAM; emu:setKeys is the sole stimulus.
+-- endpoints, while observing the native $0ABB input join. During play,
+-- emu:setKeys is the sole stimulus.
+--
+-- Equal-world mode (STAGE7_WORLD_IMAGE): at the first play-phase input join
+-- both ROMs receive the same native world image (D800-D8FF scene/player
+-- state, DC00-DCFF entity tables, FFD4-FFD5 frame counters) captured from the
+-- stock ROM, then the RNG cursor FFD1 is set to STAGE7_WORLD_SEED. Stock and
+-- DX therefore start the measured patrol from identical game state. Every
+-- run dumps the post-injection image to OUT .. '.world.bin' so the verifier
+-- can prove the four traces started equal.
 
 local base_path = assert(os.getenv("STAGE7_STATE_PATROL_BASE_PROBE"))
 local file = assert(io.open(base_path, "r"))
@@ -21,14 +29,48 @@ source, count = source:gsub(
   '  %-%- The two stock entries publish H[^\n]*',
   function()
     return [[
+  local WORLD_RANGES = {{0xD800, 0x100}, {0xDC00, 0x100}, {0xFFCB, 1}, {0xFFD4, 2}}
   local coordinate = assert(io.open(OUT .. '.coordinate.tsv', 'w'))
   coordinate:write('ordinal\tloop\tframe\tconsumed\tplanned\thalf_cycles\troom\tx\ty\n')
   local consumed_count = 0
   local planned_keys = 0
   local direction = KEY_RIGHT
   local half_cycles = 0
+  local world_image = nil
+  local world_seed = nil
+  local image_path = os.getenv('STAGE7_WORLD_IMAGE')
+  if image_path and image_path ~= '' then
+    local handle = assert(io.open(image_path, 'rb'))
+    world_image = handle:read('*a')
+    handle:close()
+    world_seed = assert(tonumber(os.getenv('STAGE7_WORLD_SEED')),
+      'equal-world mode requires STAGE7_WORLD_SEED')
+    assert(world_seed >= 0 and world_seed < 100 and world_seed % 1 == 0,
+      'RNG cursor seed must be an integer in [0, 100)')
+  end
+  local last_consumed_loop = -1
+  local last_consumed_keys = -1
   emu:setBreakpoint(function()
     if phase == 'sync' then
+      if world_image then
+        local offset = 1
+        for _, range in ipairs(WORLD_RANGES) do
+          for address = range[1], range[1] + range[2] - 1 do
+            emu:write8(address, world_image:byte(offset))
+            offset = offset + 1
+          end
+        end
+        assert(offset == #world_image + 1, 'world image size mismatch')
+        emu:write8(0xFFD1, world_seed)
+      end
+      local dump = assert(io.open(OUT .. '.world.bin', 'wb'))
+      for _, range in ipairs(WORLD_RANGES) do
+        for address = range[1], range[1] + range[2] - 1 do
+          dump:write(string.char(emu:read8(address)))
+        end
+      end
+      dump:write(string.char(emu:read8(0xFFD1)))
+      dump:close()
       phase = 'play'
       play_frames = 0
       previous_scx = emu:read8(0xFF43)
@@ -47,11 +89,22 @@ source, count = source:gsub(
     consumed_count = consumed_count + 1
     if consumed_count == 1 then
       assert(keys == 0, 'first consumed input not neutral')
+    elseif main_loop_hits == last_consumed_loop then
+      -- The native $0ABB frame-parity wait can re-enter the join inside one
+      -- main-loop iteration without a new $00A8 sample. Such a duplicate
+      -- observes the same stacked input as the first hit, which was planned
+      -- before this loop's endpoint update; the verifier requires the
+      -- duplicate row to equal the first one.
+      assert(keys == last_consumed_keys, string.format(
+        'state patrol duplicate join mismatch at loop %d: %02X/%02X',
+        main_loop_hits, keys, last_consumed_keys))
     else
       assert(keys == planned_keys, string.format(
         'state patrol input mismatch at loop %d: %02X/%02X',
         main_loop_hits, keys, planned_keys))
     end
+    last_consumed_loop = main_loop_hits
+    last_consumed_keys = keys
 
     local world_x = w:read8(0x1C00) + 256 * w:read8(0x1C01)
     local world_y = w:read8(0x1C02) + 256 * w:read8(0x1C03)

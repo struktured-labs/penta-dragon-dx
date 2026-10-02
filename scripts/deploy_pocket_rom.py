@@ -46,7 +46,7 @@ HARDWARE_TEST_READY_GATE_STATUSES = {
     "rom_owned_stationary_hazard_menu_replay": "PASS",
     "independent_rendered_continuity": "PASS",
     "release_speed_named_stages_95_stage6_strict99": (
-        "PASS_RELEASE_95_NAMED_STAGE6_STRICT99_STAGE7_WORLD_MATCHED98"
+        "PASS_RELEASE_95_NAMED_STAGE6_STRICT99_STAGE7_EQUAL_START97"
     ),
     "tool_identity_reverification": "PASS",
 }

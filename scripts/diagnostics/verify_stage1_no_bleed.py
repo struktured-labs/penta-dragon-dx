@@ -70,6 +70,8 @@ def expected_stage1_table(rom: bytes) -> bytes:
         'ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63',
         'd82f563d856995fc1844d48cdd317b12f2ac9218f023eec376ee73bc24308074',
         'b331c5e0339c26672651d0592dc658ebd9c42f4d759c1e5227e18115d0661892',
+        # Release lock: inherits the c693 tooth table; adds only #22's star.
+        '792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db',
     }:
         for tile in (*range(0x64, 0x6A), *range(0x74, 0x7A)):
             assert expected[tile] == 7
@@ -77,6 +79,7 @@ def expected_stage1_table(rom: bytes) -> bytes:
     if pin in {
         'd744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5',
         '46eb95a0c0f770fb3cf8c3211b8030a9e881f59077e558b93703ba08da71d3fb',
+        '792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db',
     }:
         # #22's data-only overlay assigns only the four five-point-star tiles
         # to BG5. Do not infer expectations from the candidate LUT itself.

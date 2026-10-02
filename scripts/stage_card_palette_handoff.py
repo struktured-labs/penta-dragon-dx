@@ -551,7 +551,76 @@ def _dirty_return_address(postcopy_call_sites: list[int]) -> int:
     return LEGACY_DIRTY_RETURN_ADDR
 
 
+def _inspect_release_lock_handoff(rom: bytes | bytearray) -> dict | None:
+    """Static handoff identity for the exact release-lock candidate.
+
+    Its 4f5a67b8 ancestor carries the reviewed handoff by whole-ROM identity.
+    The release lock's #27 ``arena-completion-safe`` stage relocates the
+    always-mapped WRAM runtime: the post-copy guard moves $DBF1 -> $DBF3
+    (bank13 $5830 gains a two-byte RET/NOP prefix and the guard's JR Z/JP pair
+    becomes the equivalent JP Z), and the native dirty-return bridge moves
+    $DBDF -> $DBDC (still ``JP $3497``). Every other byte the handoff reads is
+    outside the release-lock delta. Live card/handoff checks remain mandatory.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent / "diagnostics"))
+    import release_lock_lineage as lineage
+
+    if not lineage.is_candidate(bytes(rom)):
+        return None
+    rom = bytes(rom)
+    arena = {"arena-completion-safe", "arena-graphics-owner"}
+    untouched_ranges = [
+        (STAGE1_BG0_OFFSET, STAGE1_BG0_OFFSET + 8),
+        (TITLE_BG0_OFFSET, TITLE_BG0_OFFSET + 8),
+        (PRIVATE_OFFSET, PRIVATE_OFFSET + 0x80),
+        (STAGE1_ENTRY_GATE_OFFSET, STAGE1_ENTRY_GATE_OFFSET + 13),
+        (13 * BANK_SIZE + 0x7CFC - 0x4000, 13 * BANK_SIZE + 0x7D2D - 0x4000),
+        (VBLANK_COMMIT_OFFSET, VBLANK_COMMIT_OFFSET + 0x100),
+        (CGB_FLAG_OFFSET, CGB_FLAG_OFFSET + 1),
+    ]
+    clean = all(not lineage.touched(a, b) for a, b in untouched_ranges)
+    # Fail closed unless only #27 arena runs reach the relocated components.
+    for start, end in ((0x42A7, 0x436E),
+                       (RUNTIME_SOURCE_B_OFFSET - 0x30, RUNTIME_SOURCE_C_OFFSET + 5),
+                       (HANDOFF_EXTENSION_OFFSET, HANDOFF_EXTENSION_OFFSET + 12)):
+        lineage.ancestor_bytes(rom, start, end, arena)
+    parent = lineage.ancestor_bytes(rom, 0, 32 * BANK_SIZE, set().union(
+        *lineage.RUN_OWNERS.values()))
+    if hashlib.sha256(parent).hexdigest() != lineage.SARA_SHA256:
+        return None
+    result = inspect_stage_card_palette_handoff(parent)
+    sites = _postcopy_call_sites(rom, POSTCOPY_GUARD_ENTRY + 2)
+    hook = max(sites) + 3 if len(sites) == 2 else LEGACY_DIRTY_RETURN_ADDR
+    # WRAM image: bank13 $569A/36, $56CA/36, $56FA/5 at $DBA4, guard at $DBF1.
+    bridge = 0xDBDC
+    bridge_source = 13 * BANK_SIZE + (0x56CA - 0x4000) + (bridge - 0xDBC8)
+    guard = HANDOFF_EXTENSION_OFFSET
+    relocated = (
+        len(sites) == 2
+        and rom[hook:hook + 3] == bytes((0xC3, bridge & 0xFF, bridge >> 8))
+        and rom[bridge_source:bridge_source + 3] == NATIVE_DIRTY_RETURN_PREIMAGE
+        and rom[guard:guard + 12] == bytes.fromhex(
+            "C9 00 F0 BA B7 CA E2 10 AF E0 01 C9")
+        and parent[guard:guard + 12] == RELOCATED_POSTCOPY_GUARD
+    )
+    result = dict(result)
+    result.update({
+        "installed": bool(result["installed"] and clean and relocated),
+        "variant": "release-lock-relocated-" + str(result.get("variant")),
+        "hook_address": hook,
+        "bridge_address": bridge,
+        "postcopy_call_sites": sites,
+    })
+    return result
+
+
 def inspect_stage_card_palette_handoff(rom: bytes | bytearray) -> dict:
+    release_lock = _inspect_release_lock_handoff(rom)
+    if release_lock is not None:
+        return release_lock
     stage1_bg0 = bytes(rom[STAGE1_BG0_OFFSET:STAGE1_BG0_OFFSET + 8])
     title_bg0 = bytes(rom[TITLE_BG0_OFFSET:TITLE_BG0_OFFSET + 8])
     discriminator = _choose_discriminator(stage1_bg0, title_bg0)

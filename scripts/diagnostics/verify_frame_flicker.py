@@ -557,7 +557,9 @@ def main() -> int:
     try:
         for mode in modes:
             sample_frames = (
-                max(args.frames, 700) if mode == "demo" else args.frames
+                # From demo Stage-1 entry through the return to title (about
+                # 2,475..2,515 frames for both known demo routes).
+                max(args.frames, 2800) if mode == "demo" else args.frames
             )
             run_probe(
                 args.mgba, rom, output, mode, sample_frames, args.timeout

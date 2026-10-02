@@ -9,12 +9,18 @@ OLD = bytes.fromhex('FAFFC5 FEC9 CAF5C4 C34059')
 NEW = bytes.fromhex('3E14 CDBE09 CAF5C4 C34059')
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 5f481bb0... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 8ff1c98d...
+REPINNED_PARENT = '5f481bb0ae9230cb0cd8ff7284d98d9e0c69ed054f8f8c7402d63dba7e19c1b4'
+
+
 def offset(bank, address):
     return bank*0x4000 + address-0x4000
 
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact title-local parent required')
     gate = offset(16, 0x5CDA)
     if parent[gate:gate+11] != OLD:

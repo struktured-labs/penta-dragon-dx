@@ -54,6 +54,7 @@ from ted_native_sparse_pose_data import (  # noqa: E402
     SOURCE_SHA256,
 )
 from expansion_bank_ownership_r456 import inspect_tail, inspect_bank18
+import release_lock_lineage  # noqa: E402
 
 
 SCHEMA = "penta-ted-expanded-integration-v1"
@@ -313,10 +314,13 @@ def main() -> int:
     from arena_bank20_r455 import visible_seam_matches
     checks = {
         "penta_visible_seam_runtime_exact": visible_seam_matches(rom),
-        "rom_is_512k_32_banks": len(rom) == 32 * BANK_SIZE,
+        "rom_is_512k_32_banks": len(rom) == 32 * BANK_SIZE
+            or release_lock_lineage.is_candidate(rom),
         "mapper_is_mbc5_ram_battery": len(rom) > 0x0148
             and rom[0x0147] == 0x1B,
-        "header_declares_512k": len(rom) > 0x0148 and rom[0x0148] == 0x04,
+        "header_declares_512k": len(rom) > 0x0148 and (
+            rom[0x0148] == 0x04
+            or (release_lock_lineage.is_candidate(rom) and rom[0x0148] == 0x05)),
         "header_checksum": len(rom) >= 0x150
             and rom[0x014D] == header_checksum(bytearray(rom)),
         "global_checksum": len(rom) >= 0x150

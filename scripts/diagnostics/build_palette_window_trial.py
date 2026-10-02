@@ -10,6 +10,12 @@ PARENT = 'e8002aea7117e6416b546e39655d7c792959913af66c827c28223bf6b01b6c57'
 OFFSET = 20 * 0x4000 + 0x3320
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 51c832a1... yields byte-identical
+# changes (same offsets, preimages and values) as on the original e8002aea...
+REPINNED_PARENT = '51c832a14337a603ba7a70a4092047031f504f752ddc452f9ef2b7d4f76499d1'
+
+
 def router():
     a = Asm(0x7320)
     a.db(*bytes.fromhex('78 C1 D5 57 F0 FF 5F AF E0 FF'))
@@ -35,7 +41,7 @@ def router():
 
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact combined experimental parent required')
     old, new = build_router(), router()
     if parent[OFFSET:OFFSET+len(old)] != old:

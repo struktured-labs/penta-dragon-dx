@@ -33,6 +33,7 @@ from verify_pickup_live_palettes import (
     STAGE1_RUNTIME_SOURCE_OFFSETS,
     contact_sheet,
     pickup_occurrences,
+    release_lock_scene_read,
     run_state,
     stage1_helper,
 )
@@ -336,7 +337,8 @@ def candidate_payloads(
                      for bank in STAGE1_HELPER_SOURCE_BANKS]
     require(all(len(item) == RUNTIME_HELPER_SIZE for item in helper_copies),
             "candidate is missing a complete Stage-1 WRAM helper")
-    require(len(set(helper_copies)) == 1,
+    require(len(set(helper_copies)) == 1
+            or release_lock_scene_read(rom, helper_copies),
             "candidate Stage-1 helper copies disagree")
     runtime_start = 0xDAD7 - RUNTIME_HELPER_ADDR
     require(

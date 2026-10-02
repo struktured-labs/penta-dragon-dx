@@ -76,7 +76,33 @@ def owned_bank_variants():
     return variants
 
 
+def inspect_release_lock_tail(rom):
+    """Banks 21..31 equal the spike-death owner outside reviewed delta runs."""
+    import release_lock_lineage as lineage
+    expected = owned_bank_variants()['reconstructed-spike-death-cleanup']
+    rows = {}
+    for bank, image in sorted(expected.items()):
+        base = bank * SIZE
+        observed = rom[base:base + SIZE]
+        foreign = [
+            i for i in range(SIZE)
+            if observed[i] != image[i] and not lineage.touched(base + i, base + i + 1)
+        ]
+        rows[str(bank)] = {
+            'exact': not foreign,
+            'expected_sha256': hashlib.sha256(image).hexdigest(),
+            'actual_sha256': hashlib.sha256(observed).hexdigest(),
+            'release_lock_delta_runs': len(lineage.touched(base, base + SIZE)),
+            'method': 'pinned-builder-replay plus reviewed release-lock runs',
+        }
+    return {'exact': all(row['exact'] for row in rows.values()),
+            'mode': 'release-lock-over-spike-death-cleanup', 'banks': rows}
+
+
 def inspect_tail(rom):
+    import release_lock_lineage
+    if release_lock_lineage.is_candidate(rom):
+        return inspect_release_lock_tail(rom)
     if len(rom)!=32*SIZE:
         return {'exact':False,'reason':'requires 32 full banks','banks':{}}
     actual=rom[21*SIZE:]

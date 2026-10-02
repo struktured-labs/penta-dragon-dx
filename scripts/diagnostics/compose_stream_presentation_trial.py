@@ -36,10 +36,15 @@ def overlay(current, base, variant):
     return bytes(result), changed
 
 
-def build(source, reported):
+def build(source, reported, defer_ceiling=False):
+    """defer_ceiling omits the #14 doorway helper (release lock 2026-10-01).
+
+    Its CPU cost desyncs the attract demo, and the cheaper scratch-B helper
+    moves the cold doorway route, so #14 is deferred rather than shipped.
+    """
     if digest(source) != ceiling.SOURCE07_SHA or digest(reported) != fade.PARENT:
         raise ValueError('exact source07 and reported parents required')
-    current = ceiling.build(source, combined=True)
+    current = source if defer_ceiling else ceiling.build(source, combined=True)
     current = secret.build(current, scratch_bank=6, yield_between_rows=True)
     current, _ = menu.build(current, stage_row=True, fast_compile=True)
     records = []

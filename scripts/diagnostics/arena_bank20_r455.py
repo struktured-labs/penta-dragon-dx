@@ -102,6 +102,20 @@ def visible_seam_matches(rom: bytes) -> bool:
     if (rom[HOOK:HOOK + len(PREIMAGE)] == PREIMAGE
             and rom[HELPER:HELPER + len(helper)] == b'\xff' * len(helper)):
         return True
+    import release_lock_lineage
+    if release_lock_lineage.is_candidate(rom):
+        # Release lock: hook and seam helper are outside the delta, and every
+        # bank-20 byte outside the reviewed release-lock runs still equals the
+        # Game Over row-guard bank (the candidate's 4f5a ancestor bank 20).
+        expected = expected_gameover_row_guard_bank20()
+        base = 20 * 0x4000
+        return (rom[HOOK:HOOK + len(stub)] == stub
+                and not release_lock_lineage.touched(HOOK, HOOK + len(stub))
+                and not release_lock_lineage.touched(HELPER, HELPER + len(helper))
+                and all(
+                    rom[base + i] == expected[i]
+                    or release_lock_lineage.touched(base + i, base + i + 1)
+                    for i in range(0x4000)))
     return (rom[HOOK:HOOK + len(stub)] == stub
             and rom[20 * 0x4000:21 * 0x4000] in
             (expected_penta_seam_bank20(), expected_gameover_row_guard_bank20()))

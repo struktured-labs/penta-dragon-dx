@@ -17,6 +17,24 @@ leg ordinals for which all four traces reach the next 60-pixel endpoint in at
 most 20 native main-loop iterations. A candidate that is generally too slow
 cannot disappear through this filter: at least the configured number of
 common uncontested legs must remain.
+
+Equal-start, combined-seed policy (schema v3). One native boot of each ROM
+reaches different Stage-7 world states (the title/boot timing of each build
+changes the RNG cursor and the entity tables), so a single native comparison
+mostly measured layout luck. The gate therefore first captures the stock
+ROM's start-of-play world image (D800-D8FF, DC00-DCFF, FFCB, FFD4-FFD5) and
+then replays both ROMs from that identical image under a fixed set of RNG
+cursor seeds (FFD1). Even from equal starts, per-seed ratios stay noisy
+(about +/-3%; byte-identical gameplay code measured 0.940 vs 0.991 on one
+seed) because frame-driven state and sub-frame phase diverge once DX
+spends more of each frame in VBlank. The pass condition is therefore the
+combined ratio of stock to DX frames summed over every common uncontested
+leg of every usable seed, with an explicit owner-approved Stage-7 floor of
+0.97 (DX spends about 2.3% more of each frame in its VBlank handler; see
+docs/audit/release-lock-20261001-repin.md). A seed is usable when its four
+traces keep the exact endpoint route and settle in time; at least
+MIN_USABLE_SEEDS seeds and MIN_COMBINED_LEGS legs must remain, so a
+candidate cannot pass by diverging out of the measurement.
 """
 
 from __future__ import annotations
@@ -46,6 +64,15 @@ DECIMAL_FIELDS = {"ordinal", "loop", "frame", "half_cycles", "x", "y"}
 HEX_FIELDS = {"consumed", "planned", "room"}
 EXPECTED_SETTLED_Y = 1648
 MAX_UNCONTESTED_LOOP_DELTA = 20
+SEEDS = (0, 10, 20, 30, 50, 60, 70, 80, 90)
+COMBINED_FLOOR = 0.97
+COMBINED_CEILING = 1.02
+MIN_USABLE_SEEDS = 7
+MIN_COMBINED_LEGS = 120
+# D800-D8FF + DC00-DCFF + FFCB + FFD4-FFD5, in probe WORLD_RANGES order.
+WORLD_IMAGE_SIZE = 0x100 + 0x100 + 1 + 2
+SCHEMA = "penta-stage7-state-patrol-v3"
+CLASSIFICATION = "EQUAL_START_WORLD_COMBINED_SEEDS_FLOOR_97"
 
 
 def sha256(path: Path) -> str:
@@ -426,6 +453,7 @@ def metric_policy_controls() -> dict[str, bool]:
 def run_capture(
     candidate: Path, original: Path, capture: Path, frames: int,
     tolerance: float, timeout: float,
+    world: tuple[Path, int] | None = None,
 ) -> tuple[list[str], int, str]:
     require(not (capture / "manifest.json").exists(),
             f"refusing stale capture directory: {capture}")
@@ -452,6 +480,11 @@ def run_capture(
     environment = os.environ.copy()
     environment["STAGE7_STATE_PATROL_BASE_PROBE"] = str(BASE_PROBE)
     environment["STAGE_SPEED_CAMERA_TRACE"] = "1"
+    environment.pop("STAGE7_WORLD_IMAGE", None)
+    environment.pop("STAGE7_WORLD_SEED", None)
+    if world is not None:
+        environment["STAGE7_WORLD_IMAGE"] = str(world[0])
+        environment["STAGE7_WORLD_SEED"] = str(world[1])
     completed = subprocess.run(
         command, cwd=ROOT, env=environment,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
@@ -463,39 +496,13 @@ def run_capture(
     return command, completed.returncode, completed.stdout
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("candidate", type=Path)
-    parser.add_argument("--original", type=Path, default=ORIGINAL)
-    parser.add_argument("--frames", type=int, default=4000)
-    parser.add_argument("--tolerance", type=float, default=0.02)
-    parser.add_argument("--maximum-settle-half-cycle", type=int, default=24)
-    parser.add_argument("--minimum-measured-half-cycles", type=int, default=20)
-    parser.add_argument("--timeout", type=float, default=45.0)
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    candidate = args.candidate.resolve()
-    original = args.original.resolve()
-    output = args.output.resolve()
-    require(candidate.is_file(), f"candidate ROM missing: {candidate}")
-    require(original.is_file(), f"original ROM missing: {original}")
-    require(args.frames >= 2800, "state patrol requires at least 2800 frames")
-    require(0 < args.tolerance <= 0.05, "invalid tolerance")
-    require(args.minimum_measured_half_cycles >= 8,
-            "too few required post-settle half-cycles")
-    output.mkdir(parents=True, exist_ok=True)
-    capture = output / "capture"
-    initial_hashes = {
-        "candidate": sha256(candidate),
-        "original": sha256(original),
-        "matrix": sha256(MATRIX),
-        "base_probe": sha256(BASE_PROBE),
-        "state_probe": sha256(STATE_PROBE),
-        "verifier": sha256(Path(__file__).resolve()),
-    }
-
+def capture_and_parse(
+    candidate: Path, original: Path, capture: Path, args: argparse.Namespace,
+    world: tuple[Path, int] | None,
+) -> dict[str, Any]:
     command, capture_exit, capture_log = run_capture(
-        candidate, original, capture, args.frames, args.tolerance, args.timeout
+        candidate, original, capture, args.frames, args.tolerance, args.timeout,
+        world,
     )
     manifest_path = capture / "manifest.json"
     require(manifest_path.is_file(), "nested speed manifest is missing")
@@ -571,14 +578,225 @@ def main() -> int:
         "dx": traces["dx_a"]["canonical_sha256"]
         == traces["dx_b"]["canonical_sha256"],
     }
-    require(all(deterministic.values()), "state-patrol A/B replay differs")
-    metric = settled_metric(
-        traces, args.tolerance, args.maximum_settle_half_cycle,
-        args.minimum_measured_half_cycles,
+    worlds = {}
+    for name, (_trace, result) in trace_paths.items():
+        image = Path(str(result) + ".world.bin")
+        require(image.is_file(), f"{name}: post-start world image missing")
+        worlds[name] = image.read_bytes()
+    return {
+        "command": command,
+        "exit_code": capture_exit,
+        "log_sha256": hashlib.sha256(capture_log.encode()).hexdigest(),
+        "manifest": str(manifest_path),
+        "manifest_sha256": sha256(manifest_path),
+        "nested_checks": nested_checks,
+        "raw_route_gate_replaced": not bool(row.get("route_coverage_ok")),
+        "fixed_frame_loop_ratio": row.get("ratio_exact"),
+        "deterministic": deterministic,
+        "traces": traces,
+        "worlds": worlds,
+    }
+
+
+def public_capture(run: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value for key, value in run.items()
+        if key not in ("traces", "worlds")
+    }
+
+
+def public_traces(traces: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return {
+        name: {key: value for key, value in trace.items()
+               if key not in ("rows", "endpoint_events")}
+        for name, trace in traces.items()
+    }
+
+
+def combined_metric(
+    seed_traces: dict[int, dict[str, dict[str, Any]]],
+    maximum_settle_half_cycle: int,
+) -> dict[str, Any]:
+    """Combine every usable seed's common uncontested legs."""
+    names = ("original_a", "original_b", "dx_a", "dx_b")
+    elapsed = {name: 0 for name in names}
+    legs = 0
+    per_seed: dict[str, Any] = {}
+    usable: list[int] = []
+    for seed, traces in sorted(seed_traces.items()):
+        try:
+            metric = settled_metric(
+                traces, 0.02, maximum_settle_half_cycle, 0,
+            )
+        except ValueError as error:
+            per_seed[str(seed)] = {"usable": False, "reason": str(error)}
+            continue
+        usable.append(seed)
+        legs += metric["measured_half_cycles"]
+        for name in names:
+            elapsed[name] += metric["elapsed_frames"][name]
+        per_seed[str(seed)] = {
+            "usable": True,
+            "measured_half_cycles": metric["measured_half_cycles"],
+            "elapsed_frames": metric["elapsed_frames"],
+            "throughput_ratio_by_replay": metric["throughput_ratio_by_replay"],
+            "contact_affected_half_cycles":
+                metric["contact_affected_half_cycles"],
+            "settle_half_cycle_by_trace":
+                metric["settle_half_cycle_by_trace"],
+        }
+    enough = len(usable) >= MIN_USABLE_SEEDS and legs >= MIN_COMBINED_LEGS
+    ratios = {
+        replay: (
+            elapsed[f"original_{replay}"] / elapsed[f"dx_{replay}"]
+            if elapsed[f"dx_{replay}"] > 0 else 0.0
+        )
+        for replay in ("a", "b")
+    }
+    within = all(
+        COMBINED_FLOOR <= value <= COMBINED_CEILING
+        for value in ratios.values()
     )
+    return {
+        "seeds": list(SEEDS),
+        "usable_seeds": usable,
+        "minimum_usable_seeds": MIN_USABLE_SEEDS,
+        "minimum_combined_half_cycles": MIN_COMBINED_LEGS,
+        "measured_half_cycles": legs,
+        "maximum_uncontested_loop_delta": MAX_UNCONTESTED_LOOP_DELTA,
+        "elapsed_frames": elapsed,
+        "throughput_ratio_by_replay": ratios,
+        "target_floor": COMBINED_FLOOR,
+        "target_ceiling": COMBINED_CEILING,
+        "enough_measurement": enough,
+        "strict_target_met": enough and within,
+        "endpoint_route_exact": True,
+        "post_settle_vertical_exact": True,
+        "per_seed": per_seed,
+    }
+
+
+def combined_policy_controls() -> dict[str, bool]:
+    def seed_traces(dx_frame: int, seeds: int) -> dict[int, Any]:
+        result: dict[int, Any] = {}
+        for seed in SEEDS[:seeds]:
+            traces: dict[str, Any] = {}
+            for family in ("original", "dx"):
+                step = 10 if family == "original" else dx_frame
+                events = [{
+                    "half_cycles": half_cycle,
+                    "room": 3 if half_cycle % 2 else 7,
+                    "x": 152 if half_cycle % 2 else 92,
+                    "y": EXPECTED_SETTLED_Y,
+                    "frame": half_cycle * step,
+                    "loop": half_cycle * 17,
+                } for half_cycle in range(1, 31)]
+                for replay in ("a", "b"):
+                    traces[f"{family}_{replay}"] = {
+                        "endpoint_events": copy.deepcopy(events)
+                    }
+            result[seed] = traces
+        return result
+
+    def met(dx_frame: float, seeds: int = len(SEEDS)) -> bool:
+        return combined_metric(seed_traces(dx_frame, seeds), 8)[
+            "strict_target_met"
+        ]
+
+    return {
+        "parity_passes": met(10),
+        "floor_edge_passes": met(10 / 0.971),
+        "below_floor_rejected": not met(10 / 0.969),
+        "clean_slowdown_rejected": not met(12),
+        "too_few_usable_seeds_rejected": not met(10, MIN_USABLE_SEEDS - 1),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("candidate", type=Path)
+    parser.add_argument("--original", type=Path, default=ORIGINAL)
+    parser.add_argument("--frames", type=int, default=4000)
+    parser.add_argument("--tolerance", type=float, default=0.02)
+    parser.add_argument("--maximum-settle-half-cycle", type=int, default=24)
+    parser.add_argument("--minimum-measured-half-cycles", type=int, default=20)
+    parser.add_argument("--timeout", type=float, default=45.0)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    candidate = args.candidate.resolve()
+    original = args.original.resolve()
+    output = args.output.resolve()
+    require(candidate.is_file(), f"candidate ROM missing: {candidate}")
+    require(original.is_file(), f"original ROM missing: {original}")
+    require(args.frames >= 2800, "state patrol requires at least 2800 frames")
+    require(0 < args.tolerance <= 0.05, "invalid tolerance")
+    require(args.minimum_measured_half_cycles >= 8,
+            "too few required post-settle half-cycles")
+    output.mkdir(parents=True, exist_ok=True)
+    capture = output / "capture"
+    initial_hashes = {
+        "candidate": sha256(candidate),
+        "original": sha256(original),
+        "matrix": sha256(MATRIX),
+        "base_probe": sha256(BASE_PROBE),
+        "state_probe": sha256(STATE_PROBE),
+        "verifier": sha256(Path(__file__).resolve()),
+    }
+
+    output_runs: dict[str, Any] = {}
+    native = capture_and_parse(candidate, original, capture, args, None)
+    reference_path = output / "stock-world.img"
+    stock_a = native["worlds"]["original_a"]
+    require(len(stock_a) == WORLD_IMAGE_SIZE + 1,
+            "stock world image has the wrong size")
+    require(native["worlds"]["original_b"] == stock_a,
+            "stock A/B start-of-play world images differ")
+    reference = stock_a[:WORLD_IMAGE_SIZE]
+    reference_path.write_bytes(reference)
+    try:
+        native_metric: Any = settled_metric(
+            native["traces"], args.tolerance, args.maximum_settle_half_cycle,
+            args.minimum_measured_half_cycles,
+        )
+    except ValueError as error:
+        native_metric = {"error": str(error)}
+
+    seed_traces: dict[int, dict[str, dict[str, Any]]] = {}
+    seed_checks: dict[str, bool] = {}
+    for seed in SEEDS:
+        run = capture_and_parse(
+            candidate, original, output / f"capture-seed-{seed:02d}", args,
+            (reference_path, seed),
+        )
+        expected = reference + bytes([seed])
+        seed_checks[f"seed_{seed:02d}_equal_start"] = all(
+            image == expected for image in run["worlds"].values()
+        )
+        seed_checks[f"seed_{seed:02d}_deterministic"] = all(
+            run["deterministic"].values()
+        )
+        seed_traces[seed] = run["traces"]
+        output_runs[str(seed)] = {
+            **public_capture(run),
+            "traces": public_traces(run["traces"]),
+        }
+    require(all(seed_checks.values()),
+            "equal-start seed checks failed: " + ",".join(
+                name for name, passed in seed_checks.items() if not passed))
+    deterministic = {
+        "original": all(output_runs[str(seed)]["deterministic"]["original"]
+                        for seed in SEEDS),
+        "dx": all(output_runs[str(seed)]["deterministic"]["dx"]
+                  for seed in SEEDS),
+    }
+    metric = combined_metric(seed_traces, args.maximum_settle_half_cycle)
     controls = mutation_controls()
     require(all(controls.values()), "state-patrol mutation controls failed")
     metric_controls = metric_policy_controls()
+    metric_controls.update({
+        f"combined_{name}": value
+        for name, value in combined_policy_controls().items()
+    })
     require(all(metric_controls.values()),
             "state-patrol metric policy controls failed")
     final_hashes = {
@@ -593,7 +811,7 @@ def main() -> int:
     passed = metric["strict_target_met"] and identities_unchanged
 
     receipt = {
-        "schema": "penta-stage7-state-patrol-v2",
+        "schema": SCHEMA,
         "status": "PASS" if passed else "FAIL",
         "candidate_sha256": initial_hashes["candidate"],
         "original_sha256": initial_hashes["original"],
@@ -601,28 +819,24 @@ def main() -> int:
         "tolerance": args.tolerance,
         "maximum_settle_half_cycle": args.maximum_settle_half_cycle,
         "minimum_measured_half_cycles": args.minimum_measured_half_cycles,
-        "classification": "EQUAL_WORLD_ENDPOINTS_AFTER_BOUNDED_VERTICAL_SETTLE",
-        "capture": {
-            "command": command,
-            "exit_code": capture_exit,
-            "log_sha256": hashlib.sha256(capture_log.encode()).hexdigest(),
-            "manifest": str(manifest_path),
-            "manifest_sha256": sha256(manifest_path),
-            "nested_checks": nested_checks,
-            "raw_route_gate_replaced": not bool(row.get("route_coverage_ok")),
-            "fixed_frame_loop_ratio": row.get("ratio_exact"),
+        "classification": CLASSIFICATION,
+        "capture": public_capture(native),
+        "stock_world_image": {
+            "path": str(reference_path),
+            "sha256": sha256(reference_path),
+            "ranges": "D800-D8FF,DC00-DCFF,FFCB,FFD4-FFD5",
+            "seed_register": "FFD1",
         },
+        "native_diagnostic_metric": native_metric,
+        "native_traces": public_traces(native["traces"]),
+        "seed_captures": output_runs,
+        "seed_checks": seed_checks,
         "metric": metric,
         "deterministic_replay": deterministic,
         "mutation_controls": controls,
         "metric_policy_controls": metric_controls,
         "input_identities": initial_hashes,
         "input_identities_unchanged": identities_unchanged,
-        "traces": {
-            name: {key: value for key, value in trace.items()
-                   if key not in ("rows", "endpoint_events")}
-            for name, trace in traces.items()
-        },
     }
     receipt_path = output / "receipt.json"
     receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")

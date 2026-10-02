@@ -12,6 +12,12 @@ ENTRY = 0x7D80
 DATA = 0x7E50
 COLORS = bytes.fromhex('0000 1863 4e2e 8410')
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent a4fc3949... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 7c5afca5...
+REPINNED_PARENT = 'a4fc39492319e3cba4b15f66ba538e1014995ef4de6df0b4f07e7beae2df01a9'
+
+
 def offset(address):
     return BANK * 0x4000 + address - 0x4000
 
@@ -58,7 +64,7 @@ def payload():
     return code
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact Select02 parent required')
     if parent[offset(0x7320):offset(0x7320)+len(router())] != router():
         raise ValueError('palette-window router differs')

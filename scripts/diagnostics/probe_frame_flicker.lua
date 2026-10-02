@@ -1,6 +1,10 @@
 -- Consecutive-frame pixel/CRAM/OAM capture for palette-flicker diagnosis.
 --
--- FLICKER_MODE=demo leaves the title idle until the stock D880=$0A demo.
+-- FLICKER_MODE=demo leaves the title idle until the attract demo's Stage-1
+-- gameplay segment (D880=$02, FFC1=1) and samples through its return to title.
+-- The prerecorded demo route is cycle-sensitive: release-lock candidates end
+-- the demo in Stage 1 rather than the stock D880=$0A Gargoyle arena
+-- (docs/audit/release-lock-20261001-repin.md).
 -- FLICKER_MODE=gameplay enters Stage 1 through normal controller input.
 -- The Python wrapper terminates mGBA after the .done marker is written; do not
 -- call emu:stop() here because that can freeze this mGBA build.
@@ -60,7 +64,7 @@ local function target_active()
     local scene = emu:read8(0xD880)
     local gameplay = emu:read8(0xFFC1)
     if MODE == "demo" then
-        return scene == 0x0A
+        return scene == 0x02 and gameplay == 1
     end
     return scene == 0x02 and gameplay == 1
 end

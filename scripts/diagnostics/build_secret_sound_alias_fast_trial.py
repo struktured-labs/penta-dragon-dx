@@ -8,6 +8,12 @@ from build_secret_sound_alias_trial import PARENT, START
 from build_secret_combined_copy_trial import gate as old_gate
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent d90f5fc7... yields byte-identical
+# changes (same offsets, preimages and values) as on the original d901357a...
+REPINNED_PARENT = 'd90f5fc7245091d6f42404f04eab02672474a4cf559897a0bcfb397f592c81f0'
+
+
 def gate():
     a = Asm(0x4000)
     a.db(0xf0, 0xba, 0xfe, 7); a.jr(0x20, 'native')
@@ -25,7 +31,7 @@ def gate():
 
 
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact completion-safe parent required')
     previous, code = old_gate(), gate()
     if parent[START:START+len(code)] != previous + b'\xff'*(len(code)-len(previous)):

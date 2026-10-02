@@ -270,6 +270,7 @@ def run_stage(mgba: str, rom: Path, target: int, frames: int,
         "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b",  # title row guard: unchanged gameplay observer/data ABI
         "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d",  # death/restart successor: unchanged soak publisher ABI
         "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5",  # #6: unchanged soak publisher ABI
+        "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db",  # release lock: $12F4 and bank13 $7457/$7462 outside its delta (re-checked below)
         "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
         "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
         "d82f563d856995fc1844d48cdd317b12f2ac9218f023eec376ee73bc24308074",

@@ -1,4 +1,4 @@
-"""Source evidence for the exact 126dd stream source profile; never approval itself."""
+"""Source evidence for the release-lock stream source profile; never approval itself."""
 from __future__ import annotations
 
 import hashlib
@@ -12,13 +12,13 @@ import build_stream_source_candidate as builder
 
 
 PROFILE = {
-    "name": "stream-126dd-original-source-v1",
+    "name": "stream-release-lock-original-source-v1",
     "expanded_ted": True,
     "native_sparse": True,
     "native_pose_table": True,
     "menu_icon_colors": True,
 }
-VERIFICATION_SCHEMA = "penta-stream-126dd-original-source-verification-v1"
+VERIFICATION_SCHEMA = "penta-stream-release-lock-original-source-verification-v1"
 BINDING_KEYS = {"receipt", "receipt_sha256", "source_fingerprint"}
 
 

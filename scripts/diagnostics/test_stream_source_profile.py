@@ -1,4 +1,4 @@
-"""Offline controls for the 126dd stream source suite profile (no emulator)."""
+"""Offline controls for the release-lock stream source suite profile (no emulator)."""
 from __future__ import annotations
 
 from contextlib import redirect_stderr
@@ -33,9 +33,12 @@ class StreamSourceProfileTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, 2)
 
     def test_profile_and_contract_pins(self):
-        self.assertEqual(profile.PROFILE["name"], "stream-126dd-original-source-v1")
+        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v1")
         self.assertTrue(profile.PROFILE["expanded_ted"])
-        self.assertEqual(builder.CONTRACT["candidate_sha256"][:8], "126dd0b7")
+        self.assertEqual(builder.CONTRACT["candidate_sha256"][:8], "792319cb")
+        self.assertTrue(builder.CONTRACT["chain_flags"]["release_lock"])
+        self.assertEqual(builder.CONTRACT["deferred_issues"], [14, 34])
+        self.assertNotIn("select-buffer", builder.CONTRACT["construction_order"])
         self.assertEqual(builder.CONTRACT["source_parent_sha256"][:8], "c693eafb")
         self.assertFalse(builder.CONTRACT["chain_flags"]["experimental_late_return_fade"])
         self.assertFalse(builder.CONTRACT["release_qualification"])

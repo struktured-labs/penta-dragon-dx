@@ -24,11 +24,148 @@ OPERATOR_SHA = "dd15cb653f5208a3c5597e861ff5942f1c9189a2b5302f72063cc094504621bd
 OPERATOR_ROM_SHA = "727ee4969da086fe3c62185ca2f0bba1b62cc60d8190710f5db9bfc8b50b260b"
 
 
-def operator_retarget(state_bytes: bytes, rom: bytes) -> tuple[list, dict]:
+# The release lock's #27 arena-completion-safe stage relocates the always-
+# mapped bank-1 WRAM runtime images that the cold installer copies from bank13
+# (post-copy guard $DBF1->$DBF3, dirty bridge $DBDF->$DBDC, DABB/DB80 calls).
+# The r534 operator capture serializes the 4f5a-ABI images, so replaying it
+# unchanged executes stale WRAM code against the candidate's callers. Refresh
+# exactly these installer images, only after proving the capture holds the
+# ancestor's bytes there; CPU, stack, mapper, VRAM and game data stay untouched.
+RELEASE_LOCK_WRAM_IMAGES = (
+    (0xDAB0, 13 * 0x4000 + 0x3C6F, 14),
+    (0xDB80, 13 * 0x4000 + 0x163A, 36),
+    (0xDBA4, 13 * 0x4000 + 0x169A, 36),
+    (0xDBC8, 13 * 0x4000 + 0x16CA, 36),
+    (0xDBEC, 13 * 0x4000 + 0x16FA, 5),
+    (0xDBF1, 13 * 0x4000 + 0x1830, 12),
+)
+
+
+def release_lock_runtime_refresh(raw: bytearray, rom: bytes) -> list | None:
+    import release_lock_lineage as lineage
+
+    if not lineage.is_candidate(rom):
+        return None
+    parent = lineage.ancestor_bytes(
+        rom, 0, 32 * 0x4000, set().union(*lineage.RUN_OWNERS.values()))
+    records = []
+    for address, source, length in RELEASE_LOCK_WRAM_IMAGES:
+        offset = 0x4400 + 0x1000 + address - 0xD000
+        if bytes(raw[offset:offset + length]) != parent[source:source + length]:
+            raise ValueError(f"operator WRAM ${address:04X} is not the 4f5a installer image")
+        for start, end in [(source, source + length)]:
+            lineage.ancestor_bytes(rom, start, end,
+                                   {"arena-completion-safe", "arena-graphics-owner"})
+        raw[offset:offset + length] = rom[source:source + length]
+        records.append({"wram": f"{address:04X}", "rom_offset": f"{source:05X}",
+                        "length": length,
+                        "sha256": hashlib.sha256(rom[source:source + length]).hexdigest()})
+    return records
+
+
+SETTLE_PROBE = Path(__file__).with_name("probe_stage1_captured_menu_settle.lua")
+MEMORY_CURRENT_BANK = 0x0168
+CPU_SP, CPU_PC = 0x0028, 0x002A
+
+
+def _gbas(state_bytes: bytes) -> tuple[list, int, bytes]:
+    chunks = png_chunks(state_bytes)
+    indices = [i for i, (kind, _) in enumerate(chunks) if kind == b"gbAs"]
+    if len(indices) != 1:
+        raise ValueError("state needs exactly one machine state")
+    raw = zlib.decompress(chunks[indices[0]][1])
+    if len(raw) != GB_STATE_SIZE:
+        raise ValueError("unexpected machine state size")
+    return chunks, indices[0], raw
+
+
+def release_lock_boundary(raw: bytes, rom: bytes) -> dict:
+    """CPU PC and every stacked word stay outside the release-lock rewrites."""
+    import release_lock_lineage as lineage
+
+    sp = int.from_bytes(raw[CPU_SP:CPU_SP + 2], "little")
+    pc = int.from_bytes(raw[CPU_PC:CPU_PC + 2], "little")
+    bank = int.from_bytes(raw[MEMORY_CURRENT_BANK:MEMORY_CURRENT_BANK + 2], "little")
+    if not 0xDF00 <= sp <= 0xDFFE:
+        return {"safe": False, "reason": f"stack outside the native page (SP={sp:04X})"}
+    words = [pc] + [raw[0x4400 + 0x1000 + a - 0xD000] | raw[0x4400 + 0x1000 + a + 1 - 0xD000] << 8
+                    for a in range(sp, 0xDFFE, 2)]
+    hits = []
+    for index, word in enumerate(words):
+        if word >= 0x8000:
+            continue
+        base = word if word < 0x4000 else bank * 0x4000 + word - 0x4000
+        # PC: the executing neighbourhood must be byte-identical. Stacked
+        # return words: the CALL that pushed them (and the opcode they resume
+        # at) must be unchanged, so they resume on an instruction boundary
+        # shared by both ABIs; later candidate code may legitimately differ.
+        span = (base - 8, base + 8) if index == 0 else (base - 3, base + 1)
+        if lineage.touched(*span):
+            hits.append(f"{word:04X}")
+    # #33 replaces the bank-20 menu row prologue ($404A) and re-enters native
+    # code at $406F. A frame frozen in [$4040,$406F) was built by the native
+    # prologue and would resume into the staged contract, so reject it.
+    in_menu_bank = bank == 20 and any(0x4040 <= word < 0x406F for word in words)
+    return {"safe": not hits and not in_menu_bank, "pc": f"{pc:04X}", "sp": f"{sp:04X}",
+            "rom_bank": bank, "stack_words": [f"{w:04X}" for w in words[1:]],
+            "release_lock_hits": hits, "inside_bank20_menu": in_menu_bank}
+
+
+def settle_on_ancestor(state_bytes: bytes, rom: bytes, work: Path) -> tuple[bytes, dict]:
+    """Release lock: advance the operator capture on the authenticated 4f5a ABI.
+
+    The r534 capture freezes the CPU inside the bank-20 menu attribute row
+    routine (PC $406B). #33's staged rows replace that routine's $404A
+    prologue, so resuming the old frame on the candidate unbalances SP
+    (it walks to $E1C3) and the corrupt stack forces FFB7=$0C (Shalamar
+    arena). Run the identical no-input frames on the candidate's 4f5a ancestor
+    (which shares the r534 ABI and passes this gate) until CPU and stack are
+    outside every release-lock rewrite; the close/stationary contract then
+    runs entirely on the candidate.
+    """
+    import release_lock_lineage as lineage
+
+    ancestor = lineage.ancestor_bytes(
+        rom, 0, 32 * 0x4000, set().union(*lineage.RUN_OWNERS.values()))
+    if hashlib.sha256(ancestor).hexdigest() != lineage.SARA_SHA256:
+        raise ValueError("release-lock ancestor reconstruction failed")
+    chunks, index, raw = _gbas(state_bytes)
+    retargeted = bytearray(raw)
+    retargeted[4:8] = (zlib.crc32(ancestor) & 0xFFFFFFFF).to_bytes(4, "little")
+    chunks[index] = (b"gbAs", zlib.compress(bytes(retargeted), level=9))
+    work.mkdir(parents=True)
+    (work / "ancestor.gb").write_bytes(ancestor)
+    write_png(work / "operator-on-ancestor.ss9", chunks)
+    env = os.environ.copy()
+    for key in ("PENTA_MGBA_LOCK", "PENTA_MGBA_QT_BIN"):
+        env.pop(key, None)
+    env.update(PENTA_CAPTURED_MENU_SETTLE_OUT=str(work),
+               PENTA_CAPTURED_MENU_STATE=str(work / "operator-on-ancestor.ss9"),
+               QT_QPA_PLATFORM="offscreen", SDL_AUDIODRIVER="dummy", TMPDIR=str(ROOT / "tmp"))
+    run = subprocess.run([str(MGBA), "--fastforward", str(work / "ancestor.gb"),
+                          "--script", str(SETTLE_PROBE), "-C", f"savegamePath={work}",
+                          "-C", f"savestatePath={work}"], env=env, cwd=ROOT,
+                         capture_output=True, timeout=60, check=False)
+    (work / "emulator.log").write_bytes(run.stdout + run.stderr)
+    if run.returncode != 0 or not (work / "done.txt").is_file():
+        raise ValueError(f"ancestor settle incomplete (exit {run.returncode})")
+    for frame in range(1, 25):
+        settled = (work / f"settle-{frame:02d}.ss0").read_bytes()
+        _, _, settled_raw = _gbas(settled)
+        boundary = release_lock_boundary(settled_raw, rom)
+        if boundary["safe"]:
+            return settled, {"ancestor_sha256": lineage.SARA_SHA256, "frames": frame,
+                             "state_sha256": hashlib.sha256(settled).hexdigest(),
+                             "boundary": boundary}
+    raise ValueError("operator capture never reached a release-lock-safe boundary")
+
+
+def operator_retarget(state_bytes: bytes, rom: bytes, settled: bytes | None = None,
+                      settle: dict | None = None) -> tuple[list, dict]:
     """Explicit cross-build fixture: alter CRC metadata, never machine state."""
     if hashlib.sha256(state_bytes).hexdigest() != OPERATOR_SHA:
         raise ValueError("operator fixture SHA differs; refusing an unknown baseline")
-    chunks = png_chunks(state_bytes)
+    chunks = png_chunks(settled if settled is not None else state_bytes)
     indices = [i for i,(kind,_) in enumerate(chunks) if kind == b"gbAs"]
     if len(indices) != 1:
         raise ValueError("operator fixture needs exactly one machine state")
@@ -39,7 +176,18 @@ def operator_retarget(state_bytes: bytes, rom: bytes) -> tuple[list, dict]:
     after = bytearray(before)
     after[4:8] = (zlib.crc32(rom) & 0xFFFFFFFF).to_bytes(4, "little")
     assert after[:4] == before[:4] and after[8:] == before[8:]
+    runtime_refresh = release_lock_runtime_refresh(after, rom)
     chunks[index] = (b"gbAs", zlib.compress(after, level=9))
+    if runtime_refresh is not None:
+        return chunks, {"source_state_sha256": OPERATOR_SHA,
+                        "source_rom_sha256": OPERATOR_ROM_SHA,
+                        "target_rom_sha256": hashlib.sha256(rom).hexdigest(),
+                        "changed_state_offsets": [i for i,(a,b) in enumerate(zip(before, after))
+                                                  if a != b and not 0x5A00 <= i < 0x6000],
+                        "cpu_stack_mapper_wram_vram_unchanged": False,
+                        "release_lock_wram_runtime_refresh": runtime_refresh,
+                        "release_lock_ancestor_settle": settle,
+                        "cold_boot_qualification": False}
     return chunks, {"source_state_sha256": OPERATOR_SHA,
                     "source_rom_sha256": OPERATOR_ROM_SHA,
                     "target_rom_sha256": hashlib.sha256(rom).hexdigest(),
@@ -166,13 +314,21 @@ def main() -> int:
     retarget = None
     if args.operator_fixture:
         try:
-            retarget_chunks, retarget = operator_retarget(state_bytes, rom_bytes)
+            settled = settle = None
+            import release_lock_lineage
+            if release_lock_lineage.is_candidate(rom_bytes):
+                if out.exists():
+                    parser.error("output must be a fresh directory below repository tmp/")
+                settled, settle = settle_on_ancestor(
+                    state_bytes, rom_bytes, out / "ancestor-settle")
+            retarget_chunks, retarget = operator_retarget(
+                state_bytes, rom_bytes, settled, settle)
         except ValueError as error:
             parser.error(str(error))
     verifier = Path(__file__).resolve()
     before = {"rom": sha(rom), "state": sha(state), "probe": sha(PROBE),
               "verifier": sha(verifier), "guard": sha(MGBA)}
-    out.mkdir(parents=True)
+    out.mkdir(parents=True, exist_ok=True)
     runtime = out / "runtime"
     runtime.mkdir()
     replay_state = state

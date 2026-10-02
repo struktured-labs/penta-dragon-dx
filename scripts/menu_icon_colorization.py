@@ -194,7 +194,9 @@ def build_menu_lut(canonical_lut: bytes) -> bytes:
         raise ValueError("invalid canonical menu LUT size")
     menu_lut = bytearray(canonical_lut)
     for tile, palette in MENU_LUT_OVERRIDES.items():
-        if canonical_lut[tile] != 0:
+        # #22 assigns the four five-point-star tiles BG5 in gameplay too, the
+        # same palette the menu icon already uses; any other value conflicts.
+        if canonical_lut[tile] not in (0, palette):
             raise AssertionError(
                 f"menu-only tile ${tile:02X} is no longer neutral in gameplay"
             )

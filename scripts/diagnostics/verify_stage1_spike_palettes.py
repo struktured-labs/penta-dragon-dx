@@ -871,6 +871,28 @@ if SEMANTIC_LEGACY_CONTEXT_TRAMPOLINE != bytes.fromhex(
 
 
 def semantic_expansion_is_exact(rom: bytes) -> bool:
+    import release_lock_lineage
+    if release_lock_lineage.is_candidate(rom):
+        # Every semantic helper/bridge/LUT span is outside the release-lock
+        # delta. #22 recolors the star in the bank-13 table only; the private
+        # semantic LUTs keep the ancestor (neutral) star entries, so evaluate
+        # the authenticated 4f5a ancestor whose table built those LUTs.
+        bank_base = SEMANTIC_HELPER_BANK * 0x4000
+        helper_len = len(build_semantic_helper())
+        spans = [
+            (bank_base + SEMANTIC_HELPER_ENTRY - 0x4000, helper_len),
+            (bank_base + SEMANTIC_ROOM01_HELPER_ADDR - 0x4000, helper_len),
+            (bank_base + SEMANTIC_LUT_ADDR - 0x4000, 0x100),
+            (bank_base + SEMANTIC_ROOM01_LUT_ADDR - 0x4000, 0x100),
+            (bank_base + SEMANTIC_RETURN_BRIDGE - 0x4000, 5),
+            (SEMANTIC_PRIVATE_BANK * 0x4000 + SEMANTIC_PRIVATE_RETURN - 0x4000, 3),
+            *((bank_base + address - 0x4000, len(SEMANTIC_CONTEXT_TRAMPOLINE))
+              for address in SEMANTIC_CALLER_RETURNS),
+        ]
+        import build_room03_animation_envelope_r440 as envelope
+        spans.append((envelope.CAVE, len(envelope.helper())))
+        return semantic_expansion_is_exact(release_lock_lineage.sara_ancestor(
+            rom, *((start, start + size) for start, size in spans)))
     from build_sara_atomic_pose import CANDIDATE_SHA as SARA_SHA, authenticated_parent as sara_parent
     if hashlib.sha256(rom).hexdigest() == SARA_SHA:
         # Issue #6 changes only the two OAM emitters and checksum. Authenticate
@@ -1303,10 +1325,18 @@ def recurring_phase_raster_receipt(
         eligible_frames += 1
         signature_counts[signature] = signature_counts.get(signature, 0) + 1
         previous = references.get(signature)
+        # Queued screenshots can commit a callback after the OAM receipt for
+        # the same frame (see RASTER_ALIGNMENT_RADIUS). Exclude sprite
+        # coverage from the adjacent receipts too, so a one-pixel sprite step
+        # over a hazard cell is not misread as a hazard raster change.
         current = {
             "frame": frame_number,
             "pixels": pixels,
-            "oam": periodic_oam.get(frame_number, []),
+            "oam": [
+                rectangle
+                for neighbour in (frame_number - 1, frame_number, frame_number + 1)
+                for rectangle in periodic_oam.get(neighbour, [])
+            ],
         }
         if previous is not None:
             comparisons += 1
@@ -1397,6 +1427,22 @@ def parse_live_report(path: Path) -> dict[str, str]:
 
 def publication_boundary(rom: bytes) -> dict[str, int | str]:
     """Return the one reviewed physical-page LCDC publication site."""
+    import release_lock_lineage
+    if release_lock_lineage.is_candidate(rom):
+        # The release-lock delta leaves the primary publisher untouched; the
+        # matched variant's extras are re-checked against the delta below.
+        ancestor = release_lock_lineage.sara_ancestor(
+            rom, (PRIMARY_PUBLISHER_ADDR, PRIMARY_PUBLISHER_END))
+        result = publication_boundary(ancestor)
+        contract = PUBLICATION_VARIANTS[str(result["variant"])]
+        extras = contract.get("extras")
+        if extras is None and "extra" in contract:
+            extras = (contract["extra"],)
+        for offset, expected in extras or ():
+            if (release_lock_lineage.touched(int(offset), int(offset) + len(expected))
+                    or rom[int(offset):int(offset) + len(expected)] != expected):
+                raise RuntimeError("release-lock delta meets a publisher extra")
+        return result
     from build_sara_atomic_pose import CANDIDATE_SHA as SARA_SHA, authenticated_parent as sara_parent
     if hashlib.sha256(rom).hexdigest() == SARA_SHA:
         return publication_boundary(sara_parent(rom))

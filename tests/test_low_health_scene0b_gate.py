@@ -33,9 +33,10 @@ class LowHealthScene0BGateTests(unittest.TestCase):
     def test_probe_drives_only_the_native_health_source(self) -> None:
         self.assertIn("local SCENE0B_HEALTH = 0x40", self.probe)
         self.assertIn(
-            "emu:write8(0xDCBB, SCENE0B_HEALTH)", self.probe
+            "native_assistance.write(0xDCBB, SCENE0B_HEALTH)", self.probe
         )
-        self.assertIn("emu:write8(0xDCBB, 0xFF)", self.probe)
+        self.assertIn("native_assistance.write(0xDCBB, 0xFF)", self.probe)
+        self.assertNotIn("emu:write8(0xDCBB", self.probe)  # #41 physical bank1
         self.assertNotIn("emu:write8(0xDD06", self.probe)
         self.assertNotIn("emu:write8(0xD880", self.probe)
         self.assertIn(r"\troom\tffe5\tscy", self.probe)
@@ -117,7 +118,7 @@ class LowHealthScene0BGateTests(unittest.TestCase):
         self.assertIn("bind_candidate_runtime()", self.probe)
         self.assertLess(
             self.probe.index("bind_candidate_runtime()"),
-            self.probe.index("emu:write8(0xDCBB, SCENE0B_HEALTH)"),
+            self.probe.index("native_assistance.write(0xDCBB, SCENE0B_HEALTH)"),
         )
         self.assertIn("STAGE1_RUNTIME_SOURCE_OFFSETS", self.verifier)
         self.assertIn(

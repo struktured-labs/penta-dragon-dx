@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Build the exact 126dd stream-regression candidate as a release source profile.
+"""Build the release-lock stream candidate (792319cb) as a release source profile.
 
-Wraps scripts/build_stream_regression_candidate.py with the full experimental
-chain (presentation, arena alias, completion-safe, secret sound alias, return
-fade trial16) and binds the result to the suite source fingerprint. The chain
-starts from the original-source restart build; no retained candidate ROM is an
-input. The stages are hash-pinned and cannot be reordered, so this profile
-necessarily includes the #33/#34/#35 bytes carried by the presentation chain.
+Wraps scripts/build_stream_regression_candidate.py with the full stream chain
+(presentation, arena alias, completion-safe, secret sound alias, return fade
+trial16) in release-lock mode: the #14 doorway helper and the #34 select
+buffer are deferred and every remaining stage is re-pinned with a
+byte-identical change set (docs/audit/release-lock-20261001-repin.md). The
+result is bound to the suite source fingerprint. The chain starts from the
+original-source restart build; no retained candidate ROM is an input. #35
+(title local guard) remains in the chain with its accepted footer timing. A final
+title-glyph-window stage confines the v3.01 footer glyph GDMA to mode 0/1.
 Construction evidence only: not hardware approval and not audience approval.
 """
 from __future__ import annotations
@@ -34,9 +37,10 @@ FLAGS = {
     "secret_sound_alias": True,
     "return_fade": True,
     "experimental_late_return_fade": False,
+    "release_lock": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-126dd-original-source-build-v1",
+    "schema": "penta-stream-release-lock-original-source-build-v1",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -45,20 +49,21 @@ CONTRACT = {
         "sara-atomic", "secret-stock-graphics", "secret-palette-source",
         "gameover-accent", "native-projectile-templates",
         "continue-input-after-visuals", "presentation-composition",
-        "palette-window", "select-buffer", "handheld-palette",
+        "palette-window", "handheld-palette",
         "title-local-guard", "ted-menu-reinstall", "five-point-star",
         "arena-sound-alias", "arena-graphics-owner", "arena-alias-fastpath",
         "arena-completion-safe", "secret-sound-alias-fast",
         "secret-alias-chunks", "return-initial-map", "return-cgb-fade",
-        "return-card-deadline", "return-card-compact",
+        "return-card-deadline", "return-card-compact", "title-glyph-window",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
     "fresh_live_qualification": False,
     "audience_approval_recorded": False,
     "release_qualification": False,
+    "deferred_issues": [14, 34],
     "candidate_sha256": (
-        "126dd0b7fff1e03eb6b224f818b85398593c7109ffb676cc538c1bd90742304b"
+        "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -89,7 +94,7 @@ def build(output: Path, palette: Path = DEFAULT_PALETTE) -> dict:
     nested = stream.build(stream_output, **FLAGS)
     candidate = (stream_output / "candidate.gb").read_bytes()
     if digest(candidate) != CONTRACT["candidate_sha256"]:
-        raise ValueError("original-source stream chain did not reproduce exact 126dd")
+        raise ValueError("original-source stream chain did not reproduce the exact release-lock candidate")
     if [stage["name"] for stage in nested["stages"]] != CONTRACT["construction_order"]:
         raise ValueError("stream construction order differs from contract")
     if snapshot != source_snapshot():
@@ -114,7 +119,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
     """Authenticate the construction without re-running the 36 s chain.
 
     Verifies the nested original-source restart proof (which reconstructs its
-    own overlays), the exact stage hash linkage from c693eafb to 126dd, the
+    own overlays), the exact stage hash linkage from c693eafb to 792319cb, the
     current bytes of every builder and every transitively loaded project
     Python source, and the suite source fingerprint.
     """
@@ -129,7 +134,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
         if actual != expected or type(actual) is not type(expected):
             raise ValueError(f"stream source receipt {name} differs")
     if digest(expected_rom) != CONTRACT["candidate_sha256"]:
-        raise ValueError("verification requires exact pinned 126dd ROM")
+        raise ValueError("verification requires the exact pinned release-lock ROM")
     output = path.parent
     _check_output(output)
     if (output / "candidate.gb").read_bytes() != expected_rom:
@@ -156,8 +161,11 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
     if nested.get("retained_candidate_inputs") is not False:
         raise ValueError("stream receipt consumed retained candidates")
     for key, value in FLAGS.items():
-        name = key if key.startswith("experimental_") else "experimental_" + key
-        name += "_chain"
+        if key == "release_lock":
+            name = "release_lock_chain"
+        else:
+            name = key if key.startswith("experimental_") else "experimental_" + key
+            name += "_chain"
         if nested.get(name) is not value:
             raise ValueError(f"stream receipt {name} differs")
     if nested.get("entrypoint_sha256") != digest(Path(stream.__file__).read_bytes()):
@@ -186,7 +194,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
             raise ValueError(f"stream stage {stage['name']} builder bytes changed")
         current = stage["candidate_sha256"]
     if current != CONTRACT["candidate_sha256"]:
-        raise ValueError("stream stage linkage does not end at 126dd")
+        raise ValueError("stream stage linkage does not end at the release-lock candidate")
 
     restart_path = stream_path.parent / "restart-source/build-receipt.json"
     if digest(restart_path.read_bytes()) != nested.get("restart_receipt_sha256"):

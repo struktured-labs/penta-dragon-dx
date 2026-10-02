@@ -15,6 +15,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "scripts/diagnostics"))
+import release_lock_lineage  # noqa: E402
 from menu_icon_colorization import (  # noqa: E402
     MENU_LUT_OVERRIDES,
     MENU_SEMANTIC_FAMILIES,
@@ -67,7 +69,9 @@ def menu_oracle(data: bytes) -> tuple[bytes, frozenset[int]]:
         return menu_oracle(sara_parent(data))
     expected = bytearray(build_menu_lut(data[BANK13_LUT:BANK13_LUT+0x100]))
     reserved = frozenset()
-    if hashlib.sha256(data).hexdigest() in {R441_SHA256, R442_SHA256, TITLE_V5_SHA256, TITLE_V6_R445C_SHA256, TITLE_V6_R449F_SHA256, TITLE_V6_R449F_PREHELPER_SHA256, TITLE_V6_R451C_SHA256, R455_SHA256, R456C_SHA256, R456D_SHA256, R527_SHA256, R528_SHA256, R529_SHA256, R530_SHA256, R531_SHA256, R532_SHA256, R533_SHA256, R534_SHA256, R535_TILE_RETIRE_SHA256, R535_STAGE_CARD_BLACK_SHA256, R536_PENTA_SEAM_SHA256, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", SPIKE_DEATH_SHA256, R535_STAGE1_ONLY_CARD_BLACK_SHA256, R536_STAGE1_ONLY_CARD_BLACK_SHA256}:
+    if hashlib.sha256(data).hexdigest() in {R441_SHA256, R442_SHA256, TITLE_V5_SHA256, TITLE_V6_R445C_SHA256, TITLE_V6_R449F_SHA256, TITLE_V6_R449F_PREHELPER_SHA256, TITLE_V6_R451C_SHA256, R455_SHA256, R456C_SHA256, R456D_SHA256, R527_SHA256, R528_SHA256, R529_SHA256, R530_SHA256, R531_SHA256, R532_SHA256, R533_SHA256, R534_SHA256, R535_TILE_RETIRE_SHA256, R535_STAGE_CARD_BLACK_SHA256, R536_PENTA_SEAM_SHA256, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", SPIKE_DEATH_SHA256, R535_STAGE1_ONLY_CARD_BLACK_SHA256, R536_STAGE1_ONLY_CARD_BLACK_SHA256,
+        # Release lock: inherits the c693 private bank-20 menu LUT byte-for-byte.
+        release_lock_lineage.CANDIDATE_SHA256}:
         reserved = frozenset(MENU_RESERVED_HAZARDS)
         for tile, value in MENU_RESERVED_HAZARDS.items():
             expected[tile] = value
@@ -247,7 +251,7 @@ def main() -> int:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     data = rom.read_bytes()
-    if len(data) != 32 * BANK_SIZE:
+    if len(data) != 32 * BANK_SIZE and not release_lock_lineage.is_candidate(data):
         print(f"FAIL: expected a 512 KiB ROM, got {len(data)} bytes")
         return 1
     canonical_lut = data[BANK13_LUT:BANK13_LUT + 0x100]

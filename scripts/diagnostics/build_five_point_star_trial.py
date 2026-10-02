@@ -9,8 +9,14 @@ TILES = (0x82, 0x83, 0x92, 0x93)
 ART_SHA = 'd7156afbb1e8f9a310c0a1283a7fe16e4fca38839057d24ad3e966771c3aba6d'
 
 
+# Re-pin (docs/audit/release-lock-20261001-repin.md): the release-lock chain
+# defers #14 and #34. Parent 50d64560... yields byte-identical
+# changes (same offsets, preimages and values) as on the original 4731248a...
+REPINNED_PARENT = '50d64560ed5df570b8bfae16983b13c7bc7def5dd3d392428330b6c9701fd5ef'
+
+
 def build(parent):
-    if hashlib.sha256(parent).hexdigest() != PARENT:
+    if hashlib.sha256(parent).hexdigest() not in (PARENT, REPINNED_PARENT):
         raise ValueError('exact Ted-menu-reinstall parent required')
     art = b''.join(parent[0x1F000+t*16:0x1F010+t*16] for t in TILES)
     if hashlib.sha256(art).hexdigest() != ART_SHA:

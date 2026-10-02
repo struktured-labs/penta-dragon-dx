@@ -17,7 +17,17 @@
 
 set -e
 
-PROJECT_DIR="/home/struktured/projects/penta-dragon-dx-claude"
+# The project is the checkout that contains this script, so a git worktree
+# (e.g. ../penta-dragon-dx-perarena) runs its own editor, YAML, states, and
+# PID files. Invoking /home/struktured/projects/penta-dragon-dx-claude/
+# scripts/palette_session.sh still resolves to that historical checkout.
+_session_script="${BASH_SOURCE[0]}"
+if [ -L "$_session_script" ]; then
+    _session_script="$(readlink -f -- "$_session_script")"
+fi
+PROJECT_DIR="$(cd -- "$(dirname -- "$_session_script")/.." && pwd)"
+# live_palettes.lua reads this to find the same checkout's files.
+export PENTA_PROJECT_DIR="$PROJECT_DIR"
 ROM_DEFAULT="rom/working/penta_dragon_dx_FIXED.gb"
 LUA_SCRIPT="scripts/lua/live_palettes.lua"
 EDITOR_SCRIPT="scripts/live_palette_editor.py"
@@ -156,6 +166,7 @@ case "$cmd" in
         mgba_pid=$!
         echo "$mgba_pid" > "$MGBA_PID_FILE"
         echo "  mgba:    PID $mgba_pid platform=xcb (ROM: $(basename "$rom"))"
+        echo "  project: $PROJECT_DIR"
 
         # A background GUI launch can fail after the shell has already returned
         # (for example, if Qt cannot create the requested display device).
@@ -172,7 +183,11 @@ case "$cmd" in
         # 3. Best-effort browser open
         url="http://localhost:$PORT"
         opened=false
+        # PENTA_PALETTE_NO_BROWSER=1 skips this (automated/remote checks).
         for opener in xdg-open open; do
+            if [ "${PENTA_PALETTE_NO_BROWSER:-0}" = "1" ]; then
+                break
+            fi
             if command -v "$opener" >/dev/null 2>&1; then
                 "$opener" "$url" >/dev/null 2>&1 &
                 opened=true

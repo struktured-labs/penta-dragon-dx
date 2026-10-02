@@ -83,6 +83,25 @@ def bank_offset(bank: int, address: int) -> int:
     return bank * 0x4000 + address - 0x4000
 
 
+def release_lock_scene_read(rom_bytes: bytes, helpers: list[bytes]) -> bool:
+    """#27: only bank 13's DABB scene read differs (CALL DBDF vs LD A,(D880)).
+
+    build_arena_completion_safe_trial gives the bank-13 installer the direct
+    scene resolver and deliberately keeps bank 16's native raw read.
+    """
+    import release_lock_lineage
+
+    if not release_lock_lineage.is_candidate(rom_bytes):
+        return False
+    start = 0xDABB - RUNTIME_HELPER_ADDR
+    return (
+        helpers[0][:start] == helpers[1][:start]
+        and helpers[0][start + 3:] == helpers[1][start + 3:]
+        and helpers[0][start:start + 3] == bytes.fromhex("CD DF DB")
+        and helpers[1][start:start + 3] == bytes.fromhex("FA 80 D8")
+    )
+
+
 def stage1_helper(rom_bytes: bytes, bank: int) -> bytes:
     source_a = bank_offset(bank, RUNTIME_HELPER_SOURCE_A)
     source_b = bank_offset(bank, RUNTIME_HELPER_SOURCE_B)
@@ -403,7 +422,9 @@ def main() -> int:
     ]
     if any(len(image) != RUNTIME_HELPER_SIZE for image in helper_images):
         parser.error("candidate ROM is missing the full Stage-1 WRAM helper")
-    if helper_images[0] != helper_images[1]:
+    if helper_images[0] != helper_images[1] and not release_lock_scene_read(
+        rom_bytes, helper_images
+    ):
         parser.error("candidate Stage-1 WRAM helper source copies disagree")
     runtime_start = 0xDAD7 - RUNTIME_HELPER_ADDR
     if (

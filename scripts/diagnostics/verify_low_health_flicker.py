@@ -76,6 +76,10 @@ R456C_PROFILE_SHAS = (
     "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5",  # #6: unchanged low-health ABI
     "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
     "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
+    # Release-lock candidate: the delta vs 4f5a leaves banks 19/21, the bulk
+    # compiler and fixed $42F0..$42F5/$4324 untouched (release_lock_lineage);
+    # every profile function below still re-checks those exact ABI bytes.
+    "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db",
 )
 R455_SHA256 = "6e5e7a61ddd1a44c0db6aed123528477c5531716fa16d73b083c67d64abfcbe9"
 R455_WRONG_DESTINATION_SHA256 = "22449ff47e9996a578464fbce71ff3339a67f75becd4c47d075dde23034dacc5"
@@ -745,7 +749,11 @@ def main() -> int:
             CANONICAL_STAGE1_LUT_SHA256, RELEASE_STAGE1_LUT_SHA256,
             # r438 changes only twelve tooth bank bits; low palette bits
             # remain identical. Hazard bank selection is independently graded.
-            "22de0c9f11d8b8f4f050c4e62928e7ea300b1d7483fb9df1d65bb6eec6a0527f"}
+            "22de0c9f11d8b8f4f050c4e62928e7ea300b1d7483fb9df1d65bb6eec6a0527f",
+            # #22 five-point-star: tiles 82/83/92/93 -> palette 5 (reviewed in
+            # verify_stage1_tilemap_copy.FIVE_POINT_STAR_LUT_SHA256). The
+            # replay grades against this candidate's own LUT bytes.
+            "66b0876cbe0a4a64885655a60d9fa56ca8479c51514e3d60fe4d9a45be15de82"}
     ):
         parser.error(
             "candidate Stage-1 LUT is not the reviewed canonical semantic "

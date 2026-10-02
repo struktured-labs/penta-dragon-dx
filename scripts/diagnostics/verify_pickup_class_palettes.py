@@ -175,11 +175,35 @@ EXPECTED_TABLE = bytes(_bg_table())
 EXPECTED_TABLE_HISTOGRAM = dict(sorted(Counter(EXPECTED_TABLE).items()))
 
 
+# Issue #22 (build_five_point_star_trial): the four five-point-star tiles move
+# from the neutral dungeon palette to BG5 together; no other entry changes.
+FIVE_POINT_STAR_TILES = (0x82, 0x83, 0x92, 0x93)
+
+
+def five_point_star_variant(table: bytes) -> bool:
+    return (
+        len(table) == len(EXPECTED_TABLE)
+        and all(EXPECTED_TABLE[tile] == 0 for tile in FIVE_POINT_STAR_TILES)
+        and all(table[tile] == 5 for tile in FIVE_POINT_STAR_TILES)
+    )
+
+
+def expected_table_histogram(table: bytes) -> dict[int, int]:
+    histogram = dict(EXPECTED_TABLE_HISTOGRAM)
+    if five_point_star_variant(table):
+        histogram[0] -= len(FIVE_POINT_STAR_TILES)
+        histogram[5] = histogram.get(5, 0) + len(FIVE_POINT_STAR_TILES)
+    return dict(sorted(histogram.items()))
+
+
 def reviewed_stage1_table(table: bytes) -> bool:
-    """Accept the base LUT or its one reviewed tooth-bank variant only."""
+    """Accept the base LUT, its reviewed tooth-bank and #22 star variants."""
     if len(table) != len(EXPECTED_TABLE):
         return False
+    star = five_point_star_variant(table)
     for tile, (actual, expected) in enumerate(zip(table, EXPECTED_TABLE)):
+        if star and tile in FIVE_POINT_STAR_TILES:
+            continue
         if tile in COMPILED_TOOTH_BANK_TILES:
             if actual not in (expected, expected | 0x08):
                 return False
@@ -350,7 +374,7 @@ def main() -> int:
             reviewed_stage1_table(table)
         ),
         "exact Stage 1 palette-class histogram": (
-            semantic_table_histogram == EXPECTED_TABLE_HISTOGRAM
+            semantic_table_histogram == expected_table_histogram(table)
         ),
         "every pickup tile maps to its semantic class": all(
             semantic_table[tile] == palette

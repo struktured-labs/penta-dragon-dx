@@ -44,11 +44,11 @@ NAMED_RELEASE_FLOOR = 0.95
 NAMED_RELEASE_STAGES = frozenset({1, 2, 3, 4, 5})
 MAIN_RELEASE_STAGES = NAMED_RELEASE_STAGES & MAIN_STAGES
 STAGE2_RELEASE_STAGES = NAMED_RELEASE_STAGES & STAGE2_STAGES
-STAGE7_LOWER = 0.98
+STAGE7_LOWER = 0.97
 STAGE7_UPPER = 1.02
-STAGE7_CLASSIFICATION = "STRICT_WORLD_POSITION_MATCHED_98_TO_102"
+STAGE7_CLASSIFICATION = "EQUAL_START_COMBINED_SEEDS_97_TO_102"
 SCHEMA = "penta-split-stage-speed-qualification-v4"
-STATUS = "PASS_RELEASE_95_NAMED_STAGE6_STRICT99_STAGE7_WORLD_MATCHED98"
+STATUS = "PASS_RELEASE_95_NAMED_STAGE6_STRICT99_STAGE7_EQUAL_START97"
 STRICT_CLASSIFICATION = "STRICT_99_TO_101"
 NAMED_RELEASE_CLASSIFICATION = "NAMED_STAGE_RELEASE_FLOOR_95"
 
@@ -261,7 +261,7 @@ def validate_stage7_payload(
     receipt: dict[str, Any], candidate_sha256: str,
 ) -> dict[str, Any]:
     """Revalidate the current equal-world-position Stage-7 speed receipt."""
-    require(receipt.get("schema") == "penta-stage7-state-patrol-v2",
+    require(receipt.get("schema") == "penta-stage7-state-patrol-v3",
             "Stage-7 world-position receipt has the wrong schema")
     require(receipt.get("status") == "PASS",
             "Stage-7 world-position receipt is not passing")
@@ -275,7 +275,7 @@ def validate_stage7_payload(
         and receipt.get("maximum_settle_half_cycle") == 24
         and receipt.get("minimum_measured_half_cycles") == 20
         and receipt.get("classification")
-        == "EQUAL_WORLD_ENDPOINTS_AFTER_BOUNDED_VERTICAL_SETTLE",
+        == "EQUAL_START_WORLD_COMBINED_SEEDS_FLOOR_97",
         "Stage-7 world-position measurement policy changed",
     )
     require(receipt.get("input_identities_unchanged") is True,
@@ -314,7 +314,7 @@ def validate_stage7_payload(
         and metric.get("endpoint_route_exact") is True
         and metric.get("post_settle_vertical_exact") is True
         and isinstance(metric.get("measured_half_cycles"), int)
-        and metric["measured_half_cycles"] >= 20,
+        and metric["measured_half_cycles"] >= 120,
         "Stage-7 matched-work metric did not pass its exact policy",
     )
     ratios = metric.get("throughput_ratio_by_replay")

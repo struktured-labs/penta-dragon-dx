@@ -5,6 +5,12 @@ def walk(rom: bytes, scene: int):
     a0 = 13*16384+0x7BB2-0x4000
     b0 = 13*16384+0x7C4D-0x4000
     ram[0xDA60:0xDB00] = rom[a0:a0+46]+rom[b0:b0+114]
+    # The installed semantic runtime at DBA4 (bank13 569A/56CA/56FA, 77 bytes).
+    # #27's direct scene resolver lives at DBDF inside it and is CALLed by
+    # the DABB scene read on the release-lock candidate.
+    ram[0xDBA4:0xDBA4+77] = b''.join(
+        rom[13*16384+address-0x4000:13*16384+address-0x4000+length]
+        for address, length in ((0x569A, 36), (0x56CA, 36), (0x56FA, 5)))
     ram[0xD880] = scene
     ram[0xFF70] = 1
     ram[0xFFB7] = 2
@@ -48,6 +54,10 @@ def walk(rom: bytes, scene: int):
                 if op in (0xCD,0xC4):push(pc)
                 pc=target
         elif op==0xC9:pc=pop()
+        elif op==0xC0:
+            if not z:pc=pop()
+        elif op==0xC6:
+            v=read(pc);pc+=1;carry=reg['a']+v>255;reg['a']=(reg['a']+v)&255;z=reg['a']==0
         elif op in (0x3E,0x06):reg['a' if op==0x3E else 'b']=read(pc);pc+=1
         elif op==0xEA:put(word(pc),reg['a']);pc+=2
         elif op==0xFA:reg['a']=read(word(pc));pc+=2

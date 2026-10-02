@@ -32,6 +32,7 @@ from build_v302_title_fix import (  # noqa: E402
 from diagnostics.normalize_mgba_state_pc import (  # noqa: E402
     retarget_rom_identity,
 )
+from diagnostics import release_lock_lineage  # noqa: E402
 
 PROBE = ROOT / "scripts/diagnostics/probe_stage1_tilemap_copy.lua"
 STATE_RETARGETER = (
@@ -97,9 +98,15 @@ COMPILED_TOOTH_BANK_TILES = (*range(0x64, 0x6A), *range(0x74, 0x7A))
 COMPILED_TOOTH_BANK_LUT_SHA256 = (
     "22de0c9f11d8b8f4f050c4e62928e7ea300b1d7483fb9df1d65bb6eec6a0527f"
 )
+# Issue #22 (build_five_point_star_trial): the tooth-bank table above with
+# only the four five-point-star tiles $82/$83/$92/$93 moved from 0 to BG5.
+FIVE_POINT_STAR_LUT_SHA256 = (
+    "66b0876cbe0a4a64885655a60d9fa56ca8479c51514e3d60fe4d9a45be15de82"
+)
 REVIEWED_STAGE1_LUT_SHA256S = frozenset({
     CANONICAL_STAGE1_LUT_SHA256,
     COMPILED_TOOTH_BANK_LUT_SHA256,
+    FIVE_POINT_STAR_LUT_SHA256,
 })
 PUBLICATION_ORACLE_SCHEMA = "penta-stage1-tilemap-publication-oracle-v1"
 RECEIPT_SCHEMA = "penta-stage1-tilemap-publication-receipt-v2"
@@ -211,6 +218,14 @@ def reviewed_postcomputed_copier(rom_bytes: bytes) -> bytes:
     """Return one exact reviewed ordinary compiler/publication layout."""
     copier = rom_bytes[COPIER_START:COPIER_END]
     digest = sha256_bytes(copier)
+    if release_lock_lineage.is_candidate(rom_bytes):
+        # #27 completion-safe rewires only the copier's completion caller
+        # (0x42F5/0x4354, build_arena_completion_safe_trial); the remaining
+        # layout must be the reviewed ancestor copier. Publication is then
+        # verified live below.
+        copier = release_lock_lineage.ancestor_bytes(
+            rom_bytes, COPIER_START, COPIER_END, {"arena-completion-safe"})
+        digest = sha256_bytes(copier)
     if (
         len(copier) != COPIER_END - COPIER_START
         or digest not in REVIEWED_COPIER_SHA256S
@@ -612,9 +627,15 @@ def run_state(
         # attributes through the established $42CF row body. Its two $DBF1
         # calls are the pure and dirty tails respectively; bind completion to
         # the latter, whose FF01 physical-map tag names the actual destination.
+        # #27 completion-safe moves the equivalent completion guard from
+        # DBF1 to DBF3 (DBF1 now holds the direct scene resolver's RET).
+        completion_call = bytes.fromhex(
+            "CD F3 DB" if release_lock_lineage.is_candidate(rom_bytes)
+            else "CD F1 DB"
+        )
         r417_calls = [
             index for index in range(0x42A7, 0x436B)
-            if rom_bytes[index:index + 3] == bytes.fromhex("CD F1 DB")
+            if rom_bytes[index:index + 3] == completion_call
         ]
         if r417_calls != [0x42F5, 0x4354]:
             raise RuntimeError("r417 precomputed completion calls changed")

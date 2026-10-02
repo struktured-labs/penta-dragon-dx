@@ -36,6 +36,13 @@ def expected_parts():
 
 
 def authenticate(rom):
+    import release_lock_lineage
+    if release_lock_lineage.is_candidate(rom):
+        # The release-lock delta leaves every protocol span byte-identical.
+        rom = release_lock_lineage.sara_ancestor(rom, *(
+            (bank*0x4000+address-(0x4000 if bank else 0),
+             bank*0x4000+address-(0x4000 if bank else 0)+len(code))
+            for bank, address, code in expected_parts()))
     from build_sara_atomic_pose import CANDIDATE_SHA as SARA_SHA, authenticated_parent as sara_parent
     if hashlib.sha256(rom).hexdigest() == SARA_SHA:
         rom = sara_parent(rom)

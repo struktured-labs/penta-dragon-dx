@@ -68,7 +68,16 @@ def digest(path: Path) -> str:
 
 def expected_stage1_table(rom: bytes) -> bytes:
     expected = bytearray(EXPECTED_TABLE)
-    if hashlib.sha256(rom).hexdigest() in SEMANTIC_TABLE_VARIANT_SHA256:
+    release_lock = hashlib.sha256(rom).hexdigest() == (
+        "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db"
+    )
+    if release_lock:
+        # Issue #22: the four five-point-star tiles move from 0 to BG5.
+        for tile in (0x82, 0x83, 0x92, 0x93):
+            if expected[tile] != 0:
+                raise AssertionError(f"unexpected star palette at tile {tile:02X}")
+            expected[tile] = 5
+    if release_lock or hashlib.sha256(rom).hexdigest() in SEMANTIC_TABLE_VARIANT_SHA256:
         # Reviewed Stage-1 tooth-art rows intentionally encode BG7+VBK1 as 0x0F.
         for tile in (*range(0x64, 0x6A), *range(0x74, 0x7A)):
             if expected[tile] != 7:
@@ -172,7 +181,7 @@ def main() -> int:
     cram = Path(str(prefix) + ".bg-cram.bin").read_bytes()
     state = state_fields(Path(str(prefix) + ".state.txt"))
     screenshot = Path(str(prefix) + ".png")
-    if len(rom) not in (0x40000, 0x80000) or len(vram0) != 0x2000 \
+    if len(rom) not in (0x40000, 0x80000, 0x100000) or len(vram0) != 0x2000 \
             or len(vram1) != 0x2000 or len(cram) != 64:
         print("FAIL: incomplete ROM/VRAM/CRAM payload")
         return 1

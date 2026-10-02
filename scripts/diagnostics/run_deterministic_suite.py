@@ -522,7 +522,7 @@ def main() -> int:
     parser.add_argument("--restart-source", action="store_true",
                         help="build the exact Game Over/restart fix from original source")
     parser.add_argument("--stream-source", action="store_true",
-                        help="build the exact 126dd stream-regression chain from original source")
+                        help="build the release-lock stream chain (#14/#34 deferred) from original source")
     args = parser.parse_args()
     if args.timeout_scale <= 0:
         parser.error("--timeout-scale must be positive")

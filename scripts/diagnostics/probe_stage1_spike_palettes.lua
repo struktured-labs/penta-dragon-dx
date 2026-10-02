@@ -331,7 +331,14 @@ assert(PENTA_PUBLICATION_PC == PENTA_EXPECTED_PUBLICATION_PC,
 if watchdog then watchdog:write("init:publication-contract\n"); watchdog:flush() end
 local SETTLE = tonumber(os.getenv("STAGE1_SPIKE_SETTLE") or "180")
 local frame = 0
-local state_loaded = os.getenv("PENTA_STATE_PRELOADED") == "1"
+-- mgba-qt applies a `-t` preload before this script's first frame callback,
+-- but a host-dependent number of frames (observed 0-4) can run in between.
+-- Counting from that first callback made the replay timeline start at a
+-- variable game frame, so two replays of one savestate differed by a frame.
+-- Always reload the exact state on the first callback; the frame counter then
+-- starts at a fixed point. The preload and the reload apply the same file,
+-- so ROM-owned state preservation is unchanged.
+local state_loaded = false
 local mismatches = {}
 local cell_trace = {}
 local last_cell = ""
@@ -587,7 +594,8 @@ local function seed_active_map_owner()
   map_owner_trace[#map_owner_trace + 1] = string.format(
     "f%d:b%04X:r%02X:e0:seed", frame, base, INITIAL_MAP_ROOM)
 end
-if state_loaded then seed_active_map_owner() end
+-- The fixture map owner is seeded when the first frame callback (re)loads
+-- the exact state, so it describes the state's own LCDC map selection.
 
 local function arm_physical_map_publication()
   if not state_loaded or (emu:read8(0xD880) & 0xF7) ~= 0x02 then

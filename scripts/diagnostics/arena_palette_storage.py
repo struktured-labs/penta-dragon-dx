@@ -100,6 +100,12 @@ def arena_palette_table(rom: bytes, target: int) -> bytes:
         "eebf3f190d9d307cb1d3fa714fa2e68b7890fc5309d5da26682ce38cce0134fc",
         "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
         "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
+        # Release-lock chain (#14/#34 deferred, docs/audit/release-lock-
+        # 20261001-repin.md): bank23 byte-identical to eebf3f19; selector
+        # 13:6FD5 is the arena-alias fastpath whose game path equals the
+        # original selector. Independent builder equality below still applies.
+        "6ec44fe6b77dd59088c06a07e0631187737e8471365a68806c0d5aa407563b97",
+        "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db",
     } and target in (1, 2, 5)
     bank = 23 if relocated else 13
     offset = bank * 0x4000 + 0x3200 + target * 0x100

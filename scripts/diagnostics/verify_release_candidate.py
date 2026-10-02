@@ -102,6 +102,10 @@ def build_gates(
             "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b",  # title row guard: unchanged gameplay observer/data ABI
             "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d",  # death/restart successor: unchanged hazard ABI
             "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5",  # #6: only the two central OAM emitter images change; hazard ABI inherited
+            # Release lock: hazard-state generator, bank 19 and the low-health
+            # observer ABI are outside its delta (release_lock_lineage); the
+            # verifiers re-check every ABI byte against this exact image.
+            "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db",
             "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
             "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
         }
@@ -447,7 +451,8 @@ def build_gates(
                 "--output",
                 str(artifacts / "gameplay-movement-stress"),
             ),
-            360,
+            # Native capture plus nine equal-start seed captures.
+            1200,
         ),
         Gate(
             "gameplay_bg_palettes",
