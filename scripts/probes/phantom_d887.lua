@@ -8,8 +8,20 @@
 -- actions (move + fire) for the measurement window. Count D887 transitions
 -- only during the gameplay window. Idle title-screen comparison is useless
 -- because the sound engine produces nothing on the title menu.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
-local OUT = os.getenv("STATE_PATH") or "/tmp/penta_d887.txt"
+local OUT = os.getenv("STATE_PATH") or "tmp/penta_d887.txt"
 local MEASURE_FRAMES = tonumber(os.getenv("MEASURE_FRAMES") or "600")
 local MAX_BOOT_FRAMES = tonumber(os.getenv("MAX_BOOT_FRAMES") or "600")
 
@@ -41,6 +53,62 @@ local nonzero_run = 0
 local max_nonzero_run = 0
 local command_values = {}
 local fired = false
+local rst_log = {}
+local dma_unreadable_samples = 0
+
+local function register(name)
+    local readers = {
+        function() return emu:getRegister(name) end,
+        function() return emu:getRegister(string.lower(name)) end,
+        function() return emu:readRegister(name) end,
+        function() return emu:readRegister(string.lower(name)) end,
+    }
+    for _, reader in ipairs(readers) do
+        local ok, value = pcall(reader)
+        if ok and value ~= nil then return value & 0xFFFF end
+    end
+    return 0xFFFF
+end
+
+local function read16(address)
+    return emu:read8(address) | (emu:read8((address + 1) & 0xFFFF) << 8)
+end
+
+-- Issue #16 diagnostic only: frame samples can miss a command that the
+-- timer-driven engine reads and clears between frames. Observe bank-3's
+-- actual nonzero mailbox read and its accept/reject branches. This does not
+-- alter the existing acceptance rule and is not an acoustic-fidelity test.
+local ENGINE_TRACE = os.getenv("PENTA_PHANTOM_ENGINE_TRACE")
+local engine_trace
+if ENGINE_TRACE then
+    engine_trace = assert(io.open(ENGINE_TRACE, "w"))
+    engine_trace:write("event\tframe\tcommand\tactive\tpc\tsvbk\n")
+    local function observe(event, command_register)
+        if gameplay_at < 0 or fired then return end
+        engine_trace:write(string.format("%s\t%d\t%02X\t%02X\t%04X\t%02X\n",
+            event, f, register(command_register) & 0xFF,
+            emu:read8(0xD888), register("PC"), emu:read8(0xFF70)))
+        engine_trace:flush()
+    end
+    -- $45B6 follows LD A,[$D887]; OR A; RET Z.
+    -- $45C2 drops a lower-priority command; $45C7 starts/restarts the effect.
+    emu:setBreakpoint(function() observe("read", "A") end, 0x45B6, 3)
+    emu:setBreakpoint(function() observe("reject", "C") end, 0x45C2, 3)
+    emu:setBreakpoint(function() observe("accept", "C") end, 0x45C7, 3)
+end
+
+-- Attribute every sound command to the real RST $38 caller. This is receipt
+-- telemetry only; it never modifies the emulated machine.
+pcall(function()
+    emu:setBreakpoint(function()
+        if gameplay_at < 0 or #rst_log >= 200 then return end
+        local sp = register("SP")
+        rst_log[#rst_log + 1] = string.format(
+            "rst_f=%d A=%02X caller=%04X bank=%02X scene=%02X sp=%04X",
+            f, register("A") & 0xFF, read16(sp),
+            emu:read8(0xFF99), emu:read8(0xD880), sp)
+    end, 0x0038)
+end)
 
 callbacks:add("frame", function()
     if fired then return end
@@ -77,32 +145,45 @@ callbacks:add("frame", function()
     emu:setKeys(input)
 
     -- Godmode HP so we don't die mid-test
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCBB, 0xFF)
+    native_assistance.write(0xDCBB, 0xFF)
 
+    local sampled_pc = register("PC")
     local d887 = emu:read8(0xD887)
-    if d887 ~= prev_d887 then
-        transitions = transitions + 1
-        if prev_d887 == 0 and d887 ~= 0 then
-            command_pulses = command_pulses + 1
-            command_values[d887] = (command_values[d887] or 0) + 1
-        elseif prev_d887 ~= 0 and d887 == 0 then
-            clear_pulses = clear_pulses + 1
-        elseif prev_d887 ~= 0 and d887 ~= 0 then
-            chained_commands = chained_commands + 1
-            command_values[d887] = (command_values[d887] or 0) + 1
-        end
-        if #trans_log < 200 then
-            table.insert(trans_log, string.format("f=%d  D887: %02X -> %02X", f, prev_d887, d887))
-        end
-        prev_d887 = d887
-    end
-    if d887 ~= 0 then
-        nonzero_run = nonzero_run + 1
-        if nonzero_run > max_nonzero_run then max_nonzero_run = nonzero_run end
+    -- During the stock HRAM OAM-DMA routine ($FF80-$FF9F), CPU-bus reads of
+    -- WRAM correctly return $FF. That is an unreadable host sample, not a
+    -- sound command. Ignore it without changing the last real D887 value;
+    -- every $FF observed outside this exact PC window remains fatal.
+    local dma_unreadable = d887 == 0xFF
+        and sampled_pc >= 0xFF80 and sampled_pc <= 0xFF9F
+    if dma_unreadable then
+        dma_unreadable_samples = dma_unreadable_samples + 1
     else
-        nonzero_run = 0
+        if d887 ~= prev_d887 then
+            transitions = transitions + 1
+            if prev_d887 == 0 and d887 ~= 0 then
+                command_pulses = command_pulses + 1
+                command_values[d887] = (command_values[d887] or 0) + 1
+            elseif prev_d887 ~= 0 and d887 == 0 then
+                clear_pulses = clear_pulses + 1
+            elseif prev_d887 ~= 0 and d887 ~= 0 then
+                chained_commands = chained_commands + 1
+                command_values[d887] = (command_values[d887] or 0) + 1
+            end
+            if #trans_log < 200 then
+                table.insert(trans_log, string.format(
+                    "f=%d pc=%04X D887: %02X -> %02X",
+                    f, sampled_pc, prev_d887, d887))
+            end
+            prev_d887 = d887
+        end
+        if d887 ~= 0 then
+            nonzero_run = nonzero_run + 1
+            if nonzero_run > max_nonzero_run then
+                max_nonzero_run = nonzero_run
+            end
+        else
+            nonzero_run = 0
+        end
     end
 
     if elapsed >= MEASURE_FRAMES then
@@ -118,6 +199,8 @@ callbacks:add("frame", function()
         fh:write(string.format("chained_commands=%d\n", chained_commands))
         fh:write(string.format("unpaired_commands=%d\n", command_pulses - clear_pulses))
         fh:write(string.format("max_nonzero_run=%d\n", max_nonzero_run))
+        fh:write(string.format(
+            "dma_unreadable_samples=%d\n", dma_unreadable_samples))
         local values = {}
         for value, count in pairs(command_values) do
             table.insert(values, {value=value, count=count})
@@ -130,9 +213,19 @@ callbacks:add("frame", function()
         fh:write("command_values=" .. table.concat(value_parts, ",") .. "\n")
         fh:write("\n--- first 200 transitions ---\n")
         for _, l in ipairs(trans_log) do fh:write(l .. "\n") end
+        fh:write("\n--- first 200 RST38 calls ---\n")
+        for _, l in ipairs(rst_log) do fh:write(l .. "\n") end
         fh:close()
+        if engine_trace then engine_trace:close() end
+        local marker = assert(io.open(OUT .. ".done", "w"))
+        marker:write("complete\n")
+        marker:close()
         console:log(string.format("phantom_d887: %d transitions in %d gameplay frames",
             transitions, MEASURE_FRAMES))
-        os.exit(0)
+        -- Ordinary verification is stopped by its owning Python launcher once
+        -- the complete marker exists. os.exit from the CPU thread races Qt's
+        -- GUI destructors. The native AV tap supplies its own synchronous
+        -- finalizer/exit path so native captures can end at this exact frame.
+        if os.getenv("PENTA_NATIVE_AV_PREFIX") then os.exit(0) end
     end
 end)

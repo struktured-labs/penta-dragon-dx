@@ -1,7 +1,21 @@
 -- Reload a generated boss state in a fresh mGBA process and emit a rendered
 -- receipt plus exact production table/CRAM bytes.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BOSS_RECEIPT_OUT"), "BOSS_RECEIPT_OUT required")
+local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
+    "PENTA_STATE_FILE required")
 local STATE_OUT = os.getenv("BOSS_RECEIPT_STATE_OUT")
 local TARGET = tonumber(os.getenv("BOSS_TARGET") or "0")
 local EXPECTED_SCENE = 0x0C + TARGET
@@ -13,6 +27,7 @@ local KEEP_ALIVE = os.getenv("BOSS_RECEIPT_KEEPALIVE") ~= "0"
 local BANKED_RUNTIME = os.getenv("BOSS_RECEIPT_BANKED_RUNTIME") == "1"
 local BREAKPOINT_COUNTS = os.getenv("BOSS_RECEIPT_BREAKPOINTS") ~= "0"
 local frame, raw_frame, done, state_saved = 0, 0, false, false
+local state_loaded = false
 local palette_settled = 0
 local scene_drift_frames = 0
 local max_scene_drift_frames = 0
@@ -48,17 +63,25 @@ end
 -- local scope begins at the declaration, so registering these callbacks above
 -- the helper silently resolved `register` as an unset global when they fired.
 if BREAKPOINT_COUNTS then pcall(function()
-    emu:setBreakpoint(function() copy_entries = copy_entries + 1 end, 0x42A7)
     emu:setBreakpoint(function()
+        if state_loaded then copy_entries = copy_entries + 1 end
+    end, 0x42A7)
+    emu:setBreakpoint(function()
+        if not state_loaded then return end
         if (register("F") & 0x80) ~= 0 then
             decision_zero = decision_zero + 1
         else
             decision_nonzero = decision_nonzero + 1
         end
     end, 0x42B0)
-    emu:setBreakpoint(function() atomic_copies = atomic_copies + 1 end, 0x42B2)
-    emu:setBreakpoint(function() pure_copies = pure_copies + 1 end, 0x4324)
     emu:setBreakpoint(function()
+        if state_loaded then atomic_copies = atomic_copies + 1 end
+    end, 0x42B2)
+    emu:setBreakpoint(function()
+        if state_loaded then pure_copies = pure_copies + 1 end
+    end, 0x4324)
+    emu:setBreakpoint(function()
+        if not state_loaded then return end
         sanitizer_calls = sanitizer_calls + 1
         if #sanitizer_examples < 8 then
             sanitizer_examples[#sanitizer_examples + 1] = string.format(
@@ -70,6 +93,7 @@ end) end
 if TARGET == 8 then
     pcall(function()
         emu:addMemoryCallback(function(address, value)
+            if not state_loaded then return end
             if #penta_9c88_writes < 24 then
                 penta_9c88_writes[#penta_9c88_writes + 1] = string.format(
                     "f%d:b%02X:pc%04X:v%02X:vbk%d", frame,
@@ -80,6 +104,7 @@ if TARGET == 8 then
     end)
     pcall(function()
         emu:addMemoryCallback(function(address, value)
+            if not state_loaded then return end
             if #penta_992f_writes < 48 then
                 penta_992f_writes[#penta_992f_writes + 1] = string.format(
                     "f%d:pc%04X:v%02X:vbk%d", frame,
@@ -261,6 +286,62 @@ local function alternating_tile_count()
     return alternating
 end
 
+local function visible_oam()
+    local rows = {}
+    for sprite = 0, 39 do
+        local base = 0xFE00 + sprite * 4
+        local y, x = emu:read8(base), emu:read8(base + 1)
+        if y > 0 and y < 160 and x > 0 and x < 168 then
+            rows[#rows + 1] = string.format(
+                "%d:%d:%d:%02X:%02X", sprite, x, y,
+                emu:read8(base + 2), emu:read8(base + 3))
+        end
+    end
+    return (#rows > 0) and table.concat(rows, ",") or "none"
+end
+
+-- Issue #15: a disconnected native projectile is not detached boss artwork.
+-- Bind each Penta raster to its own hardware OAM/CHR receipt, not the final
+-- phase's state. Restore VBK and any palette selector after receipt reads.
+local function screenshot_with_sprites(path)
+    emu:screenshot(path)
+    if TARGET ~= 8 then return end
+    local old_vbk = emu:read8(0xFF4F)
+    emu:write8(0xFF4F, 0)
+    local tile0 = hex_range(0x84F0, 16)
+    emu:write8(0xFF4F, 1)
+    local tile1 = hex_range(0x84F0, 16)
+    emu:write8(0xFF4F, old_vbk)
+    local cram = ""
+    if BANKED_RUNTIME then
+        local accessor = emu.memory.cgbObjPalette
+        local raw
+        if accessor then
+            raw = accessor:readRange(0, 64)
+        else
+            local old_index = emu:read8(0xFF6A)
+            local bytes = {}
+            for index = 0, 63 do
+                emu:write8(0xFF6A, index)
+                bytes[#bytes + 1] = string.char(emu:read8(0xFF6B))
+            end
+            emu:write8(0xFF6A, old_index)
+            raw = table.concat(bytes)
+        end
+        cram = raw:gsub(".", function(char)
+            return string.format("%02X", string.byte(char))
+        end)
+    end
+    local handle = assert(io.open(path .. ".sprites.json", "w"))
+    handle:write(string.format(
+        '{"schema":"penta-projectile-phase-v1","frame":%d,' ..
+        '"cgb":%s,"lcdc":%d,"oam":"%s","tile0":"%s",' ..
+        '"tile1":"%s","obj_cram":"%s"}\n',
+        frame, tostring(BANKED_RUNTIME), emu:read8(0xFF40),
+        hex_range(0xFE00, 160), tile0, tile1, cram))
+    handle:close()
+end
+
 local function finish(status, message)
     if done then return end
     done = true
@@ -300,6 +381,7 @@ local function finish(status, message)
         hex_range(0xDB80, 0x24),
         palette_hex()
     ))
+    report:write("visible_oam=" .. visible_oam() .. "\n")
     report:close()
     local marker = assert(io.open(OUT .. ".audit.done", "w"))
     marker:write(status .. "\n")
@@ -310,6 +392,22 @@ trace:write("initialized\n")
 trace:flush()
 callbacks:add("frame", function()
     if done then return end
+    if not state_loaded then
+        local ok, result = pcall(function()
+            return emu:loadStateFile(STATE_FILE)
+        end)
+        trace:write(string.format("state_load ok=%s result=%s\n", tostring(ok), tostring(result)))
+        trace:flush()
+        if not ok or result == false then
+            done = true
+            local marker = assert(io.open(OUT .. ".audit.done", "w"))
+            marker:write("error-state-load\n")
+            marker:close()
+            return
+        end
+        state_loaded = true
+        return
+    end
     raw_frame = raw_frame + 1
     -- DX arena publishers can span a frame with SVBK2/3 selected. In that
     -- interval every Dxxx game-state address below aliases cache/runtime data;
@@ -326,7 +424,7 @@ callbacks:add("frame", function()
     frame = frame + 1
     emu:setKeys(0)
     if KEEP_ALIVE then
-        emu:write8(0xDCBB, 0xF0)
+        native_assistance.write(0xDCBB, 0xF0)
         -- D888/DD06 are native boss animation/publication state, not generic
         -- exit latches. Writing them made the receipt alter the motion it
         -- claimed to audit and can drive a restored arena out of its scene.
@@ -352,8 +450,6 @@ callbacks:add("frame", function()
         emu:write8(0xC5FF, 0x00)
     end
     if KEEP_ALIVE then
-        emu:write8(0xDCDC, 0xFF)
-        emu:write8(0xDCDD, 0xFF)
     end
     if frame <= 4 then
         trace:write(string.format(
@@ -410,7 +506,7 @@ callbacks:add("frame", function()
     if frame == math.floor(RECEIPT_FRAME / 4)
         or frame == math.floor(RECEIPT_FRAME / 2)
         or frame == math.floor(RECEIPT_FRAME * 3 / 4) then
-        emu:screenshot(OUT .. string.format(".f%03d.png", frame))
+        screenshot_with_sprites(OUT .. string.format(".f%03d.png", frame))
     end
     if frame == RECEIPT_FRAME then
         -- Saving on a phase-zero frame is sufficient: the receipt has already
@@ -422,7 +518,7 @@ callbacks:add("frame", function()
             finish("error", "palette-loader-not-settled")
             return
         end
-        emu:screenshot(OUT .. ".png")
+        screenshot_with_sprites(OUT .. ".png")
         if STATE_OUT then
             local save_ok, result = pcall(function()
                 return emu:saveStateFile(STATE_OUT)

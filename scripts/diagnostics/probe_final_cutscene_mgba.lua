@@ -5,9 +5,9 @@
 -- routine. The ROM file is never modified.
 
 local ENTRY = os.getenv("FINAL_SCENE_ENTRY") or "post-final"
-local OUT = os.getenv("FINAL_SCENE_OUT") or "/tmp/penta_final_scene.txt"
+local OUT = os.getenv("FINAL_SCENE_OUT") or "tmp/penta_final_scene.txt"
 local SCREENSHOT = os.getenv("FINAL_SCENE_SCREENSHOT")
-    or "/tmp/penta_final_scene.png"
+    or "tmp/penta_final_scene.png"
 local MAX_FRAMES = tonumber(os.getenv("FINAL_SCENE_MAX_FRAMES") or "5000")
 local STATE_OUT = os.getenv("FINAL_SCENE_STATE_OUT")
 local CAPTURE_STABLE = tonumber(
@@ -23,6 +23,19 @@ local TRACE_LAYOUT = os.getenv("FINAL_SCENE_TRACE_LAYOUT") == "1"
 local TRACE = io.open(OUT .. ".trace", "w")
 local function trace(message)
     if TRACE then TRACE:write(message .. "\n"); TRACE:flush() end
+end
+
+local function register(name)
+    for _, reader in ipairs({
+        function() return emu:readRegister(name) end,
+        function() return emu:readRegister(string.lower(name)) end,
+        function() return emu:getRegister(name) end,
+        function() return emu:getRegister(string.lower(name)) end,
+    }) do
+        local ok, value = pcall(reader)
+        if ok and value ~= nil then return value & 0xFFFF end
+    end
+    return 0xFFFF
 end
 
 local KEY_A = 0x01
@@ -91,6 +104,44 @@ local done = false
 local previous_layout_key = -1
 local layout_stable_frames = 0
 local previous_mismatch_signature = nil
+local layout_probes_installed = false
+
+local function install_layout_probes()
+    if not TRACE_LAYOUT or layout_probes_installed then return end
+    -- Bank 6:$4D18 is the production story row writer's LD [HL+],A.  The
+    -- exact $9950 watch distinguishes a rejected write from a later stock
+    -- overwrite when investigating a lower-panel mismatch.
+    local breakpoint_id = assert(emu:setBreakpoint(function()
+        if emu:read8(0xFF99) == 0x06 then
+            trace(string.format(
+                "story-write-attempt f%d pc=%04X hl=%04X a=%02X c=%02X " ..
+                "d=%02X e=%02X ly=%02X stat=%02X vbk=%02X",
+                frame, register("PC"), register("HL"), register("A") & 0xFF,
+                register("C") & 0xFF, register("D") & 0xFF,
+                register("E") & 0xFF, emu:read8(0xFF44),
+                emu:read8(0xFF41), emu:read8(0xFF4F)
+            ))
+        end
+    end, 0x4D18))
+    assert(breakpoint_id > 0)
+    local watchpoint_id = assert(emu:setWatchpoint(function(info)
+        if emu:read8(0xFF4F) == 0x01 then
+            trace(string.format(
+                "attr-9950-write f%d pc=%04X bank=%02X old=%02X new=%02X " ..
+                "ly=%02X stat=%02X",
+                frame, register("PC"), emu:read8(0xFF99),
+                info.oldValue & 0xFF, info.newValue & 0xFF,
+                emu:read8(0xFF44), emu:read8(0xFF41)
+            ))
+        end
+    end, 0x9950, C.WATCHPOINT_TYPE.WRITE))
+    assert(watchpoint_id > 0)
+    trace(string.format(
+        "installed-layout-probes breakpoint=%s watchpoint=%s",
+        tostring(breakpoint_id), tostring(watchpoint_id)
+    ))
+    layout_probes_installed = true
+end
 
 local function visible_attr_layout()
     local lcdc = emu:read8(0xFF40)
@@ -108,14 +159,14 @@ local function visible_attr_layout()
     ) and art or 0
     local viewport_bit = ((scy | scx) & 0x08) << 1
     local expected_key = (
-        0x80 | committed_art | (lcdc & 0x08) | viewport_bit
+        0x88 | committed_art | (lcdc & 0x08) | viewport_bit
     )
     if (
         committed_art == 0
         or emu:read8(0xDF49) ~= expected_key
-        -- The story publisher writes two ten-cell halves for each of eight
-        -- art rows, so a committed pass finishes at cursor $10.
-        or emu:read8(0xDF4A) < 0x10
+        -- The current story publisher commits one complete twenty-cell row
+        -- per pass, so the eight-row artwork is complete at cursor $08.
+        or emu:read8(0xDF4A) < 0x08
     ) then
         emu:write8(0xFF4F, old_vbk)
         return 0, 0, false
@@ -193,16 +244,13 @@ local function finish(status)
     out:write(string.format("df4a=%02X\n", emu:read8(0xDF4A)))
     out:write("transitions=" .. table.concat(transitions, ",") .. "\n")
     out:close()
-    if STATE_OUT then
-        local marker = assert(io.open(OUT .. ".done", "w"))
-        marker:write(status .. "\n")
-        marker:close()
-        -- Screenshot/state serialization is queued by mGBA's Qt frontend.
-        -- Leave the process alive so the parent can observe stable artifacts
-        -- before terminating it; os.exit here could drop a valid capture.
-        return
-    end
-    os.exit(status == "ok" and 0 or 1)
+    local marker = assert(io.open(OUT .. ".done", "w"))
+    marker:write(status .. "\n")
+    marker:close()
+    -- Screenshot/state serialization is queued by mGBA's Qt frontend. Leave
+    -- the process alive for every verifier mode so the parent can observe a
+    -- complete, size-stable PNG before terminating its exact child PID.
+    return
 end
 
 callbacks:add("frame", function()
@@ -240,6 +288,10 @@ callbacks:add("frame", function()
     end
 
     if scene == expected_scene and not reached then
+        -- Cartridge-memory mutation used by the diagnostic entry clears
+        -- mGBA debugger state, so install optional read-only probes only once
+        -- the injected route has reached its target scene.
+        install_layout_probes()
         -- The diagnostic stub deliberately jumps from prerecorded Stage 1,
         -- whose prelude is disabled, straight into a final-story routine.
         -- Rearm only after the stock routine publishes its target scene so
@@ -274,7 +326,7 @@ callbacks:add("frame", function()
     ) << 1
     local current_layout_key = current_art_committed
         and (
-            0x80 | current_art | (emu:read8(0xFF40) & 0x08)
+            0x88 | current_art | (emu:read8(0xFF40) & 0x08)
             | current_viewport_bit
         ) or -1
     if current_layout_key >= 0 then

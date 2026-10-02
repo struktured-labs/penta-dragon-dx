@@ -117,6 +117,10 @@ from `LD DE, $C4E0` instructions (`11 E0 C4` — the simple census
 treated `E0 C4` as `LDH (FFC4), A` but it's the low+high bytes of a
 16-bit LD DE immediate).
 
+Correction (2026-09-05): bank 1 `$50C5/$50CA` nevertheless contain real
+`LDH ($FFC4),A` stores for Sara's priority flags. The bank-0 false positives
+do not establish that `$FFC4` is free; see `hram_allocation_map.md`.
+
 ## Caveat for the HRAM census
 
 The static census in `hram_allocation_map.md` over-counts any HRAM

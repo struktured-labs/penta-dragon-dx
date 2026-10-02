@@ -3,6 +3,15 @@
 Static-analysis census of `LD (nn),A` / `LD A,(nn)` accesses to WRAM
 across all 16 ROM banks. Companion to `hram_allocation_map.md`.
 
+**Historical census, not a current allocation authority.** The expanded ROM
+now has banked attribute buffers, copying helpers and experimental palette
+backups absent from this table. Sparse literal accesses do not establish free
+RAM: indirect accesses, bulk clears, stack ownership, physical SVBK selection
+and interrupt-time users must also be checked. In particular, do not allocate
+a persistent input latch from the "sparse" DFxx observations below. Current
+experimental menu code claims SVBK7:DF00-DF80; its all-scene ownership remains
+unqualified. Consult exact candidate builders and runtime evidence.
+
 The vanilla game does NOT switch WRAM banks (zero FF70 writes in code),
 so D000-DFFF always refers to bank 1 from the game's perspective. Our
 v3.01 colorization handler is the only thing that briefly maps bank 2.

@@ -15,7 +15,7 @@ It does not launch an emulator or modify a ROM/state.
 
 ```sh
 python3 scripts/diagnostics/analyze_stage1_hazard_layers.py \
-  --output /tmp/penta-stage1-hazard-layers
+  --output tmp/penta-stage1-hazard-layers
 ```
 
 The receipt records:
@@ -141,10 +141,11 @@ changed. The dedicated 1,206-frame box route and natural demo now record zero
 persistent non-pickup mismatches, while the north receipt keeps the patterned
 floor neutral and the true cylinder atomic.
 
-This keeps the 384-byte source window the same size and changes 258 bytes. It
-uses no VRAM-bank switch, WRAM art state, or runtime art rewrite, and keeps
-attribute values in the supported `0..7` range instead of introducing bank
-bit 3 (`$08`).
+This keeps the 384-byte source window the same size and changes 237 bytes. BG7
+index 2 remains gold while its index 3 exactly matches Dungeon shade 2, so the
+environment remap preserves the floor and cast-shadow pixels around each tooth.
+The four-color tradeoff renders tooth outlines in that dark lavender instead
+of black. The design uses no WRAM art state or per-frame runtime art rewrite.
 
 Production now provides that Stage-1-local BG7 row. Audience color tuning is
 owned by `stage1_hazard_palettes.RotatingSpikeTeeth.colors` in
@@ -153,6 +154,29 @@ and cylinder body. The phased loader keeps the title-safe BG7 alias, selects
 the hazard row only when the active `FFD0` stage flag is zero, and restores
 normal YAML BG7 in the bonus and later stages. The live bonus receipt and the
 alternate-YAML build round trip prove both sides of that contract.
+
+## Frozen item-menu containment
+
+Pocket capture `483` exposed a separate double-buffer boundary: the native
+scroller can complete a pending publication after SELECT has exposed the item
+Window. If LCDC bit 3 then selects the same physical tilemap as Window-select
+bit 6, the menu remains correct but its six red/green icon rows also appear in
+the gameplay plane. That same wrong-map exposure explains the apparently red
+or gray hazard endpoints seen around menu entry; it is not a second spike-art
+class.
+
+The expanded menu prelude now enforces opposite BG and Window maps on every
+visible-menu VBlank. `verify_menu_window_order.py` includes a deterministic
+negative control that flips only the BG selector onto the live Window map.
+The approved pre-fix candidate remains aliased for 61 sampled frames; the
+contained build recovers on the next VBlank. `verify_stage1_hazard_menu.py`
+also replays floor and ceiling cylinders twice across eight adjacent menu-open
+phases and rejects floor bleed, gray tooth frames, or nondeterministic output.
+
+The north-route OG comparison remains independent of color: 352 overlapping
+terrain bytes and every matched visible viewport are tile-exact. Therefore
+the black-room wall geometry in the reviewed Stage 1 capture is stock; the
+menu-map alias was the corrupted presentation layer.
 
 ## Bank-1 fallback
 

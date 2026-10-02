@@ -347,3 +347,49 @@ def build_arena_postcopy_dispatcher() -> bytes:
     ))
     assert len(code) == 12
     return bytes(code)
+
+
+# r457c moves the raw-change record's first store out of the contiguous helper
+# so its Troop-only exact-repeat pacing cave can occupy the former tail. mGBA's
+# write watchpoint reports the PC after ``LD [HL],A``, hence $617F rather than
+# the instruction address $617E. Admit that one post-PC only when the complete
+# relocated tail is byte-exact in bank 20.
+TROOP_REPEAT_RAW_TAIL_ADDR = 0x617D
+TROOP_REPEAT_RAW_TAIL = bytes.fromhex("7A 77 16 02 C3 D0 60")
+TROOP_REPEAT_RAW_WRITER_POST_PC = 0x617F
+
+
+def cache_writer_pc_ranges(
+    rom: bytes, *, shalamar_native_exact_class: int | None = None,
+) -> tuple[tuple[int, int], ...]:
+    """Return authenticated half-open PC ranges allowed to write arena cache."""
+
+    helper_end = HELPER_ENTRY + len(build_helper(
+        shalamar_native_exact_class=shalamar_native_exact_class,
+    ))
+    ranges = [(HELPER_ENTRY, helper_end)]
+    tail_offset = (
+        HELPER_BANK * 0x4000 + TROOP_REPEAT_RAW_TAIL_ADDR - 0x4000
+    )
+    if rom[tail_offset:tail_offset + len(TROOP_REPEAT_RAW_TAIL)] \
+            == TROOP_REPEAT_RAW_TAIL:
+        ranges.append((
+            TROOP_REPEAT_RAW_WRITER_POST_PC,
+            TROOP_REPEAT_RAW_WRITER_POST_PC + 1,
+        ))
+    return tuple(ranges)
+
+
+def cache_writer_is_owned(
+    rom: bytes, bank: int, pc: int,
+    *, shalamar_native_exact_class: int | None = None,
+) -> bool:
+    """Classify a cache write against authenticated helper code locations."""
+
+    return bank == HELPER_BANK and any(
+        start <= pc < end
+        for start, end in cache_writer_pc_ranges(
+            rom,
+            shalamar_native_exact_class=shalamar_native_exact_class,
+        )
+    )

@@ -634,13 +634,18 @@ def main() -> int:
     checks["whole_game_speed_official_runner_contract"] = (
         stage_speed_gate.command[
             stage_speed_gate.command.index("--targets") + 1
-        ] == "0,1,2,3,4,5,6"
+        ] == "0,1,2,3,4,5"
         and stage_speed_gate.command[
             stage_speed_gate.command.index("--tolerance") + 1
         ] == "0.02"
-        and stage_speed_gate.command[
-            stage_speed_gate.command.index("--accepted-slowdown-floor") + 1
-        ] == "0.96"
+        # 21f125e intentionally retired the slowdown floor and set the
+        # accepted slow stages to exactly {1,2,3,5}=0.95.
+        and "--accepted-slowdown-floor" not in stage_speed_gate.command
+        and {
+            stage_speed_gate.command[index + 1]
+            for index, argument in enumerate(stage_speed_gate.command[:-1])
+            if argument == "--accepted-slow-stage"
+        } == {"1=0.95", "2=0.95", "3=0.95", "5=0.95"}
         and boss_speed_gate.command[
             boss_speed_gate.command.index("--frames") + 1
         ] == "1800"
@@ -652,7 +657,7 @@ def main() -> int:
         ] == "crystal_dragon=0.95"
         and boss_speed_gate.command[
             boss_speed_gate.command.index(
-                "--phase-mismatch-speedup-ceiling"
+                "--bounded-speedup-ceiling"
             ) + 1
         ] == "1.20"
         and boss_speed_gate.dependencies == ("boss_arenas", "boss_og_states")
@@ -668,6 +673,9 @@ def main() -> int:
         and boss_publication_gate.command[
             boss_publication_gate.command.index("--phase-ratio-ceiling") + 1
         ] == "1.20"
+        and boss_publication_gate.command[
+            boss_publication_gate.command.index("--accepted-fast-boss") + 1
+        ] == "cameo=1.23"
         and "--target-only" in north_integrity_gate.command
         and "--max-frame-lag-ratio" not in north_integrity_gate.command
         and game_start_gate.command[

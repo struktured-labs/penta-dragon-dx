@@ -21,8 +21,11 @@ load failed for OBJ region.
 """
 from __future__ import annotations
 import os, sys, subprocess, tempfile, argparse
+from pathlib import Path
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(ROOT, "scripts", "diagnostics"))
+from normalize_mgba_state_pc import retarget_rom_identity
 MGBA_QT = os.path.join(ROOT, "scripts", "mgba-qt-singleflight")
 DEFAULT_STATE = os.path.join(
     ROOT, "save_states_for_claude", "level1_sara_w_gargoyle_mini_boss.ss0"
@@ -50,6 +53,14 @@ local miniboss_at = -1
 local fired = false
 local boss_attr_checked = 0
 local boss_attr_mismatches = 0
+-- Dxxx game state lives in physical WRAM bank 1, even when a publisher has
+-- selected bank 2/3 at a frame boundary. Do not inspect or corrupt that alias.
+local function game_read(address)
+    return emu.memory.wram:read8(address - 0xC000)
+end
+local function game_write(address, value)
+    emu.memory.wram:write8(address - 0xC000, value)
+end
 
 callbacks:add("frame", function()
     if fired then return end
@@ -65,7 +76,7 @@ callbacks:add("frame", function()
             if f >= s[1] and f <= s[2] then keys = s[3]; break end
         end
         emu:setKeys(keys)
-        local scene = emu:read8(0xD880)
+        local scene = game_read(0xD880)
         if emu:read8(0xFFC1) == 1 and scene >= 0x02 and scene < 0x0C then
             gameplay_at = f
         end
@@ -75,7 +86,8 @@ callbacks:add("frame", function()
     -- During gameplay: walk right + fire + godmode to live long enough
     -- to reach the gargoyle mini-boss section
     emu:setKeys(KEY_RIGHT + (f % 4 == 0 and KEY_A or 0))
-    emu:write8(0xDCDD, 0x17); emu:write8(0xDCDC, 0xFF); emu:write8(0xDCBB, 0xFF)
+    -- #37: DCBB is health; DCDD/DCDC are native inventory/cursor state.
+    game_write(0xDCBB, 0xFF)
 
     -- Force DCB8 to advance into mini-boss section by writing it directly.
     -- DCB8=2 spawns the gargoyle, DCB8=5 spawns the spider.
@@ -86,7 +98,7 @@ callbacks:add("frame", function()
     -- timing changed. Hold the requested section until the boss flag publishes.
     if FORCE_SPAWN and elapsed >= 300 and elapsed < 420
         and emu:read8(0xFFBF) == 0 then
-        emu:write8(0xDCB8, 2)
+        game_write(0xDCB8, 2)
     end
 
     -- Detect mini-boss active: FFBF != 0
@@ -120,8 +132,8 @@ callbacks:add("frame", function()
         fh:write(string.format(
             "FFBF=%d\nD880=0x%02X\nDCB8=%d\nDD09=%d\n"
                 .. "boss_attr_checked=%d\nboss_attr_mismatches=%d\n",
-            emu:read8(0xFFBF), emu:read8(0xD880), emu:read8(0xDCB8),
-            emu:read8(0xDD09), boss_attr_checked, boss_attr_mismatches))
+            emu:read8(0xFFBF), game_read(0xD880), game_read(0xDCB8),
+            game_read(0xDD09), boss_attr_checked, boss_attr_mismatches))
         -- Dump OBJ palette RAM (FF6A index, FF6B data)
         fh:write("# OBJ palette RAM:\n")
         for p = 0, 7 do
@@ -175,8 +187,10 @@ def run_probe(
     force_spawn: bool = True,
     state_path: str | None = None,
 ) -> dict:
-    out = tempfile.NamedTemporaryFile(suffix=".txt", delete=False).name
-    lua = tempfile.NamedTemporaryFile(suffix=".lua", delete=False, mode="w")
+    scratch = Path(ROOT) / "tmp"
+    scratch.mkdir(exist_ok=True)
+    out = tempfile.NamedTemporaryFile(suffix=".txt", delete=False, dir=scratch).name
+    lua = tempfile.NamedTemporaryFile(suffix=".lua", delete=False, mode="w", dir=scratch)
     lua.write(PROBE); lua.close()
     env = os.environ.copy()
     env["STATE_PATH"] = out
@@ -186,6 +200,10 @@ def run_probe(
     env["SDL_AUDIODRIVER"] = "dummy"
     cmd = [MGBA_QT]
     if state_path:
+        if Path(rom_path).read_bytes()[0x143] == 0xC0:
+            identity_state = Path(out).with_suffix(".identity.ss0")
+            retarget_rom_identity(Path(state_path), identity_state, Path(rom_path))
+            state_path = str(identity_state)
         cmd.extend(["-t", state_path])
     cmd.extend([rom_path, "--script", lua.name, "-l", "0"])
     # Natural-spawn mode runs the in-game state machine for thousands of

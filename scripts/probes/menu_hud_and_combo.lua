@@ -1,5 +1,17 @@
 -- Regression probe for the item-menu window attributes and the retired
 -- SELECT+START teleport hotkey. Driven by verify_menu_hud_and_combo.py.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local MODE = os.getenv("PROBE_MODE") or "menu"
 local OUT = os.getenv("PROBE_OUT") or "/tmp/penta_menu_hud_and_combo.txt"
 local SCREENSHOT = os.getenv("PROBE_SCREENSHOT") or "/tmp/penta_menu_hud_and_combo.png"
@@ -58,13 +70,13 @@ callbacks:add("frame", function()
     if MODE == "title" and f == 600 then
         local lcdc = emu:read8(0xFF40)
         local bg_map = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
-        local contaminated = 0
+        local nonzero, unsafe = 0, 0
         emu:write8(0xFF4F, 1)
         for row = 0, 17 do
             for col = 0, 19 do
-                if (emu:read8(bg_map + row * 32 + col) & 7) ~= 0 then
-                    contaminated = contaminated + 1
-                end
+                local attr = emu:read8(bg_map + row * 32 + col)
+                if (attr & 7) ~= 0 then nonzero = nonzero + 1 end
+                if (attr & 0xF8) ~= 0 then unsafe = unsafe + 1 end
             end
         end
         emu:write8(0xFF4F, 0)
@@ -78,16 +90,15 @@ callbacks:add("frame", function()
             d880 = string.format("%02X", emu:read8(0xD880)),
             lcdc = string.format("%02X", lcdc),
             bg_map = string.format("%04X", bg_map),
-            contaminated_cells = contaminated,
+            contaminated_cells = nonzero,
+            unsafe_cells = unsafe,
             palette0 = palette,
         })
     end
     emu:setKeys(keys)
 
     if emu:read8(0xFFC1) == 1 then
-        emu:write8(0xDCDD, 0x17)
-        emu:write8(0xDCDC, 0xFF)
-        emu:write8(0xDCBB, 0xFF)
+        native_assistance.write(0xDCBB, 0xFF)
     end
 
     if f == 990 then

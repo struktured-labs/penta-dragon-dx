@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 
 from PIL import Image
+from normalize_mgba_state_pc import retarget_rom_identity
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,11 +92,20 @@ def main() -> int:
         output = args.output.resolve()
         output.mkdir(parents=True, exist_ok=True)
     else:
-        temporary = tempfile.TemporaryDirectory(prefix="penta-bonus-live-")
+        scratch = ROOT / "tmp"
+        scratch.mkdir(exist_ok=True)
+        temporary = tempfile.TemporaryDirectory(prefix="penta-bonus-live-", dir=scratch)
         output = Path(temporary.name)
     report = output / "bonus-stage.report.txt"
     stdout = output / "bonus-stage.mgba.log"
     shot_prefix = output / "bonus-stage"
+    runtime_state = state
+    if rom.read_bytes()[0x143] == 0xC0:
+        runtime_state = output / "bonus-stage.identity.ss0"
+        # Historical fixture is CGB-compatible ($80); current ROM is CGB-only.
+        # Preserve the entire machine state; authorize only the checked header
+        # transition and ROM CRC, never a synthetic gameplay/palette repair.
+        retarget_rom_identity(state, runtime_state, rom)
     environment = os.environ.copy()
     environment.update({
         "QT_QPA_PLATFORM": "offscreen",
@@ -108,7 +118,7 @@ def main() -> int:
             completed = subprocess.run(
                 [
                     str(args.mgba.resolve()), "--fastforward",
-                    "-t", str(state), "--script", str(PROBE), str(rom),
+                    "-t", str(runtime_state), "--script", str(PROBE), str(rom),
                 ],
                 cwd=ROOT,
                 env=environment,
@@ -176,6 +186,8 @@ def main() -> int:
             "rom_sha256": digest(rom),
             "state": str(state),
             "state_sha256": digest(state),
+            "runtime_state": str(runtime_state),
+            "runtime_state_sha256": digest(runtime_state),
             "checks": checks,
             "observed": observed,
             "expected_obj_cram": expected_cram,

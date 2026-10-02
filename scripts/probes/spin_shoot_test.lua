@@ -1,4 +1,16 @@
 -- Trivial bot: spin in a circle + spam A. Should kill Gargoyle if combat works at all.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local f = 0
 local lastDCBB = 0xFF
 local startDCBB = 0xFF
@@ -37,10 +49,10 @@ callbacks:add("frame", function()
     if not seenSpawn then
         -- Force gargoyle spawn (DCB8=2 entry)
         emu:write8(0xFFBF, 0)
-        emu:write8(0xDCB8, 0)
-        emu:write8(0xDCBA, 0x01)
+        native_assistance.write(0xDCB8, 0)
+        native_assistance.write(0xDCBA, 0x01)
         emu:write8(0xFFD6, 0x1E)
-        emu:write8(0xDCBB, 0xFF)
+        native_assistance.write(0xDCBB, 0xFF)
         for _, a in ipairs({0xDC85,0xDC8D,0xDC95,0xDC9D,0xDCA5}) do
             emu:write8(a, 0x00)
         end
@@ -55,7 +67,7 @@ callbacks:add("frame", function()
     end
 
     -- Force the boss alive each frame (defensive)
-    emu:write8(0xDCBA, 0x01)
+    native_assistance.write(0xDCBA, 0x01)
     emu:write8(0xFFD6, 0x1E)
 
     -- Strategy: spin direction every 30 frames, spam A every other frame

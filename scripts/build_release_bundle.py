@@ -28,6 +28,8 @@ sys.path.insert(0, str(ROOT / "scripts/diagnostics"))
 
 from penta_dragon_dx.patch_builder import apply_ips_patch, build_ips_patch
 from verify_release_candidate import build_gates
+from suite_contract import source_snapshot
+from runtime_tools import emulator_runtime_snapshot, runtime_snapshots_match
 
 
 VERSION = "v3.01"
@@ -65,6 +67,9 @@ REQUIRED_HARDWARE_CHECKPOINTS = {
     "later_stage",
     "boss_arena",
     "death_gameover",
+    "gameover_title_recovery",
+    "gameover_new_game_level_recovery",
+    "stage1_sara_w_ceiling",
 }
 FORBIDDEN_RELEASE_SUFFIXES = {
     ".gb",
@@ -81,7 +86,7 @@ FORBIDDEN_RELEASE_SUFFIXES = {
 SCREENSHOT_SPECS = (
     (
         "01_title_opening.png",
-        "title-cursor/default-opening.first.png",
+        "title-cursor/title-cursor.opening.png",
     ),
     (
         "02_opening_sara.png",
@@ -185,6 +190,22 @@ def validate_emulator_manifest(path: Path, rom: bytes) -> dict:
         fail(f"emulator gates are not all passed: {failed}")
     if manifest.get("selected_gates") != names:
         fail("selected_gates does not exactly match the completed gate order")
+    if tuple(names) != REQUIRED_GATE_ORDER:
+        fail("emulator gate order differs from the authoritative full matrix")
+    snapshot = source_snapshot()
+    if (manifest.get("source_fingerprint") != snapshot[0]
+            or manifest.get("source_input_count") != len(snapshot[1])):
+        fail("emulator manifest source snapshot is not current; rerun the full matrix")
+    if (
+        manifest.get("runtime_tools_intact") is not True
+        or not manifest.get("runtime_tools")
+        or not runtime_snapshots_match(
+            manifest.get("runtime_tools"),
+            manifest.get("runtime_tools_after"),
+            emulator_runtime_snapshot(),
+        )
+    ):
+        fail("emulator manifest runtime identities are not current and intact")
     return manifest
 
 
@@ -250,6 +271,36 @@ def validate_palette_approval(path: Path, rom: bytes, palette_path: Path) -> dic
     for key, value in expected.items():
         if manifest.get(key) != value:
             fail(f"palette approval {key} does not match {value!r}")
+    from r534_source_profile import PROFILE, builder, verify_binding
+    if json.dumps(manifest.get("build_profile"), sort_keys=True) == json.dumps(PROFILE, sort_keys=True):
+        if manifest.get("confirmation") != "AUDIENCE APPROVED":
+            fail("r534 palette approval lacks explicit audience confirmation")
+        if manifest.get("palette_yaml") != str(palette_path.resolve()):
+            fail("r534 palette approval selected YAML path differs")
+        try:
+            verify_binding(manifest.get("source_build"), rom, palette_path)
+        except (ValueError, OSError, TypeError, KeyError) as error:
+            fail(f"r534 palette approval source proof is invalid: {error}")
+        return manifest
+    if digest(rom, "sha256") == builder.CONTRACT["candidate_sha256"]:
+        fail("exact r534 requires its original-source approval profile")
+    from r536_source_profile import (
+        PROFILE as R536_PROFILE,
+        builder as r536_builder,
+        verify_binding as verify_r536_binding,
+    )
+    if json.dumps(manifest.get("build_profile"), sort_keys=True) == json.dumps(R536_PROFILE, sort_keys=True):
+        if manifest.get("confirmation") != "AUDIENCE APPROVED":
+            fail("r536 palette approval lacks explicit audience confirmation")
+        if manifest.get("palette_yaml") != str(palette_path.resolve()):
+            fail("r536 palette approval selected YAML path differs")
+        try:
+            verify_r536_binding(manifest.get("source_build"), rom, palette_path)
+        except (ValueError, OSError, TypeError, KeyError) as error:
+            fail(f"r536 palette approval source proof is invalid: {error}")
+        return manifest
+    if digest(rom, "sha256") == r536_builder.CONTRACT["candidate_sha256"]:
+        fail("exact r536 requires its original-source approval profile")
     expected_profile = {
         "name": "expanded-ted-menu",
         "expanded_ted": True,

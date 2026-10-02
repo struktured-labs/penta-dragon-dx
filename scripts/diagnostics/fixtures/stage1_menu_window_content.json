@@ -1,0 +1,33 @@
+{
+  "schema": "penta-stage1-menu-window-content-v1",
+  "route": "blank SRAM; native Stage 1 room 05; SELECT menu",
+  "tile_rows": [
+    "EF EF EF EF EF EF EF EF EF EF EF EF E0 D5 E1 E3 E4 E5 E6 EF",
+    "FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE",
+    "FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE",
+    "FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE",
+    "F0 F1 F2 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? FD",
+    "C0 C1 C2 C3 C4 D0 D1 D2 D3 D4 F4 F4 F4 F4 F4 F4 F4 F4 F4 FE"
+  ],
+  "raster": {
+    "native_size": [160, 144],
+    "sample_visible_ages": [1, 8, 32, 64, 96, 128, 160],
+    "regions": [
+      [0, 96, 160, 104],
+      [0, 128, 24, 136],
+      [152, 128, 160, 136],
+      [0, 136, 160, 144]
+    ],
+    "expected_rgb_sha256": "33b9a6994263127cb7b53e252600c396b6bddfa639d4f645e69d90001f78441f"
+  },
+  "reviewed_evidence": [
+    {
+      "rom_sha256": "3b9f67ea25e65d40cc383e7af319b35bded7083143f3a1efbf2c69c42b48beb2",
+      "screenshot_sha256": "35d9ae6997e2453fe271e1e43548e48a72153f80bb0ffa462dcf9d555cc136b7"
+    },
+    {
+      "rom_sha256": "4243fa84946bc0325ff46b510103c1e1c4213f0879e40b5aff77d026bf69ea88",
+      "screenshot_sha256": "c1f681d804b27cec5614bb56a5b44595d8fc857ce5bba131721f75582a9570f4"
+    }
+  ]
+}

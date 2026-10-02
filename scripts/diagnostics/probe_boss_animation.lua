@@ -1,7 +1,21 @@
 -- Capture a long, native-animation boss receipt without changing its motion.
 -- The Python owner launches this only through mgba-qt-singleflight.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BOSS_ANIMATION_OUT"), "BOSS_ANIMATION_OUT required")
+local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
+    "PENTA_STATE_FILE required")
 local EXPECTED_SCENE = tonumber(os.getenv("BOSS_ANIMATION_SCENE") or "15")
 local FRAMES = tonumber(os.getenv("BOSS_ANIMATION_FRAMES") or "3600")
 local STEP = tonumber(os.getenv("BOSS_ANIMATION_STEP") or "2")
@@ -10,6 +24,7 @@ local SOURCE_TRACE = os.getenv("BOSS_ANIMATION_SOURCE_TRACE") == "1"
 local STOCK_ROM = os.getenv("BOSS_ANIMATION_STOCK_ROM") == "1"
 local FLUSH_FRAMES = 20
 local frame, captured, finished = 0, 0, false
+local state_loaded = false
 local wrong_scene_frames = 0
 local trace = assert(io.open(OUT .. ".trace", "w"))
 local sources = SOURCE_TRACE and assert(io.open(OUT .. ".sources.bin", "wb")) or nil
@@ -19,6 +34,7 @@ local publications = SOURCE_TRACE
 if SOURCE_TRACE then
     pcall(function()
         emu:setBreakpoint(function()
+            if not state_loaded then return end
             if emu:read8(0xD880) == EXPECTED_SCENE then
                 trace:write(string.format(
                     "publication frame=%d dc0b=%02X\n",
@@ -255,6 +271,14 @@ end
 
 callbacks:add("frame", function()
     if finished then return end
+    if not state_loaded then
+        local ok, result = pcall(function()
+            return emu:loadStateFile(STATE_FILE)
+        end)
+        assert(ok and result ~= false, "failed to load requested boss state")
+        state_loaded = true
+        return
+    end
     frame = frame + 1
     emu:setKeys(0)
 
@@ -269,9 +293,7 @@ callbacks:add("frame", function()
     if game_wram_visible then
         -- Keep both contestants alive so the receipt observes animation
         -- rather than a boss-exit cut. These do not alter pose or timing.
-        emu:write8(0xDCBB, 0xF0)
-        emu:write8(0xDCDC, 0xFF)
-        emu:write8(0xDCDD, 0xFF)
+        native_assistance.write(0xDCBB, 0xF0)
     end
     -- D888/DD06 participate in Ted's native animation/publication state.
     -- Writing them here previously forced the boss out of scene $10 after

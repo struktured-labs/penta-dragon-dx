@@ -1,0 +1,35 @@
+{
+  "schema": "penta-stage1-scene0b-operator-visual-oracle-v1",
+  "mask_encoding": "sha256-lsb0-bitset-over-160x112-playfield",
+  "reviewed_wall_artifact_x_ranges": [[0, 24], [136, 160]],
+  "thresholds": {
+    "wall_chromatic_pixels": 2,
+    "wall_cleared_pixels": 8,
+    "fixture_forbidden_chromatic_pixels": 2,
+    "post_close_persistence_percent": 50
+  },
+  "captures": [
+    {
+      "label": "operator-corrupted-walls",
+      "capture_sha256": "052f2a9e7a80fc9073bf3fd452a0985a007c77afd54078274ad6408ea4010f15",
+      "rgb_sha256": "6f6dbef0bb49b04b79c5d23bd145f6023b02bc474a6275ad8bed9741fd11b603",
+      "wall_mask_pixels": 2588,
+      "wall_mask_sha256": "e0eb724ad0b5b86c2108d424ad2f56214ff9a0c72ace8fca5f5971971f077b1d",
+      "wall_height": 112,
+      "forbidden_chromatic_active": true,
+      "forbidden_chromatic_pixels": 57,
+      "forbidden_chromatic_mask_sha256": "c1470d69852cd208f2c33b438daf821d2e7eba64f27779d4d4a64dd06a99c38d"
+    },
+    {
+      "label": "operator-low-health-menu-loaded",
+      "capture_sha256": "1ea1b02625268a64982bcf272177ce89527a5a99c0baa49e6a1e247a9d2c8b67",
+      "rgb_sha256": "d10c453ed8fbea8f478d548a88cad7dd7b03c9b694de481f6fc1c70b754fde66",
+      "wall_mask_pixels": 6483,
+      "wall_mask_sha256": "c149949d529de0cd57718ba9f638faf1da5367cc9f8cfdb6ab5b74214e5042fb",
+      "wall_height": 96,
+      "forbidden_chromatic_active": false,
+      "forbidden_chromatic_pixels": 20,
+      "forbidden_chromatic_mask_sha256": "5fd30b3dd53be4681e417518791777cbd95e63fb4ab18a00cacc10b0d9a0d897"
+    }
+  ]
+}

@@ -30,7 +30,7 @@ attribute indices over stale or all-white CRAM no longer count as colorized.
 | Title attract/logo/menu | `0x00/01/1B/1C` / `0` | Logo, menu, animated banner | Title-specific paths described below |
 | **Penta Dragon pre-battle bridge** | `0x19`, then splash `0x18`, then arena `0x14` | Sets `FFBA=8`, shows Penta transition/speech, enters final boss | ROM-native multi-region Penta/Sara art above BG0 dialogue; 57 mGBA samples with zero layout mismatches |
 | **Post-final ending** | after bank-2 loop returns: `0x1A→0x16→0x00` / `0` | Lisa/Sara ending, credits, END, epilogue | Exact arts 5/6/7 region masks, then full-screen BG1/BG2/BG3; two 154-panel inventories pass |
-| Death/game-over cinematic | `0x17` / `1` | bank14 illustration, then hardware window | ROM-native neutral BG0 containment on both physical maps; six natural boss routes pass |
+| Death/game-over cinematic | `0x17` / `1` | bank14 illustration, then hardware window | Completed 24×24 source publication, coherent spectral art, stock white fade, and neutral GAME OVER; five natural boss routes pass |
 
 ## 1. OPENING START story prologue (confirmed live)
 
@@ -57,30 +57,29 @@ next page; the next sample must commit it via `DD07+1==DCF0`.
 
 ---
 
-## Death / GAME OVER cinematic (production-contained)
+## Death / GAME OVER cinematic (production-colorized)
 
-The stock death route publishes `D880=0x17`, renders its bank-14 illustration
-on the scrolled `0x9C00` background map, then enables a GAME OVER window backed
-by `0x9800` roughly 35 frames later. It writes tile IDs but does not establish
-fresh CGB attributes. Before containment, both maps therefore inherited the
-last dungeon or boss-arena attributes, producing the reported red lettering
-and scattered colored cells.
+The stock death route publishes `D880=0x17`, renders a boss-dependent viewport,
+then enables a GAME OVER window backed by `0x9800`. DX now republishes the
+completed 24×24 `C1A0` illustration workspace to `$9C00` exactly once before
+entering the scene. The bank-13 death service skips ordinary gameplay color
+work and makes all eight safe BG palette IDs resolve to the same tuneable
+spectral YAML row; the separate GAME OVER phase resolves them to a neutral row.
+No live tilemap repaint is used.
 
-The production wrapper services bank 13:`0x7100` before scene detection and
-skips the ordinary gameplay colorizer for `D880=0x17`. Each VBlank clears
-three rows and 24 columns on **both** physical maps to exact attribute byte
-zero. Seven phases cover row 31 and rows 0–19, including the scrolled
-illustration edge and the complete unscrolled window, without assuming which
-map LCDC currently assigns to BG or window. Exact zero selects BG0 and removes
-stale VRAM-bank, flip, and priority bits as well as the palette index.
+Shalamar exposed a CGB-only cadence edge: its inherited `$9800` view contained
+only the upper body even though the completed source and `$9C00` publication
+contained the head and lower claws. A Shalamar-only, receipt-bounded helper
+selects `$9C00` with `SCY=$15` and `SCX=$05`. Other bosses retain their native
+camera state. The stock white fade and GAME OVER window remain unchanged.
 
-`verify_death_gameover.py` generates exact-ROM checkpoints and follows six
-stock boss routes naturally into death: Shalamar, Cameo, Ted, Troop, Faze, and
-Penta Dragon. It verifies the illustration, the first window-enable frame,
-and settled GAME OVER state with zero displayed non-BG0 or unsafe attributes.
-Riff, Crystal Dragon, and Angela use multi-phase boss-local HP semantics, so
-the generic checkpoint generator does not falsely force their transition;
-they share the same guarded `D880=0x17` runtime service.
+`verify_death_gameover.py` generates exact-ROM checkpoints and follows five
+common stock routes naturally into death: Shalamar, Cameo, Troop, Faze, and
+Penta Dragon. It requires exact 576-cell source publication, safe attributes,
+coherent YAML CRAM through art/fade/GAME OVER, a noncollapsed viewport, and a
+spatial lower-body receipt for Shalamar (chromatic pixels through row 110).
+Riff, Crystal Dragon, Ted, and Angela use multi-phase boss-local HP semantics,
+so the generic checkpoint generator does not synthesize a false common death.
 
 ---
 
@@ -302,6 +301,14 @@ was effectively all white. The fixture and production gates now require the
 exact eight-row YAML CRAM deck as well as nonempty tile/glyph buffers and a
 nonblank chromatic screenshot. These are fatal checks, not advisory metrics.
 
+The original END page leaves two rows of live script workspace visible below
+the copyright line. Although those bytes come from stock control flow, they
+read as corrupted glyphs on a release screen. DX clears exactly those 52
+physical tilemap cells once the END page is committed: row 16 in full and the
+20 visible cells of row 17. The focused verifier now requires the exact END
+glyph rows, the exact copyright row, and zero in every other visible tilemap
+cell. Any missing, displaced, or additional footer tile fails the gate.
+
 ---
 
 ## 4. Does cutscene BG flow through the inline hook / bg_sweep?
@@ -315,7 +322,7 @@ nonblank chromatic screenshot. These are fatal checks, not advisory metrics.
 | Pre-final story (`D880=0x19`) | mixed inline/direct writers + DX position sweep | YES | Exact arts 4/7 region masks over BG0 dialogue |
 | Post-final dialogue (`D880=0x1A`) | mixed inline/direct writers + DX position sweep | YES | Exact arts 5/6/7 region masks over BG0 dialogue |
 | Credits/END/epilogue (`D880=0x16→0x00`, `FFE4=1`) | stock direct tile writer + DX ending sweep | Stock: **NO**; DX: **YES** | Full BG1/BG2/BG3 phase layouts |
-| Death/GAME OVER (`D880=0x17`) | stock bank14/direct window render + DX two-map neutralizer | Stock: **NO**; DX: **YES** | Exact BG0 on both physical maps |
+| Death/GAME OVER (`D880=0x17`) | stock bank14/direct window render + DX two-map colorizer | Stock: **NO**; DX: **YES** | Spectral illustration row, then neutral GAME OVER row, on both physical maps |
 | bg_sweep | bank13:0x6CD0 | YES, but outer handler is **gated by FFC1==1** | Gameplay only |
 
 Both cutscenes run with FFC1=0, so the gameplay `bg_sweep` is disabled. The

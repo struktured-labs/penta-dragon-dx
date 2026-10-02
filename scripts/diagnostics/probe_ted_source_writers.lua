@@ -1,6 +1,18 @@
 -- Identify the native writers responsible for Ted's visible body and for the
 -- off-silhouette staging cells that must remain neutral. This is a focused
 -- reverse-engineering probe; it does not alter game state.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("TED_WRITERS_OUT"), "TED_WRITERS_OUT required")
 local FRAMES = tonumber(os.getenv("TED_WRITERS_FRAMES") or "900")
@@ -142,9 +154,7 @@ end
 callbacks:add("frame", function()
     frame = frame + 1
     emu:setKeys(0)
-    emu:write8(0xDCBB, 0xF0)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    native_assistance.write(0xDCBB, 0xF0)
     emu:write8(0xD888, 0x00)
     emu:write8(0xDD06, 0x00)
     if emu:read8(0xD880) ~= SCENE then

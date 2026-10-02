@@ -13,8 +13,22 @@
 -- Scene holding is copied verbatim in intent from probe_boss_publication_
 -- cadence.lua so OG and DX are pinned identically; these bytes are HP and
 -- arena-exit latches, not the publication clock or pose selector.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BOSS_SPEED_OUT"), "BOSS_SPEED_OUT required")
+local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
+  "PENTA_STATE_FILE required")
 local EXPECTED_SCENE = tonumber(os.getenv("BOSS_SPEED_SCENE") or "12")
 local WARMUP = tonumber(os.getenv("BOSS_SPEED_WARMUP") or "60")
 local FRAMES = tonumber(os.getenv("BOSS_SPEED_FRAMES") or "600")
@@ -37,12 +51,14 @@ local ANCHOR_BANK = tonumber(os.getenv("BOSS_SPEED_ANCHOR_BANK") or "2")
 
 local trace = assert(io.open(OUT .. ".trace", "w"))
 local frame, scene_frames, finished = 0, 0, false
+local measuring, measurement_frames = false, 0
 local scene_drift_frames = 0
 local main_loop_hits = 0
 local raw_anchor_hits = 0
 local last_main_loop_frame, max_main_loop_gap = -1, 0
 local in_scene = false
 local parked_frames = 0
+local state_loaded = false
 
 local function finish(status)
   if finished then return end
@@ -69,8 +85,23 @@ end
 -- counterpart cannot bank extra iterations.
 pcall(function()
   emu:setBreakpoint(function()
-    if finished or not in_scene then return end
+    if finished or not state_loaded or not in_scene then return end
     if frame <= WARMUP then return end
+    -- A restored state can reach a host frame callback one CPU-loop phase
+    -- earlier or later.  Opening the window at a host-frame number therefore
+    -- made otherwise identical replays differ by one anchor hit.  Synchronize
+    -- both replays on the first real arena-loop anchor after warmup, then
+    -- observe a fixed number of complete host frames from that CPU position.
+    if not measuring then
+      measuring = true
+      measurement_frames = 0
+      scene_frames = 0
+      main_loop_hits = 0
+      raw_anchor_hits = 0
+      last_main_loop_frame = -1
+      max_main_loop_gap = 0
+      parked_frames = 0
+    end
     raw_anchor_hits = raw_anchor_hits + 1
     if ANCHOR_BANK >= 0 and emu:read8(0xFF99) ~= ANCHOR_BANK then return end
     main_loop_hits = main_loop_hits + 1
@@ -84,13 +115,24 @@ end)
 
 callbacks:add("frame", function()
   if finished then return end
+  if not state_loaded then
+    local ok, result = pcall(function()
+      return emu:loadStateFile(STATE_FILE)
+    end)
+    if not ok or result == false then
+      finish("state-load-error")
+      return
+    end
+    state_loaded = true
+    return
+  end
   frame = frame + 1
   emu:setKeys(0)
-  -- Termination must never depend on WRAM bank state: check it first so a
-  -- candidate parked in SVBK=2/3 (or the stock ROM's constant $FF) cannot
-  -- hang the run past its frame budget.
-  if frame >= WARMUP + FRAMES then
-    finish(scene_frames > 0 and "ok" or "wrong-scene")
+  -- Fail closed if the expected loop anchor is never reached.  Once the
+  -- synchronized window opens, termination is driven by measurement_frames
+  -- below and never by WRAM bank state.
+  if not measuring and frame >= WARMUP + FRAMES then
+    finish("no-anchor")
     return
   end
   -- D000-DFFF is banked CGB WRAM; wait for the runtime to restore bank 0/1
@@ -106,8 +148,14 @@ callbacks:add("frame", function()
     -- "+22.46% faster" artifact). Keep-alive writes stay skipped -- they
     -- would land in the wrong WRAM bank.
     parked_frames = parked_frames + 1
-    if in_scene and frame > WARMUP then
+    if measuring and in_scene then
       scene_frames = scene_frames + 1
+    end
+    if measuring then
+      measurement_frames = measurement_frames + 1
+      if measurement_frames >= FRAMES then
+        finish(scene_frames > 0 and "ok" or "wrong-scene")
+      end
     end
     return
   end
@@ -115,20 +163,26 @@ callbacks:add("frame", function()
     in_scene = true
     scene_drift_frames = 0
     -- Keep the contestants alive without writing pose, animation, or timing.
-    emu:write8(0xDCBB, 0xF0)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    native_assistance.write(0xDCBB, 0xF0)
+    -- #37: DCDC/DCDD belong to native inventory state, not health.
+    -- Leave them untouched; the remaining arena-hold writes are deliberate.
     emu:write8(0xD888, 0x00)
     emu:write8(0xDD06, 0x00)
-    if frame > WARMUP then scene_frames = scene_frames + 1 end
+    if measuring then scene_frames = scene_frames + 1 end
   else
     in_scene = false
-    if frame > WARMUP then
+    if measuring then
       scene_drift_frames = scene_drift_frames + 1
       if scene_drift_frames > 1 then
         finish(scene_frames > 0 and "scene-exit" or "wrong-scene")
         return
       end
+    end
+  end
+  if measuring then
+    measurement_frames = measurement_frames + 1
+    if measurement_frames >= FRAMES then
+      finish(scene_frames > 0 and "ok" or "wrong-scene")
     end
   end
 end)

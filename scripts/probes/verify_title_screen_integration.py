@@ -45,15 +45,37 @@ def check_pyboy():
         return None
 
 
+def field_colour(pixels: list) -> tuple:
+    """Most common pixel colour = the title screen's background field.
+
+    The stock title is black-on-white, so this returns near-white; a colorised
+    title returns whatever paper colour was published.  Every "is this ink?"
+    test below is expressed relative to this rather than assuming white, so the
+    same geometry assertions hold for both.
+    """
+    counts: dict = {}
+    for p in pixels:
+        key = p[:3]
+        counts[key] = counts.get(key, 0) + 1
+    return max(counts.items(), key=lambda kv: kv[1])[0]
+
+
+def is_ink(p: tuple, field: tuple, threshold: int = 48) -> bool:
+    """True when a pixel differs from the background field enough to be ink."""
+    return (abs(p[0] - field[0]) + abs(p[1] - field[1])
+            + abs(p[2] - field[2])) > threshold
+
+
 def analyze_title_screen(png_path: str, rom_path: str, verbose: bool = False) -> list[str]:
     """Analyze a title screen PNG and return a list of failure messages.
-    
+
     Empty list = all checks passed.
     """
     failures = []
     img = Image.open(png_path).convert("RGBA")
     pixels = list(img.getdata())
     w, h = img.size  # Expected: 160x144
+    field = field_colour(pixels)
 
     if verbose:
         print(f"  Image: {w}x{h}, {len(set(pixels))} distinct pixel colors")
@@ -81,7 +103,7 @@ def analyze_title_screen(png_path: str, rom_path: str, verbose: bool = False) ->
     for y in range(text_row_y, text_row_y + 8):
         for x in range(text_start_x, min(text_end_x, w)):
             p = pixels[y * w + x]
-            if p[0] < 240 or p[1] < 240 or p[2] < 240:
+            if is_ink(p, field):
                 text_pixels += 1
     if text_pixels < 10:
         failures.append(f"c) 'PENTA DRAGON DX' text not found at row 6 "
@@ -97,7 +119,7 @@ def analyze_title_screen(png_path: str, rom_path: str, verbose: bool = False) ->
     for y in range(jam_row_y, jam_row_y + 8):
         for x in range(jam_start_x, min(jam_end_x, w)):
             p = pixels[y * w + x]
-            if p[0] < 240 or p[1] < 240 or p[2] < 240:
+            if is_ink(p, field):
                 jam_pixels += 1
     if jam_pixels < 10:
         failures.append(f"d) '(C)1992 JAPAN ART MEDIA' text not found at row 15 "
@@ -113,7 +135,7 @@ def analyze_title_screen(png_path: str, rom_path: str, verbose: bool = False) ->
     for y in range(strk_row_y, strk_row_y + 8):
         for x in range(strk_start_x, min(strk_end_x, w)):
             p = pixels[y * w + x]
-            if p[0] < 240 or p[1] < 240 or p[2] < 240:
+            if is_ink(p, field):
                 strk_pixels += 1
     if strk_pixels < 5:
         failures.append(f"e) 'STRUKTURED LABS' text not found at row 17 "
@@ -129,7 +151,7 @@ def analyze_title_screen(png_path: str, rom_path: str, verbose: bool = False) ->
         row_cursor_pixels = 0
         for x in range(0, 40):  # left portion of screen
             p = pixels[y * w + x]
-            if p[0] < 240 or p[1] < 240 or p[2] < 240:
+            if is_ink(p, field):
                 row_cursor_pixels += 1
         if row_cursor_pixels >= 3:
             cursor_found = True
@@ -163,7 +185,7 @@ def analyze_title_screen(png_path: str, rom_path: str, verbose: bool = False) ->
             continue
         for x in range(w):
             p = pixels[y * w + x]
-            if p[0] < 240 or p[1] < 240 or p[2] < 240:
+            if is_ink(p, field):
                 garbage_pixels.append((x, y, p))
 
     # Allow a few stray pixels (antialiasing, border artifacts)

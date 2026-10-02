@@ -41,6 +41,7 @@ local SCHEDULE = {
 }
 local f = 0
 local gameplay_at = -1
+local gameplay_stable = 0
 local samples = {}
 local fired = false
 
@@ -110,13 +111,26 @@ callbacks:add("frame", function()
             if f >= s[1] and f <= s[2] then keys = s[3]; break end
         end
         emu:setKeys(keys)
-        if emu:read8(0xFFC1) == 1 then gameplay_at = f end
+        -- FFC1 becomes live before the CGB scene palette deck has finished
+        -- its intentional entry publication. Require a ROM-neutral two
+        -- seconds of stable Stage-1 identity before starting the additional
+        -- one-second settling delay and scroll window. Stock has no DX DF0D
+        -- or DF4C sentinels, so those cannot be used as the shared anchor.
+        if emu:read8(0xFFC1) == 1 and emu:read8(0xD880) == 0x02 then
+            gameplay_stable = gameplay_stable + 1
+        else
+            gameplay_stable = 0
+        end
+        if gameplay_stable >= 120 then
+            gameplay_at = f
+        end
         return
     end
 
     -- Sustained scroll: walk right + godmode
     emu:setKeys(KEY_RIGHT)
-    emu:write8(0xDCDD, 0x17); emu:write8(0xDCDC, 0xFF); emu:write8(0xDCBB, 0xFF)
+    -- #37/#41: physical bank1 health only; DCDD/DCDC are native menu state.
+    emu.memory.wram:write8(0x1CBB, 0xFF)
 
     local elapsed = f - gameplay_at
     -- Capture pal RAM + attr histogram every frame for the measurement window
@@ -213,7 +227,11 @@ end)
 
 
 def run_probe(rom_path: str) -> dict:
-    with tempfile.TemporaryDirectory(prefix="penta-scroll-") as temp:
+    scratch = PROJECT_ROOT / "tmp"
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-scroll-", dir=scratch
+    ) as temp:
         out = Path(temp) / "result.txt"
         lua = Path(temp) / "probe.lua"
         lua.write_text(PROBE)

@@ -12,7 +12,10 @@ local STATE_OUT = assert(
     os.getenv("ENDING_TAIL_STATE_OUT"),
     "ENDING_TAIL_STATE_OUT required"
 )
-local OUT = os.getenv("ENDING_TAIL_OUT") or "/tmp/penta-ending-tail"
+local OUT = assert(
+    os.getenv("ENDING_TAIL_OUT"),
+    "ENDING_TAIL_OUT required (use repository tmp/ or /mnt/data/tmp/)"
+)
 local TARGET_NAME = os.getenv("ENDING_TAIL_TARGET") or "credits"
 local MAX_FRAMES = tonumber(os.getenv("ENDING_TAIL_MAX_FRAMES") or "45000")
 
@@ -23,7 +26,7 @@ local TARGETS = {
     },
     end_page = {
         d880 = 0x16, d889 = 0x01, dce2 = 0x00, fff9 = 0x01,
-        stable = 60, palette = 2,
+        stable = 240, palette = 2,
     },
     epilogue_text = {
         d880 = 0x00, d889 = 0x0C, dce2 = 0x01, fff9 = 0x01,
@@ -281,8 +284,10 @@ callbacks:add("frame", function()
         if phase ~= previous_phase or (raw_committed and f % 10 == 0) then
             local target, wrong = visible_attr_layout()
             trace(string.format(
-                "f=%d phase=%s raw=%s pass=%s target=%d wrong=%d pc=%04X",
-                f, phase, tostring(raw_committed), tostring(pass_complete),
+                "f=%d phase=%s bgp=%02X mirror=%02X raw=%s pass=%s " ..
+                    "target=%d wrong=%d pc=%04X",
+                f, phase, emu:read8(0xFF47), emu:read8(0xDF50),
+                tostring(raw_committed), tostring(pass_complete),
                 target, wrong, emu:readRegister("pc")
             ))
             previous_phase = phase

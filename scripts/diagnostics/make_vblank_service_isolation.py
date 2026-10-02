@@ -16,14 +16,14 @@ from pathlib import Path
 
 BANK = 13
 WRAPPER_ADDR = 0x6F1D
-WRAPPER_SIZE = 114
+WRAPPER_SIZE = 115
 SERVICES = {
     "death": bytes.fromhex("CD 00 71"),
     "title-palette": bytes.fromhex("CD 60 6A"),
     "palette-pending": bytes.fromhex("CD 90 6C"),
     "palette-idle": bytes.fromhex("CC 90 6C"),
     "prelude": bytes.fromhex("C4 80 6E"),
-    "colorizer": bytes.fromhex("D4 00 6E"),
+    "colorizer": bytes.fromhex("CD 00 6E"),
     "glyph-copy": bytes.fromhex("CD A7 6D"),
 }
 

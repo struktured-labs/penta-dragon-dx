@@ -21,8 +21,22 @@
 --
 -- The keep-alive writes (DCBB/DCDC/DCDD/D888/DD06) are identical on both
 -- sides and those bytes are therefore excluded from the phase vector.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("TRAJ_OUT"), "TRAJ_OUT required")
+local STATE_FILE = assert(os.getenv("PENTA_STATE_FILE"),
+  "PENTA_STATE_FILE required")
 local EXPECTED_SCENE = tonumber(os.getenv("TRAJ_SCENE") or "12")
 local WARMUP = tonumber(os.getenv("TRAJ_WARMUP") or "60")
 local FRAMES = tonumber(os.getenv("TRAJ_FRAMES") or "1800")
@@ -45,6 +59,7 @@ local iters = 0
 local raw_anchor_hits = 0
 local in_scene = false
 local parked_frames = 0
+local state_loaded = false
 
 local function finish(status)
   if finished then return end
@@ -69,7 +84,7 @@ end
 -- speed-parity probe).
 pcall(function()
   emu:setBreakpoint(function()
-    if finished or not in_scene then return end
+    if finished or not state_loaded or not in_scene then return end
     if frame <= WARMUP then return end
     raw_anchor_hits = raw_anchor_hits + 1
     if ANCHOR_BANK >= 0 and emu:read8(0xFF99) ~= ANCHOR_BANK then return end
@@ -88,6 +103,17 @@ end)
 
 callbacks:add("frame", function()
   if finished then return end
+  if not state_loaded then
+    local ok, result = pcall(function()
+      return emu:loadStateFile(STATE_FILE)
+    end)
+    if not ok or result == false then
+      finish("state-load-error")
+      return
+    end
+    state_loaded = true
+    return
+  end
   frame = frame + 1
   emu:setKeys(0)
   -- Termination must never depend on WRAM bank state (a candidate parked in
@@ -116,9 +142,7 @@ callbacks:add("frame", function()
     scene_drift_frames = 0
     -- Keep the contestants alive without writing pose, animation, or
     -- timing state (verbatim from the speed-parity probe).
-    emu:write8(0xDCBB, 0xF0)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    native_assistance.write(0xDCBB, 0xF0)
     emu:write8(0xD888, 0x00)
     emu:write8(0xDD06, 0x00)
     if frame > WARMUP then scene_frames = scene_frames + 1 end

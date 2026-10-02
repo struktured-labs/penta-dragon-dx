@@ -9,6 +9,18 @@
 --
 -- Target maps: FFBA pre = (target-1) mod 9 so the ROM's INC lands on target;
 -- target D880 = 0x0C + target.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local TITLE={{180,185,0x80},{193,198,0x01},{241,246,0x01},{291,296,0x01},{341,346,0x08},{391,396,0x01}}
 local OUT="/tmp/alt_fullscan.log"
@@ -75,13 +87,13 @@ callbacks:add("frame",function()
   emu:write8(0xFFBA,pre);emu:write8(0xDF0C,0);emu:write8(0xDF1D,0);log("pre="..pre.." try="..at);sub="pr";pf=0
  elseif sub=="pr" then emu:setKeys(0x0C);pf=pf+1;if pf>=10 then emu:setKeys(0);sub="rl";pf=0 end
  elseif sub=="rl" then emu:setKeys(0);pf=pf+1;if pf>=10 then sub="w";pf=0 end
- elseif sub=="w" then pf=pf+1;emu:write8(0xDCDC,0xFF);emu:write8(0xDCDD,0xFF)
+ elseif sub=="w" then pf=pf+1
   if emu:read8(0xD880)==TGT_D880 then log("arena reached");sub="s";pf=0
   elseif pf>400 then at=at+1; if at>=MAXTRY then log("giveup");emit();ph="done" else sub="pre" end end
- elseif sub=="s" then pf=pf+1;emu:write8(0xDCDC,0xFF);emu:write8(0xDCDD,0xFF)
+ elseif sub=="s" then pf=pf+1
   if not isar(emu:read8(0xD880)) then at=at+1; if at>=MAXTRY then emit();ph="done" else sub="pre";pf=0 end
   elseif pf>=SETTLE then sub="c";pf=0 end
- elseif sub=="c" then emu:write8(0xDCDC,0xFF);emu:write8(0xDCDD,0xFF)
+ elseif sub=="c" then 
   if isar(emu:read8(0xD880)) then scan(); if frames>=COLLECT then emit();ph="done" end
   else if frames>30 then emit() end; ph="done" end
  end

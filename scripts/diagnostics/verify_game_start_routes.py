@@ -36,6 +36,8 @@ MGBA_LOCK = Path(
         str(ROOT / "tmp/penta-dragon-dx.mgba-singleflight.lock"),
     )
 )
+ROUTE_MARKER = ".penta-game-start-route-owned"
+ROUTE_SCHEMA = "penta-game-start-route-v1"
 
 
 @dataclass(frozen=True)
@@ -130,7 +132,15 @@ def run_route(
     probe_max_frames: int,
 ) -> tuple[bool, dict]:
     runtime = output / route.name
+    if runtime.exists():
+        marker = runtime / ROUTE_MARKER
+        if not marker.is_file() or marker.read_text().strip() != ROUTE_SCHEMA:
+            raise RuntimeError(
+                f"refusing to replace unowned route directory: {runtime}"
+            )
+        shutil.rmtree(runtime)
     runtime.mkdir(parents=True)
+    (runtime / ROUTE_MARKER).write_text(ROUTE_SCHEMA + "\n")
     runtime_rom = runtime / "candidate.gb"
     shutil.copy2(rom, runtime_rom)
     if route.save_mode == "saved":

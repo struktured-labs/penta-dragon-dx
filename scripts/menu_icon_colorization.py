@@ -16,6 +16,23 @@ MENU_FIXED_INTERACTIVE = 0x1D78
 MENU_PRELUDE_BANK = 13
 MENU_PRELUDE_ADDR = 0x6E80
 
+# These IDs are deliberately neutral in the gameplay LUT because the dungeon
+# reuses them as structural/font art.  The item-menu helper owns a private LUT,
+# so it can safely restore their actual menu semantics without bleeding color
+# into Stage 1. Palette numbers reuse the established YAML ramps: BG1 health,
+# BG4 cyan/teal steel, and BG5 gold/attack.
+MENU_SEMANTIC_FAMILIES = {
+    "protect_accent": ((0x86, 0x87), 5),
+    "protect_star": ((0x82, 0x83, 0x92, 0x93), 5),
+    "protect_lock": ((0x80, 0x81, 0x90, 0x91), 4),
+    "hp_fill": ((0xFC,), 1),
+}
+MENU_LUT_OVERRIDES = {
+    tile: palette
+    for tiles, palette in MENU_SEMANTIC_FAMILIES.values()
+    for tile in tiles
+}
+
 MENU_SETUP = bytes.fromhex("F3 3E 07 E0 4B 3E 60 E0 4A")
 MENU_PALETTE_SERVICE = bytes.fromhex(
     "3E C4 E0 48 3E 00 E0 49 3E E4 E0 47"
@@ -80,6 +97,19 @@ def build_menu_helper() -> tuple[bytes, int]:
 
     a.label("common")
     a.db(0xCD, 0x0E, 0x20)                  # exact stock six-row tile copy
+
+    # The stock copier has now chosen and filled its Window map. Before the
+    # attribute pass or outer publication can expose it, put gameplay BG on
+    # the opposite physical map. Doing this before $200E changed the native
+    # copier's entry timing/selector contract and stalled SELECT.
+    a.db(0xF0, 0x40, 0xCB, 0x77)            # A=LCDC; BIT 6,A
+    a.jr(0x28, "menu_window_9800")
+    a.db(0xCB, 0x9F)                        # Window=$9C00 -> BG=$9800
+    a.jr(0x18, "menu_map_ready")
+    a.label("menu_window_9800")
+    a.db(0xCB, 0xDF)                        # Window=$9800 -> BG=$9C00
+    a.label("menu_map_ready")
+    a.db(0xE0, 0x40)
     a.db(0xF3, 0xF0, 0x4F, 0xF5)            # DI; preserve incoming VBK
     a.db(0x3E, 0x01, 0xE0, 0x4F)            # VBK1 attribute plane
 
@@ -135,21 +165,43 @@ def build_menu_helper() -> tuple[bytes, int]:
 
 
 def _menu_owned_prelude(prelude: bytes) -> bytes:
-    """Retire only the now-redundant live-Window scrub path in-place."""
+    """Install the proven Window-authoritative double-buffer ownership.
+
+    The helper above applies the same rule during the between-VBlank item
+    redraw that produced the hardware-only alias.
+    """
     code = bytearray(prelude)
     stale = code.find(bytes.fromhex("CD 40 6A 28"))
     finish_marker = code.find(bytes.fromhex("F1 E0 4F 23 2B C3"))
     if stale < 0 or finish_marker < 0:
         raise AssertionError("menu Window maintenance layout moved")
-    body_start = stale + 5                     # after JR Z,window_off
-    finish = finish_marker + 3                 # receipt-locked INC/DEC/JP
-    displacement = finish - (body_start + 2)
-    if not -128 <= displacement <= 127:
-        raise AssertionError(displacement)
-    code[body_start:finish] = bytes([
-        0x18, displacement & 0xFF,
-    ]) + bytes(finish - body_start - 2)
+    body_start = stale + 5
+    finish = finish_marker + 3
+    ownership = bytes.fromhex(
+        "F0 40 CB 77 28 04 CB 9F 18 02 CB DF E0 40"
+    )
+    if len(ownership) > finish - body_start:
+        raise AssertionError("menu map containment no longer fits prelude")
+    code[body_start:finish] = ownership + bytes(
+        finish - body_start - len(ownership)
+    )
     return bytes(code)
+
+
+def build_menu_lut(canonical_lut: bytes) -> bytes:
+    """Overlay menu-only HUD semantics on the canonical gameplay LUT."""
+    if len(canonical_lut) != 0x100:
+        raise ValueError("invalid canonical menu LUT size")
+    menu_lut = bytearray(canonical_lut)
+    for tile, palette in MENU_LUT_OVERRIDES.items():
+        # #22 assigns the four five-point-star tiles BG5 in gameplay too, the
+        # same palette the menu icon already uses; any other value conflicts.
+        if canonical_lut[tile] not in (0, palette):
+            raise AssertionError(
+                f"menu-only tile ${tile:02X} is no longer neutral in gameplay"
+            )
+        menu_lut[tile] = palette
+    return bytes(menu_lut)
 
 
 def expected_bank20(canonical_lut: bytes, arena_bank: bytes) -> bytes:
@@ -165,7 +217,7 @@ def expected_bank20(canonical_lut: bytes, arena_bank: bytes) -> bytes:
     if bank[lut_off:lut_off + len(canonical_lut)] != bytes([0xFF]) * 0x100:
         raise AssertionError("bank-20 menu LUT range is not free")
     bank[helper_off:helper_off + len(helper)] = helper
-    bank[lut_off:lut_off + 0x100] = canonical_lut
+    bank[lut_off:lut_off + 0x100] = build_menu_lut(canonical_lut)
     return bytes(bank)
 
 
@@ -229,5 +281,6 @@ def install_menu_icon_colorization(rom: bytearray, prelude: bytes) -> dict[str, 
         "interactive_entry": MENU_INTERACTIVE_ENTRY,
         "helper_size": helper_size,
         "lut_size": len(canonical_lut),
+        "menu_lut_overrides": len(MENU_LUT_OVERRIDES),
         "prelude_changed_bytes": sum(a != b for a, b in zip(prelude, menu_prelude)),
     }

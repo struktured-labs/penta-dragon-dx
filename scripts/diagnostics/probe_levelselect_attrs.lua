@@ -2,6 +2,18 @@
 --
 -- The title defaults to OPENING START, so this deliberately presses DOWN
 -- before A. DCFD=1 forces the continue path through the WRAM attr-clear stub.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local OUT = os.getenv("OUT") or "/tmp/penta-levelselect-attrs"
 local f = 0
 local done = false
@@ -53,7 +65,7 @@ callbacks:add("frame", function()
   f = f + 1
 
   -- A save makes GAME START branch to bank1:7393.
-  emu:write8(0xDCFD, 0x01)
+  native_assistance.write(0xDCFD, 0x01)
   emu:setKeys(
     press(180, 186, 0x80) | -- DOWN: OPENING START -> GAME START
     press(210, 216, 0x01)   -- A

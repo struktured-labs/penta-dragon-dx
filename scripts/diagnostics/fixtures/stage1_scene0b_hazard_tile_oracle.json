@@ -1,0 +1,317 @@
+{
+  "schema": "penta-stage1-scene0b-hazard-tile-oracle-v1",
+  "purpose": "Exact tile-layout legality for four independently animated native 4x12 hazard components in the operator low-health Scene-$0B world; this fixture is independent of the ROM under test and of live candidate output.",
+  "derivation": {
+    "native_animation_definitions": {
+      "path": "rom/Penta Dragon (J).gb",
+      "file_sha256": "2f32570cff62b8664bfa06b939988c3fd6a7efabf870a990a5fa65bab37eac30",
+      "window_offset": 107008,
+      "window_size": 256,
+      "window_sha256": "34b53317e64934fbbbf4c2541fdf5805b6c4ab27c1046740b838cb9460dbab8e"
+    },
+    "native_stage1_tables": {
+      "path": "save_states_for_claude/rc11_low-health-degradation.ss0",
+      "state_sha256": "1ea1b02625268a64982bcf272177ce89527a5a99c0baa49e6a1e247a9d2c8b67",
+      "savedata_sha256": "569db09d694464705b123ae3ff2f566fbdf3f8d99d8c5e525e095a41c9498a2b",
+      "stage1_tables_size": 2048,
+      "stage1_tables_sha256": "3cc4b1116116537e5c12d9dc9feb02281c053a94fc59ad129f83745723a4f80a",
+      "tile_table_size": 1024,
+      "tile_table_sha256": "c277296aff34e23eb86fa820adb1ee3afab20254c0e6dce192c7c980d0c6c855"
+    },
+    "captured_world_window": {
+      "camera_x": 3,
+      "camera_y": 10,
+      "width": 6,
+      "height": 6,
+      "sha256": "93ef30180c9c0deb363e69ed805bab40f7f3f436f9185d7896b2f1a172ee4dfd",
+      "rows": [
+        "999A9B230E0F",
+        "8C8D8E870E26",
+        "818283230E0E",
+        "898A8B230E0E",
+        "0AFF1D400E0E",
+        "12FF10480E1E"
+      ]
+    }
+  },
+  "immutable_source": {
+    "label": "operator-low-health-menu-loaded independent world/SRAM expansion",
+    "width": 24,
+    "height": 24,
+    "world_width": 22,
+    "world_height": 20,
+    "sha256": "071a7e6fc168809e476a8996113956779d5d06bde774183bc4032b772359d42a",
+    "rows": [
+      "7C7E7E7D7C7E7E7D7C720304242516FEFEFEFEFEFEFE0000",
+      "046976790469767904630403303516FEFEFEFEFEFEFE0000",
+      "030403040304030403730304242516FEFEFEFEFEFEFE0000",
+      "020102010201020102010403303516FEFEFEFEFEFEFE0000",
+      "010201677402646774023F4E242516FEFEFEFEFEFEFE0000",
+      "02016B6E6D6C6E6E6D6C6E6E6E6F16FEFEFEFEFEFEFE0000",
+      "01027B7E7E7C7D7E7E7C7D7E7E7F16FEFEFEFEFEFEFE0000",
+      "02016A777803787778037877303516FEFEFEFEFEFEFE0000",
+      "01027A040304030403040304242516FEFEFEFEFEFEFE0000",
+      "020102010201020102010403303516FEFEFEFEFEFEFE0000",
+      "640274676402746764020304242516FEFEFEFEFEFEFE0000",
+      "616C6D61616C6D616E620403303516FEFEFEFEFEFEFE0000",
+      "7D7C71717D7C71717D720304242516FEFEFEFEFEFEFE0000",
+      "780368777803687778630403303516FEFEFEFEFEFEFE0000",
+      "030403040304030403730304242516FEFEFEFEFEFEFE0000",
+      "020102010201020102010403303516FEFEFEFEFEFEFE0000",
+      "010201020102010201020304242516FEFEFEFEFEFEFE0000",
+      "020102010201020102010403303516FEFEFEFEFEFEFE0000",
+      "222301020102010201052021282516FEFEFEFEFEFEFE0000",
+      "323302010201020105033031343816FEFEFEFEFEFEFE0000",
+      "000000000000000000000000000000000000000000000000",
+      "000000000000000000000000000000000000000000000000",
+      "000000000000000000000000000000000000000000000000",
+      "000000000000000000000000000000000000000000000000"
+    ]
+  },
+  "coverage": {
+    "legacy_hazard_positions": 45,
+    "legacy_broad_envelope_cells": 156,
+    "exact_object_cells": 192,
+    "exact_object_cells_outside_legacy_envelope": 48,
+    "immutable_guard_cells": 12,
+    "audited_union_cells": 204
+  },
+  "objects": [
+    {
+      "name": "north_standard",
+      "family": "standard_cylinder",
+      "row": 0,
+      "column": 0,
+      "captured_world_ids": ["99", "9A", "9B"],
+      "captured_phase": "P3"
+    },
+    {
+      "name": "connector_thrust",
+      "family": "connector_thrust",
+      "row": 4,
+      "column": 0,
+      "captured_world_ids": ["8C", "8D", "8E"],
+      "captured_phase": "P2"
+    },
+    {
+      "name": "upper_cylinder",
+      "family": "upper_cylinder",
+      "row": 8,
+      "column": 0,
+      "captured_world_ids": ["81", "82", "83"],
+      "captured_phase": "P2"
+    },
+    {
+      "name": "south_standard",
+      "family": "standard_cylinder",
+      "row": 12,
+      "column": 0,
+      "captured_world_ids": ["89", "8A", "8B"],
+      "captured_phase": "P2"
+    }
+  ],
+  "families": {
+    "standard_cylinder": {
+      "width": 12,
+      "height": 4,
+      "authority": "Native stock-ROM P0-P3 world-ID definitions expanded through the hash-pinned operator Stage-1 SRAM tile table; IDs 99-9B and 89-8B share these exact templates.",
+      "phases": [
+        {
+          "id": "P0",
+          "sha256": "35722560336cdbe67126f0c6e0f80e1feb04153b590ed9ab7f24fdee8cc16ecb",
+          "definition_offsets": ["1A224", "1A228", "1A22C"],
+          "metatile_definitions": ["5A5C0B0B", "5A5C0B0B", "65020C02"],
+          "rows": [
+            "71717D7C71717D7C71720304",
+            "687778036877780368630403",
+            "030403040304030403730304",
+            "020102010201020102010403"
+          ]
+        },
+        {
+          "id": "P1",
+          "sha256": "b2da61097a99e4b24e90a4340b2182fc9e1769253f150c5d3b5f6878f5796eff",
+          "definition_offsets": ["1A264", "1A268", "1A26C"],
+          "metatile_definitions": ["5B5D0B0B", "5B5D0B0B", "64020C02"],
+          "rows": [
+            "7E7D7C7E7E7D7C7E7E720304",
+            "767904697679046976630403",
+            "030403040304030403730304",
+            "020102010201020102010403"
+          ]
+        },
+        {
+          "id": "P2",
+          "sha256": "d8e87d19b921dd28fd070df1af7eb83cf35e08499d51369332cc4bb958e2e6c8",
+          "definition_offsets": ["1A2A4", "1A2A8", "1A2AC"],
+          "metatile_definitions": ["5C5A0B0B", "5C5A0B0B", "63020C02"],
+          "rows": [
+            "7D7C71717D7C71717D720304",
+            "780368777803687778630403",
+            "030403040304030403730304",
+            "020102010201020102010403"
+          ]
+        },
+        {
+          "id": "P3",
+          "sha256": "003e0a6b8056b9a794b8493d77a35f4569a311e6fd0c96e9c5cc7daa14c93288",
+          "definition_offsets": ["1A2E4", "1A2E8", "1A2EC"],
+          "metatile_definitions": ["5D5B0B0B", "5D5B0B0B", "62020C02"],
+          "rows": [
+            "7C7E7E7D7C7E7E7D7C720304",
+            "046976790469767904630403",
+            "030403040304030403730304",
+            "020102010201020102010403"
+          ]
+        }
+      ]
+    },
+    "connector_thrust": {
+      "width": 12,
+      "height": 4,
+      "authority": "Native stock-ROM P0-P3 world-ID definitions expanded through the hash-pinned operator Stage-1 SRAM tile table; the nonmonotonic offsets are the native 8C-8E phase order.",
+      "phases": [
+        {
+          "id": "P0",
+          "sha256": "e3fa6a2b4d4fe4e2d007441a56e7643848d11fe388294abc78c66625e3515290",
+          "definition_offsets": ["1A230", "1A234", "1A238"],
+          "metatile_definitions": ["01410161", "45435553", "45475557"],
+          "rows": [
+            "010201026467740264675F04",
+            "02016B6C6E6E6D6C6E6E6D6C",
+            "01027B7C7D7E7E7C7D7E7E7C",
+            "02016A037877780378776803"
+          ]
+        },
+        {
+          "id": "P1",
+          "sha256": "25ebd54ba92765d490bdcedbbb561f7f1b72f6a3bd0cea6c218f9d3724862a50",
+          "definition_offsets": ["1A210", "1A214", "1A218"],
+          "metatile_definitions": ["0140015E", "44425452", "44465456"],
+          "rows": [
+            "010201750165667501654F5E",
+            "02016B6D6C6E6E6D6C6E6E6D",
+            "01027B7E7C7D7E7E7C7D7E7E",
+            "02016A690479766904797669"
+          ]
+        },
+        {
+          "id": "P2",
+          "sha256": "2f0760749e34387cea577776901d80968b98c5b789a41f2c2871961e1908922d",
+          "definition_offsets": ["1A270", "1A274", "1A278"],
+          "metatile_definitions": ["013F015F", "43455355", "43495359"],
+          "rows": [
+            "010201677402646774023F4E",
+            "02016B6E6D6C6E6E6D6C6E6E",
+            "01027B7E7E7C7D7E7E7C7D7E",
+            "02016A777803787778037877"
+          ]
+        },
+        {
+          "id": "P3",
+          "sha256": "d933a18b4212b015ac170a2b1286058d9bce13a239d50d8fdf68e1bd901e4679",
+          "definition_offsets": ["1A250", "1A254", "1A258"],
+          "metatile_definitions": ["013E0160", "42445254", "42485258"],
+          "rows": [
+            "01020165667501656675033E",
+            "02016B6E6E6D6C6E6E6D6C6E",
+            "01027B7D7E7E7C7D7E7E7C7D",
+            "02016A797669047976690479"
+          ]
+        }
+      ]
+    },
+    "upper_cylinder": {
+      "width": 12,
+      "height": 4,
+      "authority": "Native stock-ROM P0-P3 world-ID definitions for IDs 81-83 expanded through the hash-pinned operator Stage-1 SRAM tile table.",
+      "phases": [
+        {
+          "id": "P0",
+          "sha256": "2fa5c6f2dcfbb15f84f7e80e331faea27ee7e37aa50a647a87d4f11be132d05c",
+          "definition_offsets": ["1A204", "1A208", "1A20C"],
+          "metatile_definitions": ["010A4A4C", "0B0B4A4C", "0B024F02"],
+          "rows": [
+            "01027A040304030403040304",
+            "020102010201020102010403",
+            "746764027467640274020304",
+            "6D61616C6D61616C6D620403"
+          ]
+        },
+        {
+          "id": "P1",
+          "sha256": "e79a0334d1438b12ec3bd36653fa66481152494a1d8b12ddaa5d646719c2c475",
+          "definition_offsets": ["1A244", "1A248", "1A24C"],
+          "metatile_definitions": ["010A4B4D", "0B0B4B4D", "0B025002"],
+          "rows": [
+            "01027A040304030403040304",
+            "020102010201020102010403",
+            "666501756665017566020304",
+            "6E6E6C6D6E6E6C6D6E620403"
+          ]
+        },
+        {
+          "id": "P2",
+          "sha256": "b9934317759eb17c4299d0dff893e5b3794be154c4e307e68c7db240892f77a6",
+          "definition_offsets": ["1A284", "1A288", "1A28C"],
+          "metatile_definitions": ["010A4C4A", "0B0B4C4A", "0B025102"],
+          "rows": [
+            "01027A040304030403040304",
+            "020102010201020102010403",
+            "640274676402746764020304",
+            "616C6D61616C6D616E620403"
+          ]
+        },
+        {
+          "id": "P3",
+          "sha256": "2bdb758a442349914a540d3b0616f3fdae5e16a7ff466a24d38e77fd44999fa6",
+          "definition_offsets": ["1A2C4", "1A2C8", "1A2CC"],
+          "metatile_definitions": ["010A4D4B", "0B0B4D4B", "0B024E02"],
+          "rows": [
+            "01027A040304030403040304",
+            "020102010201020102010403",
+            "017566650175666501020304",
+            "6C6D6E6E6C6D6E6E6C620403"
+          ]
+        }
+      ]
+    }
+  },
+  "provenance": [
+    {
+      "role": "immutable_scene0b_world_and_stage1_tables",
+      "path": "save_states_for_claude/rc11_low-health-degradation.ss0",
+      "sha256": "1ea1b02625268a64982bcf272177ce89527a5a99c0baa49e6a1e247a9d2c8b67"
+    },
+    {
+      "role": "native_animation_definition_rom",
+      "path": "rom/Penta Dragon (J).gb",
+      "sha256": "2f32570cff62b8664bfa06b939988c3fd6a7efabf870a990a5fa65bab37eac30"
+    },
+    {
+      "role": "authenticated_four_standard_phases",
+      "path": "tmp/audit-260-fixes-r10/full-suite-r2/matrix/artifacts/stage1-spike-miniboss-transition/stage1-spike-ceiling/stage1-spike-ceiling.txt",
+      "sha256": "b378cdb73a41ab01b337698d145b4ecadc632cf90de63d5e9ba71ce137d6f339"
+    },
+    {
+      "role": "authenticated_matrix_manifest",
+      "path": "tmp/audit-260-fixes-r10/full-suite-r2/matrix/manifest.json",
+      "sha256": "bb5f65db5002a2fe7bc477f285ff47d25ba96a4947b3683457cdd7c2d349a7a3"
+    },
+    {
+      "role": "native_connector_retracted",
+      "path": "save_states_for_claude/level1_sara_w_thrusting_spike_hazard.ss0",
+      "sha256": "8c6cbdaed17cbed154171447e08eb770b0fc95fcad459a4b1bec7fd28f246b0a"
+    },
+    {
+      "role": "native_connector_tip_3E",
+      "path": "save_states_for_claude/v2.26_level1_sara_w_gargoyle_mini_boss.ss0",
+      "sha256": "eb56cad61d22461c39646cf8a08dc8fa521db45b6e7f52cdc6eeec5e8d8fa35d"
+    },
+    {
+      "role": "native_connector_tip_5F_and_state_binding",
+      "path": "tmp/stage1-hazard-shift8-r100/cold-hazard-state/receipt.json",
+      "sha256": "2940c2f166d03c3616c0c159e949a6aede287854ddffd1ee6e857abb66c3af3f"
+    }
+  ]
+}

@@ -11,6 +11,7 @@ valid cross-build comparison into synthetic corruption.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -62,11 +63,15 @@ def capture(
         Path(f"{prefix}{suffix}").unlink(missing_ok=True)
     for fraction in (frames // 4, frames // 2, frames * 3 // 4):
         Path(f"{prefix}.f{fraction:03d}.png").unlink(missing_ok=True)
+    for phase in (frames // 4, frames // 2, frames * 3 // 4, frames):
+        suffix = f".f{phase:03d}.png" if phase != frames else ".png"
+        Path(f"{prefix}{suffix}.sprites.json").unlink(missing_ok=True)
 
     rom_bytes = rom.read_bytes()
     env = os.environ.copy()
     env.update({
         "BOSS_RECEIPT_OUT": str(prefix),
+        "PENTA_STATE_FILE": str(state.resolve()),
         "BOSS_RECEIPT_FRAMES": str(frames),
         "BOSS_RECEIPT_REARM": "0",
         "BOSS_RECEIPT_PALETTE_REARM": "1" if rearm_palettes else "0",
@@ -83,7 +88,7 @@ def capture(
     })
     process = subprocess.Popen(
         [
-            str(mgba), "-t", str(state),
+            str(mgba),
             "-C", f"savegamePath={prefix.parent}",
             "-C", f"savestatePath={prefix.parent}",
             str(rom), "--script", str(PROBE),
@@ -110,6 +115,21 @@ def capture(
 
     if marker.read_text().strip() != "ok":
         raise RuntimeError(f"boss {target}: capture probe rejected state")
+    if target == 8:
+        for phase in (frames // 4, frames // 2, frames * 3 // 4, frames):
+            suffix = f".f{phase:03d}.png" if phase != frames else ".png"
+            image = Path(f"{prefix}{suffix}")
+            receipt = Path(f"{image}.sprites.json")
+            payload = json.loads(receipt.read_text())
+            if payload["frame"] != phase:
+                raise ValueError("projectile receipt phase mismatch")
+            payload.update({
+                "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
+                "rom_sha256": hashlib.sha256(rom_bytes).hexdigest(),
+                "state_sha256": hashlib.sha256(state.read_bytes()).hexdigest(),
+                "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
+            })
+            receipt.write_text(json.dumps(payload, indent=2) + "\n")
     return report_fields(Path(f"{prefix}.audit.report"))
 
 
@@ -143,9 +163,12 @@ def staging_violations(
     return violations, examples
 
 
-def build_contact_sheet(output: Path, frames: int) -> Path:
+def build_contact_sheet(
+    output: Path, frames: int, targets: tuple[int, ...]
+) -> Path:
     sample_paths: list[tuple[str, str, Path]] = []
-    for index, boss in enumerate(BOSSES):
+    for index in targets:
+        boss = BOSSES[index]
         prefix = output / f"boss{index}_{boss.name}"
         for frame in (frames // 4, frames // 2, frames * 3 // 4, frames):
             suffix = f".f{frame:03d}.png" if frame != frames else ".png"
@@ -153,7 +176,10 @@ def build_contact_sheet(output: Path, frames: int) -> Path:
 
     tile_width, tile_height = 160, 144
     label_height = 28
-    sheet = Image.new("RGB", (tile_width * 4, (tile_height + label_height) * 9))
+    sheet = Image.new(
+        "RGB",
+        (tile_width * 4, (tile_height + label_height) * len(targets)),
+    )
     draw = ImageDraw.Draw(sheet)
     for sample_index, (name, material, path) in enumerate(sample_paths):
         row, col = divmod(sample_index, 4)
@@ -180,6 +206,13 @@ def main() -> int:
     parser.add_argument("--frames", type=int, default=120)
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument(
+        "--target",
+        type=int,
+        choices=range(len(BOSSES)),
+        action="append",
+        help="capture only this boss index (repeatable; default: all nine)",
+    )
+    parser.add_argument(
         "--rearm-palettes",
         action="store_true",
         help=(
@@ -202,8 +235,10 @@ def main() -> int:
     rom, states = args.rom.resolve(), args.states.resolve()
     output, mgba = args.output.resolve(), args.mgba.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    targets = tuple(dict.fromkeys(args.target or range(len(BOSSES))))
     receipts: list[dict[str, object]] = []
-    for target, boss in enumerate(BOSSES):
+    for target in targets:
+        boss = BOSSES[target]
         name, material = boss.name, boss.material
         state = states / f"boss{target}_{name}.ss0"
         if not state.is_file():
@@ -281,7 +316,7 @@ def main() -> int:
         (output / "all-boss-material-phases.png").unlink(missing_ok=True)
         print(f"FAIL: stock-clear staging blockers: {blockers}")
         return 1
-    gallery = build_contact_sheet(output, args.frames)
+    gallery = build_contact_sheet(output, args.frames, targets)
     print(f"gallery: {gallery}")
     return 0
 

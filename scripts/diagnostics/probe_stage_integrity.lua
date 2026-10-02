@@ -11,7 +11,7 @@
 -- checkpoint transition can muddy the result.
 
 local TARGET = tonumber(os.getenv("STAGE_TARGET") or "1")
-local OUT = os.getenv("STAGE_OUT") or "/tmp/penta_stage_integrity"
+local OUT = assert(os.getenv("STAGE_OUT"), "STAGE_OUT required")
 local SHOT = os.getenv("STAGE_SHOT") == "1"
 local STATE_OUT = os.getenv("STAGE_STATE_OUT")
 local ROUTE_TRACE = os.getenv("STAGE_ROUTE_TRACE")
@@ -20,6 +20,17 @@ local f, phase, seeded, confirmed = 0, "title", false, false
 local stable_frames = 0
 local max_stable_frames = 0
 local expected_scene = TARGET + 2
+
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  -- #41: health/resource assistance belongs to physical bank1.
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local function reg(name)
   for _, reader in ipairs({
@@ -92,6 +103,14 @@ local function capture()
   dump_range(OUT .. ".vram1.bin", 0x8000, 0x97FF)
   dump_range(OUT .. ".attr.bin", 0x9800, 0x9FFF)
   dump_range(OUT .. ".bg-lut.bin", 0xC600, 0xC6FF)
+  local old_svbk = emu:read8(0xFF70)
+  emu:write8(0xFF70, 1)
+  dump_range(OUT .. ".wram1-db.bin", 0xDB00, 0xDB7F)
+  emu:write8(0xFF70, 2)
+  dump_range(OUT .. ".wram2-plane.bin", 0xD000, 0xD3FF)
+  emu:write8(0xFF70, 3)
+  dump_range(OUT .. ".wram3-plane.bin", 0xD000, 0xD3FF)
+  emu:write8(0xFF70, old_svbk)
 
   local old_bcps = emu:read8(0xFF68)
   local bgp = assert(io.open(OUT .. ".bgp.bin", "wb"))
@@ -124,12 +143,19 @@ local function capture()
   local meta = assert(io.open(OUT .. ".meta", "w"))
   meta:write(string.format(
     "frame=%d target=%d expected_scene=%02X D880=%02X FFC1=%02X FF91=%02X DF02=%02X DF0D=%02X FFBA=%02X " ..
-    "LCDC=%02X SCX=%02X SCY=%02X active_map=%04X visible=%d unsafe_attr=%d\n",
+    "LCDC=%02X STAT=%02X HDMA5=%02X PC=%04X SP=%04X SCX=%02X SCY=%02X " ..
+    "active_map=%04X visible=%d unsafe_attr=%d\n",
     f, TARGET, expected_scene, emu:read8(0xD880), emu:read8(0xFFC1),
     emu:read8(0xFF91), emu:read8(0xDF02), emu:read8(0xDF0D), emu:read8(0xFFBA),
-    emu:read8(0xFF40), emu:read8(0xFF43),
-    emu:read8(0xFF42), active_base, visible, unsafe))
+    emu:read8(0xFF40), emu:read8(0xFF41), emu:read8(0xFF55),
+    emu:readRegister("PC") & 0xFFFF, emu:readRegister("SP") & 0xFFFF,
+    emu:read8(0xFF43), emu:read8(0xFF42), active_base, visible, unsafe))
   meta:write("visible_attr_hist=" .. table.concat(parts, ",") .. "\n")
+  meta:write(string.format("native_assistance_writes=%d\n", native_assistance.writes))
+  for bank = 0, 7 do
+    meta:write(string.format("native_assistance_svbk_%d=%d\n", bank,
+      native_assistance.bank_shadow_counts[bank] or 0))
+  end
   meta:close()
 
   emu:write8(0xFF4F, old_vbk)
@@ -167,7 +193,7 @@ callbacks:add("frame", function()
   end
 
   if phase == "level_select" and not confirmed then
-    emu:write8(0xDCFD, 0x01)
+    native_assistance.write(0xDCFD, 0x01)
     emu:write8(0xFFBA, TARGET)
     seed_sram()
     if f % 60 >= 10 and f % 60 < 16 then emu:setKeys(KEY_A)
@@ -182,9 +208,8 @@ callbacks:add("frame", function()
   end
 
   emu:setKeys(0)
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xF0)
+  -- #37: health is DCBB; leave native inventory state DCDC/DCDD alone.
+  native_assistance.write(0xDCBB, 0xF0)
   emu:write8(0xFFBA, TARGET)
 
   if emu:read8(0xD880) == expected_scene and emu:read8(0xFFC1) == 1 then

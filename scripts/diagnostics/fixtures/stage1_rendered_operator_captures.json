@@ -1,0 +1,40 @@
+{
+  "schema": "penta-stage1-rendered-operator-captures-v1",
+  "oracle": "hash-pinned-rendered-pixels-only",
+  "captures": [
+    {
+      "label": "operator-busted-room",
+      "path": "manual_captures/rc11_busted_room_2026_08_30.png",
+      "sha256": "ac8242e86ddf00ef7b94bd95a0784b877dae4ca132d052a388777684cd7d4c37",
+      "rgb_sha256": "67b1a05866b78f0bb75f783b47502d6dca4cf1aa9fce843bf55e6a6fde841b1e",
+      "reviewed_defect": "clear hazard cells",
+      "expected_clear_hazard_cells": [
+        [88, 64],
+        [96, 64]
+      ]
+    },
+    {
+      "label": "operator-official-room01-wall-edge",
+      "path": "manual_captures/rc11_official_corrupted_wall_edges_2026_08_30.png",
+      "sha256": "99d4030d620f80f5d37235b4152d5b122049b226eeac4391ddea76d26fea55c3",
+      "rgb_sha256": "f2ed80faceafba657a7424d5a19347164504f74e3f7399d6e5920d2f2bc84fb8",
+      "reviewed_defect": "mixed BG0/BG6 room-01 wall-edge ramp",
+      "reviewed_wall_regions": [
+        [0, 0, 16, 112],
+        [144, 0, 160, 112]
+      ],
+      "region_mask_pixels": 3584,
+      "region_mask_sha256": "5a45ca5554207c53052de257f370a082871c77ed4debe2e5644b0e5d289ec63a",
+      "bg0_dark": {
+        "rgb": [82, 82, 123],
+        "pixels": 404,
+        "mask_sha256": "ceebac9154575a8878b26b1a3148ba06c1fc2262faec272b55b4260044945c30"
+      },
+      "bg6_dark": {
+        "rgb": [66, 66, 123],
+        "pixels": 518,
+        "mask_sha256": "bb2e0eef21a34da2bf277bc082e7ad8f7ce05ce725c86b3a8b8a29e9124cadd6"
+      }
+    }
+  ]
+}

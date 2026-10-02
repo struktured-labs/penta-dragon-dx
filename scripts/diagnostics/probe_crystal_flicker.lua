@@ -1,6 +1,18 @@
 -- Trace Crystal Dragon's native ghost animation without modifying game state.
 -- The matching Python verifier owns the emulator lifecycle and single-flight
 -- guard; this probe only emits deterministic per-frame evidence.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("CRYSTAL_FLICKER_OUT"), "CRYSTAL_FLICKER_OUT required")
 local FRAMES = tonumber(os.getenv("CRYSTAL_FLICKER_FRAMES") or "1920")
@@ -14,6 +26,7 @@ local SCREENSHOTS = os.getenv("CRYSTAL_FLICKER_SCREENSHOTS") == "1"
 local SCREENSHOT_STEP = tonumber(os.getenv("CRYSTAL_FLICKER_SCREENSHOT_STEP") or "60")
 local TRACE_STEP = tonumber(os.getenv("CRYSTAL_FLICKER_TRACE_STEP") or "1")
 local STATE_OUT = os.getenv("CRYSTAL_FLICKER_STATE_OUT")
+local STATE_FILE = os.getenv("CRYSTAL_FLICKER_STATE_FILE")
 local STATE_TRACE = os.getenv("CRYSTAL_FLICKER_STATE_TRACE") == "1"
 local COPY_TRACE = os.getenv("CRYSTAL_FLICKER_COPY_TRACE") == "1"
 local AFTERIMAGE = os.getenv("CRYSTAL_FLICKER_AFTERIMAGE") or ""
@@ -21,6 +34,7 @@ local EXPECTED_SCENE = tonumber(os.getenv("CRYSTAL_FLICKER_EXPECTED_SCENE") or "
 local frame = 0
 local trace = assert(io.open(OUT .. ".trace", "w"))
 local finished = false
+local state_loaded = STATE_FILE == nil
 local last_body = nil
 local blank_publishes, afterimage_fills = 0, 0
 local boss_released = false
@@ -186,6 +200,14 @@ end
 
 callbacks:add("frame", function()
     if finished then return end
+    if not state_loaded then
+        local ok, result = pcall(function()
+            return emu:loadStateFile(STATE_FILE)
+        end)
+        assert(ok and result ~= false, "failed to load requested crystal state")
+        state_loaded = true
+        return
+    end
     frame = frame + 1
     emu:setKeys(0)
     -- D000-DFFF is banked. Candidate arena publishers can remain on SVBK2/3
@@ -197,9 +219,7 @@ callbacks:add("frame", function()
     local scene = EXPECTED_SCENE
     if wram_accessible then
         scene = emu:read8(0xD880)
-        emu:write8(0xDCBB, 0xF0)
-        emu:write8(0xDCDC, 0xFF)
-        emu:write8(0xDCDD, 0xFF)
+        native_assistance.write(0xDCBB, 0xF0)
         -- Match the established boss-corpus survival policy. Without these
         -- neutralizations some synthetic arena fixtures resolve the fight
         -- before the scene-isolation control can observe a palette.

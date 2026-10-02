@@ -1,6 +1,10 @@
 -- Consecutive-frame pixel/CRAM/OAM capture for palette-flicker diagnosis.
 --
--- FLICKER_MODE=demo leaves the title idle until the stock D880=$0A demo.
+-- FLICKER_MODE=demo leaves the title idle until the attract demo's Stage-1
+-- gameplay segment (D880=$02, FFC1=1) and samples through its return to title.
+-- The prerecorded demo route is cycle-sensitive: release-lock candidates end
+-- the demo in Stage 1 rather than the stock D880=$0A Gargoyle arena
+-- (docs/audit/release-lock-20261001-repin.md).
 -- FLICKER_MODE=gameplay enters Stage 1 through normal controller input.
 -- The Python wrapper terminates mGBA after the .done marker is written; do not
 -- call emu:stop() here because that can freeze this mGBA build.
@@ -9,6 +13,10 @@ local OUT = assert(os.getenv("FLICKER_OUT"), "FLICKER_OUT is required")
 local MODE = os.getenv("FLICKER_MODE") or "demo"
 local SAMPLE_FRAMES = tonumber(os.getenv("FLICKER_SAMPLE_FRAMES") or "300")
 local MAX_FRAMES = tonumber(os.getenv("FLICKER_MAX_FRAMES") or "16000")
+local ROUTE = os.getenv("FLICKER_ROUTE") or "right-fire"
+local TURN_PERIOD = tonumber(os.getenv("FLICKER_TURN_PERIOD") or "45")
+assert(ROUTE == "right-fire" or ROUTE == "sara-turns" or ROUTE == "sara-turns-fire")
+assert(TURN_PERIOD >= 1 and TURN_PERIOD % 1 == 0)
 
 local KEY_A, KEY_START, KEY_DOWN = 0x01, 0x08, 0x80
 local frame, target_frame, samples = 0, nil, 0
@@ -37,6 +45,14 @@ local function scheduled_keys()
         if frame >= row[1] and frame <= row[2] then return row[3] end
     end
     if target_frame and frame - target_frame > 30 then
+        if ROUTE ~= "right-fire" then
+            local directions = {0x10, 0x40, 0x20, 0x80}
+            local keys = directions[(math.floor((frame - target_frame - 31) / TURN_PERIOD) % 4) + 1]
+            if ROUTE == "sara-turns-fire" and (frame-target_frame) % 60 < 6 then
+                keys = keys | KEY_A
+            end
+            return keys
+        end
         -- Exercise scrolling and firing so gameplay uses more than Sara's
         -- standing sprite palettes.
         return 0x10 | (((frame - target_frame) % 60 < 6) and KEY_A or 0)
@@ -48,7 +64,7 @@ local function target_active()
     local scene = emu:read8(0xD880)
     local gameplay = emu:read8(0xFFC1)
     if MODE == "demo" then
-        return scene == 0x0A
+        return scene == 0x02 and gameplay == 1
     end
     return scene == 0x02 and gameplay == 1
 end

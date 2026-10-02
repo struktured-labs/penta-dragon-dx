@@ -4,6 +4,18 @@
 -- screenshot/dump — if that yields uniform p0, the bleed is stale attrs (cleaner
 -- approach valid, trigger is the problem); if it stays mixed, an active writer
 -- is setting p1.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local OUT = os.getenv("OUT") or "/tmp/sfd"
 local f, prevd = 0, -1
 local function log(m) local h=io.open(OUT..".log","a"); if h then h:write(m.."\n");h:close() end end
@@ -28,7 +40,7 @@ local function dumpbig(tag)
 end
 callbacks:add("frame", function()
   f = f + 1
-  emu:write8(0xDCFD, 0x01)
+  native_assistance.write(0xDCFD, 0x01)
   emu:setKeys(press(180,186,0x80) | press(210,216,0x01))
   local d = emu:read8(0xD880)
   if d ~= prevd then log(string.format("f%d D880=%02X DF23(prev)=?", f, d)); prevd=d end

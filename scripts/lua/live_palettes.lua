@@ -2,7 +2,40 @@
 -- Scene buttons load whitelisted mGBA states; no in-ROM teleport is used.
 local f = 0
 local last_hash = 0
-local ROOT = "/home/struktured/projects/penta-dragon-dx-claude"
+-- Project root: PENTA_PROJECT_DIR (exported by palette_session.sh), else the
+-- checkout containing this script (<root>/scripts/lua/live_palettes.lua),
+-- else the historical stream checkout. This lets a worktree run its own
+-- session without reading or writing another checkout's files.
+local LEGACY_ROOT = "/home/struktured/projects/penta-dragon-dx-claude"
+local function detect_root()
+    local env_root = os.getenv("PENTA_PROJECT_DIR")
+    if env_root and #env_root > 0 then return (env_root:gsub("/+$", "")) end
+    if debug and debug.getinfo then
+        -- Level 1 is this function, i.e. this script's own chunk. (Do not
+        -- wrap in pcall: that would make level 1 the C function pcall.)
+        local info = debug.getinfo(1, "S")
+        local source = info and info.source or ""
+        if source:sub(1, 1) == "@" then
+            local path = source:sub(2)
+            local root = path:match("^(.*)/scripts/lua/[^/]+$")
+            if root == nil and path:match("^scripts/lua/[^/]+$") then
+                root = "."
+            end
+            if root then
+                if root:sub(1, 1) ~= "/" then
+                    local pwd = os.getenv("PWD")
+                    if not pwd or #pwd == 0 then return LEGACY_ROOT end
+                    root = (root == ".") and pwd or (pwd .. "/" .. root)
+                end
+                return root
+            end
+        end
+    end
+    return LEGACY_ROOT
+end
+local ROOT = detect_root()
+local AUTOSTART_FILE = ROOT .. "/rom/working/live_palettes_autostart"
+local SCREENSHOT_TRIGGER = ROOT .. "/rom/working/live_palettes_screenshot"
 local PAL_FILE = os.getenv("LIVE_PALETTE_FILE") or
     (ROOT .. "/rom/working/live_palettes.txt")
 local SENTINEL = os.getenv("LIVE_PALETTE_LOG") or
@@ -11,7 +44,15 @@ local SMOKE_OUT = os.getenv("LIVE_PALETTE_SMOKE_OUT")
 local VISUAL_AUDIT_OUT = os.getenv("LIVE_PALETTE_VISUAL_AUDIT_OUT")
 local SCENE_AUDIT_OUT = os.getenv("LIVE_PALETTE_SCENE_AUDIT_OUT")
 local SPECIAL_AUDIT_OUT = os.getenv("LIVE_PALETTE_SPECIAL_AUDIT_OUT")
-local STATE_ROOT = ROOT .. "/save_states_for_claude"
+local STATE_ROOT = os.getenv("LIVE_PALETTE_STATE_DIR") or
+    (ROOT .. "/save_states_for_claude")
+local function load_state(path)
+    local ok, result = pcall(function() return emu:loadStateFile(path) end)
+    return ok and result ~= false, result
+end
+local function game_read(address)
+    return emu.memory.wram:read8(address - 0xC000)
+end
 local STAGE_STATE_DIR = os.getenv("LIVE_PALETTE_STAGE_STATE_DIR") or
     (ROOT .. "/tmp/palette_session/states")
 local BOSS_STATE_DIR = os.getenv("LIVE_PALETTE_BOSS_STATE_DIR") or
@@ -140,7 +181,11 @@ end
 
 -- Reset log on startup
 local fh = io.open(SENTINEL, "w")
-if fh then fh:write("live_palettes.lua loaded at start\n"); fh:close() end
+if fh then
+    fh:write("live_palettes.lua loaded at start\n")
+    fh:write("root=" .. ROOT .. "\n")
+    fh:close()
+end
 
 local function parse_color(s)
     if #s == 6 then
@@ -159,7 +204,8 @@ end
 
 -- Parsed file contains:
 --   writes: list of explicitly edited palette overrides, applied every frame
---           (BOSS/POWER/JET writes are guarded by live state flags)
+--           (BOSS/POWER/JET writes are guarded by live state flags;
+--           ARENA<d880>.BG<n> writes only while D880 equals <d880>)
 --   scene:  optional whitelisted mGBA save-state key, consumed once
 local function load_palettes(path)
     local fh = io.open(path, "r")
@@ -178,6 +224,8 @@ local function load_palettes(path)
                 line:match("^BOSS(%d)@(%d):(.+)$")
             local jet_slot, jet_colors = line:match("^JET(%d):(.+)$")
             local power_idx, power_colors = line:match("^POWER(%d):(.+)$")
+            local arena_scene, arena_row, arena_colors =
+                line:match("^ARENA(%x%x)%.BG([0-7]):(.+)$")
             local kind, pal_idx, colors = line:match("^(OBJ)(%d):(.+)$")
             if not kind then
                 kind, pal_idx, colors = line:match("^(BG)(%d):(.+)$")
@@ -188,6 +236,8 @@ local function load_palettes(path)
                 kind, pal_idx, colors = "JET", jet_slot, jet_colors
             elseif power_idx then
                 kind, pal_idx, colors = "POWER", 0, power_colors
+            elseif arena_scene then
+                kind, pal_idx, colors = "BG", arena_row, arena_colors
             end
             if kind and pal_idx then
                 local is_obj = kind ~= "BG"
@@ -204,6 +254,8 @@ local function load_palettes(path)
                             boss = boss_idx and tonumber(boss_idx) or nil,
                             jet = jet_slot and tonumber(jet_slot) or nil,
                             power = power_idx and tonumber(power_idx) or nil,
+                            arena = arena_scene and tonumber(arena_scene, 16)
+                                or nil,
                         })
                     end
                 end
@@ -220,6 +272,7 @@ local function apply_writes(writes)
             (not w.boss or emu:read8(0xFFBF) == w.boss)
             and (not w.jet or emu:read8(0xFFD0) == 1)
             and (not w.power or emu:read8(0xFFC0) == w.power)
+            and (not w.arena or game_read(0xD880) == w.arena)
         )
         if active then
             if w.is_obj then
@@ -258,12 +311,12 @@ local function story_art_guard(scene)
     local spec = STORY_ART_SCENES[scene]
     if not spec then return false, nil end
     local committed = (
-        emu:read8(0xD880) == spec.d880
+        game_read(0xD880) == spec.d880
         and emu:read8(0xFFC1) == 0
-        and emu:read8(0xDCE8) == spec.sequence
-        and emu:read8(0xDCEA) == 0x01
-        and emu:read8(0xDCF0) == spec.art
-        and ((emu:read8(0xDD07) + 1) & 0xFF) == spec.art
+        and game_read(0xDCE8) == spec.sequence
+        and game_read(0xDCEA) == 0x01
+        and game_read(0xDCF0) == spec.art
+        and ((game_read(0xDD07) + 1) & 0xFF) == spec.art
     )
     return committed, spec
 end
@@ -303,11 +356,11 @@ local function ending_tail_guard(scene)
     local spec = ENDING_TAIL_SCENES[scene]
     if not spec then return false, nil end
     local committed = (
-        emu:read8(0xD880) == spec.d880
+        game_read(0xD880) == spec.d880
         and emu:read8(0xFFC1) == 0
         and emu:read8(0xFFE4) == 1
-        and emu:read8(0xD889) == spec.d889
-        and emu:read8(0xDCE2) == spec.dce2
+        and game_read(0xD889) == spec.d889
+        and game_read(0xDCE2) == spec.dce2
         and emu:read8(0xFFF9) == spec.fff9
     )
     return committed, spec
@@ -375,7 +428,7 @@ end
 -- documented frames (180-396). Avoids manual keypresses inside mGBA.
 local autostart_armed = false
 do
-    local fh = io.open("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_autostart", "r")
+    local fh = io.open(AUTOSTART_FILE, "r")
     if fh then autostart_armed = true; fh:close()
         log("autostart armed via rom/working/live_palettes_autostart")
     end
@@ -407,9 +460,7 @@ callbacks:add("frame", function()
         end
         local spec = SPECIAL_AUDIT_SCENES[special_index]
         if special_wait == 0 then
-            special_ok = pcall(function()
-                return emu:loadStateFile(SCENE_FILES[spec.scene])
-            end)
+            special_ok = load_state(SCENE_FILES[spec.scene])
             emu:setKeys(0)
             special_wait = 30
         else
@@ -452,7 +503,7 @@ callbacks:add("frame", function()
         local scene = SCENE_ORDER[audit_index]
         if audit_wait == 0 then
             local state_path = SCENE_FILES[scene]
-            audit_ok = pcall(function() return emu:loadStateFile(state_path) end)
+            audit_ok = load_state(state_path)
             emu:setKeys(0)
             audit_wait = 30
         else
@@ -473,14 +524,14 @@ callbacks:add("frame", function()
                     "story_top=%d story_dialogue=%d d889=%02X " ..
                     "dce2=%02X fff9=%02X tail_preview=%s " ..
                     "tail_cells=%d tail_palette=%d\n",
-                    scene, tostring(audit_ok), emu:read8(0xD880),
+                    scene, tostring(audit_ok), game_read(0xD880),
                     emu:read8(0xFFC1), emu:read8(0xFFBF),
                     emu:read8(0xFFC0), emu:read8(0xFFD0),
                     emu:read8(0xFFBA), emu:read8(0xFFE4),
-                    emu:read8(0xDCE8), emu:read8(0xDCEA),
-                    emu:read8(0xDCF0), emu:read8(0xDD07),
+                    game_read(0xDCE8), game_read(0xDCEA),
+                    game_read(0xDCF0), game_read(0xDD07),
                     tostring(story_preview), top_target, dialogue_zero,
-                    emu:read8(0xD889), emu:read8(0xDCE2),
+                    game_read(0xD889), game_read(0xDCE2),
                     emu:read8(0xFFF9), tostring(tail_preview), tail_cells,
                     tail_palette
                 ))
@@ -502,22 +553,22 @@ callbacks:add("frame", function()
         if f <= 410 then emu:setKeys(k) end
         if f == 500 then
             autostart_armed = false
-            os.remove("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_autostart")
+            os.remove(AUTOSTART_FILE)
             log(string.format("f%d: autostart finished, FFC1=%d D880=0x%02X",
-                f, emu:read8(0xFFC1), emu:read8(0xD880)))
+                f, emu:read8(0xFFC1), game_read(0xD880)))
         end
     end
 
     -- Screenshot trigger: read rom/working/live_palettes_screenshot, save to that path.
     if f % 5 == 0 then
-        local sfh = io.open("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_screenshot", "r")
+        local sfh = io.open(SCREENSHOT_TRIGGER, "r")
         if sfh then
             local path = sfh:read("*all"):gsub("%s+$", "")
             sfh:close()
             if path and #path > 0 then
                 emu:screenshot(path)
                 log(string.format("f%d: screenshot saved to %s", f, path))
-                os.remove("/home/struktured/projects/penta-dragon-dx-claude/rom/working/live_palettes_screenshot")
+                os.remove(SCREENSHOT_TRIGGER)
             end
         end
     end
@@ -543,9 +594,7 @@ callbacks:add("frame", function()
                 ))
                 if scene then
                     local state_path = SCENE_FILES[scene]
-                    local ok, result = pcall(function()
-                        return emu:loadStateFile(state_path)
-                    end)
+                    local ok, result = load_state(state_path)
                     if ok then loaded_scene = scene end
                     log(string.format(
                         "f%d: loadStateFile scene=%s ok=%s result=%s",
@@ -589,7 +638,7 @@ callbacks:add("frame", function()
                 local report = assert(io.open(VISUAL_AUDIT_OUT, "w"))
                 report:write(string.format(
                     "frame=%d scene=%s d880=%02X ffc1=%d bg3=%s\n",
-                    f, loaded_scene, emu:read8(0xD880),
+                    f, loaded_scene, game_read(0xD880),
                     emu:read8(0xFFC1), read_palette(false, 3)
                 ))
                 report:close()
@@ -611,7 +660,7 @@ callbacks:add("frame", function()
         out:write(string.format(
             "frame=%d scene=%s d880=%02X ffc1=%d ffbf=%02X " ..
             "bg3=%s obj4=%s obj6=%s\n",
-            f, loaded_scene, emu:read8(0xD880), emu:read8(0xFFC1),
+            f, loaded_scene, game_read(0xD880), emu:read8(0xFFC1),
             emu:read8(0xFFBF), read_palette(false, 3),
             read_palette(true, 4), read_palette(true, 6)
         ))

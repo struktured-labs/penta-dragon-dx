@@ -3,6 +3,18 @@
 -- BG tile IDs. Goal: confirm whether FFBA actually equals 4 during normal
 -- stage-5 dungeon roaming (so it's a valid lava-override key) OR whether the
 -- lava tileset is present while FFBA reads something else (need another key).
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 local TARGET = 4               -- stage 5 = FFBA 4
 local KEY_A, KEY_START = 0x01, 0x08
 local f, phase, seeded, started, conf = 0, "title", false, false, 0
@@ -34,7 +46,7 @@ end
 
 callbacks:add("frame", function()
   f = f + 1
-  emu:write8(0xDCFD, 0x01)
+  native_assistance.write(0xDCFD, 0x01)
   if not seeded and f >= 100 then seedSRAM(); seeded = true end
   local d880, ffc1 = emu:read8(0xD880), emu:read8(0xFFC1)
 
@@ -53,7 +65,7 @@ callbacks:add("frame", function()
   end
   if phase == "play" then
     -- keep Sara alive but DO NOT touch FFBA — read it as the game maintains it
-    emu:write8(0xDCDD,0x17); emu:write8(0xDCDC,0xFF); emu:write8(0xDCBB,0xF0)
+      native_assistance.write(0xDCBB, 0xF0)
     emu:setKeys(0x10 + ((f % 4 < 2) and KEY_A or 0))   -- walk right + fire
     if (f - conf) % 120 == 0 then
       log(string.format("f%d t+%d  D880=%02X FFC1=%d FFBA=%02X FFBD=%02X FFCF=%02X DCFD=%02X DCB8=%02X",

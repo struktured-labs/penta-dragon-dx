@@ -433,6 +433,7 @@ def main() -> int:
         previous_full_story_art: int | None = None
         story_transition_art: int | None = None
         story_transition_samples = 0
+        initial_story_handoffs = 0
         for index, panel in enumerate(panels, 1):
             palettes = panel.palettes
             state = panel.story_state
@@ -495,15 +496,15 @@ def main() -> int:
                 )
                 # Stock can redraw the same committed art page with neutral
                 # attributes. Production detects its nonzero upper-panel
-                # sentinel and republishes one exact five-cell quarter per
-                # VBlank. Admit one captured in-progress sample only when the
+                # sentinel and republishes one exact 20-cell row per VBlank.
+                # Admit one captured in-progress sample only when the
                 # row cursor proves that bounded repair and every cell is
                 # either neutral or its final YAML value.
                 same_art_repair = (
                     art_committed
                     and previous_attributes is not None
                     and previous_full_story_art == art
-                    and state["df4a"] < 0x20
+                    and state["df4a"] < 0x08
                     and panel.attributes[160:] == bytes(200)
                     and all(
                         actual in {0, expected}
@@ -535,12 +536,26 @@ def main() -> int:
                     and panel.attributes == previous_attributes
                     and next_commits_art
                 )
+                initial_page_handoff = (
+                    not art_committed
+                    and previous_full_story_art is None
+                    and state["dce8"] == sequence
+                    and state["dcea"] == 0x01
+                    and 1 <= art <= 7
+                    and initial_story_handoffs == 0
+                    and set(palettes)
+                        <= set(Counter(expected_story_attrs[art]))
+                    and next_commits_art
+                )
                 bounded_transition = (
                     committed_transition
                     or previous_page_handoff
+                    or initial_page_handoff
                     or same_art_repair
                 )
                 if bounded_transition:
+                    if initial_page_handoff:
+                        initial_story_handoffs += 1
                     if story_transition_art != art:
                         story_transition_art = art
                         story_transition_samples = 0

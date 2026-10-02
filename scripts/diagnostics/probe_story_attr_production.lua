@@ -126,6 +126,55 @@ local function active_bg_cram()
     return table.concat(values)
 end
 
+local function cram_row(cram, palette)
+    local first = palette * 16 + 1
+    return cram:sub(first, first + 15)
+end
+
+local function referenced_cram_exact(cram)
+    if EXPECTED_CRAM == "" then return true end
+    local referenced = {}
+    if KIND == "ending" then
+        referenced[PALETTE] = true
+    elseif KIND == "story" then
+        -- The lower dialogue region is intentionally BG0. The upper art
+        -- region may reference any palette named by its committed mask.
+        referenced[0] = true
+        for index = 1, #MASK do
+            referenced[assert(tonumber(MASK:sub(index, index)))] = true
+        end
+    else
+        referenced[0] = true
+    end
+    for palette in pairs(referenced) do
+        if cram_row(cram, palette) ~= cram_row(EXPECTED_CRAM, palette) then
+            return false
+        end
+    end
+    return true
+end
+
+local function visible_tiles_hex()
+    local lcdc = emu:read8(0xFF40)
+    local scy = emu:read8(0xFF42)
+    local scx = emu:read8(0xFF43)
+    local base = ((lcdc & 0x08) ~= 0) and 0x9C00 or 0x9800
+    local old_vbk = emu:read8(0xFF4F)
+    local values = {}
+    emu:write8(0xFF4F, 0)
+    for row = 0, 17 do
+        for column = 0, 19 do
+            local map_y = ((scy + row * 8) >> 3) & 0x1F
+            local map_x = ((scx + column * 8) >> 3) & 0x1F
+            values[#values + 1] = string.format(
+                "%02X", emu:read8(base + map_y * 32 + map_x)
+            )
+        end
+    end
+    emu:write8(0xFF4F, old_vbk)
+    return table.concat(values)
+end
+
 local function trace_layout()
     if not TRACE then return end
     local lcdc = emu:read8(0xFF40)
@@ -156,9 +205,9 @@ local function trace_layout()
     emu:write8(0xFF4F, old_vbk)
     local trace = assert(io.open(TRACE, "a"))
     trace:write(string.format(
-        "frame=%d key=%02X row=%02X vbk=%02X bad=%d %s\n",
+        "frame=%d key=%02X row=%02X cleaner=%02X vbk=%02X bad=%d %s\n",
         f, emu:read8(0xDF49), emu:read8(0xDF4A),
-        old_vbk, #bad, table.concat(bad, " ")
+        emu:read8(0xDF07), old_vbk, #bad, table.concat(bad, " ")
     ))
     trace:close()
 end
@@ -169,6 +218,8 @@ local function finish(status, message)
     local target, neutral, wrong, unsafe, wrong_examples = visible_attr_counts()
     local table_nonzero = active_table_nonzero()
     local cram = active_bg_cram()
+    local cram_referenced_exact = referenced_cram_exact(cram)
+    local tiles = visible_tiles_hex()
     local expected_target = 0
     local expected_neutral = 360
     if KIND == "story" then
@@ -184,7 +235,7 @@ local function finish(status, message)
             or wrong ~= 0
             or unsafe ~= 0
             or (TABLE_MUST_BE_NEUTRAL and table_nonzero ~= 0)
-            or (EXPECTED_CRAM ~= "" and cram ~= EXPECTED_CRAM)
+            or not cram_referenced_exact
         )
     ) then
         status = "error"
@@ -195,12 +246,14 @@ local function finish(status, message)
     report:write(string.format(
         "status=%s kind=%s frame=%d d880=%02X palette=%d " ..
         "target=%d neutral=%d wrong=%d unsafe=%d wrong_examples=%s " ..
-        "table_nonzero=%d table_required=%s cram=%s " ..
+        "table_nonzero=%d table_required=%s cram_referenced_exact=%s " ..
+        "cram=%s tiles=%s " ..
         "df07=%02X key=%02X row=%02X lcdc=%02X scy=%02X scx=%02X " ..
         "message=%s\n",
         status, KIND, f, emu:read8(0xD880), PALETTE,
         target, neutral, wrong, unsafe, wrong_examples, table_nonzero,
-        tostring(TABLE_MUST_BE_NEUTRAL), cram,
+        tostring(TABLE_MUST_BE_NEUTRAL), tostring(cram_referenced_exact),
+        cram, tiles,
         emu:read8(0xDF07), emu:read8(0xDF49), emu:read8(0xDF4A),
         emu:read8(0xFF40), emu:read8(0xFF42), emu:read8(0xFF43),
         message
@@ -221,9 +274,9 @@ callbacks:add("frame", function()
     end
     trace_layout()
     -- Story panels can advance automatically at different stock cadences.
-    -- Accept the first exact layout only after one complete 32-quarter art
+    -- Accept the first exact layout only after one complete eight-row art
     -- pass; if the page leaves first, the state is a real production miss.
-    if KIND == "story" and emu:read8(0xDF4A) >= 0x20 then
+    if KIND == "story" and emu:read8(0xDF4A) >= 0x08 then
         local target, neutral, wrong, unsafe = visible_attr_counts()
         if (
             target == 160 and neutral == 200 and wrong == 0 and unsafe == 0

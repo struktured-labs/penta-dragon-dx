@@ -24,6 +24,7 @@ PRECOMMIT_POLICY = ROOT / "scripts/diagnostics/verify_precommit_policy.py"
 SUITE_RUNNER = ROOT / "scripts/diagnostics/run_deterministic_suite.py"
 PROJECT_SETTINGS = ROOT / ".claude/settings.json"
 AGENT_RULES = ROOT / "AGENTS.md"
+CHECKED_DELEGATION = "PENTA_CHECKED_SINGLEFLIGHT_DELEGATION"
 
 
 def hook_result(command: str) -> subprocess.CompletedProcess[str]:
@@ -191,7 +192,7 @@ def main() -> int:
         except OSError as exc:
             failures.append(f"guarded entrypoint unavailable: {relative}: {exc}")
             continue
-        if "singleflight" not in source:
+        if "singleflight" not in source and CHECKED_DELEGATION not in source:
             failures.append(f"entrypoint bypasses the single-flight wrapper: {relative}")
         if "pkill" in source or "killall" in source:
             failures.append(f"entrypoint contains broad process killing: {relative}")

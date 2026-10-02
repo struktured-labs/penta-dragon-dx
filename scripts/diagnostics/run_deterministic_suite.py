@@ -76,7 +76,7 @@ def configure_repo_temp(output: Path) -> Path:
     return runtime_tmp
 
 
-def run_logged(command: list[str], log: Path) -> int:
+def run_logged(command: list[str], log: Path, *, environment: dict | None = None) -> int:
     with log.open("w") as handle:
         result = subprocess.run(
             command,
@@ -84,6 +84,7 @@ def run_logged(command: list[str], log: Path) -> int:
             stdout=handle,
             stderr=subprocess.STDOUT,
             check=False,
+            env=environment,
         )
     return result.returncode
 
@@ -408,57 +409,66 @@ def run_matrix_guarded(
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        allowed_process_groups: set[int] = set()
-        group_deadline = time.monotonic() + 1
-        while not allowed_process_groups and time.monotonic() < group_deadline:
-            allowed_process_groups.update(token_process_groups(owner_token))
-            if not allowed_process_groups:
-                time.sleep(0.01)
-        foreign: list[dict[str, str | int]] = []
-        foreign_observations: dict[tuple[int, int], int] = {}
-        while process.poll() is None:
-            observed = foreign_mgba_processes(
+        try:
+            allowed_process_groups: set[int] = set()
+            group_deadline = time.monotonic() + 1
+            while not allowed_process_groups and time.monotonic() < group_deadline:
+                allowed_process_groups.update(token_process_groups(owner_token))
+                if not allowed_process_groups:
+                    time.sleep(0.01)
+            foreign: list[dict[str, str | int]] = []
+            foreign_observations: dict[tuple[int, int], int] = {}
+            while process.poll() is None:
+                observed = foreign_mgba_processes(
+                    process.pid,
+                    owner_token,
+                    allowed_process_groups,
+                )
+                observed_keys = {
+                    (int(item["pid"]), int(item["process_group"]))
+                    for item in observed
+                }
+                foreign_observations = {
+                    key: foreign_observations.get(key, 0) + 1
+                    for key in observed_keys
+                }
+                foreign = [
+                    item
+                    for item in observed
+                    if foreign_observations[
+                        (int(item["pid"]), int(item["process_group"]))
+                    ] >= 3
+                ]
+                if foreign:
+                    # Stop only the matrix group and per-run-token descendants.
+                    # Never signal the foreign owner or use a name-pattern kill.
+                    stop_matrix_and_owned(process, owner_token)
+                    cleanup_owner_registry(owner_token)
+                    return process.returncode, foreign, []
+                time.sleep(0.05)
+            # Close the small race between the final poll and matrix exit.
+            foreign = foreign_mgba_processes(
                 process.pid,
                 owner_token,
                 allowed_process_groups,
             )
-            observed_keys = {
-                (int(item["pid"]), int(item["process_group"]))
-                for item in observed
-            }
-            foreign_observations = {
-                key: foreign_observations.get(key, 0) + 1
-                for key in observed_keys
-            }
-            foreign = [
-                item
-                for item in observed
-                if foreign_observations[
-                    (int(item["pid"]), int(item["process_group"]))
-                ] >= 3
-            ]
             if foreign:
-                # Stop only the matrix group and per-run-token descendants.
-                # Never signal the foreign owner or use a name-pattern kill.
-                stop_matrix_and_owned(process, owner_token)
+                stop_owned_mgba(owner_token)
                 cleanup_owner_registry(owner_token)
                 return process.returncode, foreign, []
-            time.sleep(0.05)
-        # Close the small race between the final poll and matrix exit.
-        foreign = foreign_mgba_processes(
-            process.pid,
-            owner_token,
-            allowed_process_groups,
-        )
-        if foreign:
-            stop_owned_mgba(owner_token)
+            leaked = owned_mgba_processes(owner_token)
+            if leaked:
+                stop_owned_mgba(owner_token)
             cleanup_owner_registry(owner_token)
-            return process.returncode, foreign, []
-        leaked = owned_mgba_processes(owner_token)
-        if leaked:
-            stop_owned_mgba(owner_token)
-        cleanup_owner_registry(owner_token)
-        return process.returncode, [], leaked
+            return process.returncode, [], leaked
+        except BaseException:
+            # Issue #12: SIGINT or monitor failures must not orphan the
+            # separately sessioned matrix or any token-owned emulator.
+            try:
+                stop_matrix_and_owned(process, owner_token)
+            finally:
+                cleanup_owner_registry(owner_token)
+            raise
 
 
 def git_head() -> str:
@@ -505,9 +515,29 @@ def main() -> int:
         help="include the isolated expanded-bank item-menu publisher",
     )
     parser.add_argument("--timeout-scale", type=float, default=1.0)
+    parser.add_argument("--r534-source", action="store_true",
+                        help="build exact r534 from original source and retain both traced source proofs")
+    parser.add_argument("--r536-source", action="store_true",
+                        help="build exact r536 from original source and retain both traced source proofs")
+    parser.add_argument("--restart-source", action="store_true",
+                        help="build the exact Game Over/restart fix from original source")
+    parser.add_argument("--stream-source", action="store_true",
+                        help="build the release-lock stream chain (#14/#34 deferred) from original source")
     args = parser.parse_args()
     if args.timeout_scale <= 0:
         parser.error("--timeout-scale must be positive")
+    if sum((args.r534_source, args.r536_source, args.restart_source, args.stream_source)) > 1:
+        parser.error("select only one original-source profile")
+    source_profile = (args.r534_source or args.r536_source or args.restart_source
+                      or args.stream_source)
+    if source_profile and (args.expanded_ted or args.menu_icon_colors or args.resume):
+        label = "stream" if args.stream_source else "restart" if args.restart_source else "r536" if args.r536_source else "r534"
+        parser.error(f"{label} source is a distinct fresh profile; no legacy flags or resume")
+    if source_profile:
+        selected_output = args.output.resolve()
+        if (selected_output.exists() or selected_output == ROOT / "tmp"
+                or not selected_output.is_relative_to(ROOT / "tmp")):
+            parser.error("original-source profile requires a fresh repository-local tmp output")
     if args.menu_icon_colors and not args.expanded_ted:
         parser.error("--menu-icon-colors requires --expanded-ted")
 
@@ -522,6 +552,18 @@ def main() -> int:
         "native_pose_table": args.expanded_ted,
         "menu_icon_colors": args.menu_icon_colors,
     }
+    if args.stream_source:
+        from stream_source_profile import PROFILE
+        build_profile = dict(PROFILE)
+    elif args.restart_source:
+        from restart_source_profile import PROFILE
+        build_profile = dict(PROFILE)
+    elif args.r536_source:
+        from r536_source_profile import PROFILE
+        build_profile = dict(PROFILE)
+    elif args.r534_source:
+        from r534_source_profile import PROFILE
+        build_profile = dict(PROFILE)
 
     process_check = subprocess.run(
         [str(PROCESS_CHECK), "--require-none"],
@@ -546,6 +588,9 @@ def main() -> int:
     candidate_b = build_dir / "candidate-b.gb"
     base_a = build_dir / "candidate-a-v301.gb"
     base_b = build_dir / "candidate-b-v301.gb"
+    if source_profile:
+        candidate_a = build_dir / "source-a/candidate.gb"
+        candidate_b = build_dir / "source-b/candidate.gb"
     run_manifest = output / "run.json"
 
     source_fingerprint, source_inputs = source_snapshot()
@@ -567,7 +612,16 @@ def main() -> int:
         ("a", candidate_a, base_a),
         ("b", candidate_b, base_b),
     ):
-        if args.expanded_ted:
+        if source_profile:
+            source_builder = (
+                "diagnostics/build_stream_source_candidate.py" if args.stream_source
+                else "build_restart_candidate.py" if args.restart_source
+                else "build_r536_candidate.py" if args.r536_source
+                else "build_r534_candidate.py"
+            )
+            command = [sys.executable, str(ROOT / "scripts" / source_builder),
+                       "--out-dir", str(candidate.parent)]
+        elif args.expanded_ted:
             command = [
                 sys.executable,
                 str(EXPANDED_BUILDER),
@@ -589,7 +643,14 @@ def main() -> int:
                 "--base-output",
                 str(base),
             ]
-        returncode = run_logged(command, logs / f"build-{label}.log")
+        # The source compiler must not resolve Python/system libraries through
+        # the emulator's scratch runtime. Keep that runtime on the matrix only;
+        # the factory filesystem audit remains unchanged and fail-closed.
+        build_environment = None
+        if source_profile:
+            build_environment = {key: value for key, value in os.environ.items()
+                                 if key not in {"LD_LIBRARY_PATH", "LD_PRELOAD"}}
+        returncode = run_logged(command, logs / f"build-{label}.log", environment=build_environment)
         if returncode != 0:
             run.update(
                 status="build-failed",
@@ -600,6 +661,24 @@ def main() -> int:
             write_json(run_manifest, run)
             print(f"FAIL: build {label} exited {returncode}")
             return 1
+
+    source_bindings = []
+    if source_profile:
+        if args.stream_source:
+            from stream_source_profile import builder, verify_binding
+        elif args.restart_source:
+            from restart_source_profile import builder, verify_binding
+        elif args.r536_source:
+            from r536_source_profile import builder, verify_binding
+        else:
+            from r534_source_profile import builder, verify_binding
+        for candidate in (candidate_a, candidate_b):
+            receipt_path = candidate.parent / "build-receipt.json"
+            binding = {"receipt": str(receipt_path), "receipt_sha256": sha256_file(receipt_path),
+                       "source_fingerprint": source_fingerprint}
+            verify_binding(binding, candidate.read_bytes(), builder.DEFAULT_PALETTE)
+            source_bindings.append(binding)
+        run["source_builds"] = source_bindings
 
     build_sha256_a = sha256_file(candidate_a)
     build_sha256_b = sha256_file(candidate_b)
@@ -737,9 +816,21 @@ def main() -> int:
         }
         for result in matrix_value["results"]
     ]
+    if source_profile:
+        if args.stream_source:
+            from stream_suite_evidence import matrix_evidence
+        elif args.restart_source:
+            from restart_suite_evidence import matrix_evidence
+        elif args.r536_source:
+            from r536_suite_evidence import matrix_evidence
+        else:
+            from r534_suite_evidence import matrix_evidence
+        matrix_evidence(matrix_manifest, candidate_a.read_bytes())
     try:
         release_ledger = collect_release_ledger(
-            matrix_dir, expanded=args.expanded_ted
+            matrix_dir,
+            expanded=build_profile["expanded_ted"],
+            source_profile=(build_profile["name"] if source_profile else None),
         )
     except RuntimeError as exc:
         run.update(
@@ -781,6 +872,18 @@ def main() -> int:
         "rom_committed": False,
         "hardware_status": "pending-reservation-backed-mister",
     }
+    if source_profile:
+        if args.stream_source:
+            from stream_suite_evidence import verify
+        elif args.restart_source:
+            from restart_suite_evidence import verify
+        elif args.r536_source:
+            from r536_suite_evidence import verify
+        else:
+            from r534_suite_evidence import verify
+        receipt["source_builds"] = source_bindings
+        receipt["matrix"]["manifest_path"] = str(matrix_manifest)
+        verify(receipt)
     write_json(args.receipt.resolve(), receipt)
     run.update(
         status="passed",

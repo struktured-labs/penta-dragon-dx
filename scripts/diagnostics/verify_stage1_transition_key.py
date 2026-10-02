@@ -6,12 +6,14 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import time
+import math
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +28,7 @@ FEATURE_FIELDS = {
     "ffcf", "ffe8", "ffe9", "ffeb",
 }
 STAGE1_LUT_OFFSET = 13 * 0x4000 + (0x7000 - 0x4000)
+PRODUCTION_FEATURES = ("dc00", "scy", "dc02", "raw247")
 
 
 def parse_samples(text: str) -> tuple[int, ...]:
@@ -117,13 +120,14 @@ def run_profile(
 
 def assess(
     trace: Path, features: tuple[str, ...], canonical_lut: bytes | None,
+    *, trace_text: str | None = None,
 ) -> dict:
     last_key: dict[int, int] = {}
     last_plane: dict[int, bytes] = {}
     events = publications = transitions = false_negatives = false_positives = 0
     first_false_negative = None
     destinations: set[int] = set()
-    with trace.open(newline="") as handle:
+    with (trace.open(newline="") if trace_text is None else io.StringIO(trace_text, newline="")) as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             events += 1
             destination = int(row["destination"], 16)
@@ -139,8 +143,14 @@ def assess(
                     key ^= raw[int(feature[3:])]
                 else:
                     key ^= int(row[feature], 16)
-            key &= 0x7F
-            published = last_key.get(destination) != key
+            # The installed DAD7 runtime compares and stores the full byte.
+            # Masking bit 7 here under-certified keys whose source transition
+            # existed only in that bit.
+            key &= 0xFF
+            # Runtime initialization seeds both physical-map cache bytes to
+            # $FF. Model that exact cold state so a proposed first key of $FF
+            # fails instead of being credited as an automatic publication.
+            published = last_key.get(destination, 0xFF) != key
             transitioned = last_plane.get(destination) != plane
             publications += int(published)
             transitions += int(transitioned)
@@ -188,6 +198,7 @@ def main() -> int:
     )
     parser.add_argument("--skip-live", action="store_true")
     parser.add_argument("--skip-attract", action="store_true")
+    parser.add_argument("--skip-states", action="store_true")
     args = parser.parse_args()
 
     rom = args.rom.resolve()
@@ -201,11 +212,12 @@ def main() -> int:
         profiles.append((
             "cold-attract", "attract", None, args.attract_frames, 40000
         ))
-    for state_name in tuple(args.state_names) or DEFAULT_STATES:
-        state = (args.states / state_name).resolve()
-        if not state.is_file():
-            raise SystemExit(f"missing state: {state}")
-        profiles.append((state.stem, "state", state, args.frames, 6000))
+    if not args.skip_states:
+        for state_name in tuple(args.state_names) or DEFAULT_STATES:
+            state = (args.states / state_name).resolve()
+            if not state.is_file():
+                raise SystemExit(f"missing state: {state}")
+            profiles.append((state.stem, "state", state, args.frames, 6000))
 
     rom_bytes = rom.read_bytes()
     canonical_lut = rom_bytes[STAGE1_LUT_OFFSET:STAGE1_LUT_OFFSET + 256]
@@ -227,16 +239,28 @@ def main() -> int:
             timeout=args.timeout,
         )
         proposed = assess(trace, features, canonical_lut)
-        current = assess(trace, ("scx", "dc02", "raw49"), canonical_lut)
+        current = assess(trace, PRODUCTION_FEATURES, canonical_lut)
         live_plane = assess(trace, features, None)
         profile = {
             "probe": probe_report,
             "proposed_canonical_plane": proposed,
-            "current_camera_raw49": current,
+            "production_semantic_key": current,
             "live_lut_plane_telemetry": live_plane,
         }
         receipt["profiles"][name] = profile
-        failed |= proposed["events"] == 0 or proposed["false_negatives"] != 0
+        # A false positive is a safe extra atomic publication, not a missed
+        # visual update.  Bound it to one extra for every three required
+        # semantic transitions; the independent speed gates remain the final
+        # authority on whether that bounded safety margin is affordable.
+        false_positive_limit = max(
+            8, math.ceil(proposed["semantic_transitions"] / 3)
+        )
+        proposed["false_positive_limit"] = false_positive_limit
+        failed |= (
+            proposed["events"] == 0
+            or proposed["false_negatives"] != 0
+            or proposed["false_positives"] > false_positive_limit
+        )
         print(
             f"{name}: events={proposed['events']} "
             f"transitions={proposed['semantic_transitions']} "

@@ -1,6 +1,18 @@
 -- Minimal liveness receipt for the exact low-health/music transition route.
 -- Keep this probe deliberately free of screenshots, VRAM scans, breakpoints,
 -- and watchpoints so a missing heartbeat is evidence of a game-side stall.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("LOW_HEALTH_LIVE_OUT"))
 local SETTLE = tonumber(os.getenv("LOW_HEALTH_LIVE_SETTLE") or "120")
@@ -24,10 +36,10 @@ callbacks:add("frame", function()
   emu:setKeys(
     frame > SETTLE + PRE_TRIGGER and transition_frame < 0 and KEYS or 0)
   if frame <= SETTLE + PRE_TRIGGER then
-    emu:write8(0xDCDD, 1)
+    native_assistance.write(0xDCDD, 1)
   else
-    emu:write8(0xDCDC, LOW_SUB)
-    emu:write8(0xDCDD, 0)
+    native_assistance.write(0xDCDC, LOW_SUB)
+    native_assistance.write(0xDCDD, 0)
   end
 
   local handle = assert(io.open(OUT .. ".heartbeat", "a"))

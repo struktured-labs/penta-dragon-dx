@@ -100,6 +100,8 @@ def main() -> int:
         fire=False,
         trace=None,
         trace_writes=False,
+        trace_camera_min=0x02B0,
+        trace_camera_max=0x02D0,
     )
     direct_report = run_route(output=output / "direct",
                               via_opening=False, **common)

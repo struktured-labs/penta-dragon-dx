@@ -16,9 +16,11 @@ import time
 from pathlib import Path
 
 from PIL import Image, ImageChops
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
 DEFAULT_YAML = ROOT / "palettes/penta_palettes_v097.yaml"
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 BUILDER = ROOT / "scripts/build_v302_title_fix.py"
@@ -28,6 +30,7 @@ BANK13 = 13 * 0x4000
 
 TUNED = {
     ("bg_palettes", "Dungeon"): ["7FFF", "6A10", "3508", "0000"],
+    ("bg_palettes", "BG4"): ["7FFF", "6FE0", "2D80", "0000"],
     ("bg_palettes", "BG7"): ["7FFF", "4210", "2108", "0000"],
     ("stage1_hazard_palettes", "RotatingSpikeTeeth"): [
         "7FFF", "5294", "02DF", "0000"
@@ -117,6 +120,7 @@ def run_probe(
     mgba: str,
     rom: Path,
     output: Path,
+    expected_title_bg: bytes,
     expected_bg0: bytes,
     expected_bg7: bytes,
     expected_obj2: bytes,
@@ -133,6 +137,9 @@ def run_probe(
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
         PENTA_ROUNDTRIP_OUT=str(output),
+        PENTA_EXPECTED_TITLE_BG=",".join(
+            f"{byte:02X}" for byte in expected_title_bg
+        ),
         PENTA_EXPECTED_BG0=",".join(f"{byte:02X}" for byte in expected_bg0),
         PENTA_EXPECTED_BG7=",".join(f"{byte:02X}" for byte in expected_bg7),
         PENTA_EXPECTED_OBJ2=",".join(f"{byte:02X}" for byte in expected_obj2),
@@ -305,6 +312,11 @@ def main() -> int:
         rom = output_rom.read_bytes()
         palette_data = BANK13 + (0x6800 - 0x4000)
         bg0 = palette_bytes(TUNED[("bg_palettes", "Dungeon")])
+        tuned_document = yaml.safe_load(tuned_yaml.read_text())
+        title_bg_name = tuned_document["title_bg_palette"]
+        title_bg = palette_bytes(
+            tuned_document["bg_palettes"][title_bg_name]["colors"]
+        )
         bg7 = palette_bytes(TUNED[("bg_palettes", "BG7")])
         stage1_hazard_bg7 = palette_bytes(
             TUNED[("stage1_hazard_palettes", "RotatingSpikeTeeth")]
@@ -330,7 +342,9 @@ def main() -> int:
 
         static_checks = {
             "BG0 source": rom[palette_data:palette_data + 8] == bg0,
-            "title BG7 mask": rom[palette_data + 56:palette_data + 64] == bg0,
+            "title BG7 mask": (
+                rom[palette_data + 56:palette_data + 64] == title_bg
+            ),
             "tuned BG7 source": rom[
                 BANK13 + (0x68F8 - 0x4000):
                 BANK13 + (0x68F8 - 0x4000) + 8
@@ -381,8 +395,9 @@ def main() -> int:
                 20 * 0x4000 + (0x4100 - 0x4000):
                 20 * 0x4000 + (0x4200 - 0x4000)
             ]
-            static_checks["menu canonical LUT copy"] = (
-                private_menu_lut == canonical_lut
+            from menu_icon_colorization import build_menu_lut
+            static_checks["menu canonical LUT plus HUD overlay"] = (
+                private_menu_lut == build_menu_lut(canonical_lut)
             )
             failed_static = [
                 name for name, passed in static_checks.items() if not passed
@@ -393,6 +408,9 @@ def main() -> int:
 
         source_rom = args.candidate.read_bytes()
         source_bg0 = source_rom[palette_data:palette_data + 8]
+        source_title_bg = source_rom[
+            palette_data + 56:palette_data + 64
+        ]
         source_bg7 = source_rom[
             BANK13 + (0x68C8 - 0x4000):
             BANK13 + (0x68C8 - 0x4000) + 8
@@ -405,6 +423,7 @@ def main() -> int:
             args.mgba,
             args.candidate,
             baseline_output,
+            source_title_bg,
             source_bg0,
             source_bg7,
             source_obj2,
@@ -415,6 +434,7 @@ def main() -> int:
             args.mgba,
             output_rom,
             tuned_output,
+            title_bg,
             bg0,
             stage1_hazard_bg7,
             obj2,

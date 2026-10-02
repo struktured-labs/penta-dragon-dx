@@ -1,5 +1,17 @@
 -- Resume the Stage-1 secret/bonus SHMUP in the current ROM and audit its
 -- live jet palette, hardware OAM, visible BG attributes, and rendered frames.
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("BONUS_LIVE_OUT"), "BONUS_LIVE_OUT required")
 local SHOT_PREFIX = assert(
@@ -132,9 +144,7 @@ callbacks:add("frame", function()
     end
     if frame == 1 then emu:write8(0xDF0D, 0xFF) end
 
-    emu:write8(0xDCDD, 0x17)
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCBB, 0xFF)
+    native_assistance.write(0xDCBB, 0xFF)
 
     if frame >= SETTLE then sample_frame() end
     if frame == SETTLE or frame == math.floor((SETTLE + FRAMES) / 2)

@@ -20,6 +20,8 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from pathlib import Path
+import shutil
+import tempfile
 
 from pyboy import PyBoy
 
@@ -27,6 +29,8 @@ from pyboy import PyBoy
 CAPTURE_START = 120   # title screen is fully showing by this point
 CAPTURE_END = 600
 WHITE_THRESHOLD = 240
+ROOT = Path(__file__).resolve().parents[2]
+PROJECT_TMP = ROOT / "tmp"
 
 
 def analyze_frame(image) -> tuple[float, Counter[tuple[int, int, int]]]:
@@ -53,7 +57,22 @@ def format_distribution(distribution: Counter[tuple[int, int, int]]) -> str:
     )
 
 
+def prepare_runtime_rom(rom_path: Path, runtime: Path) -> Path:
+    runtime_rom = runtime / "candidate.gb"
+    shutil.copy2(rom_path.resolve(), runtime_rom)
+    return runtime_rom
+
+
 def run_probe(rom_path: Path) -> bool:
+    PROJECT_TMP.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="penta-title-animation-", dir=PROJECT_TMP
+    ) as directory:
+        runtime_rom = prepare_runtime_rom(rom_path, Path(directory))
+        return run_runtime_probe(runtime_rom)
+
+
+def run_runtime_probe(rom_path: Path) -> bool:
     pyboy = PyBoy(
         str(rom_path), window="null", cgb=True,
         sound_emulated=False, log_level=5,

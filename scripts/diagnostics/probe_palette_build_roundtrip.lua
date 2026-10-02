@@ -19,6 +19,7 @@ local function parse_bytes(name)
 end
 
 local EXPECTED_BG0 = parse_bytes("PENTA_EXPECTED_BG0")
+local EXPECTED_TITLE_BG = parse_bytes("PENTA_EXPECTED_TITLE_BG")
 local EXPECTED_BG7 = parse_bytes("PENTA_EXPECTED_BG7")
 local EXPECTED_OBJ2 = parse_bytes("PENTA_EXPECTED_OBJ2")
 
@@ -92,11 +93,11 @@ local function finish(status, message, gameplay_bg0, gameplay_bg7, gameplay_obj2
     report:write("phase_trace=" .. table.concat(phase_trace, ";") .. "\n")
     report:write(string.format(
         "title_bg0_match=%d\n",
-        title_bg0 and equal(title_bg0, EXPECTED_BG0) and 1 or 0
+        title_bg0 and equal(title_bg0, EXPECTED_TITLE_BG) and 1 or 0
     ))
     report:write(string.format(
         "title_bg7_masked=%d\n",
-        title_bg7 and equal(title_bg7, EXPECTED_BG0) and 1 or 0
+        title_bg7 and equal(title_bg7, EXPECTED_TITLE_BG) and 1 or 0
     ))
     report:write(string.format(
         "gameplay_bg0_match=%d\n",
@@ -162,8 +163,8 @@ callbacks:add("frame", function()
         local gameplay_obj2 = read_palette(0xFF6A, 0xFF6B, 2)
         local clean = (
             title_checked
-            and equal(title_bg0, EXPECTED_BG0)
-            and equal(title_bg7, EXPECTED_BG0)
+            and equal(title_bg0, EXPECTED_TITLE_BG)
+            and equal(title_bg7, EXPECTED_TITLE_BG)
             and equal(gameplay_bg0, EXPECTED_BG0)
             and equal(gameplay_bg7, EXPECTED_BG7)
             and equal(gameplay_obj2, EXPECTED_OBJ2)

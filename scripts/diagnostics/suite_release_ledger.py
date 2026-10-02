@@ -18,6 +18,13 @@ SCHEMA = "penta-release-ledger-v1"
 HEX64 = set("0123456789abcdef")
 
 
+# v3 is the current equal-start combined-seed gate; v2 receipts remain valid
+# historical evidence inside retained matrices built under the old policy.
+# The suite receipt still binds the current verifier hash for new runs.
+STAGE7_PATROL_SCHEMAS = frozenset({
+    "penta-stage7-state-patrol-v2", "penta-stage7-state-patrol-v3",
+})
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -43,14 +50,30 @@ def canonical_sha256(value: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def collect_release_ledger(matrix_dir: Path, *, expanded: bool) -> dict[str, Any]:
+def collect_release_ledger(
+    matrix_dir: Path,
+    *,
+    expanded: bool,
+    r534: bool = False,
+    source_profile: str | None = None,
+) -> dict[str, Any]:
     """Extract every accepted target miss from a completed release matrix."""
+
+    if r534:
+        if source_profile not in {None, "r534-original-source-v1"}:
+            raise RuntimeError("conflicting source-bound release-ledger profiles")
+        source_profile = "r534-original-source-v1"
+    source_bound = source_profile is not None
 
     artifacts_dir = matrix_dir / "artifacts"
     evidence_paths = {
         "title_attract": artifacts_dir / "title-idle-reel.summary.json",
         "gameplay_speed": artifacts_dir / "gameplay-speed/manifest.json",
+        "gameplay_movement_stress": (
+            artifacts_dir / "gameplay-movement-stress/manifest.json"
+        ),
         "boss_speed": artifacts_dir / "boss-speed-parity.json",
+        "boss_publication": artifacts_dir / "boss-publication-cadence.json",
         "boss_trajectory": artifacts_dir / "boss-trajectory-pairing.json",
         "boss_trajectory_null": (
             artifacts_dir / "boss-trajectory-pairing-null.json"
@@ -60,6 +83,8 @@ def collect_release_ledger(matrix_dir: Path, *, expanded: bool) -> dict[str, Any
         evidence_paths["ted_readiness"] = (
             artifacts_dir / "ted-release-readiness/report.json"
         )
+    if source_bound:
+        evidence_paths["gameplay_movement_stress"] = artifacts_dir / "gameplay-movement-stress/receipt.json"
     documents = {name: load_json(path) for name, path in evidence_paths.items()}
     evidence = {
         name: {
@@ -89,6 +114,9 @@ def collect_release_ledger(matrix_dir: Path, *, expanded: bool) -> dict[str, Any
 
     gameplay = documents["gameplay_speed"]
     for row in gameplay.get("rows", []):
+        if source_bound and row.get("target_met") is not True and not (
+                row.get("accepted_slowdown_deviation") is True and row.get("throughput_accepted") is True):
+            raise RuntimeError("source-bound gameplay target miss lacks explicit accepted deviation")
         if (
             row.get("target_met") is False
             and row.get("accepted_slowdown_deviation") is True
@@ -104,14 +132,62 @@ def collect_release_ledger(matrix_dir: Path, *, expanded: bool) -> dict[str, Any
                 "deviation_percent": (1.0 - ratio) * 100.0,
                 "target_percent": float(gameplay["tolerance"]) * 100.0,
                 "accepted_floor_ratio": float(
-                    gameplay["accepted_slowdown_floor"]
+                    row.get(
+                        "accepted_slowdown_floor",
+                        gameplay["accepted_slowdown_floor"],
+                    )
                 ),
                 "policy": "accepted_slowdown_floor",
                 "evidence": "gameplay_speed",
             })
 
+    movement = documents["gameplay_movement_stress"]
+    if source_bound and (movement.get("schema") not in STAGE7_PATROL_SCHEMAS
+                 or movement.get("status") != "PASS"
+                 or movement.get("metric", {}).get("strict_target_met") is not True):
+        raise RuntimeError("source-bound ledger requires the equal-start combined-seed Stage-7 patrol pass")
+    for row in movement.get("rows", []):
+        if (
+            row.get("target_met") is False
+            and row.get("accepted_slowdown_deviation") is True
+            and row.get("throughput_accepted") is True
+        ):
+            ratio = float(row["ratio"])
+            deviations.append({
+                "id": f"stage_{row['stage']}_movement_stress_speed",
+                "scope": f"stage_{row['stage']}_movement_stress",
+                "measurement": "bounded_patrol_gameplay_throughput",
+                "direction": "slower",
+                "ratio_dx_over_og": ratio,
+                "deviation_percent": (1.0 - ratio) * 100.0,
+                "target_percent": float(movement["tolerance"]) * 100.0,
+                "accepted_floor_ratio": float(
+                    row.get(
+                        "accepted_slowdown_floor",
+                        movement["accepted_slowdown_floor"],
+                    )
+                ),
+                "policy": "accepted_movement_stress_floor",
+                "evidence": "gameplay_movement_stress",
+            })
+
     boss_speed = documents["boss_speed"]
     for row in boss_speed.get("bosses", []):
+        if source_bound and row.get("target_met") is not True and not (
+                row.get("throughput_accepted") is True and (
+                    row.get("accepted_bounded_speedup") is True or row.get("accepted_slowdown_deviation") is True)):
+            raise RuntimeError("source-bound boss target miss lacks explicit accepted deviation")
+        if source_bound and row.get("target_met") is False and row.get("accepted_bounded_speedup") is True:
+            if row.get("throughput_accepted") is not True:
+                raise RuntimeError("source-bound boss speedup is not accepted by its gate")
+            deviations.append({
+                "id": f"boss_{row['boss']}_loop_speedup", "scope": row["boss"],
+                "measurement": "arena_loop_throughput", "direction": "faster",
+                "ratio_dx_over_og": float(row["speed_ratio"]),
+                "deviation_percent": -float(row["slowdown_percent"]),
+                "target_percent": float(boss_speed["maximum_slowdown_percent"]),
+                "policy": "accepted_bounded_speedup", "evidence": "boss_speed",
+            })
         if (
             row.get("target_met") is False
             and row.get("accepted_slowdown_deviation") is True
@@ -133,6 +209,39 @@ def collect_release_ledger(matrix_dir: Path, *, expanded: bool) -> dict[str, Any
                 "policy": "operator_accepted_slow_boss",
                 "evidence": "boss_speed",
             })
+
+    boss_publication = documents["boss_publication"]
+    for row in boss_publication.get("bosses", []):
+        if source_bound and row.get("target_met") is not True and not (
+                row.get("accepted_phase_deviation") is True and row.get("phase_bound_met") is True):
+            raise RuntimeError("source-bound publication target miss lacks explicit accepted deviation")
+        if (
+            (row.get("accepted_fast_boss_override") is True or source_bound)
+            and row.get("accepted_phase_deviation") is True
+            and row.get("phase_bound_met") is True
+        ):
+            deviations.append({
+                "id": f"boss_{row['boss']}_publication_fast_boundary",
+                "scope": row["boss"],
+                "measurement": "publication_event_rate",
+                "direction": "faster",
+                "ratio_dx_over_og": float(row["speed_ratio"]),
+                "deviation_percent": (
+                    float(row["speed_ratio"]) - 1.0
+                ) * 100.0,
+                "accepted_ceiling_ratio": float(
+                    row["phase_ratio_ceiling"]
+                ),
+                "policy": "operator_accepted_fast_boss_boundary",
+                "evidence": "boss_publication",
+            })
+            if source_bound and row.get("accepted_fast_boss_override") is not True:
+                deviations[-1].update(
+                    id=f"boss_{row['boss']}_publication_phase_deviation",
+                    policy="accepted_phase_deviation",
+                    direction="faster" if float(row["speed_ratio"]) > 1 else "slower",
+                    deviation_percent=abs((float(row["speed_ratio"]) - 1) * 100),
+                )
 
     if expanded:
         ted = documents["ted_readiness"]["cadence"]
@@ -256,12 +365,30 @@ def collect_release_ledger(matrix_dir: Path, *, expanded: bool) -> dict[str, Any
         },
         "evidence": evidence,
     }
+    if source_bound:
+        ledger["profile"] = source_profile
+        ledger["stage7_world_position"] = {
+            "classification": movement["classification"], "metric": movement["metric"],
+            "evidence": "gameplay_movement_stress",
+        }
     ledger["ledger_sha256"] = canonical_sha256(ledger)
     return ledger
 
 
-def validate_release_ledger(value: object, *, expanded: bool) -> list[str]:
+def validate_release_ledger(
+    value: object,
+    *,
+    expanded: bool,
+    r534: bool = False,
+    source_profile: str | None = None,
+) -> list[str]:
     """Return structural/integrity errors for a receipt-embedded ledger."""
+
+    if r534:
+        if source_profile not in {None, "r534-original-source-v1"}:
+            return ["conflicting source-bound release-ledger profiles"]
+        source_profile = "r534-original-source-v1"
+    source_bound = source_profile is not None
 
     if not isinstance(value, dict):
         return ["release_ledger is not an object"]
@@ -286,6 +413,7 @@ def validate_release_ledger(value: object, *, expanded: bool) -> list[str]:
         "stage_5_speed",
         "stage_7_speed",
         "boss_crystal_dragon_speed",
+        "boss_cameo_publication_fast_boundary",
     }
     if expanded:
         required.add("ted_publication_cadence")
@@ -297,6 +425,14 @@ def validate_release_ledger(value: object, *, expanded: bool) -> list[str]:
         "boss_angela_matched_transition_cadence",
         "boss_penta_dragon_matched_transition_cadence",
     })
+    if source_bound:
+        # Current source-bound verification regenerates the entire ledger from
+        # its nested evidence. Do not require historical slowdowns to recur.
+        required = {"title_attract_combined_duration"}
+        if value.get("profile") != source_profile:
+            errors.append("source-bound ledger profile mismatch")
+        if value.get("stage7_world_position", {}).get("metric", {}).get("strict_target_met") is not True:
+            errors.append("source-bound ledger omits strict Stage-7 world-position parity")
     missing = sorted(required - set(ids))
     if missing:
         errors.append("accepted deviations omitted: " + ", ".join(missing))
@@ -329,11 +465,13 @@ def validate_release_ledger(value: object, *, expanded: bool) -> list[str]:
         errors.append("trajectory null control is not exact zero")
     evidence = value.get("evidence")
     required_evidence = {
-        "title_attract", "gameplay_speed", "boss_speed",
+        "title_attract", "gameplay_speed", "boss_speed", "boss_publication",
         "boss_trajectory", "boss_trajectory_null",
     }
     if expanded:
         required_evidence.add("ted_readiness")
+    if source_bound:
+        required_evidence.add("gameplay_movement_stress")
     if not isinstance(evidence, dict):
         errors.append("release-ledger evidence map is missing")
     else:

@@ -68,9 +68,12 @@ future bg_table refactor that mis-routes a palette is caught even if
 
 ## Per-probe notes
 
-**verify_phantom_d887.py** caches the vanilla baseline on disk
-(`.phantom_d887_baseline.json`, keyed by ROM mtime+size). Use
-`--rebaseline` to force a fresh measurement.
+**verify_phantom_d887.py** now measures both baseline and candidate freshly.
+It checks native requests and bank-qualified engine consumption; frame-sampled
+D887 transitions remain diagnostics because they can miss inter-frame pulses.
+The old mtime/size-only baseline cache is no longer used. Raw request/engine
+traces and ROM/tool/core identities are retained with the receipt. This checks
+command integrity, not acoustic equivalence; native PCM is separate evidence.
 
 **verify_scroll_tearing.py** samples *both* BG palette RAM and the
 VBK=1 attr histogram every frame during a 4-second scroll window. The

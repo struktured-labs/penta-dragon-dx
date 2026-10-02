@@ -32,12 +32,15 @@ def _ted_materials() -> dict[int, int]:
     for row, width in enumerate(_TED_ROW_WIDTHS):
         for col in range(width):
             if row <= 6:
-                # Dark blue edge scales frame interleaved gold/crimson armor;
-                # stagger each row so no palette boundary spans the sphere.
-                if col in (0, width - 1) and row >= 2:
+                # Keep the top contour and both shell edges crimson.  The old
+                # two-thirds-gold checker made the crown read as loose floor
+                # cells in the human audit.  Sparse, staggered gold scales
+                # retain the Contra/Metroid highlight without creating a
+                # straight material boundary or a checkerboard cap.
+                if row == 0 or col in (0, width - 1):
                     palette = 1
                 else:
-                    palette = 5 if (row + col) % 3 else 1
+                    palette = 5 if (row + col) % 3 == 0 else 1
             else:
                 # Preserve vertical tendril identity across animated rows.
                 palette = (1, 5, 2)[col % 3]
@@ -108,7 +111,13 @@ ARENA_TILE_PAL = {
     # These four tables previously treated later animation chunks as item
     # pickups.  That was the source of the visible horizontal bands.
     "troop": _span(7, 0x23, 0xFF),
-    "faze": _span(2, 0x12, 0xFF, exclude=(0x7A,)),
+    # $03-$0F are Faze's traced upper horns.  The old $12 floor left that
+    # contour on neutral BG0 even though the connected body was purple.
+    # Tile $01 is the arena background and $7A remains the measured hole.
+    "faze": _span(2, 0x03, 0xFF, exclude=(0x7A,)),
     "angela": _span(2, 0x20, 0xBA) | {0xFF: 2},
-    "penta_dragon": _span(1, 0x20, 0xFF),
+    # The final pose inventory proves $01-$1F are the lower tail, the slim
+    # torso connector, and a wing-edge continuation.  $FF alone is the black
+    # arena field (and _table_from_dict force-clears that sentinel).
+    "penta_dragon": _span(1, 0x01, 0xFE),
 }

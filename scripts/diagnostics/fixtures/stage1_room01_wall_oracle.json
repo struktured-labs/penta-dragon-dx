@@ -1,0 +1,78 @@
+{
+  "schema": "penta-stage1-room01-wall-oracle-v1",
+  "review_basis": "Human-reviewed cold north trajectory; selectors are semantic and frame numbers are evidence only.",
+  "room01_checkpoint": {
+    "selector": {
+      "room": 1,
+      "camera": 988,
+      "lcdc": 139,
+      "scx": 12,
+      "scy": 0,
+      "camera_y": 60,
+      "scene": 2,
+      "active": 1,
+      "svbk": 1
+    },
+    "reviewed_gameplay_frame": 1065,
+    "minimum_records": 3,
+    "expected_attr": 6,
+    "wall_rows": [
+      {"y": 0, "cells": [[1, 38], [2, 39], [19, 36], [20, 37]]},
+      {"y": 1, "cells": [[1, 54], [2, 51], [19, 48], [20, 53]]},
+      {"y": 2, "cells": [[1, 38], [2, 39], [19, 36], [20, 37]]},
+      {"y": 3, "cells": [[1, 54], [2, 51], [19, 48], [20, 53]]},
+      {"y": 4, "cells": [[1, 38], [2, 39], [19, 36], [20, 37]]},
+      {"y": 5, "cells": [[1, 54], [2, 51], [19, 48], [20, 53]]},
+      {"y": 6, "cells": [[1, 38], [2, 39], [19, 36], [20, 37]]},
+      {"y": 7, "cells": [[1, 54], [2, 51], [19, 48], [20, 53]]},
+      {"y": 8, "cells": [[1, 38], [2, 39], [19, 36], [20, 37]]},
+      {"y": 9, "cells": [[1, 54], [2, 51], [19, 48], [20, 53]]},
+      {"y": 10, "cells": [[1, 38], [20, 37]]},
+      {"y": 11, "cells": [[6, 51], [15, 48]]},
+      {"y": 12, "cells": [[5, 38], [6, 39], [15, 36], [16, 37]]},
+      {"y": 13, "cells": [[5, 54], [6, 51], [15, 48], [16, 53]]},
+      {"y": 14, "cells": [[5, 38], [16, 37]]},
+      {"y": 15, "cells": [[8, 51], [13, 48]]},
+      {"y": 16, "cells": [[7, 38], [8, 39], [13, 36], [14, 37]]},
+      {"y": 17, "cells": [[7, 54], [8, 51], [13, 48], [14, 53]]}
+    ]
+  },
+  "room05_patterned_floor_control": {
+    "selector": {
+      "room": 5,
+      "camera": 1824,
+      "lcdc": 131,
+      "scx": 0,
+      "scy": 0,
+      "camera_y": 60,
+      "scene": 2,
+      "active": 1,
+      "svbk": 1
+    },
+    "reviewed_gameplay_frames": [1, 2],
+    "minimum_records": 2,
+    "visible_rows": 18,
+    "visible_columns": 20,
+    "patterned_floor_tile_ids": [42, 43, 44, 45, 46, 58, 59, 60, 61],
+    "expected_attr": 0,
+    "control_cells": [
+      {"view_index": 98, "x": 14, "y": 4, "map_offset": 142, "tile": 44},
+      {"view_index": 99, "x": 15, "y": 4, "map_offset": 143, "tile": 45},
+      {"view_index": 119, "x": 14, "y": 5, "map_offset": 174, "tile": 60}
+    ]
+  },
+  "archived_negative_controls": {
+    "r290": {
+      "trajectory_sha256": "0b1cc081f5e3462ca747520475cd93ea58491ac407b7a244f4a02f4ef4933711",
+      "checkpoint_records": 3,
+      "bad_cells_per_record": 32,
+      "wall_attrs_hex": "06000006060000060600000606000006060000060600000606000006060000060600000606000006060600000600000606000006060600000600000606000006"
+    },
+    "r292": {
+      "trajectory_sha256": "cc7cd56f78e260df27af3a4c48f80246c289bf2f9f18622835a001dd13116bba",
+      "checkpoint_records": 3,
+      "bad_cells_per_record": 32,
+      "wall_attrs_hex": "06000006060000060600000606000006060000060600000606000006060000060600000606000006060600000600000606000006060600000600000606000006"
+    }
+  }
+}

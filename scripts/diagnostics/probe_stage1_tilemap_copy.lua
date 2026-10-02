@@ -13,14 +13,39 @@
 --   STAGE1_TILEMAP_TRACE_HASH  optional eight-digit packed-source hash
 --   STAGE1_TILEMAP_PURE_COMPLETION  candidate's pure-copy RET address
 --   STAGE1_TILEMAP_ATOMIC_WRAP  candidate's fixed atomic exit address
+--   STAGE1_TILEMAP_CANONICAL_LUT  reviewed immutable 256-byte Stage-1 LUT
+--   STAGE1_TILEMAP_CANONICAL_LUT_SHA256  reviewed LUT digest
+--   STAGE1_TILEMAP_ROM_SHA256  exact candidate digest
+--   STAGE1_TILEMAP_COPIER_SHA256  reviewed fixed-bank copier digest
+--   STAGE1_TILEMAP_ORACLE_SCHEMA  expected-plane contract identifier
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local OUT = assert(os.getenv("STAGE1_TILEMAP_OUT"))
+local DONE = assert(os.getenv("STAGE1_TILEMAP_DONE"))
 local LIMIT = tonumber(os.getenv("STAGE1_TILEMAP_FRAMES") or "900")
 local WARM_RESET = os.getenv("STAGE1_TILEMAP_WARM_RESET") == "1"
 local SETUP_PATH = os.getenv("STAGE1_TILEMAP_SETUP") or ""
 local FORCE_PURE = os.getenv("STAGE1_TILEMAP_FORCE_PURE") == "1"
 local TRACE_HASH_TEXT = os.getenv("STAGE1_TILEMAP_TRACE_HASH") or ""
 local TRACE_HASH = TRACE_HASH_TEXT ~= "" and tonumber(TRACE_HASH_TEXT, 16) or nil
+local CANONICAL_LUT_PATH = assert(
+  os.getenv("STAGE1_TILEMAP_CANONICAL_LUT"))
+local CANONICAL_LUT_SHA256 = assert(
+  os.getenv("STAGE1_TILEMAP_CANONICAL_LUT_SHA256"))
+local ROM_SHA256 = assert(os.getenv("STAGE1_TILEMAP_ROM_SHA256"))
+local COPIER_SHA256 = assert(os.getenv("STAGE1_TILEMAP_COPIER_SHA256"))
+local ORACLE_SCHEMA = assert(os.getenv("STAGE1_TILEMAP_ORACLE_SCHEMA"))
 local PURE_COMPLETION = tonumber(
   assert(os.getenv("STAGE1_TILEMAP_PURE_COMPLETION")), 16)
 local KEY_A = 0x01
@@ -34,6 +59,7 @@ local ATOMIC_ROW = tonumber(
   assert(os.getenv("STAGE1_TILEMAP_ATOMIC_ROW")), 16)
 local ATOMIC_FIRST_TILE_WRITE = tonumber(
   assert(os.getenv("STAGE1_TILEMAP_ATOMIC_FIRST_WRITE")), 16)
+local R417_PRECOMPUTED = os.getenv("STAGE1_TILEMAP_R417_PRECOMPUTED") == "1"
 local TILE_ROW = tonumber(
   assert(os.getenv("STAGE1_TILEMAP_TILE_ROW")), 16)
 local wrap_opcode = emu:read8(ATOMIC_WRAP)
@@ -48,10 +74,17 @@ local copy_entries, atomic_completions, pure_completions = 0, 0, 0
 local wrap_hits, exact_copies = 0, 0
 local unmatched_wrap_hits, wrong_destination_wrap_hits = 0, 0
 local mismatch_copies, mismatch_cells = 0, 0
+local attribute_mismatch_copies, attribute_mismatch_cells = 0, 0
+local attribute_checked_copies, attribute_unreadable_copies = 0, 0
+local deferred_attribute_checks, deferred_attribute_pending = {}, 0
 local entry_mismatch_copies, entry_mismatch_cells = 0, 0
-local source_changed_cells = 0
+local source_changed_copies, source_changed_cells = 0, 0
+local publication_model_copies, publication_model_cells = 0, 0
+local ordinary_attribute_model_copies, ordinary_attribute_model_cells = 0, 0
 local first_mismatch = nil
-local pending_source, pending_base = nil, nil
+local first_attribute_mismatch = nil
+local pending_source, pending_attributes, pending_base = nil, nil, nil
+local pending_room, pending_ffe5 = nil, nil
 local pending_wraps, selected_base = 0, nil
 local pending_first_atomic_write = false
 local trace_target_copy = false
@@ -79,6 +112,12 @@ if SETUP_PATH ~= "" then
   setup_bytes = {string.byte(data, 1, #data)}
 end
 
+local canonical_lut_file = assert(io.open(CANONICAL_LUT_PATH, "rb"))
+local canonical_lut = assert(canonical_lut_file:read("*a"))
+canonical_lut_file:close()
+assert(#canonical_lut == 0x100,
+  "Stage-1 canonical attribute LUT must be exactly 256 bytes")
+
 local function read_register(name)
   local ok, value = pcall(function() return emu:readRegister(name) end)
   if ok and value ~= nil then
@@ -97,6 +136,30 @@ local function packed_source()
     bytes[offset + 1] = emu:read8(0xC1A0 + offset)
   end
   return bytes
+end
+
+-- This is the independent ordinary-plane owner used by the resident compiler.
+-- Never consult mutable C600 here: a corrupt live LUT copied faithfully to
+-- VRAM must fail instead of grading itself. Room $01's four metallic wall
+-- tiles are the one reviewed semantic override.  The approved compiled-tooth
+-- LUT stores the CGB VRAM-bank bit in twelve entries, so this compares the
+-- complete reviewed attribute byte—not only its palette low bits.
+local function independent_expected_palette(tile, room, ffe5)
+  local effective_room = ffe5 ~= 0 and ffe5 or room
+  if effective_room == 0x01
+      and (tile == 0x24 or tile == 0x27
+        or tile == 0x30 or tile == 0x33) then
+    return 0x06
+  end
+  return string.byte(canonical_lut, tile + 1)
+end
+
+local function expected_attribute_plane(source, room, ffe5)
+  local expected = {}
+  for offset, tile in ipairs(source) do
+    expected[offset] = independent_expected_palette(tile, room, ffe5)
+  end
+  return expected
 end
 
 local function source_hash(bytes)
@@ -121,20 +184,31 @@ local function dump_map(path, base)
   handle:close()
 end
 
-local function compare_completed_copy(base, expected)
-  local current = packed_source()
+local function compare_completed_copy(
+    base, expected, expected_attributes, compare_attributes)
+  -- The entry snapshot owns this publication. Completion-time C1A0 is read
+  -- only to reject in-flight source drift; it can never become the oracle.
+  local completion_source = packed_source()
   local local_mismatches, local_entry_mismatches = 0, 0
+  local local_source_changes = 0
+  local local_attribute_mismatches = 0
+  local attributes_readable = compare_attributes
+      and (emu:read8(0xFF41) & 3) ~= 3
+  local old_vbk = emu:read8(0xFF4F)
+  if attributes_readable then emu:write8(0xFF4F, 1) end
   for row = 0, 23 do
     for col = 0, 23 do
       local source_offset = row * 24 + col
       local address = base + row * 32 + col
-      local entry_wanted = expected[source_offset + 1]
-      local wanted = current[source_offset + 1]
+      local wanted = expected[source_offset + 1]
+      local completion_tile = completion_source[source_offset + 1]
       local actual = raw_vram:read8(address - 0x8000)
-      if entry_wanted ~= wanted then
-        source_changed_cells = source_changed_cells + 1
+      local actual_attr = attributes_readable and emu:read8(address) or 0
+      local wanted_attr = expected_attributes[source_offset + 1]
+      if completion_tile ~= wanted then
+        local_source_changes = local_source_changes + 1
       end
-      if actual ~= entry_wanted then
+      if actual ~= wanted then
         local_entry_mismatches = local_entry_mismatches + 1
       end
       if actual ~= wanted then
@@ -148,7 +222,7 @@ local function compare_completed_copy(base, expected)
             col = col,
             address = address,
             expected = wanted,
-            entry_expected = entry_wanted,
+            completion_source = completion_tile,
             actual = actual,
             scene = emu:read8(0xD880),
             room = emu:read8(0xFFBD),
@@ -157,15 +231,56 @@ local function compare_completed_copy(base, expected)
             stat = emu:read8(0xFF41) & 3,
             vbk = emu:read8(0xFF4F) & 1,
           }
-          dump_bytes(OUT .. ".first.source.bin", current)
-          dump_bytes(OUT .. ".first.entry-source.bin", expected)
+          dump_bytes(OUT .. ".first.completion-source.bin", completion_source)
+          dump_bytes(OUT .. ".first.publication-source.bin", expected)
           dump_map(OUT .. ".first.map.bin", base)
           emu:screenshot(OUT .. ".first.png")
         end
       end
+      if attributes_readable and actual_attr ~= wanted_attr then
+        local_attribute_mismatches = local_attribute_mismatches + 1
+        if not first_attribute_mismatch then
+          first_attribute_mismatch = {
+            frame = frame,
+            copy = atomic_completions,
+            base = base,
+            row = row,
+            col = col,
+            address = address,
+            tile = wanted,
+            expected = wanted_attr,
+            actual = actual_attr,
+            scene = emu:read8(0xD880),
+            room = emu:read8(0xFFBD),
+          }
+        end
+      end
     end
   end
+  publication_model_copies = publication_model_copies + 1
+  publication_model_cells = publication_model_cells + 576
+  source_changed_cells = source_changed_cells + local_source_changes
+  if local_source_changes > 0 then
+    source_changed_copies = source_changed_copies + 1
+  end
   mismatch_cells = mismatch_cells + local_mismatches
+  if attributes_readable then
+    emu:write8(0xFF4F, old_vbk)
+    attribute_checked_copies = attribute_checked_copies + 1
+    ordinary_attribute_model_copies = ordinary_attribute_model_copies + 1
+    ordinary_attribute_model_cells = ordinary_attribute_model_cells + 576
+  elseif compare_attributes then
+    -- Preserve the immutable entry-owned expectation, then read it on the
+    -- first later PPU-safe frame.  Never read bank-1 VRAM during mode 3.
+    deferred_attribute_checks[#deferred_attribute_checks + 1] = {
+      base = base, expected_attributes = expected_attributes,
+      expected = expected, copy = atomic_completions,
+      room = emu:read8(0xFFBD),
+    }
+    deferred_attribute_pending = deferred_attribute_pending + 1
+  end
+  attribute_mismatch_cells =
+      attribute_mismatch_cells + local_attribute_mismatches
   entry_mismatch_cells = entry_mismatch_cells + local_entry_mismatches
   if local_entry_mismatches > 0 then
     entry_mismatch_copies = entry_mismatch_copies + 1
@@ -175,12 +290,62 @@ local function compare_completed_copy(base, expected)
   else
     mismatch_copies = mismatch_copies + 1
   end
+  if local_attribute_mismatches > 0 then
+    attribute_mismatch_copies = attribute_mismatch_copies + 1
+  end
+end
+
+local function flush_deferred_attribute_checks()
+  if #deferred_attribute_checks == 0 then return end
+  if (emu:read8(0xFF41) & 3) == 3 then return end
+  local old_vbk = emu:read8(0xFF4F)
+  emu:write8(0xFF4F, 1)
+  for _, check in ipairs(deferred_attribute_checks) do
+    local local_mismatches = 0
+    for row = 0, 23 do
+      for col = 0, 23 do
+        local source_offset = row * 24 + col
+        local address = check.base + row * 32 + col
+        local wanted_attr = check.expected_attributes[source_offset + 1]
+        local actual_attr = emu:read8(address)
+        if actual_attr ~= wanted_attr then
+          local_mismatches = local_mismatches + 1
+          if not first_attribute_mismatch then
+            first_attribute_mismatch = {
+              frame = frame, copy = check.copy, base = check.base,
+              row = row, col = col, address = address,
+              tile = check.expected[source_offset + 1],
+              expected = wanted_attr, actual = actual_attr,
+              scene = emu:read8(0xD880), room = check.room,
+            }
+          end
+        end
+      end
+    end
+    attribute_checked_copies = attribute_checked_copies + 1
+    ordinary_attribute_model_copies = ordinary_attribute_model_copies + 1
+    ordinary_attribute_model_cells = ordinary_attribute_model_cells + 576
+    attribute_mismatch_cells = attribute_mismatch_cells + local_mismatches
+    if local_mismatches > 0 then
+      attribute_mismatch_copies = attribute_mismatch_copies + 1
+    end
+    deferred_attribute_pending = deferred_attribute_pending - 1
+  end
+  emu:write8(0xFF4F, old_vbk)
+  deferred_attribute_checks = {}
 end
 
 local function write_report()
   if finished then return end
   finished = true
   local handle = assert(io.open(OUT, "w"))
+  handle:write("oracle_schema=" .. ORACLE_SCHEMA .. "\n")
+  handle:write("rom_sha256=" .. ROM_SHA256 .. "\n")
+  handle:write("copier_sha256=" .. COPIER_SHA256 .. "\n")
+  handle:write("canonical_lut_sha256=" .. CANONICAL_LUT_SHA256 .. "\n")
+  handle:write("ordinary_attribute_scope=dirty-pre-semantic-overlay\n")
+  handle:write(
+    "semantic_overlay_owner=stage1-hazard-and-low-health-publication-gates\n")
   handle:write(string.format("frames=%d\n", play_frame))
   handle:write(string.format("total_frames=%d\n", frame))
   handle:write(string.format("final_scene=%02X\n", emu:read8(0xD880)))
@@ -200,10 +365,32 @@ local function write_report()
   handle:write(string.format("mismatch_copies=%d\n", mismatch_copies))
   handle:write(string.format("mismatch_cells=%d\n", mismatch_cells))
   handle:write(string.format(
+    "attribute_mismatch_copies=%d\n", attribute_mismatch_copies))
+  handle:write(string.format(
+    "attribute_mismatch_cells=%d\n", attribute_mismatch_cells))
+  handle:write(string.format(
+    "attribute_checked_copies=%d\n", attribute_checked_copies))
+  handle:write(string.format(
+    "attribute_unreadable_copies=%d\n", attribute_unreadable_copies))
+  handle:write(string.format(
+    "deferred_attribute_pending=%d\n", deferred_attribute_pending))
+  handle:write(string.format(
     "entry_mismatch_copies=%d\n", entry_mismatch_copies))
   handle:write(string.format(
     "entry_mismatch_cells=%d\n", entry_mismatch_cells))
+  handle:write(string.format(
+    "source_changed_copies=%d\n", source_changed_copies))
   handle:write(string.format("source_changed_cells=%d\n", source_changed_cells))
+  handle:write(string.format(
+    "publication_model_copies=%d\n", publication_model_copies))
+  handle:write(string.format(
+    "publication_model_cells=%d\n", publication_model_cells))
+  handle:write(string.format(
+    "ordinary_attribute_model_copies=%d\n",
+    ordinary_attribute_model_copies))
+  handle:write(string.format(
+    "ordinary_attribute_model_cells=%d\n",
+    ordinary_attribute_model_cells))
   local destination_parts = {}
   for base in pairs(destinations) do
     destination_parts[#destination_parts + 1] = string.format("%04X", base)
@@ -257,12 +444,12 @@ local function write_report()
   if first_mismatch then
     handle:write(string.format(
       "first_mismatch=frame:%d copy:%d base:%04X row:%d col:%d " ..
-      "address:%04X expected:%02X entry_expected:%02X actual:%02X " ..
+      "address:%04X expected:%02X completion_source:%02X actual:%02X " ..
       "scene:%02X room:%02X stat:%d vbk:%d " ..
       "scx:%02X scy:%02X\n",
       first_mismatch.frame, first_mismatch.copy, first_mismatch.base,
       first_mismatch.row, first_mismatch.col, first_mismatch.address,
-      first_mismatch.expected, first_mismatch.entry_expected,
+      first_mismatch.expected, first_mismatch.completion_source,
       first_mismatch.actual,
       first_mismatch.scene, first_mismatch.room,
       first_mismatch.stat, first_mismatch.vbk,
@@ -270,7 +457,23 @@ local function write_report()
   else
     handle:write("first_mismatch=none\n")
   end
+  if first_attribute_mismatch then
+    handle:write(string.format(
+      "first_attribute_mismatch=frame:%d copy:%d base:%04X row:%d col:%d " ..
+      "address:%04X tile:%02X expected:%02X actual:%02X scene:%02X room:%02X\n",
+      first_attribute_mismatch.frame, first_attribute_mismatch.copy,
+      first_attribute_mismatch.base, first_attribute_mismatch.row,
+      first_attribute_mismatch.col, first_attribute_mismatch.address,
+      first_attribute_mismatch.tile, first_attribute_mismatch.expected,
+      first_attribute_mismatch.actual, first_attribute_mismatch.scene,
+      first_attribute_mismatch.room))
+  else
+    handle:write("first_attribute_mismatch=none\n")
+  end
   handle:close()
+  local done = assert(io.open(DONE, "w"))
+  done:write("complete\n")
+  done:close()
   emu:stop()
 end
 
@@ -307,6 +510,10 @@ pcall(function()
     if h == 0x98 or h == 0x9C then
       pending_base = h * 0x100
       pending_source = packed_source()
+      pending_room = emu:read8(0xFFBD)
+      pending_ffe5 = emu:read8(0xFFE5)
+      pending_attributes = expected_attribute_plane(
+        pending_source, pending_room, pending_ffe5)
     end
     local pending_hash = source_hash(pending_source)
     trace_target_copy = TRACE_HASH ~= nil and pending_hash == TRACE_HASH
@@ -389,15 +596,22 @@ pcall(function()
 
   emu:setBreakpoint(function()
     if emu:read8(0xD880) ~= 0x02 or emu:read8(0xFF99) ~= 1 then return end
-    wrap_hits = wrap_hits + 1
     local a, h = read_register("A"), read_register("H")
+    -- The r417 precomputed layout visits this wrapper during partial rows.
+    -- Its byte-pinned completed tails have H=$9B/$9F only.
+    if R417_PRECOMPUTED and (h & 0x03) ~= 0x03 then return end
+    wrap_hits = wrap_hits + 1
     wrap_a_values[a] = (wrap_a_values[a] or 0) + 1
     wrap_h_values[h] = (wrap_h_values[h] or 0) + 1
     local base
     if ATOMIC_WRAP_MODE == "direct-map" then
-      -- Complete tile and attribute planes were already published by GDMA;
-      -- the double-buffered path retains the exact destination base in H.
-      base = h * 0x100
+      -- The postcomputed compiler borrows H while staging the attribute plane,
+      -- but its odd FF01 tag still names the exact physical DMA destination.
+      -- Decode only the reviewed $99/$9D tags; aliases fail closed below.
+      local tag = emu:read8(0xFF01)
+      if tag == 0x99 then base = 0x9800
+      elseif tag == 0x9D then base = 0x9C00
+      else base = 0 end
     elseif STOCK_ORDER_WRAP then
       -- Stock-order candidate: one final visit with H=base+$03. The row-end
       -- discriminator may legitimately leave A=$00, $E0, or another value;
@@ -409,7 +623,10 @@ pcall(function()
       if a ~= 0x80 then return end
       base = h * 0x100
     end
-    if base ~= 0x9800 and base ~= 0x9C00 then return end
+    if base ~= 0x9800 and base ~= 0x9C00 then
+      wrong_destination_wrap_hits = wrong_destination_wrap_hits + 1
+      return
+    end
     if pending_source == nil then
       unmatched_wrap_hits = unmatched_wrap_hits + 1
       return
@@ -422,13 +639,14 @@ pcall(function()
     atomic_completions = atomic_completions + 1
     completion_stat_values[emu:read8(0xFF41) & 3] =
       (completion_stat_values[emu:read8(0xFF41) & 3] or 0) + 1
-    compare_completed_copy(base, pending_source)
+    compare_completed_copy(base, pending_source, pending_attributes, true)
     if trace_target_copy then
       dump_bytes(OUT .. ".trace.source.bin", pending_source)
       dump_map(OUT .. ".trace.map.bin", base)
       emu:screenshot(OUT .. ".trace.png")
     end
-    pending_source, pending_base = nil, nil
+    pending_source, pending_attributes, pending_base = nil, nil, nil
+    pending_room, pending_ffe5 = nil, nil
     pending_wraps = 0
     trace_target_copy = false
   end, ATOMIC_WRAP, ATOMIC_WRAP_SEGMENT)
@@ -443,13 +661,15 @@ pcall(function()
     pure_completions = pure_completions + 1
     completion_stat_values[emu:read8(0xFF41) & 3] =
       (completion_stat_values[emu:read8(0xFF41) & 3] or 0) + 1
-    compare_completed_copy(pending_base, pending_source)
+    compare_completed_copy(
+      pending_base, pending_source, pending_attributes, false)
     if trace_target_copy then
       dump_bytes(OUT .. ".trace.source.bin", pending_source)
       dump_map(OUT .. ".trace.map.bin", pending_base)
       emu:screenshot(OUT .. ".trace.png")
     end
-    pending_source, pending_base = nil, nil
+    pending_source, pending_attributes, pending_base = nil, nil, nil
+    pending_room, pending_ffe5 = nil, nil
     pending_wraps = 0
     trace_target_copy = false
   end, PURE_COMPLETION, 1)
@@ -458,6 +678,7 @@ end)
 callbacks:add("frame", function()
   if finished then return end
   frame = frame + 1
+  flush_deferred_attribute_checks()
 
   if WARM_RESET and not did_reset and frame == 20 then
     did_reset = true
@@ -496,9 +717,7 @@ callbacks:add("frame", function()
 
   play_frame = play_frame + 1
   -- Preserve normal room logic but keep this diagnostic route alive.
-  emu:write8(0xDCDD, 0x17)
-  emu:write8(0xDCDC, 0xFF)
-  emu:write8(0xDCBB, 0xFF)
+  native_assistance.write(0xDCBB, 0xFF)
   local leg = math.floor((play_frame % 480) / 120)
   local movement
   if leg == 0 then movement = KEY_RIGHT

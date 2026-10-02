@@ -38,9 +38,9 @@ roster:
   - {identity: 29, resource_id: 0x25, gameplay_tile: 0x60}
   - {identity: 30, resource_id: 0x26, gameplay_tile: 0x70}
   - {identity: 31, resource_id: 0x28, gameplay_tile: 0x40}
-  - {identity: 32, resource_id: 0x29, gameplay_tile: 0x50}
+  - {identity: 32, resource_id: 0x29, gameplay_tile: 0x50, stock_presentation: "centered actor is visually black in the stock ROM; retain the native name-label frame as companion evidence"}
   - {identity: 33, resource_id: 0x2A, gameplay_tile: 0x60}
   - {identity: 34, resource_id: 0x2B, gameplay_tile: 0x70}
   - {identity: 35, resource_id: 0x2C, gameplay_tile: 0x30}
-  - {identity: 36, resource_id: 0x2D, gameplay_tile: 0x40}
-  - {identity: 37, resource_id: 0x2E, gameplay_tile: 0x50}
+  - {identity: 36, resource_id: 0x2D, gameplay_tile: 0x40, stock_presentation: "centered actor is visually black in the stock ROM; retain the native name-label frame as companion evidence"}
+  - {identity: 37, resource_id: 0x2E, gameplay_tile: 0x50, stock_presentation: "stock ROM renders this identity as the same tiny centered glyph"}

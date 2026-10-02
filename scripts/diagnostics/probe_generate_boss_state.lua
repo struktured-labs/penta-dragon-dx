@@ -10,6 +10,18 @@
 --   BOSS_STATE_OUT  output .ss0 path
 --   BOSS_OUT        output prefix for .report/.png
 --   BOSS_STABLE_FRAMES frames to render after the arena appears (default 240)
+-- #41: native assistance writes physical WRAM bank1 regardless of the SVBK
+-- bank a graphics routine selected. #37: never write DCDC/DCDD (inventory /
+-- ten-slot cursor) as fake health; DCBB is the health byte.
+local native_assistance = {writes = 0, bank_shadow_counts = {}}
+function native_assistance.write(address, value)
+  local svbk = emu:read8(0xFF70) & 7
+  native_assistance.writes = native_assistance.writes + 1
+  native_assistance.bank_shadow_counts[svbk] =
+    (native_assistance.bank_shadow_counts[svbk] or 0) + 1
+  assert(emu.memory and emu.memory.wram, "physical WRAM required for assistance")
+    :write8(address - 0xC000, value)
+end
 
 local TARGET = tonumber(os.getenv("BOSS_TARGET") or "0")
 local STATE_OUT = assert(os.getenv("BOSS_STATE_OUT"), "BOSS_STATE_OUT required")
@@ -18,6 +30,10 @@ local STABLE_TARGET = tonumber(os.getenv("BOSS_STABLE_FRAMES") or "240")
 local ENTRY_TIMEOUT = tonumber(os.getenv("BOSS_ENTRY_TIMEOUT") or "1200")
 local OBJ_EXPECTED = os.getenv("BOSS_OBJ_EXPECTED") or ""
 local STOCK_ROM = os.getenv("BOSS_STOCK_ROM") == "1"
+local RELOCATED_LATCHES = os.getenv("BOSS_RELOCATED_TED_LATCHES") == "1"
+local TED_TARGET_LATCH = RELOCATED_LATCHES and 0xFF73 or 0xFFA7
+local TED_COUNTER_LATCH = RELOCATED_LATCHES and 0xFF74 or 0xFFA8
+local TED_ANCHOR_LATCH = RELOCATED_LATCHES and 0xFF72 or 0xFFA9
 local WRITER_MIRROR = os.getenv("BOSS_WRITER_MIRROR") == "1"
 local FORCE_TED_FALLBACK = os.getenv("BOSS_FORCE_TED_FALLBACK") == "1"
 local PUBLISH_STATE_OUT = os.getenv("BOSS_PUBLISH_STATE_OUT")
@@ -29,6 +45,10 @@ local TROOP_BUILDER_TRACE = os.getenv("BOSS_TROOP_BUILDER_TRACE") == "1"
 local NATIVE_LAYOUT_TRACE = os.getenv("BOSS_NATIVE_LAYOUT_TRACE") == "1"
 local COPY_ROUTE_TRACE = os.getenv("BOSS_COPY_ROUTE_TRACE") == "1"
 local EXPECTED_SCENE = 0x0C + TARGET
+local function game_ram(address)
+    -- Observe bank-1 game state without switching the live CPU's SVBK.
+    return assert(emu.memory.wram):read8(address - 0xC000)
+end
 local f, reached, stable, palette_settled, settle_frame, done = 0, false, 0, 0, 0, false
 -- Ted's scene byte becomes visible roughly a minute before the synthetic
 -- dispatcher has actually armed his moving source writer. Saving during that
@@ -49,9 +69,9 @@ local trace = assert(io.open(OUT .. ".trace", "w"))
 -- before that callback fires.
 if not STOCK_ROM then
     emu:write8(0xC5FF, 0x00)
-    emu:write8(0xFFA7, 0x00)
-    emu:write8(0xFFA8, 0x00)
-    emu:write8(0xFFA9, 0x00)
+    emu:write8(TED_TARGET_LATCH, 0x00)
+    emu:write8(TED_COUNTER_LATCH, 0x00)
+    emu:write8(TED_ANCHOR_LATCH, 0x00)
 end
 
 local function register(name)
@@ -146,7 +166,7 @@ end
 
 if TARGET == 4 and os.getenv("TED_NATIVE_POSE_TRACE") == "1" then
     local function pose_log(tag)
-        if emu:read8(0xFFA7) ~= 0x11 then return end
+        if emu:read8(TED_TARGET_LATCH) ~= 0x11 then return end
         trace:write(string.format(
             "native-pose tag=%s frame=%d pc=%04X sp=%04X bc=%04X de=%04X hl=%04X " ..
             "svbk=%02X ff91=%02X count=%02X\n",
@@ -167,6 +187,71 @@ local function route_hex(address, length)
         result[#result + 1] = string.format("%02X", emu:read8(address + offset))
     end
     return table.concat(result)
+end
+
+-- Issue32: optional read-only counts at the native publication call/return.
+-- No bank-register writes and no source/scene/cache mutations. Keep this off
+-- in qualification runs; breakpoint neutrality is not assumed.
+local blank_trace = os.getenv("TED_BLANK_TRACE")
+if TARGET == 4 and blank_trace then
+    local log = assert(io.open(blank_trace, "w"))
+    emu:setRangeWatchpoint(function(info)
+        if game_ram(0xD880) ~= 0x10 then return end
+        log:write(string.format(
+            "dma frame=%d pc=%04X bank=%02X regs=%s svbk=%02X vbk=%02X value=%02X\n",
+            f,register("PC"),emu:read8(0xFF99),route_hex(0xFF51,4),
+            emu:read8(0xFF70),emu:read8(0xFF4F),
+            (info.newValue or info.value or 0)&0xFF))
+        log:flush()
+    end,0xFF55,0xFF55,C.WATCHPOINT_TYPE.WRITE)
+    local function count(domain, first, size)
+        local n = 0
+        for i = first, first + size - 1 do
+            if domain:read8(i) ~= 0 then n = n + 1 end
+        end
+        return n
+    end
+    for _, pc in ipairs({0x700B,0x700F}) do
+        emu:setBreakpoint(function()
+            log:write(string.format(
+                "commit frame=%d pc=%04X regs=%s target=%02X svbk=%02X vbk=%02X cache=%d map98=%d map9c=%d\n",
+                f,pc,route_hex(0xFF51,5),emu:read8(0xFF73),
+                emu:read8(0xFF70),emu:read8(0xFF4F),
+                count(emu.memory.wram,0x2000,1024),
+                count(emu.memory.vram,0x1800,1024),count(emu.memory.vram,0x1C00,1024)))
+            log:flush()
+        end,pc,16)
+    end
+    for _, site in ipairs({0x028A, 0x028D, 0xC4F5, 0xC536, 0xC545, 0xC5D1, 0xC5D4, 0xC5D7}) do
+        emu:setBreakpoint(function()
+            if game_ram(0xD880) ~= 0x10 then return end
+            if site == 0xC545 then
+                log:write(string.format("target-store frame=%d af=%04X bytes=%s\n",
+                    f,register("AF"),route_hex(0xC536,17)))
+            end
+            if site == 0xC5D4 then
+                log:write(string.format("publisher frame=%d front=%s commit=%s\n",
+                    f,route_hex(0x5CE5,24),route_hex(0x700B,9)))
+            end
+            local crown = -1
+            for i=0,571 do
+                local matches=true
+                for j=0,4 do
+                    if emu.memory.wram:read8(0x1A0+i+j)~=2+j then matches=false; break end
+                end
+                if matches then crown=i; break end
+            end
+            log:write(string.format(
+                "frame=%d site=%04X bank=%02X svbk=%02X ie=%02X source=%d map98=%d map9c=%d ready=%02X de=%04X hl=%04X bc=%04X crown=%d target=%02X\n",
+                f, site, emu:read8(0xFF99), emu:read8(0xFF70),
+                emu:read8(0xFFFF), count(emu.memory.wram,0x1A0,576),
+                count(emu.memory.vram,0x1800,1024),
+                count(emu.memory.vram,0x1C00,1024),
+                emu.memory.wram:read8(0x5FF),
+                register("DE"),register("HL"),register("BC"),crown,emu:read8(0xFF73)))
+            log:flush()
+        end, site)
+    end
 end
 
 local function ted_pose_marker()
@@ -416,7 +501,7 @@ if TARGET == 4 and os.getenv("BOSS_ROUTE_TRACE") == "1" then
                 end
             end
             if item[1] == "compiler-exit" then
-                local target = emu:read8(0xFFA7) << 8
+                local target = emu:read8(TED_TARGET_LATCH) << 8
                 local peer = target == 0x9800 and 0x9C00 or 0x9800
                 local bad, peer_bad, source_bad, target_expected_bad = 0, 0, 0, 0
                 local first = "none"
@@ -618,6 +703,13 @@ if qualified then
             register("HL"), register("BC"), register("SP"),
             emu:read8(0xFFFF), emu:read8(0xFF40)))
         q:flush()
+        if name:sub(1, 9) == "expanded-" then
+            q:write(string.format("dma frame=%d regs=%s latch=%02X c4f5=%s af=%04X latch_addr=%04X opcode=%s\n",
+                f, hex_range(0xFF4F, 7), emu:read8(TED_TARGET_LATCH),
+                hex_range(0xC4F5, 6), register("AF"), TED_TARGET_LATCH,
+                hex_range(register("PC"), 3)))
+            q:flush()
+        end
     end
     local function bp(address, name, segment)
         assert(pcall(function()
@@ -627,6 +719,21 @@ if qualified then
         end))
     end
     bp(0x028A, "caller")
+    bp(0xC543, "expanded-target-write")
+    bp(0xC545, "expanded-target-written")
+    assert(pcall(function()
+        emu:setWatchpoint(function(info)
+            q:write(string.format("target-write frame=%d pc=%04X bank=%02X value=%02X\n",
+                f, register("PC"), emu:read8(0xFF99),
+                (info.newValue or info.value or 0) & 0xFF))
+            q:flush()
+        end, TED_TARGET_LATCH, TED_TARGET_LATCH, C.WATCHPOINT_TYPE.WRITE)
+    end))
+    for _, site in ipairs({
+        {0x4000, "expanded-entry"}, {0x5CDA, "expanded-runtime"},
+        {0x5CE5, "expanded-publish"}, {0x700B, "expanded-gdma"},
+        {0x5E79, "expanded-wait"}, {0x55D8, "expanded-attrs"},
+    }) do bp(site[1], site[2], 16) end
     bp(0xDB80, "gate")
     bp(0x0838, "fixed-wrapper")
     bp(0x0846, "fixed-wrapper-exit")
@@ -735,22 +842,17 @@ callbacks:add("frame", function()
     -- plane; wait until the runtime restores bank 1.
     local svbk = emu:read8(0xFF70) & 0x07
     local game_wram_visible = STOCK_ROM or svbk == 0 or svbk == 1
-    if not game_wram_visible then
-        return
-    end
-
-    -- Keep Sara alive while the arena settles.
-    emu:write8(0xDCDC, 0xFF)
-    emu:write8(0xDCDD, 0xFF)
+    -- #37: DCDC/DCDD are inventory state, not health. Leave them native;
+    -- only the explicitly assisted DCBB health refill below keeps Sara alive.
     -- The synthetic Stage-1 dispatcher route can inherit an attack phase that
     -- decrements DCBB before serialization (Troop arms D888/DD06; Ted and
     -- Penta can leave for the splash shortly after reload). Keep every visual
     -- fixture in its arena; boss-exit behavior has a separate death/game-over
     -- gate.
-    emu:write8(0xDCBB, 0xF0)
+    if game_wram_visible then native_assistance.write(0xDCBB, 0xF0) end
 
-    local scene = emu:read8(0xD880)
-    if f <= ENTRY_TIMEOUT and (not reached or stable < 80) then
+    local scene = game_ram(0xD880)
+    if game_wram_visible and f <= ENTRY_TIMEOUT and (not reached or stable < 80) then
         trace:write(string.format(
             "frame=%d pc=%04X d880=%02X ff91=%02X df0d=%02X ffb7=%02X ffba=%02X " ..
             "ffbf=%02X ffc0=%02X ffd0=%02X ffc1=%02X tick=%02X bgp=%02X hash=%02X " ..
@@ -776,7 +878,7 @@ callbacks:add("frame", function()
         trace:flush()
     end
     if not reached then
-        if scene == EXPECTED_SCENE then
+        if scene == EXPECTED_SCENE and game_wram_visible then
             -- The serialized diagnostic landing waits in Stage 1 before
             -- calling the stock boss dispatcher and can consume the pending
             -- scene transition during that artificial wait. Rearm only after
@@ -791,12 +893,12 @@ callbacks:add("frame", function()
         end
     end
     if reached then
-        if emu:read8(0xD880) ~= EXPECTED_SCENE then
+        if game_ram(0xD880) ~= EXPECTED_SCENE then
             finish("error", "arena-left-before-save")
             return
         end
         if TARGET == 4 and not ted_activated
-                and (emu:read8(0xD888) ~= 0 or emu:read8(0xDD06) ~= 0) then
+                and (game_ram(0xD888) ~= 0 or game_ram(0xDD06) ~= 0) then
             ted_activated = true
             stable = 0
             palette_settled = 0
@@ -818,7 +920,7 @@ callbacks:add("frame", function()
         -- still carrying Stage 1 rows into the arena. Require a separate
         -- eight-frame quiet hold after phase zero, but do not demand another
         -- full minute from short-lived synthetic boss entry fixtures.
-        if emu:read8(0xDF4C) == 0 then
+        if game_ram(0xDF4C) == 0 then
             palette_settled = palette_settled + 1
         else
             palette_settled = 0
@@ -832,7 +934,7 @@ callbacks:add("frame", function()
         local pc = register("PC")
         local bank = emu:read8(0xFF99)
         local mainline_rendezvous = TARGET ~= 4 or ted_activated
-        local publisher_idle = emu:read8(0xFFFF) == 0x07
+        local publisher_idle = game_wram_visible and emu:read8(0xFFFF) == 0x07
             -- Expanded Ted helpers can execute at the same $6000 address in
             -- a high MBC5 bank.  Serializing there produces a state that
             -- resumes in the wrong mapped code page.  Candidate fixtures must

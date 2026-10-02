@@ -1,0 +1,21 @@
+diff --git a/src/gb/io.c b/src/gb/io.c
+--- a/src/gb/io.c
++++ b/src/gb/io.c
+@@ -456,6 +456,9 @@ void GBIOWrite(struct GB* gb, unsigned address, uint8_t value) {
+ 		if (gb->model >= GB_MODEL_CGB) {
+ 			switch (address) {
+ 			case GB_REG_KEY0:
++			case GB_REG_PSWX:
++			case GB_REG_PSWY:
++			case GB_REG_PSW:
+ 				break;
+ 			case GB_REG_KEY1:
+ 				value &= 0x1;
+@@ -658,6 +661,7 @@ uint8_t GBIORead(struct GB* gb, unsigned address) {
+ 	case GB_REG_SVBK:
+ 	case GB_REG_PSWX:
+ 	case GB_REG_PSWY:
++	case GB_REG_PSW:
+ 	case GB_REG_UNK75:
+ 		// Handled transparently by the registers
+ 		if (gb->model < GB_MODEL_CGB) {

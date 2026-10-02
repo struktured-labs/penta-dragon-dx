@@ -24,6 +24,8 @@ from scripts.arena_semantic_key import (  # noqa: E402
     HELPER_BANK,
     HELPER_ENTRY,
     build_helper,
+    cache_writer_is_owned,
+    cache_writer_pc_ranges,
 )
 
 SHARED_CACHE_TARGETS = (0, 1, 3, 5, 6, 7, 8)
@@ -80,6 +82,10 @@ def terminate(process: subprocess.Popen[bytes]) -> None:
 def capture(
     rom: Path, state: Path, prefix: Path, target: int, frames: int, timeout: float
 ) -> dict[str, object]:
+    rom_data = rom.read_bytes()
+    writer_ranges = cache_writer_pc_ranges(
+        rom_data, shalamar_native_exact_class=4
+    )
     prefix.parent.mkdir(parents=True, exist_ok=True)
     marker = Path(str(prefix) + ".done")
     marker.unlink(missing_ok=True)
@@ -89,6 +95,7 @@ def capture(
     env = os.environ.copy()
     env.update(
         BOSS_SEMANTIC_OUT=str(prefix),
+        PENTA_STATE_FILE=str(state.resolve()),
         BOSS_SEMANTIC_SCENE=str(BOSSES[target].scene),
         BOSS_SEMANTIC_FRAMES=str(frames),
         QT_QPA_PLATFORM="offscreen",
@@ -96,7 +103,7 @@ def capture(
     )
     process = subprocess.Popen(
         [
-            str(MGBA), "--fastforward", "-t", str(state),
+            str(MGBA), "--fastforward",
             "-C", f"savegamePath={runtime_dir}",
             "-C", f"savestatePath={runtime_dir}",
             str(rom), "--script", str(PROBE),
@@ -215,8 +222,10 @@ def capture(
     foreign_cache_writers = [
         writer for writer in cache_writers
         if writer["address"] not in CACHE_RECORD
-        or writer["bank"] != HELPER_BANK
-        or not (HELPER_ENTRY <= writer["pc"] < HELPER_END)
+        or not cache_writer_is_owned(
+            rom_data, writer["bank"], writer["pc"],
+            shalamar_native_exact_class=4,
+        )
     ]
     if foreign_cache_writers:
         raise RuntimeError(
@@ -270,7 +279,9 @@ def capture(
         "cache_writer_contract": "pass",
         "cache_writer_counts": cache_writer_counts,
         "cache_writer_bank": f"{HELPER_BANK:02X}",
-        "cache_writer_pc_range": f"{HELPER_ENTRY:04X}-{HELPER_END - 1:04X}",
+        "cache_writer_pc_ranges": [
+            f"{start:04X}-{end - 1:04X}" for start, end in writer_ranges
+        ],
         "foreign_cache_writers": 0,
         "trace": str(Path(str(prefix) + ".trace").resolve()),
         "trace_sha256": sha256(Path(str(prefix) + ".trace")),

@@ -57,6 +57,92 @@ PHASE_TARGETS = {
     "epilogue_text": {3},
 }
 
+NATIVE_FADE_BGP = frozenset(
+    (0x00, 0x40, 0x84, 0x90, 0xC4, 0xD9, 0xEE, 0xF9, 0xFE, 0xFF)
+)
+DMG_GRAY_COLORS = (
+    bytes.fromhex("ff7f"),
+    bytes.fromhex("9452"),
+    bytes.fromhex("4a29"),
+    bytes.fromhex("0000"),
+)
+
+
+def dmg_cram_row(bgp: int) -> bytes:
+    """Return the exact little-endian CGB row for one DMG BGP mapping."""
+    if not 0 <= bgp <= 0xFF:
+        raise ValueError("BGP must be one byte")
+    return b"".join(
+        DMG_GRAY_COLORS[(bgp >> (color * 2)) & 0x03]
+        for color in range(4)
+    )
+
+
+def hidden_by_exact_fade_cram(panel: dict, palettes: dict[int, int]) -> bool:
+    """Prove that every visible attribute row renders the native DMG fade.
+
+    Attribute masks are allowed to be transitional only when BGP is a value
+    from a native fade table and every palette ID referenced by the viewport
+    has the exact corresponding eight-byte CGB grayscale row. Unreferenced
+    CRAM rows are deliberately irrelevant; missing telemetry fails closed.
+    """
+    state = panel.get("story_state", {})
+    bgp = state.get("bgp")
+    if bgp not in NATIVE_FADE_BGP or sum(palettes.values()) != 360:
+        return False
+    expected = dmg_cram_row(bgp)
+    for palette in palettes:
+        try:
+            observed = bytes(
+                state[f"bg{palette * 8 + offset:02x}"]
+                for offset in range(8)
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+        if observed != expected:
+            return False
+    return True
+
+
+def native_fade_cram_precedence(
+    panel: dict, palettes: dict[int, int], ordinary_valid: bool
+) -> bool:
+    """Make an active native fade depend exclusively on its exact CRAM.
+
+    Palette-row aliases are valid for artistic E4 pages, but must never mask
+    a one-frame BGP/CRAM lag during a native grayscale transition.
+    """
+    bgp = panel.get("story_state", {}).get("bgp")
+    if bgp not in NATIVE_FADE_BGP:
+        return ordinary_valid
+    return hidden_by_exact_fade_cram(panel, palettes)
+
+
+def attributes_visually_match_cram(
+    attributes: bytes, expected: bytes, state: dict[str, int]
+) -> bool:
+    """Accept attribute aliases only when their complete CRAM rows match."""
+    if len(attributes) != len(expected):
+        return False
+    rows: dict[int, bytes] = {}
+    for actual, wanted in zip(attributes, expected):
+        if actual == wanted:
+            continue
+        if actual & 0xF8 or wanted & 0xF8:
+            return False
+        try:
+            for palette in (actual, wanted):
+                if palette not in rows:
+                    rows[palette] = bytes(
+                        state[f"bg{palette * 8 + offset:02x}"]
+                        for offset in range(8)
+                    )
+        except (KeyError, TypeError, ValueError):
+            return False
+        if rows[actual] != rows[wanted]:
+            return False
+    return True
+
 
 def compress(values: list[tuple[int, int, int, int]]) -> list[
     tuple[int, int, int, int]
@@ -89,6 +175,8 @@ def analyze_manifest(
     previous_full_story_art: int | None = None
     story_repair_art: int | None = None
     story_repair_samples = 0
+    initial_story_handoffs = 0
+    hidden_transition_frames: dict[str, list[int]] = {}
     for panel in panels:
         state = panel.get("story_state", {})
         missing = {"d889", "dce2", "fff9"} - state.keys()
@@ -103,31 +191,37 @@ def analyze_manifest(
             state["dce2"],
             state["fff9"],
         )
-        signatures.append(signature)
+        palettes = {
+            int(palette): count
+            for palette, count in panel.get("palettes", {}).items()
+        }
+        hidden = hidden_by_exact_fade_cram(panel, palettes)
+        unsafe = int(panel.get("unsafe_attr_cells", 0))
+        if unsafe:
+            failures.append(
+                f"frame {panel['frame']}: ending has {unsafe} unsafe "
+                "attribute bytes"
+            )
+        if panel["ffc1"] != 0 or panel["ffe4"] != 1:
+            failures.append(
+                f"frame {panel['frame']}: ending escaped its context "
+                f"(FFC1={panel['ffc1']:02X}, FFE4={panel['ffe4']:02X})"
+            )
         phase = PHASE_NAMES.get(signature)
         if phase is None:
+            if hidden and panel["ffc1"] == 0 and panel["ffe4"] == 1:
+                hidden_transition_frames.setdefault("uncommitted", []).append(
+                    panel["frame"]
+                )
+                continue
             failures.append(
                 f"frame {panel['frame']}: unknown ending signature "
                 f"{tuple(f'{value:02X}' for value in signature)}"
             )
             continue
+        signatures.append(signature)
         phase_counts[phase] += 1
         phase_frames.setdefault(phase, []).append(panel["frame"])
-        if panel["ffc1"] != 0 or panel["ffe4"] != 1:
-            failures.append(
-                f"frame {panel['frame']}: {phase} escaped the ending context "
-                f"(FFC1={panel['ffc1']:02X}, FFE4={panel['ffe4']:02X})"
-            )
-        unsafe = int(panel.get("unsafe_attr_cells", 0))
-        if unsafe:
-            failures.append(
-                f"frame {panel['frame']}: {phase} has {unsafe} unsafe "
-                "attribute bytes"
-            )
-        palettes = {
-            int(palette): count
-            for palette, count in panel.get("palettes", {}).items()
-        }
 
         valid = False
         if phase == "post_final_dialogue":
@@ -157,12 +251,20 @@ def analyze_manifest(
             expected = (
                 expected_story_attrs[art] if art_committed else bytes(360)
             )
-            valid = attributes == expected
-            if valid and art_committed:
+            exact = attributes == expected
+            valid = exact or attributes_visually_match_cram(
+                attributes, expected, state
+            )
+            if exact and art_committed:
                 full_targets[phase].add(art)
                 previous_full_story_art = art
                 story_repair_art = None
                 story_repair_samples = 0
+            elif valid:
+                # A byte-different attribute mask can still be pixel-exact
+                # when every substituted palette has an identical full CRAM
+                # row (notably the temporary story BG6 -> BG0 cleaner alias).
+                pass
             elif art_committed and previous_full_story_art is not None:
                 previous = expected_story_attrs[previous_full_story_art]
                 valid = (
@@ -206,6 +308,25 @@ def analyze_manifest(
                 # DD07 commits it. The exact previous position mask is still
                 # the correct visible layout during that bounded handoff.
                 valid = True
+            elif (
+                not art_committed
+                and art in {5, 6, 7}
+                and previous_full_story_art is None
+                and state.get("dce8") == 0x05
+                and state.get("dcea") == 0x01
+                and initial_story_handoffs == 0
+                and panel.get("tilemap_hex") == "00" * 360
+                and set(palettes) <= set(range(8))
+            ):
+                # The first sampled post-final frame is the stock slide-in:
+                # DCF0 announces art 5 before DD07 commits it, and the screen
+                # is still the all-zero blank transition tilemap. Its inherited
+                # attributes are not visible and can legitimately belong to
+                # the preceding phase. Admit exactly one *provably blank*
+                # handoff; the strict full-target gate below still requires
+                # committed exact masks for arts 5/6/7.
+                initial_story_handoffs += 1
+                valid = True
         else:
             transition_pairs = {
                 "credits": {0, 1},
@@ -214,14 +335,27 @@ def analyze_manifest(
                 "epilogue_text": {0, 3},
             }
             allowed = transition_pairs[phase]
+            attribute_hex = panel.get("attribute_hex", "")
+            try:
+                attributes = bytes.fromhex(attribute_hex)
+            except (TypeError, ValueError):
+                attributes = b""
             valid = (
                 set(palettes) <= allowed
                 and sum(palettes.values()) == 360
             )
             target = next(iter(PHASE_TARGETS[phase]))
+            if not valid and attributes_visually_match_cram(
+                attributes, bytes((target,)) * 360, state
+            ):
+                valid = True
             if palettes == {target: 360}:
                 full_targets[phase].add(target)
 
+        fade_active = state.get("bgp") in NATIVE_FADE_BGP
+        valid = native_fade_cram_precedence(panel, palettes, valid)
+        if fade_active and valid:
+            hidden_transition_frames.setdefault(phase, []).append(panel["frame"])
         if not valid:
             failures.append(
                 f"frame {panel['frame']}: {phase} attributes are {palettes}"
@@ -255,6 +389,7 @@ def analyze_manifest(
             "first_frame": phase_frames[name][0],
             "last_frame": phase_frames[name][-1],
             "full_targets": sorted(full_targets[name]),
+            "hidden_transition_frames": hidden_transition_frames.get(name, []),
         }
         for signature, name in PHASE_NAMES.items()
         if phase_frames.get(name)
@@ -266,6 +401,7 @@ def analyze_manifest(
         "observed_signature": [list(values) for values in compressed],
         "expected_signature": [list(values) for values in EXPECTED_SIGNATURE],
         "phases": phases,
+        "hidden_transition_frames": hidden_transition_frames,
         "failures": failures,
     }
 

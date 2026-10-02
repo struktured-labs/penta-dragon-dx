@@ -34,10 +34,73 @@ SHOT = re.compile(
     r"shot frame=(?P<frame>\d+) room=(?P<room>[0-9A-F]{2}) "
     r"scx=(?P<scx>[0-9A-F]{2}) scy=(?P<scy>[0-9A-F]{2}) d880=(?P<scene>[0-9A-F]{2})"
 )
+GRID = re.compile(
+    r"grid frame=(?P<frame>\d+) tiles=(?P<tiles>[0-9A-F]{720}) "
+    r"attrs=(?P<attrs>[0-9A-F]{720})"
+)
+AUDIT = re.compile(
+    r"audit frame=(?P<frame>\d+) tiles=(?P<tiles>[0-9A-F]{720}) "
+    r"attrs=(?P<attrs>[0-9A-F]{720})"
+)
+
+# Later-stage semantic rows are sparse.  In Stage 5, BG1/BG2 are reserved for
+# the health/rare pickup faces below; ordinary tiles carrying either palette
+# are stale attribute trails, even when the stock grayscale happens to make
+# them look like an intentional cast shadow.  This exact failure is visible in
+# the r8 patrol at frames 240/480: 02/06/12/15 retain the previous pickup's
+# palette while the replacement 88/89/98/99 cells remain on lava BG5.
+STAGE5_PICKUP_PALETTES = {
+    1: frozenset((0x88, 0x89, 0x96, 0x98, 0x99)),
+    2: frozenset((0xAE, 0xAF, 0xBE, 0xBF, 0xC6, 0xC7, 0xD6, 0xD7)),
+}
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def audit_stage_semantic_palettes(stage: int, rows: list[dict]) -> dict:
+    """Reject sampled later-stage pickup omissions and detached trails."""
+    if stage != 5:
+        return {"status": "not-applicable", "failures": []}
+    failures: list[str] = []
+    for row in rows:
+        tiles = bytes.fromhex(row["tilemap_hex"])
+        attrs = bytes.fromhex(row["attribute_hex"])
+        if len(tiles) != 360 or len(attrs) != 360:
+            failures.append(f"f{row['frame']:04d}: malformed visible grid")
+            continue
+        semantic_tiles = set().union(*STAGE5_PICKUP_PALETTES.values())
+        for index, (tile, raw_attr) in enumerate(zip(tiles, attrs)):
+            palette = raw_attr & 0x07
+            expected = next(
+                (slot for slot, members in STAGE5_PICKUP_PALETTES.items()
+                 if tile in members),
+                None,
+            )
+            grid = f"r{index // 20:02d}c{index % 20:02d}"
+            if expected is not None and palette != expected:
+                failures.append(
+                    f"f{row['frame']:04d}:{grid}: pickup {tile:02X} "
+                    f"uses BG{palette}, expected BG{expected}"
+                )
+            elif expected is None and palette in STAGE5_PICKUP_PALETTES:
+                failures.append(
+                    f"f{row['frame']:04d}:{grid}: non-pickup {tile:02X} "
+                    f"retains semantic BG{palette}"
+                )
+            if raw_attr & 0xF8:
+                failures.append(
+                    f"f{row['frame']:04d}:{grid}: unsafe attr {raw_attr:02X}"
+                )
+        # Keep the local name alive as an explicit reminder that every
+        # declared semantic tile belongs to exactly one palette class.
+        assert len(semantic_tiles) == sum(map(len, STAGE5_PICKUP_PALETTES.values()))
+    return {
+        "status": "pass" if not failures else "fail",
+        "sampled_frames": len(rows),
+        "failures": failures,
+    }
 
 
 def terminate(process: subprocess.Popen[bytes]) -> None:
@@ -51,8 +114,9 @@ def terminate(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=3)
 
 
-def capture(rom: Path, target: int, frames: int, step: int, mode: str,
-            prefix: Path, timeout: float) -> list[dict]:
+def capture(rom: Path, target: int, frames: int, step: int, audit_step: int,
+            mode: str, prefix: Path, timeout: float,
+            publication_trace: bool) -> tuple[list[dict], list[dict]]:
     prefix.parent.mkdir(parents=True, exist_ok=True)
     for stale in prefix.parent.glob(prefix.name + ".f*.png"):
         stale.unlink()
@@ -66,10 +130,13 @@ def capture(rom: Path, target: int, frames: int, step: int, mode: str,
         SSS_TARGET=str(target),
         SSS_FRAMES=str(frames),
         SSS_STEP=str(step),
+        SSS_AUDIT_STEP=str(audit_step),
         SSS_MODE=mode,
         QT_QPA_PLATFORM="offscreen",
         SDL_AUDIODRIVER="dummy",
     )
+    if publication_trace:
+        env["SSS_PUBLICATION_TRACE"] = str(prefix) + ".publications.tsv"
     process = subprocess.Popen(
         [str(MGBA), "--fastforward",
          "-C", f"savegamePath={prefix.parent}",
@@ -93,23 +160,63 @@ def capture(rom: Path, target: int, frames: int, step: int, mode: str,
     status = marker.read_text().strip()
     if status != "ok":
         raise RuntimeError(f"stage capture rejected {prefix.name}: {status}")
+    lines = trace.read_text().splitlines()
+    audits = [
+        {
+            "frame": int(match.group("frame")),
+            "tilemap_hex": match.group("tiles"),
+            "attribute_hex": match.group("attrs"),
+        }
+        for line in lines
+        if (match := AUDIT.fullmatch(line.strip()))
+    ]
+    grids = {
+        int(match.group("frame")): {
+            "tilemap_hex": match.group("tiles"),
+            "attribute_hex": match.group("attrs"),
+        }
+        for line in lines
+        if (match := AUDIT.fullmatch(line.strip()))
+    }
     rows = []
-    for line in trace.read_text().splitlines():
+    for line in lines:
         m = SHOT.fullmatch(line.strip())
         if m:
             shot_path = Path(f"{prefix}.f{int(m.group('frame')):04d}.png")
             if shot_path.is_file():
-                rows.append({
+                row = {
                     "frame": int(m.group("frame")),
                     "room": m.group("room"),
                     "scx": m.group("scx"),
                     "scy": m.group("scy"),
                     "png": shot_path,
                     "png_sha256": sha256(shot_path),
-                })
+                }
+                row.update(grids.get(row["frame"], {}))
+                rows.append(row)
     if not rows:
         raise RuntimeError(f"no screenshots captured for {prefix.name}")
-    return rows
+    missing_grids = [row["frame"] for row in rows if "tilemap_hex" not in row]
+    if missing_grids:
+        raise RuntimeError(
+            f"missing visible tile/attribute grids for {prefix.name}: "
+            f"{missing_grids}"
+        )
+    if not audits:
+        raise RuntimeError(f"no visible-map audit samples for {prefix.name}")
+    return rows, audits
+
+
+def assistance_summary(prefix: Path) -> dict:
+    """#41 retain the physical-bank assistance totals, including scratch selection."""
+    fields = dict(re.findall(r'^(native_assistance_\w+)=(\d+)$',
+                             Path(str(prefix)+'.trace').read_text(), re.MULTILINE))
+    total = int(fields['native_assistance_writes'])
+    counts = {str(bank): int(fields[f'native_assistance_svbk_{bank}'])
+              for bank in range(8)}
+    if sum(counts.values()) != total:
+        raise ValueError('inconsistent native assistance counters')
+    return dict(physical_bank=1, writes=total, selected_svbk_counts=counts)
 
 
 def build_sheet(og: list[dict], dx: list[dict], out: Path, stage: int) -> None:
@@ -144,6 +251,14 @@ def main() -> int:
                         help="FFBA target(s); default all 7")
     parser.add_argument("--frames", type=int, default=1200)
     parser.add_argument("--step", type=int, default=60)
+    parser.add_argument(
+        "--audit-step", type=int, default=1,
+        help="sample visible tile/attribute semantics every N play frames",
+    )
+    parser.add_argument(
+        "--publication-trace", action="store_true",
+        help="record exact tile-copy decisions and native map flips",
+    )
     parser.add_argument("--mode", choices=("right", "patrol"), default="patrol")
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--output", type=Path, required=True)
@@ -154,23 +269,42 @@ def main() -> int:
     manifest = {
         "schema": "penta-stage-side-by-side-v1",
         "status": "pass",
+        "probe_sha256": sha256(PROBE),
+        "verifier_sha256": sha256(Path(__file__)),
+        "assistance": "SRAM level select and stage setup; physical bank1 DCFD save flag and DCBB health (#41); no DCDD/DCDC refill (#37)",
         "original_rom_sha256": sha256(args.original.resolve()),
         "dx_rom_sha256": sha256(args.dx_rom.resolve()),
-        "frames": args.frames, "step": args.step, "mode": args.mode,
+        "frames": args.frames, "step": args.step,
+        "audit_step": args.audit_step, "mode": args.mode,
         "stages": {},
     }
     for target in stages:
         stage_dir = args.output / f"stage{target + 1}"
-        og = capture(args.original.resolve(), target, args.frames, args.step,
-                     args.mode, stage_dir / "og" / "run", args.timeout)
-        dx = capture(args.dx_rom.resolve(), target, args.frames, args.step,
-                     args.mode, stage_dir / "dx" / "run", args.timeout)
+        og, og_audits = capture(
+            args.original.resolve(), target, args.frames, args.step,
+            args.audit_step, args.mode, stage_dir / "og" / "run",
+            args.timeout, args.publication_trace,
+        )
+        dx, dx_audits = capture(
+            args.dx_rom.resolve(), target, args.frames, args.step,
+            args.audit_step, args.mode, stage_dir / "dx" / "run",
+            args.timeout, args.publication_trace,
+        )
+        semantic_audit = audit_stage_semantic_palettes(target + 1, dx_audits)
+        if semantic_audit["status"] == "fail":
+            preview = "; ".join(semantic_audit["failures"][:8])
+            raise RuntimeError(
+                f"stage {target + 1} semantic palette audit failed: {preview}"
+            )
         sheet = args.output / f"stage{target + 1}-side-by-side.png"
         build_sheet(og, dx, sheet, target)
         manifest["stages"][f"stage{target + 1}"] = {
+            "native_assistance": {side: assistance_summary(stage_dir/side/'run')
+                                  for side in ('og', 'dx')},
             "og_shots": len(og), "dx_shots": len(dx),
             "og_image_sha256": [row["png_sha256"] for row in og],
             "dx_image_sha256": [row["png_sha256"] for row in dx],
+            "semantic_palette_audit": semantic_audit,
             "sheet": str(sheet), "sheet_sha256": sha256(sheet),
         }
         print(f"stage {target + 1}: og={len(og)} dx={len(dx)} shots -> {sheet}")

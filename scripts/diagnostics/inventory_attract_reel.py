@@ -4,6 +4,12 @@
 The title spotlight is D880=$1B. D880=$0A is a gameplay demo/miniboss scene,
 not the spotlight reel. This distinction is the regression this gate exists
 to preserve.
+
+The prerecorded attract demo replays joypad input and is cycle-sensitive.
+Stock-equivalent builds end it in the D880=$0A Gargoyle arena; release-lock
+candidates (docs/audit/release-lock-20261001-repin.md) end it in Stage 1 and
+return straight to the title. Both routes are accepted, but each must meet
+its own duration, palette and return-to-title invariants.
 """
 
 from __future__ import annotations
@@ -17,11 +23,15 @@ import subprocess
 import tempfile
 import time
 
+import sys
+
 import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
 PROBE = ROOT / "scripts/diagnostics/probe_attract_reel_inventory.lua"
+if str(ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts"))
 PALETTE_SOURCE = ROOT / "palettes/penta_palettes_v097.yaml"
 SPOTLIGHT_ACTORS = {
     0: ("Sara W", 2, "SaraWitch"),
@@ -230,9 +240,28 @@ def summarize(trace: Path) -> int:
         ),
         None,
     )
+    # Stage-1-only demo route: no Gargoyle segment follows the stage entry.
+    stage_only_route = (
+        stage_transition is not None and gargoyle_transition is None
+    )
+    post_stage_transition = next(
+        (
+            transition for transition in timing_transitions
+            if (
+                stage_only_route
+                and transition[0] > stage_transition[0]
+            )
+        ),
+        None,
+    )
     stage_frames = (
         gargoyle_transition[0] - stage_transition[0]
         if stage_transition is not None and gargoyle_transition is not None
+        else None
+    )
+    stage_only_frames = (
+        post_stage_transition[0] - stage_transition[0]
+        if post_stage_transition is not None
         else None
     )
     gargoyle_frames = (
@@ -272,6 +301,29 @@ def summarize(trace: Path) -> int:
     demo_sprites = 0
     demo_attr_bad = 0
     demo_route_bad = []
+    # Stage-1 demo OBJ attributes versus the production tile->palette LUT.
+    # 0xFF entries are Sara, whose palette follows her form (FFBE).
+    from build_v301_teleport import build_obj_pal_table
+
+    obj_lut = build_obj_pal_table()
+    stage_obj_samples = 0
+    stage_obj_sprites = 0
+    stage_obj_bad = 0
+    for row in rows:
+        if (
+            row["kind"] == "scene"
+            or row["scene"] != 0x02
+            or row["ffc1"] != 1
+            or row["dcfd"] != 0
+        ):
+            continue
+        stage_obj_samples += 1
+        for sprite in row["hw"]:  # type: ignore[union-attr]
+            stage_obj_sprites += 1
+            expected = obj_lut[sprite[3]]
+            if expected == 0xFF:
+                expected = 1 if row["ffbe"] else 2
+            stage_obj_bad += (sprite[4] & 7) != expected
     for row in rows:
         if (
             row["scene"] in (0x02, 0x0A)
@@ -343,8 +395,17 @@ def summarize(trace: Path) -> int:
         failures.append(f"{actor_attr_bad} spotlight quadrant palette mismatches")
     if actor_shadow_matches == 0:
         failures.append("hardware spotlight OAM never matched either shadow buffer")
-    if demo_samples < 20:
+    if not stage_only_route and demo_samples < 20:
         failures.append(f"only {demo_samples} Gargoyle demo samples (need 20+)")
+    if stage_only_route and stage_obj_samples < 200:
+        failures.append(
+            f"only {stage_obj_samples} Stage-1 demo OAM samples (need 200+)"
+        )
+    if stage_obj_bad:
+        failures.append(
+            f"{stage_obj_bad}/{stage_obj_sprites} Stage-1 demo sprites differ "
+            "from the production OBJ palette LUT"
+        )
     if demo_attr_bad:
         failures.append(
             f"{demo_attr_bad}/{demo_sprites} demo miniboss sprites changed "
@@ -364,12 +425,20 @@ def summarize(trace: Path) -> int:
     # diagnostics, but gate the complete sequence and every visual/route
     # invariant. The combined envelope is intentionally tighter (15%).
     timing_observations: list[str] = []
-    if not segment_duration_matches(stage_frames, og_stage_frames):
+    if stage_only_route:
+        timing_observations.append(
+            "demo route ended in Stage 1 without a Gargoyle segment "
+            f"({stage_only_frames} frames); the combined envelope gates it"
+        )
+    elif not segment_duration_matches(stage_frames, og_stage_frames):
         timing_observations.append(
             "gameplay-demo segment is outside the advisory 20% OG envelope "
             f"({stage_frames} vs {og_stage_frames} frames)"
         )
-    if not segment_duration_matches(gargoyle_frames, og_gargoyle_frames):
+    if (
+        not stage_only_route
+        and not segment_duration_matches(gargoyle_frames, og_gargoyle_frames)
+    ):
         timing_observations.append(
             "Gargoyle-demo segment is outside the advisory 20% OG envelope "
             f"({gargoyle_frames} vs {og_gargoyle_frames} frames)"
@@ -377,7 +446,7 @@ def summarize(trace: Path) -> int:
     combined_demo_frames = (
         stage_frames + gargoyle_frames
         if stage_frames is not None and gargoyle_frames is not None
-        else None
+        else stage_only_frames
     )
     combined_demo_og_frames = og_stage_frames + og_gargoyle_frames
     if not combined_duration_matches(
@@ -388,12 +457,10 @@ def summarize(trace: Path) -> int:
             f"of OG ({combined_demo_frames} vs "
             f"{combined_demo_og_frames} frames)"
         )
-    if (
-        post_gargoyle_transition is None
-        or post_gargoyle_transition[1:] != (0x01, 1)
-    ):
+    demo_exit = post_stage_transition if stage_only_route else post_gargoyle_transition
+    if demo_exit is None or demo_exit[1:] != (0x01, 1):
         failures.append(
-            "Gargoyle demo did not return directly to the active title menu"
+            "attract demo did not return directly to the active title menu"
         )
     if menu_start is None:
         failures.append("returned-title D880=01 menu was not reached")
@@ -432,6 +499,12 @@ def summarize(trace: Path) -> int:
         "demo_miniboss_sprites": demo_sprites,
         "demo_miniboss_palette_mismatches": demo_attr_bad,
         "demo_route_mismatches": len(demo_route_bad),
+        "demo_route": "stage1-only" if stage_only_route else "stage1-gargoyle",
+        "demo_stage_only_frames": stage_only_frames,
+        "demo_stage_obj_samples": stage_obj_samples,
+        "demo_stage_obj_sprites": stage_obj_sprites,
+        "demo_stage_obj_palette_mismatches": stage_obj_bad,
+        "post_stage_transition": post_stage_transition,
         "demo_stage_frames": stage_frames,
         "demo_stage_og_frames": og_stage_frames,
         "demo_gargoyle_frames": gargoyle_frames,
@@ -464,7 +537,10 @@ def summarize(trace: Path) -> int:
     summary_path.write_text(json.dumps(summary, indent=2) + "\n")
 
     print(
-        f"Demo Gargoyle: samples={demo_samples} sprites={demo_sprites} "
+        f"Demo route: {'stage1-only' if stage_only_route else 'stage1-gargoyle'} "
+        f"stage_obj samples={stage_obj_samples} sprites={stage_obj_sprites} "
+        f"mismatches={stage_obj_bad}; "
+        f"Gargoyle: samples={demo_samples} sprites={demo_sprites} "
         f"palette6_mismatches={demo_attr_bad}; "
         f"timing stage={stage_frames}/{og_stage_frames} "
         f"gargoyle={gargoyle_frames}/{og_gargoyle_frames}"
@@ -486,7 +562,8 @@ def summarize(trace: Path) -> int:
         return 1
     print(
         "PASS: real D880=1B spotlight actors reach hardware OAM with "
-        "YAML palette slots; D880=0A Gargoyle remains on boss slot 6."
+        "YAML palette slots; demo OBJ palettes match the production LUT "
+        "(D880=0A Gargoyle, when reached, remains on boss slot 6)."
     )
     return 0
 

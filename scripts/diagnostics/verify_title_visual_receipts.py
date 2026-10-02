@@ -26,6 +26,7 @@ from build_v302_title_fix import (  # noqa: E402
 PROBE = Path(__file__).with_name("probe_title_visual_receipts_mgba.lua")
 DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 DEFAULT_MGBA = ROOT / "scripts/mgba-qt-singleflight"
+MIN_DEMO_SAMPLES = 20
 
 
 def parse_report(path: Path) -> dict[str, str]:
@@ -44,11 +45,35 @@ def red_dominant_pixels(path: Path) -> int:
         )
 
 
+def prepare_runtime_rom(rom: Path, output: Path) -> tuple[Path, Path]:
+    """Copy the ROM into a clean private directory for a cold SRAM boot."""
+    runtime = output / "runtime"
+    if runtime.exists():
+        shutil.rmtree(runtime)
+    runtime.mkdir(parents=True)
+    runtime_rom = runtime / "candidate.gb"
+    shutil.copy2(rom, runtime_rom)
+    return runtime_rom, runtime
+
+
+def probe_command(mgba: Path, runtime_rom: Path, runtime: Path) -> list[str]:
+    return [
+        str(mgba),
+        "--fastforward",
+        "-C", f"savegamePath={runtime}",
+        "-C", f"savestatePath={runtime}",
+        "--script", str(PROBE),
+        str(runtime_rom),
+    ]
+
+
 def run_probe(rom: Path, output: Path, mgba: Path, timeout: float) -> dict[str, str]:
+    runtime_rom, runtime = prepare_runtime_rom(rom, output)
     environment = os.environ.copy()
     environment.update(
         TITLE_VISUAL_OUT=str(output),
         TITLE_VISUAL_MAX_FRAMES="26000",
+        TITLE_VISUAL_MIN_DEMO_SAMPLES=str(MIN_DEMO_SAMPLES),
         TITLE_VISUAL_FOOTER_HEX=bytes(
             map_title_string_to_tiles(TITLE_FOOTER)
         ).hex(),
@@ -57,7 +82,7 @@ def run_probe(rom: Path, output: Path, mgba: Path, timeout: float) -> dict[str, 
         SDL_AUDIODRIVER="dummy",
     )
     process = subprocess.Popen(
-        [str(mgba), "--fastforward", "--script", str(PROBE), str(rom)],
+        probe_command(mgba, runtime_rom, runtime),
         cwd=ROOT,
         env=environment,
         stdout=subprocess.DEVNULL,
@@ -160,7 +185,7 @@ def main() -> int:
     demo_samples = int(report.get("demo_samples", "0"))
     demo_sprites = int(report.get("demo_sprites", "0"))
     demo_mismatches = int(report.get("demo_mismatches", "-1"))
-    if demo_samples < 10:
+    if demo_samples < MIN_DEMO_SAMPLES:
         failures.append(f"only {demo_samples} demo miniboss samples")
     if demo_mismatches:
         failures.append(f"{demo_mismatches}/{demo_sprites} demo palette mismatches")
@@ -186,6 +211,7 @@ def main() -> int:
         "captures": captures,
         "demo_miniboss": {
             "samples": demo_samples,
+            "minimum_samples": MIN_DEMO_SAMPLES,
             "sprites": demo_sprites,
             "expected_palette_slots": {"tiles_20_2F": 2, "tiles_30_4F": 6},
             "palette_mismatches": demo_mismatches,

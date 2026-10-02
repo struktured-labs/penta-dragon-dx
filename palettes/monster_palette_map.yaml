@@ -9,6 +9,9 @@ monsters:
     tile_ranges: [[0x10, 0x2F]]
     palette: dynamic_ffbe         # resolved at runtime from FFBE
   - name: crow
+    # Tile-family name, not a universal actor identity: scene09/stage07
+    # reuses $30-$37 for the Game Boy-shaped monster (issue #25).
+    # A global palette edit here also changes ordinary-stage crows.
     tile_ranges: [[0x30, 0x3F]]
     palette: 3                   # pal 3 (freed by projectiles moving to pal 0)
   - name: orc

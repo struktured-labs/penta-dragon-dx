@@ -29,9 +29,27 @@ from boss_geometry_contract import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def scratch_root() -> Path:
+    """Prefer large scratch, but use repository tmp/ when it is unavailable."""
+    for candidate in (Path("/mnt/data/tmp"), ROOT / "tmp"):
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                prefix="penta-scratch-probe-", dir=candidate
+            ):
+                pass
+            return candidate
+        except OSError:
+            continue
+    raise RuntimeError("neither /mnt/data/tmp nor repository tmp/ is writable")
 sys.path.insert(0, str(ROOT / "scripts"))
 PROBE = ROOT / "scripts/diagnostics/probe_boss_geometry.lua"
-DEFAULT_MGBA = ROOT / "scripts/mgba-headless-singleflight"
+# mGBA headless 0.11.0 crashes when Lua calls loadStateFile after callback
+# registration.  The checked-in Qt wrapper supports the same offscreen probe
+# and preserves the project-wide single-flight/parent-death safety contract.
+DEFAULT_MGBA = ROOT / "scripts/mgba-qt-singleflight"
 
 
 def sha256(path: Path) -> str:
@@ -47,12 +65,13 @@ def run_probe(mgba: Path, rom: Path, state: Path, prefix: Path,
         "QT_QPA_PLATFORM": "offscreen",
         "SDL_AUDIODRIVER": "dummy",
         "BOSS_GEOMETRY_OUT": str(prefix),
+        "PENTA_STATE_FILE": str(state.resolve()),
         "BOSS_GEOMETRY_FRAMES": str(frames),
         "BOSS_GEOMETRY_WARMUP": str(warmup),
         "BOSS_GEOMETRY_SCENE": str(scene),
     })
     proc = subprocess.Popen(
-        [str(mgba), "-t", str(state), "--script", str(PROBE), str(rom)],
+        [str(mgba), "--fastforward", "--script", str(PROBE), str(rom)],
         cwd=ROOT,
         env=env,
         stdout=subprocess.DEVNULL,
@@ -560,7 +579,7 @@ def main() -> int:
         work.mkdir(parents=True, exist_ok=True)
     else:
         temporary = tempfile.TemporaryDirectory(
-            prefix="penta-boss-geometry-", dir="/mnt/data/tmp"
+            prefix="penta-boss-geometry-", dir=scratch_root()
         )
         work = Path(temporary.name)
     try:
