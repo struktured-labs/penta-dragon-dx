@@ -79,7 +79,7 @@ R456C_PROFILE_SHAS = (
     # Release-lock candidate: the delta vs 4f5a leaves banks 19/21, the bulk
     # compiler and fixed $42F0..$42F5/$4324 untouched (release_lock_lineage);
     # every profile function below still re-checks those exact ABI bytes.
-    "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db",
+    "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8",
 )
 R455_SHA256 = "6e5e7a61ddd1a44c0db6aed123528477c5531716fa16d73b083c67d64abfcbe9"
 R455_WRONG_DESTINATION_SHA256 = "22449ff47e9996a578464fbce71ff3339a67f75becd4c47d075dde23034dacc5"

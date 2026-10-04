@@ -52,7 +52,10 @@ PINS = {
                compact='6ec44fe6b77dd59088c06a07e0631187737e8471365a68806c0d5aa407563b97',
                # Footer glyph GDMA only in a VRAM-accessible window (returned
                # title read "DX V3901" once #34 no longer masked the timing).
-               title_glyph='792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db'),
+               title_glyph='792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db',
+               # Continue into a miniboss reloads BG palettes (sequencer reload for scene
+               # $0A) and the CRAM source writer can no longer straddle mode 3.
+               continue_miniboss='db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8'),
 }
 
 
@@ -134,7 +137,10 @@ def return_fade_chain(parent, release_lock=False):
         ('return-card-compact',compact,compact.build,pins['compact']))
     if release_lock:
         import build_title_glyph_window_trial as glyph
-        stages+=(('title-glyph-window',glyph,glyph.build,pins['title_glyph']),)
+        import build_continue_miniboss_reload_trial as continue_reload
+        stages+=(('title-glyph-window',glyph,glyph.build,pins['title_glyph']),
+                 ('continue-miniboss-reload',continue_reload,continue_reload.build,
+                  pins['continue_miniboss']))
     for name,module,transform,expected in stages:
         result=transform(parent)
         if digest(result)!=expected:

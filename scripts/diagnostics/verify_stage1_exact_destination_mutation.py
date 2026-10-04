@@ -126,7 +126,7 @@ def main() -> int:
     relative = helper.find(AUTHORITATIVE_DESTINATION)
     if relative < 0 or helper.find(AUTHORITATIVE_DESTINATION, relative + 1) >= 0:
         raise SystemExit("FAIL: expected one authoritative-destination instruction")
-    # The release-lock candidate (792319cb) is accepted with the c693/4f5a
+    # The release-lock candidate (db09de8d) is accepted with the c693/4f5a
     # lineage below: its delta leaves bank 19 untouched (release_lock_lineage).
     # Expanded releases relocate the private Stage-1 helper from build-time
     # bank 14 to bank 19. The fixed mapper's immediate byte is the runtime
@@ -143,7 +143,7 @@ def main() -> int:
     source_sha256 = digest(source)
     expected_prefix = (
         R451C_HELPER_PREFIX
-        if source_sha256 in {R451C_SHA256, R453_SHA256, R455_SHA256, R456C_SHA256, R456D_SHA256, R527_SHA256, R528_SHA256, R529_SHA256, R530_SHA256, R531_SHA256, R532_SHA256, R533_SHA256, R534_SHA256, R535_TILE_RETIRE_SHA256, R535_STAGE_CARD_BLACK_SHA256, R536_PENTA_SEAM_SHA256, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d", "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5", "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db", R535_STAGE1_ONLY_CARD_BLACK_SHA256, R536_STAGE1_ONLY_CARD_BLACK_SHA256}
+        if source_sha256 in {R451C_SHA256, R453_SHA256, R455_SHA256, R456C_SHA256, R456D_SHA256, R527_SHA256, R528_SHA256, R529_SHA256, R530_SHA256, R531_SHA256, R532_SHA256, R533_SHA256, R534_SHA256, R535_TILE_RETIRE_SHA256, R535_STAGE_CARD_BLACK_SHA256, R536_PENTA_SEAM_SHA256, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d", "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5", "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8", R535_STAGE1_ONLY_CARD_BLACK_SHA256, R536_STAGE1_ONLY_CARD_BLACK_SHA256}
         else helper[:prefix_end]
     )
     if source[helper_offset:helper_offset + len(expected_prefix)] != expected_prefix:
@@ -161,7 +161,7 @@ def main() -> int:
     mutant_path = output / "candidate-forced-to-wrong-map-page.gb"
     mutant_path.write_bytes(mutant)
 
-    uses_current_hazard_fixture = source_sha256 in {R451C_SHA256, R453_SHA256, R455_SHA256, R456C_SHA256, R456D_SHA256, R527_SHA256, R528_SHA256, R529_SHA256, R530_SHA256, R531_SHA256, R532_SHA256, R533_SHA256, R534_SHA256, R535_TILE_RETIRE_SHA256, R535_STAGE_CARD_BLACK_SHA256, R536_PENTA_SEAM_SHA256, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d", "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5", "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db", R535_STAGE1_ONLY_CARD_BLACK_SHA256, R536_STAGE1_ONLY_CARD_BLACK_SHA256}
+    uses_current_hazard_fixture = source_sha256 in {R451C_SHA256, R453_SHA256, R455_SHA256, R456C_SHA256, R456D_SHA256, R527_SHA256, R528_SHA256, R529_SHA256, R530_SHA256, R531_SHA256, R532_SHA256, R533_SHA256, R534_SHA256, R535_TILE_RETIRE_SHA256, R535_STAGE_CARD_BLACK_SHA256, R536_PENTA_SEAM_SHA256, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d", "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5", "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8", R535_STAGE1_ONLY_CARD_BLACK_SHA256, R536_STAGE1_ONLY_CARD_BLACK_SHA256}
     # The state was captured from the clean candidate before this exact
     # helper-only mutation.  Authenticate that reuse explicitly; the child
     # verifier still checks the mutated ROM hash and the unchanged state hash.

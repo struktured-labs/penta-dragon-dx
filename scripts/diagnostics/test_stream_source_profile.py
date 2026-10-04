@@ -35,7 +35,7 @@ class StreamSourceProfileTests(unittest.TestCase):
     def test_profile_and_contract_pins(self):
         self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v1")
         self.assertTrue(profile.PROFILE["expanded_ted"])
-        self.assertEqual(builder.CONTRACT["candidate_sha256"][:8], "792319cb")
+        self.assertEqual(builder.CONTRACT["candidate_sha256"][:8], "db09de8d")
         self.assertTrue(builder.CONTRACT["chain_flags"]["release_lock"])
         self.assertEqual(builder.CONTRACT["deferred_issues"], [14, 34])
         self.assertNotIn("select-buffer", builder.CONTRACT["construction_order"])

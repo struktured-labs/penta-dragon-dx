@@ -2,6 +2,13 @@
 
 ## [Unreleased] - Restart fixes
 
+- Fix #28 Continue into a live miniboss: Continue acceptance queues a
+  palette-sequencer reload, CRAM bursts are written right after the HBlank edge
+  from bank-20 page copies (no byte can land in STAT mode 3; stale `4A29`), and
+  the death service drops its unchecked repair write. Cycle-identical to
+  792319cb on every frame (attract lockstep 0-26000), so all original gates hold
+  unrelaxed. New gate `stage1_miniboss_continue_palette`. Candidate:
+  `db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8`.
 - Fix #7–#10: retire stale CGB attributes and OAM at death entry, rearm the
   title prelude, and keep title publication separate from gameplay row updates.
   Exact candidate: `c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d`.
