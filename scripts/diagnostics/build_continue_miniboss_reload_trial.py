@@ -1,41 +1,62 @@
 #!/usr/bin/env python3
-"""Release lock: reload BG palettes after Continue into a miniboss, and make the
-CRAM source writer immune to mode-3 drops.
+"""Release lock: Continue into a live miniboss restores the fight's palettes,
+every CRAM burst is mode-3-proof, and the frame timing is cycle-identical to
+the 792319cb parent on every path (refs #28).
 
-1. Continue during a miniboss fight (refs #28 follow-up).
-   A death in a miniboss fight followed by Continue resumes straight into scene
-   D880=$0A with the miniboss alive. The deferred BG reload request $DF5D is
-   raised only by the scene-02 entry hook (bank13 $7D18 -> $7719). The VBlank
-   commit gate ($7703) consumes it only while D880==$02. So the death/white-fade
-   CRAM (FFFF/FFFF/7E1F/294A in every BG palette) survives until the miniboss
-   dies and the room and HUD render flat pink.
-   - $7703 gate: accept D880 AND $F7 == $02 (scenes $02 and $0A). Same 22
-     bytes. The palette sequencer's BG writer ($71B6) already folds $0A onto
-     $02 the same way.
-   - $7D18: the scene-02 path jumps straight to its continuation $7D26.
-   - $7D35: the common hook tail CALL $6D9E -> CALL $7719.
-   - $7719 cave: PUSH AF; LD A,$27; CALL $0847; POP AF; JP $6D9E (the old
-     7-byte setter plus its 3 free bytes).
-   - bank $27:$6C80 (entered through the existing $0847 bank-call ABI): raise
-     $DF5D:=1 when D880==$02 (old behaviour), or when D880==$0A and the
-     previous observed scene $DF0D==$17 (Continue out of the death sequence).
-     Miniboss spawn ($02->$0A) and kill ($0A->$02) keep their exact old
-     behaviour.
+Root causes (792319cb)
+  a. Continue after dying to a miniboss resumes straight into scene D880=$0A.
+     The deferred BG reload ($DF5D) is consumed by the VBlank commit gate
+     (bank13 $7703) only while D880==$02, so the death/white-fade CRAM survives
+     until the miniboss dies (flat pink room/HUD, garbled-looking Sara).
+  b. Palette-sequencer CRAM bursts go through the bank-20 router ($732A): it
+     waits for a fresh HBlank and then spends 35 M-cycles on the fixed mapper
+     switch ($0061/$09BE) before the bank-13 writer ($71E3) issues its four
+     writes. On long mode-3 lines the 4th write lands in the next line's mode 3
+     and the PPU drops it (stale BG byte 59 / OBJ byte $CF seen live).
+  c. The death service (bank13/bank16 $7182..$7188) repeats one direct,
+     unchecked write of BG byte 39 that can hit mode 3 during the death fade.
 
-2. Mode-3-proof CRAM source writer (stale pal4 colour-3 / #28 "4A29" byte).
-   The bank-20 router ($732A) waits for a fresh HBlank and then reaches the
-   bank-13 writer ($71E3) through the fixed mapper switch ($0061/$09BE). That
-   costs 38 M-cycles before the first of four writes. On lines with a long mode
-   3 (sprite-heavy miniboss lines) the 4th write lands in the next line's mode 3
-   and the PPU drops it. The router now publishes the bank-13 mapper state
-   ($DC09, $FF99) and saves HL before the wait; IE is already 0 here, so no
-   interrupt can observe the early bookkeeping. After the edge it writes $2100
-   directly from bank-20 $71E0, so execution falls through into bank-13 $71E3.
-   Worst case the 4th write now lands 32 M-cycles (128 dots) after HBlank
-   begins, inside the minimum 167-dot mode-0 + mode-2 window. Same wait
-   condition, same VBlank/LCD-off fast paths, same stack/IE/DE contract. The
-   writer itself is unchanged. Each burst ends ~30 M-cycles earlier, still on
-   the same scan line.
+The frame-timed attract demo, boss-speed parity and Stage-7 gates depend on the
+exact per-frame cycle profile, so this stage changes no cycle count on any
+path except the post-death Continue acceptance (a menu frame; the demo never
+dies):
+
+1. Cycle-funded dispatch (bank 20). The forward entry chain ($7A2A..$7A59)
+   kept the source bank in B and then did PUSH BC / LD B,A ... LD A,B / POP BC
+   and a JP hop to $7320 before $732A. Keeping the bank in D instead
+   ($7A2B PUSH DE / LD D,A, $7A54 LD A,D / POP DE) and jumping straight to the
+   new dispatcher ($7A59 JP $6320) frees 13 M-cycles per burst. The dispatcher
+   spends exactly those 13 M (per leaf, NOP / INC BC+DEC BC padding and
+   identical carry-flag results) choosing a router:
+     - source page $68xx (bank 13/16): RC68, writes from a bank-20 copy of the
+       page at the same address;
+     - source page $7Cxx: RC7C, H translated to the bank-20 copy ($6E for
+       bank 13, $70 for bank 16) and restored to $7C;
+     - Stage-7 local path ($7DB1) and every other source: the original router
+       bytes (inline copy, RCOLD) or the original $732A, unchanged.
+   RC68/RC7C use the identical VBlank/LCD-off fast paths and HBlank wait, then
+   issue the four writes immediately after the edge (4th write <= 28 M after
+   HBlank begins, inside the minimum 167-dot mode-0+mode-2 window), pad, load
+   A=D and enter the shared tail at $71E9 (CALL $0061 -> bank13 $71EC). From
+   the edge to $7FE3 the path is exactly 65 M-cycles, as in the parent, with
+   the same registers, flags, $DC09/$FF99/IE and bank.
+2. Death service (banks 13 and 16, $7182): `LD A,A7 / LDH [68],A / DEC HL /
+   LD A,[HL] / LDH [C],A` becomes `LD A,A8 / LDH [68],A / DEC HL / LD A,[HL] /
+   LD A,[HL]`: same bytes count and cycles, the index register still ends at
+   $A8, and the redundant unchecked byte-39 repair write is gone (the following
+   mode-safe bursts already write that byte).
+3. Continue acceptance (bank 1 $4AD4, runs only when the player picks Continue):
+   `LD A,FF / LD [DCBB],A` becomes `LD A,27 / CALL $0847` (bank-call ABI). The
+   bank-$27 helper does the original store and, when the resume scene has a
+   live miniboss (FFBF!=0), queues the palette sequencer's reload job
+   ($DF4C:=$11, what the $7703 gate's reload path hands it). The sequencer
+   does not step during scene $17, so the job runs from the first $0A frame
+   after resume through the mode-safe routers. Returns A=1 (bank for $0061).
+
+Verified: attract demo frames 0-26000 lockstep against 792319cb (emu cycle
+counter, scene, RNG, WRAM $C000-$DEFF, HRAM and CRAM identical every frame;
+only a dead stack slot at $DFC1-$DFC4 differs) and
+verify_stage1_miniboss_continue_palette.py.
 """
 from __future__ import annotations
 
@@ -46,101 +67,137 @@ from pathlib import Path
 
 PARENT = '792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db'
 NAME = 'continue-miniboss-reload'
+ROUTER_BANK = 20
+TREE_ORG = 0x6320
+TREE_LIMIT = 0x67E0
 PRIVATE_BANK = 0x27
 PRIVATE_ENTRY = 0x6C80
-ROUTER_BANK = 20
-ROUTER_ENTRY = 0x732A
-SWITCH = 0x71DE            # bank 20: PUSH-free switch tail ends at $71E2
-WRITER = 0x71E3            # bank 13 source writer (unchanged)
+PAGE_COPIES = ((0x6800, 13, 0x6800), (0x6E00, 13, 0x7C00), (0x7000, 16, 0x7C00))
+# Per-leaf padding (M-cycles) that makes every dispatch leaf reach its router
+# with the parent's cycle count; RC_PAD is the post-write padding.
+PADS = {'B7C': 2, 'Both': 1, 'F68': 9, 'S7a': 6, 'S7b': 5, 'E68': 11, 'D68': 12,
+        'C7C': 5, 'Coth': 6, 'A68': 3, 'A7C': 1, 'OLDA': 6}
+RC_PAD = {'RC68': 8, 'RC7C': 6}
 
-GATE_OLD = bytes.fromhex('FA80D8 FE02 C22D74 FA5DDF 3D C22D74 AF EA5DDF C30F74')
-GATE_NEW = bytes.fromhex(
-    'FA5DDF'    # 7703 LD A,[DF5D]
-    '3D'        # 7706 DEC A
-    'C22D74'    # 7707 JP NZ,742D      (no request)
-    'FA80D8'    # 770A LD A,[D880]
-    'E6F7'      # 770D AND F7          ($02 and $0A)
-    'D602'      # 770F SUB 02          (A=0 on match)
-    '20F4'      # 7711 JR NZ,7707      (Z clear -> JP NZ,742D)
-    'EA5DDF'    # 7713 LD [DF5D],A     (consume: A=0)
-    'C30F74')   # 7716 JP 740F
-SETTER_OLD = bytes.fromhex('3C EA5DDF C3267D 000000')
-CAVE_NEW = bytes.fromhex('F5 3E27 CD4708 F1 C39E6D')
-HOOK02_OLD = bytes.fromhex('C31977 0000')
-HOOK02_NEW = bytes.fromhex('C3267D 0000')
-TAIL_OLD = bytes.fromhex('CD9E6D')
-TAIL_NEW = bytes.fromhex('CD1977')
-TAIL_CALLEE = bytes.fromhex('AF EA49DF EA4BDF C9')
-BANK_CALL_ABI = bytes.fromhex('CD6100 CD806C C36100')
-PRIVATE = bytes.fromhex(
-    'FA80D8'    # LD A,[D880]
-    'FE02'      # CP 02
-    '280B'      # JR Z,set
-    'FE0A'      # CP 0A
-    '200C'      # JR NZ,done
-    'FA0DDF'    # LD A,[DF0D]   previous observed scene
-    'FE17'      # CP 17
-    '2005'      # JR NZ,done
-    '3E01'      # set: LD A,1
-    'EA5DDF'    # LD [DF5D],A
-    '3E0D'      # done: LD A,0D  (bank for $0847's JP $0061)
-    'C9')
-
-# bank 20 router entry ($732A) and its retired wait/switch sequence
-ROUTER_OLD = bytes.fromhex(
-    'F040 CB7F 2820 F041 E603 FE01 200A F044 FE90 3804 FE98 380E'
-    'F041 E603 FE03 20F8 F041 E603 20FA 7A E5 21E371 E5 C36100')
-WRITER_OLD = bytes.fromhex('E1 2AE2 2AE2 2AE2 2AE2 7B D1 E0FF C9')
-MAPPER_SWITCH = bytes.fromhex('EA09DC C3BE09')            # $0061
-MAPPER_TAIL = bytes.fromhex('E099 EA0021 C9')              # $09BE
-
-
-def assemble_router():
-    """Bank-20 router placed so that its LD [$2100],A ends at $71E2."""
-    S, E = 'switch', 'edge'
-    parts = [
-        '7A',            # LD A,D            source bank (13)
-        'EA09DC',        # LD [DC09],A       mapper shadow, as $0061 would
-        'E099',          # LDH [FF99],A      ISR bank-restore byte, as $09BE would
-        'E5',            # PUSH HL           operand for the writer's POP HL
-        'F040', 'CB7F',  # LCDC.7
-        ('28', S),       # JR Z,switch       LCD off: write now
-        'F041', 'E603', 'FE01',
-        ('20', E),       # JR NZ,edge        not VBlank
-        'F044', 'FE90',
-        ('38', E),       # JR C,edge         (parity with the old router)
-        'FE98',
-        ('38', S),       # JR C,switch       VBlank LY $90..$97: write now
-        E,
-        'F041', 'E603', 'FE03', '20F8',   # acquire mode 3
-        'F041', 'E603', '20FA',           # then a fresh mode 0
-        S,
-        '7A', 'EA0021',  # LD A,D ; LD [2100],A -> falls into bank13 $71E3
-    ]
-    size = sum(2 if isinstance(x, tuple) else (0 if x in (S, E) else len(x) // 2) for x in parts)
-    start = WRITER - size
-    labels, pc = {}, start
-    for x in parts:
-        if isinstance(x, tuple):
-            pc += 2
-        elif x in (S, E):
-            labels[x] = pc
-        else:
-            pc += len(x) // 2
-    code, pc = bytearray(), start
-    for x in parts:
-        if isinstance(x, tuple):
-            rel = labels[x[1]] - (pc + 2)
-            assert -128 <= rel <= 127
-            code += bytes((int(x[0], 16), rel & 0xFF)); pc += 2
-        elif x not in (S, E):
-            code += bytes.fromhex(x); pc += len(x) // 2
-    assert start + len(code) == WRITER
-    return start, bytes(code)
+OLD_ROUTER = bytes.fromhex('F040CB7F2820F041E603FE01200AF044FE903804FE98380E'
+                           'F041E603FE0320F8F041E60320FA7AE521E371E5C36100')
+CHAIN_EDITS = ((0x7A2B, 0xC5, 0xD5), (0x7A2C, 0x47, 0x57), (0x7A54, 0x78, 0x7A), (0x7A55, 0xC1, 0xD1))
+CHAIN_JP_OLD = bytes.fromhex('C32073')
+TAIL = bytes.fromhex('3E0DCD6100')               # bank20 $71E7, unchanged
+WRITER = bytes.fromhex('E12AE22AE22AE22AE27BD1E0FFC9')   # bank13 $71E3, unchanged
+DEATH_OLD = bytes.fromhex('3EA7E0682B7EE2')
+DEATH_NEW = bytes.fromhex('3EA8E0682B7E7E')
+ACCEPT_OLD = bytes.fromhex('3EFFEABBDC')
+ACCEPT_NEW = bytes.fromhex('3E27CD4708')
+BANK_CALL_ABI = bytes.fromhex('CD6100CD806CC36100')
+MAPPER_SWITCH = bytes.fromhex('EA09DCC3BE09')
+MAPPER_TAIL = bytes.fromhex('E099EA0021C9')
 
 
 def off(bank, addr):
-    return bank * 0x4000 + addr - 0x4000
+    return bank * 0x4000 + addr - (0x4000 if bank else 0)
+
+
+def assemble(org, items):
+    """Label-aware SM83 assembler: hex strings, ('label',n), ('jr',cc,n),
+    ('jpc',cc,n), ('jp',n|addr)."""
+    size = lambda it: (len(bytes.fromhex(it)) if isinstance(it, str)
+                       else {'label': 0, 'jr': 2}.get(it[0], 3))
+    labels, pc = {}, org
+    for it in items:
+        if not isinstance(it, str) and it[0] == 'label':
+            assert it[1] not in labels, it
+            labels[it[1]] = pc
+        pc += size(it)
+    out, pc = bytearray(), org
+    for it in items:
+        if isinstance(it, str):
+            out += bytes.fromhex(it)
+        elif it[0] == 'jr':
+            rel = labels[it[2]] - (pc + 2)
+            assert -128 <= rel <= 127, it
+            out += bytes(({None: 0x18, 'NZ': 0x20, 'Z': 0x28, 'C': 0x38}[it[1]], rel & 0xFF))
+        elif it[0] == 'jpc':
+            t = labels[it[2]]
+            out += bytes(({'NZ': 0xC2, 'Z': 0xCA}[it[1]], t & 0xFF, t >> 8))
+        elif it[0] == 'jp':
+            t = it[1] if isinstance(it[1], int) else labels[it[1]]
+            out += bytes((0xC3, t & 0xFF, t >> 8))
+        pc += size(it)
+    return bytes(out), labels
+
+
+def pad(n):
+    """n M-cycles of padding: INC BC/DEC BC pairs (4 M) then NOPs."""
+    assert n >= 0
+    return '030B' * (n // 4) + '00' * (n % 4)
+
+
+def router_copy(prefix, post, n):
+    p = prefix
+    return [('label', p), 'F040', 'CB7F', ('jr', 'Z', p + 'S'), 'F041', 'E603', 'FE01',
+            ('jr', 'NZ', p + 'E'), 'F044', 'FE90', ('jr', 'C', p + 'E'), 'FE98', ('jr', 'C', p + 'S'),
+            ('label', p + 'E'), 'F041', 'E603', 'FE03', '20F8', 'F041', 'E603', '20FA',
+            ('label', p + 'S'), '2AE2', '2AE2', '2AE2', '2AE2', *post,
+            '7A', pad(n), ('jp', 0x71E9)]
+
+
+def dispatcher_items():
+    P = lambda k: pad(PADS[k])
+    return [
+        'F0FF', '5F', 'AF', 'E0FF',            # E:=IE, IE:=0 (as the parent's $7D84)
+        '7A', 'FE0D', ('jr', 'NZ', 'LA'),
+        '79', 'FE6B', ('jr', 'NZ', 'LB'),
+        '7C', 'FE68', ('jr', 'NZ', 'LC'),
+        '7D', 'E6FB', 'FE58', ('jpc', 'NZ', 'D68'),
+        'F0BA', 'FE07', ('jpc', 'NZ', 'E68'),
+        'FA80D8', 'FE09', ('jpc', 'Z', 'S7a'),
+        'FE0A', ('jpc', 'NZ', 'F68'),
+        ('label', 'S7b'), P('S7b'), ('jp', 0x7DB1),
+        ('label', 'LB'), '7C', 'FE7C', ('jr', 'Z', 'B7C'), 'FE68', ('jr', 'Z', 'B68'),
+        ('label', 'Both'), '79', 'FE6B', P('Both'), ('jp', 0x732A),
+        ('label', 'B68'), '79', 'FE6B', ('jp', 'RC68'),
+        ('label', 'B7C'), '266E', '79', 'FE6B', P('B7C'), ('jp', 'RC7C'),
+        ('label', 'LC'), 'FE7C', ('jr', 'Z', 'C7C'),
+        ('label', 'Coth'), '7C', 'FE68', P('Coth'), ('jp', 0x732A),
+        ('label', 'C7C'), '266E', 'B7', P('C7C'), ('jp', 'RC7C'),
+        ('label', 'LA'), 'FE10', ('jr', 'NZ', 'OLDA'),
+        '7C', 'FE68', ('jr', 'Z', 'A68'), 'FE7C', ('jr', 'Z', 'A7C'),
+        ('label', 'Aoth'), 'B7', ('jr', None, 'RCOLD'),
+        ('label', 'OLDA'), '7A', 'FE0D', P('OLDA'), ('jr', None, 'RCOLD'),
+        ('label', 'A68'), P('A68'), ('jp', 'RC68'),
+        ('label', 'A7C'), '2670', P('A7C'),
+        *router_copy('RC7C', ['267C'], RC_PAD['RC7C']),
+        ('label', 'RCOLD'), OLD_ROUTER.hex(),
+        *router_copy('RC68', [], RC_PAD['RC68']),
+        ('label', 'S7a'), P('S7a'), ('jp', 0x7DB1),
+        ('label', 'D68'), P('D68'), ('jp', 'RC68'),
+        ('label', 'E68'), P('E68'), ('jp', 'RC68'),
+        ('label', 'F68'), P('F68'), ('jp', 'RC68'),
+    ]
+
+
+def private_helper():
+    return assemble(PRIVATE_ENTRY, [
+        '3EFF', 'EABBDC',          # original Continue store
+        'F0BF', 'B7', ('jr', 'Z', 'done'),   # resume scene has a live miniboss?
+        '3E11', 'EA4CDF',          # palette-sequencer reload job
+        ('label', 'done'), '3E01', 'C9'])[0]
+
+
+def edits(parent: bytes):
+    """(offset, new bytes) for every byte run this stage writes."""
+    tree, _ = assemble(TREE_ORG, dispatcher_items())
+    if TREE_ORG + len(tree) > TREE_LIMIT:
+        raise ValueError('dispatcher overflows its cave')
+    out = [(off(ROUTER_BANK, TREE_ORG), tree)]
+    out += [(off(ROUTER_BANK, a), bytes((new,))) for a, _, new in CHAIN_EDITS]
+    out.append((off(ROUTER_BANK, 0x7A5A), bytes((TREE_ORG & 0xFF, TREE_ORG >> 8))))
+    out += [(off(ROUTER_BANK, dst), parent[off(b, a):off(b, a) + 0x100]) for dst, b, a in PAGE_COPIES]
+    out += [(off(b, 0x7182), DEATH_NEW) for b in (13, 16)]
+    out.append((off(1, 0x4AD4), ACCEPT_NEW))
+    out.append((off(PRIVATE_BANK, PRIVATE_ENTRY), private_helper()))
+    return out
 
 
 def build(parent: bytes, *, with_metadata: bool = False):
@@ -148,49 +205,36 @@ def build(parent: bytes, *, with_metadata: bool = False):
         raise ValueError('exact release-lock 792319cb parent required')
     if parent[0x147] != 0x1B or parent[0x148] != 0x05:
         raise ValueError('MBC5 1 MiB expected')
-    b13 = lambda a, n: parent[off(13, a):off(13, a) + n]
-    checks = (
-        (b13(0x7703, 22), GATE_OLD, 'gate'),
-        (b13(0x7719, 10), SETTER_OLD, 'setter/cave'),
-        (b13(0x7D18, 5), HOOK02_OLD, 'scene-02 hook'),
-        (b13(0x7D35, 3), TAIL_OLD, 'hook tail'),
-        (b13(0x6D9E, 8), TAIL_CALLEE, 'tail callee'),
-        (b13(WRITER, len(WRITER_OLD)), WRITER_OLD, 'bank13 source writer'),
-        (parent[0x0847:0x0850], BANK_CALL_ABI, 'bank-call ABI'),
+    r20 = lambda a, n: parent[off(ROUTER_BANK, a):off(ROUTER_BANK, a) + n]
+    checks = [
+        (r20(0x732A, len(OLD_ROUTER)), OLD_ROUTER, 'bank20 router'),
+        (r20(0x7A59, 3), CHAIN_JP_OLD, 'chain hop'),
+        (r20(0x7320, 10), bytes.fromhex('C3807D57F0FF5FAFE0FF'), 'bank20 hop'),
+        (r20(0x71E7, 5), TAIL, 'bank20 tail'),
+        (parent[off(13, 0x71E3):off(13, 0x71E3) + len(WRITER)], WRITER, 'bank13 writer'),
+        (parent[off(16, 0x71E3):off(16, 0x71E3) + len(WRITER)], WRITER, 'bank16 writer'),
         (parent[0x0061:0x0067], MAPPER_SWITCH, 'mapper switch'),
         (parent[0x09BE:0x09C4], MAPPER_TAIL, 'mapper tail'),
-        (parent[off(ROUTER_BANK, ROUTER_ENTRY):off(ROUTER_BANK, ROUTER_ENTRY) + len(ROUTER_OLD)],
-         ROUTER_OLD, 'bank20 router'),
-    )
+        (parent[0x0847:0x0850], BANK_CALL_ABI, 'bank-call ABI'),
+        (parent[off(1, 0x4AD4):off(1, 0x4AD9)], ACCEPT_OLD, 'Continue acceptance'),
+        (parent[off(13, 0x6800):off(13, 0x6900)], parent[off(16, 0x6800):off(16, 0x6900)], '68 pages'),
+    ]
+    checks += [(r20(a, 1), bytes((old,)), f'chain {a:04X}') for a, old, _ in CHAIN_EDITS]
+    checks += [(parent[off(b, 0x7182):off(b, 0x7189)], DEATH_OLD, f'death service {b}') for b in (13, 16)]
     for actual, expected, label in checks:
         if actual != expected:
             raise ValueError(f'{label} preimage differs')
-    start, router = assemble_router()
-    if set(parent[off(ROUTER_BANK, start):off(ROUTER_BANK, WRITER)]) != {0xFF}:
-        raise ValueError('bank20 router cave is not free')
-    # bank 20 $71E3.. must stay the bank-20 forward entry (JP $7A2A) untouched
-    if parent[off(ROUTER_BANK, WRITER):off(ROUTER_BANK, WRITER) + 3] != bytes.fromhex('C32A7A'):
-        raise ValueError('bank20 forward entry differs')
-    if set(parent[off(PRIVATE_BANK, 0x4000):off(PRIVATE_BANK, 0x8000)]) != {0xFF}:
-        raise ValueError('private bank not free')
-    for i in range(len(parent) - 2):
-        if parent[i] in (0xEA, 0xFA) and parent[i + 1] == 0x5D and parent[i + 2] == 0xDF:
-            if not off(13, 0x7703) <= i < off(13, 0x7723):
-                raise ValueError(f'unexpected $DF5D reference at {i:#x}')
+    free = [(off(ROUTER_BANK, TREE_ORG), TREE_LIMIT - TREE_ORG)]
+    free += [(off(ROUTER_BANK, dst), 0x100) for dst, _, _ in PAGE_COPIES]
+    free.append((off(PRIVATE_BANK, 0x4000), 0x4000))
+    for o, n in free:
+        if set(parent[o:o + n]) != {0xFF}:
+            raise ValueError(f'cave {o:#x} not free')
     rom = bytearray(parent)
     owned = set()
-
-    def put(o, data):
+    for o, data in edits(parent):
         rom[o:o + len(data)] = data
         owned.update(range(o, o + len(data)))
-
-    put(off(13, 0x7703), GATE_NEW)
-    put(off(13, 0x7719), CAVE_NEW)
-    put(off(13, 0x7D18), HOOK02_NEW)
-    put(off(13, 0x7D35), TAIL_NEW)
-    put(off(PRIVATE_BANK, PRIVATE_ENTRY), PRIVATE)
-    put(off(ROUTER_BANK, start), router)
-    put(off(ROUTER_BANK, ROUTER_ENTRY), bytes((0xC3, start & 0xFF, start >> 8)))
     rom[0x14E:0x150] = ((sum(rom[:0x14E]) + sum(rom[0x150:])) & 0xFFFF).to_bytes(2, 'big')
     changed = {i for i, (x, y) in enumerate(zip(parent, rom)) if x != y}
     if not changed <= owned | {0x14E, 0x14F}:
@@ -199,7 +243,7 @@ def build(parent: bytes, *, with_metadata: bool = False):
     if with_metadata:
         return result, dict(name=NAME, parent_sha256=PARENT,
                             candidate_sha256=hashlib.sha256(result).hexdigest(),
-                            router_cave=f'20:{start:04X}', changed=len(changed))
+                            dispatcher=f'20:{TREE_ORG:04X}', changed=len(changed))
     return result
 
 
@@ -207,22 +251,18 @@ def verify_installed(rom: bytes) -> bool:
     """Exact bytes of this stage in a candidate (static identity, not live)."""
     if len(rom) != 0x100000:
         return False
-    start, router = assemble_router()
-    spans = (
-        (off(13, 0x7703), GATE_NEW), (off(13, 0x7719), CAVE_NEW),
-        (off(13, 0x7D18), HOOK02_NEW), (off(13, 0x7D35), TAIL_NEW),
-        (off(13, WRITER), WRITER_OLD),
-        (off(PRIVATE_BANK, PRIVATE_ENTRY), PRIVATE),
-        (off(ROUTER_BANK, start), router),
-        (off(ROUTER_BANK, ROUTER_ENTRY), bytes((0xC3, start & 0xFF, start >> 8))),
-        (off(ROUTER_BANK, WRITER), bytes.fromhex('C32A7A')),
-        (0x0847, BANK_CALL_ABI),
-    )
+    try:
+        spans = edits(rom)
+    except (AssertionError, ValueError):
+        return False
+    # page copies must equal their live source pages
+    spans += [(off(ROUTER_BANK, 0x732A), OLD_ROUTER), (off(ROUTER_BANK, 0x71E7), TAIL),
+              (off(13, 0x71E3), WRITER), (off(16, 0x71E3), WRITER), (0x0847, BANK_CALL_ABI)]
     return all(rom[o:o + len(data)] == data for o, data in spans)
 
 
 if __name__ == '__main__':
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('parent', type=Path)
     p.add_argument('--output', type=Path, required=True)
     a = p.parse_args()

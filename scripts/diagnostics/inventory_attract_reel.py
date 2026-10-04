@@ -47,10 +47,6 @@ COMBINED_DEMO_DURATION_TOLERANCE = 0.15
 DEMO_TRANSITION_BOUNDARY_SLACK = 2
 
 
-# A Gargoyle segment shorter than this (OG demo: 395 frames) that never put
-# the miniboss on hardware OAM is treated as a Stage-1-only demo route.
-GARGOYLE_UNSEEN_MAX_FRAMES = 200
-
 def segment_duration_matches(actual: int | None, expected: int) -> bool:
     return (
         actual is not None
@@ -399,27 +395,9 @@ def summarize(trace: Path) -> int:
         failures.append(f"{actor_attr_bad} spotlight quadrant palette mismatches")
     if actor_shadow_matches == 0:
         failures.append("hardware spotlight OAM never matched either shadow buffer")
-    # The prerecorded demo is frame-timed while gameplay is main-loop timed,
-    # so a small change in per-frame work can move the Gargoyle spawn into the
-    # last frames before the demo timer returns to the title. If the miniboss
-    # never reached hardware OAM before that exit, the run carries no Gargoyle
-    # coverage at all; hold it to the Stage-1-only coverage floor instead.
-    # Any Gargoyle sprite that does reach OAM is still palette-checked above.
-    gargoyle_unseen_late = (
-        not stage_only_route
-        and demo_samples == 0
-        and gargoyle_frames is not None
-        and gargoyle_frames < GARGOYLE_UNSEEN_MAX_FRAMES
-    )
-    if gargoyle_unseen_late:
-        print(
-            "TIMING: Gargoyle spawned only "
-            f"{gargoyle_frames} frames before the demo exit and never reached "
-            "hardware OAM; applying the Stage-1-only coverage floor"
-        )
-    if not stage_only_route and not gargoyle_unseen_late and demo_samples < 20:
+    if not stage_only_route and demo_samples < 20:
         failures.append(f"only {demo_samples} Gargoyle demo samples (need 20+)")
-    if (stage_only_route or gargoyle_unseen_late) and stage_obj_samples < 200:
+    if stage_only_route and stage_obj_samples < 200:
         failures.append(
             f"only {stage_obj_samples} Stage-1 demo OAM samples (need 200+)"
         )
@@ -518,7 +496,6 @@ def summarize(trace: Path) -> int:
         "spotlight_palette_mismatches": actor_attr_bad,
         "spotlight_shadow_matches": actor_shadow_matches,
         "demo_miniboss_samples": demo_samples,
-        "demo_gargoyle_unseen_late": gargoyle_unseen_late,
         "demo_miniboss_sprites": demo_sprites,
         "demo_miniboss_palette_mismatches": demo_attr_bad,
         "demo_route_mismatches": len(demo_route_bad),

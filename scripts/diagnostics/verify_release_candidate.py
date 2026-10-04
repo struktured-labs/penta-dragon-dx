@@ -105,7 +105,7 @@ def build_gates(
             # Release lock: hazard-state generator, bank 19 and the low-health
             # observer ABI are outside its delta (release_lock_lineage); the
             # verifiers re-check every ABI byte against this exact image.
-            "93d21c4e00d2565c9bb9423de77d90f1e7b5b986b5633c53000d6e13c80e62fe",
+            "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8",
             "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
             "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
         }

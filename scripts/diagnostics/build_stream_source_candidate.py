@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the release-lock stream candidate (93d21c4e) as a release source profile.
+"""Build the release-lock stream candidate (db09de8d) as a release source profile.
 
 Wraps scripts/build_stream_regression_candidate.py with the full stream chain
 (presentation, arena alias, completion-safe, secret sound alias, return fade
@@ -64,7 +64,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [14, 34],
     "candidate_sha256": (
-        "93d21c4e00d2565c9bb9423de77d90f1e7b5b986b5633c53000d6e13c80e62fe"
+        "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -120,7 +120,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
     """Authenticate the construction without re-running the 36 s chain.
 
     Verifies the nested original-source restart proof (which reconstructs its
-    own overlays), the exact stage hash linkage from c693eafb to 93d21c4e, the
+    own overlays), the exact stage hash linkage from c693eafb to db09de8d, the
     current bytes of every builder and every transitively loaded project
     Python source, and the suite source fingerprint.
     """

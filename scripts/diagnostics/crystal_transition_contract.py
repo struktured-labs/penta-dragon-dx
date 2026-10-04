@@ -12,16 +12,6 @@ def offset(address):
 
 
 def verify_transition(rom):
-    import release_lock_lineage
-    if release_lock_lineage.is_candidate(bytes(rom)):
-        # The final continue-miniboss-reload stage moves the scene-02 reload
-        # arm from the $7D18 setter into the common hook tail ($7D35 -> $7719
-        # -> bank 39) and widens the $7703 gate to scene $0A. Authenticate that
-        # exact stage, then hold the inherited title-port/r443e3 contract to
-        # the bytes it was built on.
-        import build_continue_miniboss_reload_trial as continue_reload
-        assert continue_reload.verify_installed(bytes(rom)), "continue-miniboss-reload stage differs"
-        rom = release_lock_lineage.revert_owned(bytes(rom), {release_lock_lineage.CONTINUE_OWNER})
     original = build_title_transition_service()
     start = offset(TITLE_TRANSITION_SERVICE_ADDR)
     if rom[start:start + len(original)] == original:

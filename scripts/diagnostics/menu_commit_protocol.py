@@ -38,15 +38,8 @@ def expected_parts():
 def authenticate(rom):
     import release_lock_lineage
     if release_lock_lineage.is_candidate(rom):
-        # The release-lock delta leaves every protocol span byte-identical,
-        # except the continue-miniboss-reload stage's reworked $7703 commit
-        # gate (now also accepting scene $0A). Authenticate that stage's exact
-        # bytes, then check the inherited transaction on the ancestor.
-        import build_continue_miniboss_reload_trial as continue_reload
-        if not continue_reload.verify_installed(rom):
-            raise ValueError('continue-miniboss-reload stage bytes differ')
-        rom = release_lock_lineage.sara_ancestor(rom, except_owners={
-            release_lock_lineage.CONTINUE_OWNER}, *(
+        # The release-lock delta leaves every protocol span byte-identical.
+        rom = release_lock_lineage.sara_ancestor(rom, *(
             (bank*0x4000+address-(0x4000 if bank else 0),
              bank*0x4000+address-(0x4000 if bank else 0)+len(code))
             for bank, address, code in expected_parts()))
