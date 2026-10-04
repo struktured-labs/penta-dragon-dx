@@ -35,6 +35,26 @@ class Stage7StatePatrol(unittest.TestCase):
             with self.assertRaises(ValueError):
                 verify.validate_rows(damaged, 3, "damaged")
 
+    def test_duplicate_join_may_cross_one_frame_only(self):
+        base = [
+            row(1, 1, 0, 0, 0x10, 0, 5, 96),
+            row(2, 2, 4, 0x10, 0x20, 1, 3, 152),
+            row(3, 2, 5, 0x10, 0x20, 1, 3, 152),
+            row(4, 2, 5, 0x10, 0x20, 1, 3, 152),
+            row(5, 3, 8, 0x20, 0x10, 2, 7, 92),
+        ]
+        logical, duplicates = verify.normalize_rows(copy.deepcopy(base), 3, "ok")
+        self.assertEqual(duplicates, 2)
+        self.assertEqual(logical[1]["frame"], 4)
+        for index, field, value in (
+            (2, "frame", 6), (2, "x", 148), (2, "consumed", 0x20),
+            (3, "planned", 0x10), (2, "frame", 3),
+        ):
+            damaged = copy.deepcopy(base)
+            damaged[index][field] = value
+            with self.assertRaises(ValueError):
+                verify.normalize_rows(damaged, 3, "damaged")
+
     @staticmethod
     def metric_traces(dx_scale: int = 10, dx_settle: int = 5):
         traces = {}

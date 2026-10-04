@@ -76,6 +76,7 @@ LIVE_GATES = (
     "low_health_scene0b_publication",
     "pocket_stage1_visual_incident",
     "miniboss_color",
+    "stage1_miniboss_continue_palette",
     "later_stage_integrity",
     "later_stage_soak",
     "stage2_stream_soak",

@@ -105,7 +105,7 @@ def build_gates(
             # Release lock: hazard-state generator, bank 19 and the low-health
             # observer ABI are outside its delta (release_lock_lineage); the
             # verifiers re-check every ABI byte against this exact image.
-            "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db",
+            "93d21c4e00d2565c9bb9423de77d90f1e7b5b986b5633c53000d6e13c80e62fe",
             "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
             "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
         }
@@ -781,6 +781,18 @@ def build_gates(
             script("scripts/probes/verify_miniboss_color.py", r),
             240,
         ),
+        # Continue into a live miniboss restores the fight's BG palettes
+        # (792319cb kept the death fade); expanded release images only.
+        *((Gate(
+            "stage1_miniboss_continue_palette",
+            script(
+                "scripts/diagnostics/verify_stage1_miniboss_continue_palette.py",
+                r,
+                "--output",
+                str(artifacts / "stage1-miniboss-continue-palette"),
+            ),
+            600,
+        ),) if expanded_candidate else ()),
         Gate(
             "later_stage_integrity",
             script(

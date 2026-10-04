@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the release-lock stream candidate (792319cb) as a release source profile.
+"""Build the release-lock stream candidate (93d21c4e) as a release source profile.
 
 Wraps scripts/build_stream_regression_candidate.py with the full stream chain
 (presentation, arena alias, completion-safe, secret sound alias, return fade
@@ -55,6 +55,7 @@ CONTRACT = {
         "arena-completion-safe", "secret-sound-alias-fast",
         "secret-alias-chunks", "return-initial-map", "return-cgb-fade",
         "return-card-deadline", "return-card-compact", "title-glyph-window",
+        "continue-miniboss-reload",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -63,7 +64,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [14, 34],
     "candidate_sha256": (
-        "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db"
+        "93d21c4e00d2565c9bb9423de77d90f1e7b5b986b5633c53000d6e13c80e62fe"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -119,7 +120,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
     """Authenticate the construction without re-running the 36 s chain.
 
     Verifies the nested original-source restart proof (which reconstructs its
-    own overlays), the exact stage hash linkage from c693eafb to 792319cb, the
+    own overlays), the exact stage hash linkage from c693eafb to 93d21c4e, the
     current bytes of every builder and every transitively loaded project
     Python source, and the suite source fingerprint.
     """

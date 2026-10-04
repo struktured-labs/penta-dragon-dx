@@ -12,6 +12,13 @@ leaves byte-identical to 4f5a67b8. ``DELTA_VS_SARA`` lists every changed
 file-offset run inside the first 512 KiB (computed from the source build);
 banks 32..63 are new. It is a recognition aid, never a byte mask: callers
 must still check the bytes they care about.
+
+The final ``continue-miniboss-reload`` stage (Continue into a miniboss reloads
+BG palettes; mode-3-proof CRAM source writer) owns six runs: bank13
+$7703/$7719/$7D18/$7D35 and bank20 $71B2/$732A. Its bank-39 helper lies in the
+expansion. Verifiers whose spans meet those runs must authenticate the stage
+with ``build_continue_miniboss_reload_trial.verify_installed`` and may then
+apply their historical contract to ``revert_owned(rom, {CONTINUE_OWNER})``.
 """
 from __future__ import annotations
 
@@ -19,8 +26,9 @@ import hashlib
 
 SARA_SHA256 = "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5"
 CANDIDATE_SHA256 = (
-    "792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db"
+    "93d21c4e00d2565c9bb9423de77d90f1e7b5b986b5633c53000d6e13c80e62fe"
 )
+CONTINUE_OWNER = "continue-miniboss-reload"
 ROM_SIZE = 0x100000
 LEGACY_SIZE = 0x80000
 DELTA_VS_SARA = (
@@ -29,15 +37,15 @@ DELTA_VS_SARA = (
     (0x042F6, 1), (0x04355, 4), (0x075F1, 2), (0x1F828, 23), (0x1F920, 3),
     (0x1F930, 3), (0x3563A, 3), (0x3569C, 14), (0x356DE, 16), (0x356FA, 5),
     (0x35830, 12), (0x369C1, 4), (0x36A57, 8), (0x36DAD, 1), (0x36DBD, 67),
-    (0x36F98, 103), (0x37082, 2), (0x37092, 2), (0x3718F, 5), (0x37C38, 2),
-    (0x37C7A, 3), (0x37FEA, 5), (0x4155D, 12), (0x416A4, 6), (0x416DE, 3),
-    (0x41CDA, 5), (0x5004A, 3), (0x5028F, 4), (0x50700, 3362),
-    (0x5151C, 1784), (0x51C20, 105), (0x51CDC, 6), (0x52A59, 6),
-    (0x52B80, 85), (0x52C21, 7), (0x52C40, 17), (0x52DA7, 31),
-    (0x52DE0, 31), (0x52F92, 14), (0x531E7, 5), (0x53320, 3),
-    (0x5332F, 42), (0x53C00, 360), (0x53D80, 115), (0x53E50, 8),
-    (0x6EC81, 24), (0x70000, 61), (0x72C80, 5), (0x7F1A0, 6),
-    (0x7F1CE, 3), (0x7F1E3, 12),
+    (0x36F98, 103), (0x37082, 2), (0x37092, 2), (0x3718F, 5), (0x37704, 15),
+    (0x37719, 10), (0x37C38, 2), (0x37C7A, 3), (0x37D19, 2), (0x37D36, 2),
+    (0x37FEA, 5), (0x4155D, 12), (0x416A4, 6), (0x416DE, 3), (0x41CDA, 5),
+    (0x5004A, 3), (0x5028F, 4), (0x50700, 3362), (0x5151C, 1784),
+    (0x51C20, 105), (0x51CDC, 6), (0x52A59, 6), (0x52B80, 85), (0x52C21, 7),
+    (0x52C40, 17), (0x52DA7, 31), (0x52DE0, 31), (0x52F92, 14),
+    (0x531B2, 49), (0x531E7, 5), (0x53320, 3), (0x5332A, 3), (0x5332F, 42),
+    (0x53C00, 360), (0x53D80, 115), (0x53E50, 8), (0x6EC81, 24),
+    (0x70000, 61), (0x72C80, 5), (0x7F1A0, 6), (0x7F1CE, 3), (0x7F1E3, 12),
 )
 
 # Stage(s) of build_stream_regression_candidate --release-lock that write each
@@ -103,6 +111,12 @@ RUN_OWNERS = {
     0x7f1a0: ('arena-completion-safe',),
     0x7f1ce: ('arena-completion-safe',),
     0x7f1e3: ('arena-completion-safe',),
+    0x37704: ('continue-miniboss-reload',),
+    0x37719: ('continue-miniboss-reload',),
+    0x37d19: ('continue-miniboss-reload',),
+    0x37d36: ('continue-miniboss-reload',),
+    0x531b2: ('continue-miniboss-reload',),
+    0x5332a: ('continue-miniboss-reload',),
     # Header ROM size/checksums: every stage re-normalizes them.
     0x00148: ("header",),
 }
@@ -115,10 +129,10 @@ SARA_PREIMAGE = (
     "/XPR0K3+J6Chsf7hycPTTRhQwYdd2zVY1j9gPHn4kcDqfLVqPg6tB5m8Cr80ROxyHwTaJTwI"
     "shN/EGz34UGIHcOD0I+HE7I/+H9d/8D/l+usf5UK73/9mf5PQuMFWG0AqlqJS2f/1JT/YzJg"
     "Puyc+09UQw6oUOqfpIbQPykNvn/SQCyjwfVPTIFPgmX9K477dlGvmO4DVV7jsRD4x2kgfawo"
-    "XY/BTvysO4eEEMiRzIef169/FXz/Vfh9RYYCQYZjbAxaQsKsCr9Ogrzx8HBPPsPWMKCHMXwF"
-    "9/yv/0f/neTjOvrxsFbJ/1EwCkbBKBgFo2AUjIJRMApGwSgYBaNgFIyCUTAKRsEoGAWEQcXB"
-    "q2IfHJ8x/2PU4APTzAo/QLTCr6qnio8Lnx5OZBgNpBEEzm3X4Kw5xpwu+OAwH4Md40mqGCq4"
-    "4CCfI3wsH3mAHwBiYTGF"
+    "XY/BTvysO4eEEMiRzIef169/FXz/Vfh9RYYCQYZjbAxaQsKsCr9Ogrzx8HBPPkPDjX9Mh3RL"
+    "fsXetwVS621exd4/rFYLlN0aBgwJyfJ5uRhehofMr/9H/53k4zr68bBWyf9RMApGwSgYBaNg"
+    "FIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFNAAVB69+cDgt9sHxGfM/Rg0+MM2s8ANEK/yqeqr4"
+    "uPDp4USG0XAaQeDcdg3OmmPM6YIPDvMx2DGepIqhggsO8jnCx/+RJwUAE9dx8g=="
 )
 
 
@@ -126,14 +140,41 @@ def is_candidate(rom: bytes) -> bool:
     return len(rom) == ROM_SIZE and hashlib.sha256(rom).hexdigest() == CANDIDATE_SHA256
 
 
-def touched(start: int, end: int) -> list[tuple[int, int]]:
-    """Return release-lock delta runs intersecting file range [start, end)."""
+def touched(start: int, end: int, except_owners=frozenset()) -> list[tuple[int, int]]:
+    """Return release-lock delta runs intersecting file range [start, end).
+
+    Runs written only by ``except_owners`` are omitted; a caller passing them
+    must authenticate those owners' bytes itself.
+    """
     if end > LEGACY_SIZE:
         raise ValueError("range extends into the release-lock expansion banks")
     return [
         (offset, length) for offset, length in DELTA_VS_SARA
         if offset < end and start < offset + length
+        and not (except_owners and set(RUN_OWNERS[offset]) <= set(except_owners))
     ]
+
+
+def revert_owned(rom: bytes, owners) -> bytes:
+    """Candidate bytes with the runs written only by ``owners`` reverted.
+
+    Those runs revert to their 4f5a67b8 preimage, which is also the byte
+    content of the stage's parent there (owner runs never overlap earlier
+    stage runs). Fails closed on any run with a mixed owner set.
+    """
+    if not is_candidate(rom):
+        raise ValueError("not the exact release-lock candidate")
+    blob = _preimage()
+    result = bytearray(rom)
+    cursor = 0
+    for offset, length in DELTA_VS_SARA:
+        run_owners = set(RUN_OWNERS[offset])
+        if run_owners & set(owners):
+            if not run_owners <= set(owners):
+                raise ValueError(f"run {offset:#x} has mixed owners {RUN_OWNERS[offset]}")
+            result[offset:offset + length] = blob[cursor:cursor + length]
+        cursor += length
+    return bytes(result)
 
 
 def untouched(rom: bytes, *ranges: tuple[int, int]) -> bool:
@@ -141,7 +182,7 @@ def untouched(rom: bytes, *ranges: tuple[int, int]) -> bool:
     return is_candidate(rom) and not any(touched(s, e) for s, e in ranges)
 
 
-def sara_ancestor(rom: bytes, *ranges: tuple[int, int]) -> bytes:
+def sara_ancestor(rom: bytes, *ranges: tuple[int, int], except_owners=frozenset()) -> bytes:
     """Return the authenticated 4f5a67b8 ancestor of the candidate.
 
     Every ``ranges`` entry (file offsets, end exclusive) must lie outside the
@@ -157,7 +198,7 @@ def sara_ancestor(rom: bytes, *ranges: tuple[int, int]) -> bytes:
     if not ranges:
         raise ValueError("sara_ancestor requires the verifier's byte ranges")
     for start, end in ranges:
-        hits = touched(start, end)
+        hits = touched(start, end, except_owners)
         if hits:
             raise ValueError(
                 f"range {start:#x}..{end:#x} meets the release-lock delta {hits}"

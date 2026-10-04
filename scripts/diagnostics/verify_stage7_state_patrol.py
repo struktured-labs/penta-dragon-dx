@@ -101,14 +101,28 @@ def normalize_rows(
     duplicates = 0
     for row in rows:
         if logical and row["loop"] == logical[-1]["loop"]:
-            current = {key: value for key, value in row.items() if key != "ordinal"}
+            # A duplicate join is the native $0ABB frame-parity wait
+            # re-entering inside one main-loop iteration. The wait can span
+            # one VBlank, so the duplicate may be observed on the next frame;
+            # every other field (stacked input, plan, endpoint state, room,
+            # coordinates) must still equal the first observation, and the
+            # logical row keeps the first observation's frame.
+            ignored = ("ordinal", "frame")
+            current = {
+                key: value for key, value in row.items() if key not in ignored
+            }
             previous = {
                 key: value for key, value in logical[-1].items()
-                if key != "ordinal"
+                if key not in ignored
             }
             require(
                 current == previous,
                 f"{label}: disagreeing duplicate at loop {row['loop']}",
+            )
+            require(
+                logical[-1]["frame"] <= row["frame"] <= logical[-1]["frame"] + 1,
+                f"{label}: duplicate at loop {row['loop']} spans more than "
+                "one frame",
             )
             duplicates += 1
             continue
