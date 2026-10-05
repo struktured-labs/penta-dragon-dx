@@ -1,4 +1,4 @@
-"""Release-lock 2026-10-01 candidate lineage (#14/#34 deferred).
+"""Release-lock 2026-10-01 candidate lineage (#34 deferred; #14 fixed).
 
 The stream release-lock candidate is source-built by
 ``scripts/build_stream_regression_candidate.py --release-lock`` from the
@@ -22,6 +22,12 @@ edits. Its bank-39 helper lies in the expansion. Verifiers whose spans meet
 those runs must authenticate the stage with
 ``build_continue_miniboss_reload_trial.verify_installed`` and may then
 apply their historical contract to ``revert_owned(rom, {CONTINUE_OWNER})``.
+
+The ``sara-overhang-priority`` stage after it (#14: Sara hidden behind black
+ceiling overhangs, cycle-identical) owns bank0 $11A0..$11C2 (fused flash and
+priority helper), bank1 $50A3..$50F8 (quadrant flags + range test) and the
+bank0D/bank10 $7B43/$7B45 emitter call sites (OVERHANG_OWNER). Authenticate it
+with ``build_sara_overhang_priority.verify_installed``.
 """
 from __future__ import annotations
 
@@ -29,34 +35,37 @@ import hashlib
 
 SARA_SHA256 = "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5"
 CANDIDATE_SHA256 = (
-    "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8"
+    "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb"
 )
 CONTINUE_OWNER = "continue-miniboss-reload"
+OVERHANG_OWNER = "sara-overhang-priority"
 ROM_SIZE = 0x100000
 LEGACY_SIZE = 0x80000
 DELTA_VS_SARA = (
     (0x00148, 8), (0x00A81, 9), (0x00A95, 2), (0x00AA0, 2), (0x00AB6, 5),
-    (0x00CC7, 1), (0x015DB, 2), (0x02AE1, 1), (0x02B91, 14), (0x02BC6, 20),
-    (0x042F6, 1), (0x04355, 4), (0x04AD5, 4), (0x075F1, 2), (0x1F828, 23),
-    (0x1F920, 3), (0x1F930, 3), (0x3563A, 3), (0x3569C, 14), (0x356DE, 16),
-    (0x356FA, 5), (0x35830, 12), (0x369C1, 4), (0x36A57, 8), (0x36DAD, 1),
-    (0x36DBD, 67), (0x36F98, 103), (0x37082, 2), (0x37092, 2), (0x37183, 1),
-    (0x37188, 1), (0x3718F, 5), (0x37C38, 2), (0x37C7A, 3), (0x37FEA, 5),
-    (0x4155D, 12), (0x416A4, 6), (0x416DE, 3), (0x41CDA, 5), (0x43183, 1),
-    (0x43188, 1), (0x5004A, 3), (0x5028F, 4), (0x50700, 3362),
-    (0x5151C, 1784), (0x51C20, 105), (0x51CDC, 6), (0x52320, 1),
-    (0x52322, 3), (0x52326, 329), (0x52801, 7), (0x52809, 7), (0x52811, 7),
-    (0x52819, 7), (0x52821, 7), (0x52829, 1), (0x5282B, 5), (0x52831, 7),
-    (0x52839, 41), (0x52863, 87), (0x528BB, 13), (0x528C9, 3), (0x528CD, 29),
-    (0x528EB, 7), (0x528F3, 5), (0x528F9, 7), (0x52A59, 6), (0x52B80, 85),
-    (0x52C21, 7), (0x52C40, 17), (0x52DA7, 31), (0x52DE0, 31), (0x52E00, 44),
-    (0x52E2D, 1), (0x52E2F, 5), (0x52E35, 1), (0x52E37, 5), (0x52E3D, 1),
-    (0x52E3F, 1), (0x52E41, 1), (0x52E43, 189), (0x52F92, 14), (0x53000, 44),
-    (0x5302D, 1), (0x5302F, 5), (0x53035, 1), (0x53037, 5), (0x5303D, 1),
-    (0x5303F, 1), (0x53041, 1), (0x53043, 189), (0x531E7, 5), (0x53320, 3),
-    (0x5332F, 42), (0x53A2B, 2), (0x53A54, 2), (0x53A5B, 1), (0x53C00, 360),
-    (0x53D80, 115), (0x53E50, 8), (0x6EC81, 24), (0x70000, 61), (0x72C80, 5),
-    (0x7F1A0, 6), (0x7F1CE, 3), (0x7F1E3, 12),
+    (0x00CC7, 1), (0x011A0, 4), (0x011A5, 29), (0x015DB, 2), (0x02AE1, 1),
+    (0x02B91, 14), (0x02BC6, 20), (0x042F6, 1), (0x04355, 4), (0x04AD5, 4),
+    (0x050A3, 1), (0x050A5, 62), (0x050E4, 1), (0x050E6, 1), (0x050E8, 17),
+    (0x075F1, 2), (0x1F828, 23), (0x1F920, 3), (0x1F930, 3), (0x3563A, 3),
+    (0x3569C, 14), (0x356DE, 16), (0x356FA, 5), (0x35830, 12), (0x369C1, 4),
+    (0x36A57, 8), (0x36DAD, 1), (0x36DBD, 67), (0x36F98, 103), (0x37082, 2),
+    (0x37092, 2), (0x37183, 1), (0x37188, 1), (0x3718F, 5), (0x37B43, 1),
+    (0x37B45, 6), (0x37C38, 2), (0x37C7A, 3), (0x37FEA, 5), (0x4155D, 12),
+    (0x416A4, 6), (0x416DE, 3), (0x41CDA, 5), (0x43183, 1), (0x43188, 1),
+    (0x43B43, 1), (0x43B45, 6), (0x5004A, 3), (0x5028F, 4), (0x50700, 3362),
+    (0x5151C, 1784), (0x51C20, 105), (0x51CDC, 6), (0x52320, 1), (0x52322, 3),
+    (0x52326, 329), (0x52801, 7), (0x52809, 7), (0x52811, 7), (0x52819, 7),
+    (0x52821, 7), (0x52829, 1), (0x5282B, 5), (0x52831, 7), (0x52839, 41),
+    (0x52863, 87), (0x528BB, 13), (0x528C9, 3), (0x528CD, 29), (0x528EB, 7),
+    (0x528F3, 5), (0x528F9, 7), (0x52A59, 6), (0x52B80, 85), (0x52C21, 7),
+    (0x52C40, 17), (0x52DA7, 31), (0x52DE0, 31), (0x52E00, 44), (0x52E2D, 1),
+    (0x52E2F, 5), (0x52E35, 1), (0x52E37, 5), (0x52E3D, 1), (0x52E3F, 1),
+    (0x52E41, 1), (0x52E43, 189), (0x52F92, 14), (0x53000, 44), (0x5302D, 1),
+    (0x5302F, 5), (0x53035, 1), (0x53037, 5), (0x5303D, 1), (0x5303F, 1),
+    (0x53041, 1), (0x53043, 189), (0x531E7, 5), (0x53320, 3), (0x5332F, 42),
+    (0x53A2B, 2), (0x53A54, 2), (0x53A5B, 1), (0x53C00, 360), (0x53D80, 115),
+    (0x53E50, 8), (0x6EC81, 24), (0x70000, 61), (0x72C80, 5), (0x7F1A0, 6),
+    (0x7F1CE, 3), (0x7F1E3, 12),
 )
 
 # Stage(s) of build_stream_regression_candidate --release-lock that write each
@@ -167,6 +176,17 @@ RUN_OWNERS = {
     0x53a2b: ('continue-miniboss-reload',),
     0x53a54: ('continue-miniboss-reload',),
     0x53a5b: ('continue-miniboss-reload',),
+    0x011a0: ('sara-overhang-priority',),
+    0x011a5: ('sara-overhang-priority',),
+    0x050a3: ('sara-overhang-priority',),
+    0x050a5: ('sara-overhang-priority',),
+    0x050e4: ('sara-overhang-priority',),
+    0x050e6: ('sara-overhang-priority',),
+    0x050e8: ('sara-overhang-priority',),
+    0x37b43: ('sara-overhang-priority',),
+    0x37b45: ('sara-overhang-priority',),
+    0x43b43: ('sara-overhang-priority',),
+    0x43b45: ('sara-overhang-priority',),
     # Header ROM size/checksums: every stage re-normalizes them.
     0x00148: ("header",),
 }
@@ -174,15 +194,17 @@ RUN_OWNERS = {
 
 # 4f5a67b8 preimage bytes of DELTA_VS_SARA, concatenated, zlib, base64.
 SARA_PREIMAGE = (
-    "eNrt2U1IG0EUB/DJbpQkmM2HbUxjkQ2CDAElYA89DUlVPKq1aumlepJSxK9CNRHrxZtXFTx5"
-    "s+BhBRG1gpgOCWxhiwjVQoUdU2NlLyYHQRaZuMnBVnr1JO/HDI8Z/gzz5jp2AYXQ9thCj1ur"
-    "jF1oAddp3NM0/0JLRt0Jj9uH9ohXO3XmwrPH9fUoVV6ES5tHthjS1p1qofCL6kVj57jZ83WX"
-    "77Ll/TWEZnhsOjYtE0IEwf5tS/ssvTZnflrjbYK34sYk92KsnKh08Rm6K/9lE9sVZlNp1rs6"
-    "3JCUHBH2zi2b+BEZYl2kn70kNayb5NkrglhPgfa/z3dcKqzDbFvik/KFeb3Ig/i8nO28mw0e"
-    "aNdTH7kQFWnLEH+M66xgiD/Bfh7CEq+15lPs4gFZCtoVw6GTN4agW8nDqude7ozWZsYGmxCp"
-    "0dodQX/pkiL980kxunWjTw+jER/KVKKIv7pCNtVSGyvZEzo3jDZ6rZb/6+u2fbOY5upKVnKl"
-    "CzTyoQgAAAAAAAAAAAAAAAAAAADuyUTqRyAfPxO5DUvlKspXpSqbiVz492iODqC/4XT7RGoc"
-    "3uzB+76JnVMZcdDHqISITb2XQ33LKSl++//376fgDfJ2Y94="
+    "eNrt2U1oE0EUB/DZbIxJabZJ1XRNRTYEylCwBPTQi9PUD3JMtbaKB62nIlKiVWhMSu1F8OBV"
+    "C56qlwg9rCJSq1CaDAmsYUUFP8DKTmrTSi7NHgplKRM3oVaL157k/ZhleDt/hnlzHacDBdHc"
+    "6MMBr+6KrumBpuXelq4HJ/R0xFvSyuvFnmIP+15YSHTMTGTw3uNjZnFVFs1ipqQhlGrx+tEC"
+    "8enLnnLo7mI4jLKNIlT/+UWIIv2FRzPNb9SoVd4sGthFBJaTRZXldKOvUdF6RbcqhOwKod9r"
+    "+fpavvQha2qXwoPh6WB3c6z6OJ6ciziJIAtqRjvakpvn82z6/TOEJnl0IjqhEEIcDufbV/pT"
+    "6YI1+dUel1P8FD6S5j6M1ZJGp46hnaqvZ7FTZYJGl3wziY605O5kV72KhfeTEXaGDLGzpI31"
+    "kyo7RxAbMOnQtWp8XWVx6/QjfltZszanuIx/NrJ9O7PyR31zfIw7IiI9OcIP4MN2MMgP4lYe"
+    "xBJvt79DuIkHFEl2qhW3QS5WHIad/Nzc7eOeSHthdLgLkTY95pZb64cU6eodtdJvVM4bIXTd"
+    "jwou1Nm6b49iafU2Mkslej+Bnuj3/Csbz18O2p3/0972LVi1PNcyS1thqSlv0s5bNQAAAAAA"
+    "AAAAAAAAAAAAALBLktlPgWrvisgFLDVmUdmoz4qVKod+3CjTK+hPOB9LZm/Cnf333s1iz3hB"
+    "HPYzKiEiaLuyqX86K/VuPwP+/Tb4C0LRoaU="
 )
 
 

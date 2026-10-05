@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Build the release-lock stream candidate (db09de8d) as a release source profile.
+"""Build the release-lock stream candidate (ffc29f4e) as a release source profile.
 
 Wraps scripts/build_stream_regression_candidate.py with the full stream chain
 (presentation, arena alias, completion-safe, secret sound alias, return fade
-trial16) in release-lock mode: the #14 doorway helper and the #34 select
-buffer are deferred and every remaining stage is re-pinned with a
+trial16) in release-lock mode: the #34 select buffer is deferred (the old #14
+doorway helper stays out; #14 is fixed by the final cycle-identical
+sara-overhang-priority stage) and every remaining stage is re-pinned with a
 byte-identical change set (docs/audit/release-lock-20261001-repin.md). The
 result is bound to the suite source fingerprint. The chain starts from the
 original-source restart build; no retained candidate ROM is an input. #35
@@ -55,16 +56,16 @@ CONTRACT = {
         "arena-completion-safe", "secret-sound-alias-fast",
         "secret-alias-chunks", "return-initial-map", "return-cgb-fade",
         "return-card-deadline", "return-card-compact", "title-glyph-window",
-        "continue-miniboss-reload",
+        "continue-miniboss-reload", "sara-overhang-priority",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
     "fresh_live_qualification": False,
     "audience_approval_recorded": False,
     "release_qualification": False,
-    "deferred_issues": [14, 34],
+    "deferred_issues": [34],
     "candidate_sha256": (
-        "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8"
+        "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -120,7 +121,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
     """Authenticate the construction without re-running the 36 s chain.
 
     Verifies the nested original-source restart proof (which reconstructs its
-    own overlays), the exact stage hash linkage from c693eafb to db09de8d, the
+    own overlays), the exact stage hash linkage from c693eafb to ffc29f4e, the
     current bytes of every builder and every transitively loaded project
     Python source, and the suite source fingerprint.
     """

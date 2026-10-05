@@ -95,13 +95,17 @@ class CandidateTests(unittest.TestCase):
         for o, n in owned:
             for i in range(o, o + n):
                 self.assertTrue(any(a <= i < b for a, b in spans), hex(i))
-        parent = bytearray(self.lineage.revert_owned(rom, {self.lineage.CONTINUE_OWNER}))
+        # The later #14 sara-overhang-priority stage owns disjoint runs; revert
+        # both so the result is this stage's exact parent.
+        import build_sara_overhang_priority as overhang
+        parent = bytearray(self.lineage.revert_owned(
+            rom, {self.lineage.CONTINUE_OWNER, self.lineage.OVERHANG_OWNER}))
         # Outside bank 39 and the header checksum, reverting the owned runs
         # reproduces the exact stage parent.
         parent[off(stage.PRIVATE_BANK, 0x4000):off(stage.PRIVATE_BANK, 0x8000)] = b"\xFF" * 0x4000
         parent[0x14E:0x150] = ((sum(parent[:0x14E]) + sum(parent[0x150:])) & 0xFFFF).to_bytes(2, "big")
         self.assertEqual(hashlib.sha256(parent).hexdigest(), stage.PARENT)
-        self.assertEqual(stage.build(bytes(parent)), rom)
+        self.assertEqual(overhang.build(stage.build(bytes(parent))), rom)
         self.assertFalse(stage.verify_installed(bytes(parent)))
 
     def test_inherited_static_checks_and_mutants(self) -> None:

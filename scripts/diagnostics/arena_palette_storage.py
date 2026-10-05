@@ -105,7 +105,7 @@ def arena_palette_table(rom: bytes, target: int) -> bytes:
         # 13:6FD5 is the arena-alias fastpath whose game path equals the
         # original selector. Independent builder equality below still applies.
         "6ec44fe6b77dd59088c06a07e0631187737e8471365a68806c0d5aa407563b97",
-        "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8",
+        "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb",
     } and target in (1, 2, 5)
     bank = 23 if relocated else 13
     offset = bank * 0x4000 + 0x3200 + target * 0x100

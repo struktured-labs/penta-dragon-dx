@@ -29,7 +29,8 @@ def digest(data):
 
 
 # Release lock 2026-10-01: defer #14 (doorway helper timing) and #34 (select
-# buffer). Every remaining stage is re-pinned with byte-identical change sets;
+# buffer). #14 is since fixed by the cycle-identical sara-overhang-priority
+# stage at the end of the return-fade chain. Every remaining stage is re-pinned with byte-identical change sets;
 # evidence in docs/audit/release-lock-20261001-repin.md.
 PINS = {
     False: dict(presentation='d744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5',
@@ -55,7 +56,10 @@ PINS = {
                title_glyph='792319cbe9db7d56ae6497018b727c8a0a8737c3c8c7a4a122713054677022db',
                # Continue into a miniboss reloads BG palettes (sequencer reload for scene
                # $0A) and the CRAM source writer can no longer straddle mode 3.
-               continue_miniboss='db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8'),
+               continue_miniboss='db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8',
+               # #14: Sara regains OBJ-to-BG priority under black ceiling overhangs
+               # (fused flash/priority helper, cycle-identical quadrant flags).
+               overhang_priority='ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb'),
 }
 
 
@@ -138,9 +142,12 @@ def return_fade_chain(parent, release_lock=False):
     if release_lock:
         import build_title_glyph_window_trial as glyph
         import build_continue_miniboss_reload_trial as continue_reload
+        import build_sara_overhang_priority as overhang
         stages+=(('title-glyph-window',glyph,glyph.build,pins['title_glyph']),
                  ('continue-miniboss-reload',continue_reload,continue_reload.build,
-                  pins['continue_miniboss']))
+                  pins['continue_miniboss']),
+                 ('sara-overhang-priority',overhang,overhang.build,
+                  pins['overhang_priority']))
     for name,module,transform,expected in stages:
         result=transform(parent)
         if digest(result)!=expected:
@@ -283,7 +290,7 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['experimental_late_return_fade_chain'] = experimental_late_return_fade
     receipt['release_lock_chain'] = release_lock
     if release_lock:
-        receipt['deferred_issues'] = [14, 34]
+        receipt['deferred_issues'] = [34]
     if secret_sound_alias:
         receipt['qualification_warning'] = 'Secret low-health audio comparison fails; experimental construction only, not deployment approval.'
     if return_fade:

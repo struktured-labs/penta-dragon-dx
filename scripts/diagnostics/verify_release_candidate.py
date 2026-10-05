@@ -105,7 +105,7 @@ def build_gates(
             # Release lock: hazard-state generator, bank 19 and the low-health
             # observer ABI are outside its delta (release_lock_lineage); the
             # verifiers re-check every ABI byte against this exact image.
-            "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8",
+            "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb",
             "b691c96c7477473e05f2304705f132c696997dbd2b3a639a35be4cef3713fc96",
             "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
         }
@@ -792,6 +792,18 @@ def build_gates(
                 str(artifacts / "stage1-miniboss-continue-palette"),
             ),
             600,
+        ),) if expanded_candidate else ()),
+        # #14: Sara hidden behind the black ceiling overhang exactly as on the
+        # original cartridge (OBJ priority restored); expanded release images only.
+        *((Gate(
+            "sara_overhang_priority",
+            script(
+                "scripts/diagnostics/verify_sara_overhang_priority.py",
+                r,
+                "--output",
+                str(artifacts / "sara-overhang-priority"),
+            ),
+            400,
         ),) if expanded_candidate else ()),
         Gate(
             "later_stage_integrity",

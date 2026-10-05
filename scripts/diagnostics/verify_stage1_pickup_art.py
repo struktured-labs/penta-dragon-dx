@@ -69,7 +69,7 @@ def digest(path: Path) -> str:
 def expected_stage1_table(rom: bytes) -> bytes:
     expected = bytearray(EXPECTED_TABLE)
     release_lock = hashlib.sha256(rom).hexdigest() == (
-        "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8"
+        "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb"
     )
     if release_lock:
         # Issue #22: the four five-point-star tiles move from 0 to BG5.

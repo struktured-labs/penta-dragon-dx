@@ -2,6 +2,13 @@
 
 ## [Unreleased] - Restart fixes
 
+- Fix #14 Sara drawn over black ceiling overhangs: restore the original OBJ-to-BG
+  priority for Sara's quadrants (bank1 quadrant flags plus a private copy at
+  `$C0C0`, fused flash/priority helper at `$11A0`, emitter call sites at
+  0D/10:`$7B42`). Cycle-identical to db09de8d (attract lockstep 0-26000,
+  Stage-7 patrol), all original gates unrelaxed. New gate
+  `sara_overhang_priority`. Candidate:
+  `ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb`.
 - Fix #28 Continue into a live miniboss: Continue acceptance queues a
   palette-sequencer reload, CRAM bursts are written right after the HBlank edge
   from bank-20 page copies (no byte can land in STAT mode 3; stale `4A29`), and
