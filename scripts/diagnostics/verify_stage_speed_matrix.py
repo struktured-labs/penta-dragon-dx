@@ -1372,6 +1372,7 @@ def main() -> int:
             candidate.get("central_x_entry_11a2", 0)
             + candidate.get("central_x_entry_11a5", 0)
             + candidate.get("central_x_entry_db40", 0)
+            + candidate.get("central_x_entry_11a0", 0)
         )
         (
             central_output_telemetry_ok,

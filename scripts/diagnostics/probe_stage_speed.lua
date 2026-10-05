@@ -102,7 +102,7 @@ local central_attr_samples = 0
 local central_xflip_changes, central_yflip_changes = 0, 0
 local central_any_flip_changes = 0
 local central_y_low_slot_samples, central_y_low_control_set = 0, 0
-local central_x_entries = {at11a2=0, at11a5=0, atdb40=0}
+local central_x_entries = {at11a2=0, at11a5=0, atdb40=0, at11a0=0}
 local pending_central_attr, pending_central_x_attr = nil, nil
 local last_main_loop_frame, max_main_loop_gap = -1, 0
 local tile_copy_hits, atomic_attr_passes = 0, 0
@@ -695,6 +695,30 @@ breakpoints_available = pcall(function()
       pending_central_x_attr = nil
     end
   end, 0xDB40)
+  local function overhang_sara_layout()
+    -- #14: authenticate the fused flash/priority helper at $11A0 and its
+    -- exact WRAM call site before accepting its observation points.
+    local function same(address, hex)
+      local index = 0
+      for byte in hex:gmatch('%x%x') do
+        if emu:read8(address+index) ~= tonumber(byte,16) then return false end
+        index = index+1
+      end
+      return true
+    end
+    return same(0xDA41, '2ACDA0110FE680B0B1001213')
+      and same(0x11A0, 'E5E668477B0F0F6FE63FE0DD26AB7EA7280435CBE0007DFEC49F26C0A6F5F123E1C9')
+  end
+  local overhang_pending = false
+  emu:setBreakpoint(function()
+    overhang_pending = false
+    if phase == 'play' and entry_return() == 0xDA45 and overhang_sara_layout() then
+      central_x_entries.at11a0 = central_x_entries.at11a0+1
+      pending_central_attr = read_register('A') & 0xFF
+      pending_central_x_attr = nil
+      overhang_pending = true
+    end
+  end, 0x11A0)
   local function sample_central_y(qualified)
     if phase == "play" and qualified
         and pending_central_attr ~= nil then
@@ -732,6 +756,32 @@ breakpoints_available = pcall(function()
       pending_central_attr, pending_central_x_attr = nil, nil
     end
   end
+  emu:setBreakpoint(function()
+    -- Flash stage done: B holds the helper's attribute with bit 4 resolved,
+    -- which is the parent's $1188 input for the same entry attribute.
+    if overhang_pending and pending_central_attr ~= nil then
+      local b = read_register('B')
+      if b >= 0 then
+        pending_central_x_attr = (pending_central_attr & 0xEF) | (b & 0x10)
+        local slot = emu:read8(0xFFDD)
+        if slot < 4 then
+          central_y_low_slot_samples = central_y_low_slot_samples + 1
+          if emu:read8(0xFFC2 + slot) ~= 0 then
+            central_y_low_control_set = central_y_low_control_set + 1
+          end
+        end
+        if ((pending_central_x_attr ~ pending_central_attr) & 0x10) ~= 0 then
+          central_xflip_changes = central_xflip_changes + 1
+        end
+      end
+    end
+  end, 0x11B6)
+  emu:setBreakpoint(function()
+    if overhang_pending then
+      overhang_pending = false
+      if overhang_sara_layout() then sample_central_output() end
+    end
+  end, 0xDA4A)
   emu:setBreakpoint(sample_central_output, 0xDA41)
   emu:setBreakpoint(function()
     if combined_sara_layout() then sample_central_output() end
@@ -1313,6 +1363,8 @@ finish = function()
     '  "central_x_entry_11a5": %d,\n', central_x_entries.at11a5))
   handle:write(string.format(
     '  "central_x_entry_db40": %d,\n', central_x_entries.atdb40))
+  handle:write(string.format(
+    '  "central_x_entry_11a0": %d,\n', central_x_entries.at11a0))
   handle:write(string.format('  "free_emitter_hits": %d,\n', free_emitter_hits))
   handle:write(string.format('  "tile_copy_hits": %d,\n', tile_copy_hits))
   handle:write(string.format(

@@ -219,7 +219,7 @@ def relocated_ted_latches(rom: bytes) -> bool:
         # Release-lock chain (#14/#34 deferred): bank17 byte-identical to
         # d744/126dd (6aa4f5f8...). Latch recognition only; no retargeting.
         "6ec44fe6b77dd59088c06a07e0631187737e8471365a68806c0d5aa407563b97",
-        "db09de8d1b4293401f587fcce77689d8c13799eb009f13001487786c3accdcb8",
+        "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb",
         PENTA_SYNC_DMA_SHA256,
         PALETTE_STORAGE_SHA256,
         *ENTRY_WHITE_SHA256,
