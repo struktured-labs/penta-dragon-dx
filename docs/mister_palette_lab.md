@@ -1,5 +1,16 @@
 # Rivalmage palette lab — experimental first version
 
+October 7 update (#19/#39): the bridge also accepts the emulator-qualified
+retest ROM `6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228`
+via `--source PATH`. Its primary rows are unchanged, and its complete normalized
+layout is independently pinned. Settled Stage 1/2 ownership checks apply to this
+layout and palette-only edits; unsupported contexts retain rejection behavior.
+Its browser labels identify OBJ0 as Sara's weapon shots and OBJ3 as enemy bullets
+and crows, reflecting the projectile separation fix. Stable API/YAML keys are
+retained. This is offline compatibility, not hardware Apply/Resume acceptance;
+the default source and running services are unchanged. See
+[validation and limits](audit/palette_retest_20261007.md).
+
 Offline compatibility update: the bridge explicitly accepts experimental
 late-return build `46eb95a0c0f770fb3cf8c3211b8030a9e881f59077e558b93703ba08da71d3fb`
 for primary-row editing (#19). All15 rows match the126dd parent, and actual-ROM
@@ -47,7 +58,7 @@ namespaces; the checkpoint carries cartridge RAM for resumption.
   the operation refuses before uploading/reloading. A scene override may
   subsequently replace the colors; readback catches immediate replacement.
 - OBJ transparent color zero cannot change. RGB picks quantize to BGR555.
-- On the exact experimental `46eb95a0…` layout (including palette-only edits),
+- On the exact `46eb95a0…` and `6c4a9654…` layouts (including palette-only edits),
   settled ordinary Stages 1 and 2 have checked fixed-slot ownership maps. Equal primary
   rows remain independently editable there; a coincidentally equal private BG7
   row is not changed. This requires the complete primary palette installation,
@@ -58,7 +69,7 @@ namespaces; the checkpoint carries cartridge RAM for resumption.
   This is offline-tested, not yet hardware-qualified or enabled in a running server.
 - Elsewhere, equal primary rows in the same BG/OBJ group are refused (#39).
   Undo the edit that made them identical or return to a supported context.
-  Older layouts reject ambiguity before checkpointing. The `46eb95a0…` layout
+  Older layouts reject ambiguity before checkpointing. These two layouts
   can require a checkpoint to resolve ownership; unresolved aliases still fail
   before upload/reload. Receipts identify which ownership method was used.
   No-op quantized colors and invalid OBJ transparency changes also fail in
