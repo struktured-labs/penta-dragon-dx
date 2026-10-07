@@ -56,10 +56,20 @@ def mutants(source):
 
 def authenticate(source, changed):
     source_sha = hashlib.sha256(source).hexdigest()
+    import playtest_successor_lineage as successor
+    successor_controls = False
+    if successor.is_candidate(source):
+        # #61: only inherit the closed mutation plans after authenticating
+        # both native close sites and the complete hazard publisher bank.
+        # Apply those plans to SOURCE itself below, not the ancestor ROM.
+        successor.authenticated_parent(source, (0x1B6F, 0x1B76),
+                                       (0x1DC8, 0x1DCF),
+                                       (19 * 0x4000, 20 * 0x4000))
+        successor_controls = True
     if source_sha in {CURRENT_R451C_SHA, CURRENT_R453_SHA, CURRENT_R455_SHA, CURRENT_R456C_SHA, CURRENT_R456D_SHA, CURRENT_R527_SHA, CURRENT_R528_SHA, CURRENT_R529_SHA, CURRENT_R530_SHA, CURRENT_R531_SHA, CURRENT_R532_SHA, CURRENT_R533_SHA, CURRENT_R534_SHA, CURRENT_R535_TILE_RETIRE_SHA, CURRENT_R535_STAGE_CARD_BLACK_SHA, CURRENT_R536_PENTA_SEAM_SHA, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d", "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5", CURRENT_R535_STAGE1_ONLY_CARD_BLACK_SHA, CURRENT_R536_STAGE1_ONLY_CARD_BLACK_SHA,
                       # Release lock: 1B72/1DCB and all of bank 19 are outside
                       # the release-lock delta (release_lock_lineage).
-                      "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb"}:
+                      "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb"} or successor_controls:
         plans = {
             'forced-visible-menu-repair': ((0x1B72, bytes.fromhex('AF E0 E4 C9'), bytes.fromhex('CD A0 42 C9')),
                                            (0x1DCB, bytes.fromhex('AF E0 E4 C9'), bytes.fromhex('CD A0 42 C9'))),

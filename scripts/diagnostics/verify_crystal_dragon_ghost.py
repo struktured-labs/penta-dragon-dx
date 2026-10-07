@@ -16,10 +16,11 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 
 import yaml
 
-from normalize_mgba_state_pc import normalize, retarget_rom_identity
+from normalize_mgba_state_pc import normalize, retarget_rom_identity, png_chunks
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,6 +29,18 @@ DEFAULT_ROM = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 DEFAULT_MGBA = ROOT / "scripts/mgba-qt-singleflight"
 PROBE = ROOT / "scripts/diagnostics/probe_crystal_flicker.lua"
 BANK13 = 13 * 0x4000
+
+
+def verify_exact_stage3_payload(raw: bytes, rom: bytes) -> None:
+    """#61: freshly generated isolation states must never be retargeted."""
+    if len(raw) != 0x11800 or int.from_bytes(raw[:4], 'little') != 0x00400003:
+        raise ValueError('exact Stage3 requires an mGBA v3 GB state')
+    if raw[8] != 0x80 or raw[0x350] == 0xFF:
+        raise ValueError('exact Stage3 requires post-BIOS CGB state')
+    if raw[16:32] != rom[0x134:0x144] or int.from_bytes(raw[4:8], 'little') != zlib.crc32(rom) & 0xFFFFFFFF:
+        raise ValueError('Stage3 state does not belong to exact ROM')
+    if raw[0x5C80] != 4 or raw[0x3BA] != 2:
+        raise ValueError('isolation state is not ordinary Stage3')
 
 
 def rom_offset(address: int) -> int:
@@ -181,6 +194,8 @@ def main() -> int:
         help="ordinary Stage 3 fixture used as the same-index isolation control",
     )
     parser.add_argument("--mgba", type=Path, default=DEFAULT_MGBA)
+    parser.add_argument("--stage3-exact-rom", action="store_true",
+                        help="require freshly generated exact-ROM Stage3; forbid identity retargeting")
     parser.add_argument("--frames", type=int, default=720)
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--output", type=Path)
@@ -284,7 +299,12 @@ def main() -> int:
         # stock exit boundary for this heavier per-frame CRAM/OAM probe.
         shutil.copy2(riff_state, riff_candidate_state)
         stage3_source = args.stage3_state
-        if rom[0x143] == 0xC0:
+        if args.stage3_exact_rom:
+            chunks = [data for kind, data in png_chunks(stage3_source.read_bytes()) if kind == b'gbAs']
+            if len(chunks) != 1:
+                raise ValueError('exact Stage3 requires one serialized state')
+            verify_exact_stage3_payload(zlib.decompress(chunks[0]), rom)
+        elif rom[0x143] == 0xC0:
             stage3_source = temp_path / "stage3-identity.ss0"
             retarget_rom_identity(args.stage3_state, stage3_source, args.rom.resolve())
         normalize(

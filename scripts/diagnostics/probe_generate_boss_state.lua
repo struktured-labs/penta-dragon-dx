@@ -26,6 +26,23 @@ end
 local TARGET = tonumber(os.getenv("BOSS_TARGET") or "0")
 local STATE_OUT = assert(os.getenv("BOSS_STATE_OUT"), "BOSS_STATE_OUT required")
 local OUT = os.getenv("BOSS_OUT") or "tmp/penta-stream-boss"
+-- #27 opt-in, read-only instruction-boundary trace. This diagnoses banked
+-- entry assumptions; it does not alter the entry recipe or acceptance checks.
+if os.getenv("BOSS_PRELUDE_TRACE") == "1" then
+  local trace = assert(io.open(OUT .. ".prelude.tsv", "w"))
+  trace:write("pc\tbank\tdc09\tsp\tff91\topcode\n")
+  local hits = 0
+  for _, address in ipairs({0x1A43, 0x1A49, 0x1A4C, 0x1A4F, 0x1A52}) do
+    emu:setBreakpoint(function()
+      if hits >= 50 then return end
+      hits = hits + 1
+      trace:write(string.format("%04X\t%02X\t%02X\t%04X\t%02X\t%02X\n",
+        address, emu:read8(0xFF99), emu:read8(0xDC09),
+        emu:readRegister("SP") & 65535, emu:read8(0xFF91), emu:read8(0x7C9A)))
+      trace:flush()
+    end, address)
+  end
+end
 local STABLE_TARGET = tonumber(os.getenv("BOSS_STABLE_FRAMES") or "240")
 local ENTRY_TIMEOUT = tonumber(os.getenv("BOSS_ENTRY_TIMEOUT") or "1200")
 local OBJ_EXPECTED = os.getenv("BOSS_OBJ_EXPECTED") or ""

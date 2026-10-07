@@ -64,16 +64,33 @@ def expected_boss_repairs_bank20() -> bytes:
 
 
 @lru_cache(maxsize=1)
-def expected_penta_seam_bank20() -> bytes:
+def expected_penta_seam_rom() -> bytes:
     # r535 also owns menu/reveal code in this bank. Replay its authenticated
     # lineage instead of treating those bytes as erased r455 padding.
-    import compose_stage4_cache_key_r534 as r534
+    import tempfile
+    from pathlib import Path
+    import build_r534_candidate as r534
     import build_title_tile_retire_trial_r535 as title
     import build_stage_card_blank_trial_r535 as card
     import build_penta_seam_vram_trial_r536 as seam
-    original, _ = r534.build(r534.r518.BASE.read_bytes())
+    # #61: reconstruct from the original cartridge and current source. The
+    # historical r475 scratch ROM is not an input and the ROM under test is
+    # never used to derive expected bytes. The builder authenticates its
+    # original, double-builds, traces factory reads and checks the exact hash.
+    scratch = r534.ROOT / "tmp"
+    scratch.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="bank20-source-", dir=scratch) as work:
+        output = Path(work) / "r534"
+        # This historical source stage predates the purple Game Over overlay.
+        r534.build(output, r534.ROOT / "palettes/penta_palettes_restart_parent.yaml")
+        original = (output / "candidate.gb").read_bytes()
     image = seam.build(card.build(title.build(original)))
-    return image[20 * 0x4000:21 * 0x4000]
+    return image
+
+
+@lru_cache(maxsize=1)
+def expected_penta_seam_bank20() -> bytes:
+    return expected_penta_seam_rom()[20 * 0x4000:21 * 0x4000]
 
 
 def matches(rom: bytes) -> bool:
@@ -99,6 +116,11 @@ def expected_gameover_row_guard_bank20() -> bytes:
 def visible_seam_matches(rom: bytes) -> bool:
     from build_penta_seam_vram_trial_r536 import HOOK, HELPER, PREIMAGE, payloads
     stub, helper = payloads()
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        return visible_seam_matches(successor.authenticated_parent(
+            rom, (HOOK, HOOK + len(PREIMAGE)),
+            (HELPER, HELPER + len(helper)), (20 * 0x4000, 21 * 0x4000)))
     if (rom[HOOK:HOOK + len(PREIMAGE)] == PREIMAGE
             and rom[HELPER:HELPER + len(helper)] == b'\xff' * len(helper)):
         return True

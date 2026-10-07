@@ -54,6 +54,15 @@ from build_stage1_unified_scene0b_r305 import NEW_FIXED_STUB, NEW_ATTR_GATEWAY
 from build_stage1_runtime_epoch_r312 import CAPTURED_STALE_DAD7
 
 
+def component_overlay(rom: bytes, offset: int, payload: bytes, owners: set) -> bytes:
+    """#61: inherit an oracle only for authenticated, unchanged fragments."""
+    import playtest_successor_lineage as successor
+    contract = rom
+    if successor.is_candidate(rom):
+        contract = successor.authenticated_parent(rom, (offset, offset + len(payload)))
+    return release_lock_lineage.overlay(contract, offset, payload, owners)
+
+
 def classify(scene: int) -> str:
     """Model the compact two-range arithmetic in the ROM dispatcher."""
     normalized = (scene - 0x03) & 0xFF
@@ -116,7 +125,13 @@ def verify(rom: bytes) -> int:
         rom[first_offset:first_offset + first_length]
         + rom[second_offset:second_offset + second_length]
     )
-    if release_lock_lineage.is_candidate(rom):
+    import playtest_successor_lineage as successor
+    contract = rom
+    if successor.is_candidate(rom):
+        contract = successor.authenticated_parent(
+            rom, (first_offset, first_offset + first_length),
+            (second_offset, second_offset + second_length))
+    if release_lock_lineage.is_candidate(contract):
         # #27 (build_arena_graphics_owner_trial -> build_arena_completion_
         # safe_trial): the bank-13 DABB scene read becomes CALL DBDF, the
         # installed direct scene resolver. The following SUB $03 recomputes
@@ -141,7 +156,7 @@ def verify(rom: bytes) -> int:
     # fragments (release_lock_lineage.RUN_OWNERS); behaviour is gated live by
     # boss_arenas and the boss cadence/geometry gates.
     arena27 = {"arena-graphics-owner", "arena-completion-safe"}
-    geometry = release_lock_lineage.overlay(rom, geometry_offset, geometry, arena27)
+    geometry = component_overlay(rom, geometry_offset, geometry, arena27)
     assert rom[geometry_offset:geometry_offset + len(geometry)] == geometry, (
         "ROM does not embed the compiled atomic arena geometry helper"
     )
@@ -174,7 +189,7 @@ def verify(rom: bytes) -> int:
             assert payload[23:26] == bytes(3)
             payload = payload[:23] + bytes.fromhex("C3 97 34") + payload[26:]
         offset = BANK13 + address - 0x4000
-        payload = release_lock_lineage.overlay(rom, offset, payload, arena27)
+        payload = component_overlay(rom, offset, payload, arena27)
         assert rom[offset:offset + len(payload)] == payload, (
             f"arena semantic source fragment ${address:04X} differs from source"
         )
@@ -205,7 +220,7 @@ def verify(rom: bytes) -> int:
     )
     tail, _ = build_oam_wram_copy_tail()
     tail_offset = BANK13 + OAM_WRAM_COPY_TAIL_ADDR - 0x4000
-    tail = release_lock_lineage.overlay(rom, tail_offset, tail, arena27)
+    tail = component_overlay(rom, tail_offset, tail, arena27)
     assert rom[tail_offset:tail_offset + len(tail)] == tail, (
         "arena WRAM installer tail differs from source"
     )

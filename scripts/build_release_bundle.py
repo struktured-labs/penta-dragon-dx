@@ -142,6 +142,14 @@ def load_json(path: Path, label: str) -> dict:
 def validate_emulator_manifest(path: Path, rom: bytes) -> dict:
     manifest = load_json(path, "emulator manifest")
     rom_md5 = digest(rom, "md5")
+    required_order = tuple(gate.name for gate in build_gates(
+        ROOT / "tmp/release-roster-candidate.gb",
+        ROOT / "tmp/release-roster-artifacts",
+        expanded_candidate_override=True,
+        menu_icon_candidate_override=True,
+        candidate_sha256=digest(rom, "sha256"),
+    ))
+    required_gates = set(required_order)
 
     if manifest.get("status") != "emulator-pass":
         fail("emulator manifest status is not emulator-pass")
@@ -169,17 +177,17 @@ def validate_emulator_manifest(path: Path, rom: bytes) -> dict:
         fail("emulator manifest source fingerprint changed during the run")
 
     results = manifest.get("results")
-    if not isinstance(results, list) or len(results) != EXPECTED_GATE_COUNT:
+    if not isinstance(results, list) or len(results) != len(required_order):
         fail(
-            f"expected {EXPECTED_GATE_COUNT} emulator gate results, "
+            f"expected {len(required_order)} emulator gate results, "
             f"found {len(results) if isinstance(results, list) else 'invalid'}"
         )
     names = [result.get("name") for result in results if isinstance(result, dict)]
     if len(names) != len(results) or len(set(names)) != len(names):
         fail("emulator manifest contains invalid or duplicate gate names")
-    if set(names) != REQUIRED_GATES:
-        missing = sorted(REQUIRED_GATES - set(names))
-        extra = sorted(set(names) - REQUIRED_GATES)
+    if set(names) != required_gates:
+        missing = sorted(required_gates - set(names))
+        extra = sorted(set(names) - required_gates)
         fail(f"emulator gate set mismatch; missing={missing}, extra={extra}")
     failed = [
         result.get("name")
@@ -190,7 +198,7 @@ def validate_emulator_manifest(path: Path, rom: bytes) -> dict:
         fail(f"emulator gates are not all passed: {failed}")
     if manifest.get("selected_gates") != names:
         fail("selected_gates does not exactly match the completed gate order")
-    if tuple(names) != REQUIRED_GATE_ORDER:
+    if tuple(names) != required_order:
         fail("emulator gate order differs from the authoritative full matrix")
     snapshot = source_snapshot()
     if (manifest.get("source_fingerprint") != snapshot[0]
@@ -357,7 +365,8 @@ def validate_png(path: Path) -> dict[str, int | float]:
     }
 
 
-def render_readme(final: bool, rom_hashes: dict[str, str | int]) -> bytes:
+def render_readme(final: bool, rom_hashes: dict[str, str | int],
+                  gate_count: int = EXPECTED_GATE_COUNT) -> bytes:
     try:
         template = README_TEMPLATE.read_text()
     except OSError as exc:
@@ -390,6 +399,7 @@ def render_readme(final: bool, rom_hashes: dict[str, str | int]) -> bytes:
         release_notice=release_notice,
         hardware_notice=hardware_notice,
         palette_notice=palette_notice,
+        gate_count=gate_count,
     )
     body += (
         "\nExpected patched ROM\n"
@@ -588,7 +598,7 @@ def main() -> int:
     files = {
         "CHECKSUMS.txt": render_checksums(base_hashes, patch_hashes, rom_hashes),
         "Penta_Dragon_DX_v3.01.ips": patch,
-        "README.txt": render_readme(args.final, rom_hashes),
+        "README.txt": render_readme(args.final, rom_hashes, len(emulator["results"])),
     }
     write_deterministic_zip(archive_path, root_name, files)
     validate_archive(archive_path, files, root_name)
@@ -641,7 +651,7 @@ def main() -> int:
     )
     print(
         f"PASS: IPS reconstructs release ROM MD5 {rom_hashes['md5']} "
-        f"after {EXPECTED_GATE_COUNT} emulator gates"
+        f"after {len(emulator['results'])} emulator gates"
     )
     print(f"PASS: copied {len(screenshot_audit)} native 160x144 screenshots")
     if not args.final:

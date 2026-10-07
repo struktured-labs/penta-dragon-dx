@@ -4,11 +4,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/diagnostics'))
 from hazard_mutations_r442 import mutants, authenticate
+from source_observer_fixtures import observer_fixtures
 
 
 class HazardMutations(unittest.TestCase):
     def test_r453_exact_controls_and_no_extra_changes(self):
-        source = (ROOT / 'tmp/title-nightfall-port/d82-r453-title-attract-recovery/candidate.gb').read_bytes()
+        source = observer_fixtures()['r453']
         plans = {
             'forced-visible-menu-repair': ((0x1B72, bytes.fromhex('CD A0 42 C9')), (0x1DCB, bytes.fromhex('CD A0 42 C9'))),
             'short-endpoint-span': ((0x4E2D4, b'\x0a'),),
@@ -28,7 +29,7 @@ class HazardMutations(unittest.TestCase):
         with self.assertRaises(ValueError): authenticate(source + b'changed', source)
 
     def test_closed_set_and_preserved_close_handoff(self):
-        source = (ROOT / 'tmp/stage1-subscene-tracking-r442/candidate.gb').read_bytes()
+        source = observer_fixtures()['r442']
         controls = mutants(source)
         self.assertEqual(len(controls), 4)
         for name, payload in controls.items():

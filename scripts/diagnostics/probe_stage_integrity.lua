@@ -14,6 +14,9 @@ local TARGET = tonumber(os.getenv("STAGE_TARGET") or "1")
 local OUT = assert(os.getenv("STAGE_OUT"), "STAGE_OUT required")
 local SHOT = os.getenv("STAGE_SHOT") == "1"
 local STATE_OUT = os.getenv("STAGE_STATE_OUT")
+local PATROL = tonumber(os.getenv('STAGE_PATROL_FRAMES') or '0')
+local patrol_age = nil
+local patrol_trace = nil
 local ROUTE_TRACE = os.getenv("STAGE_ROUTE_TRACE")
 local KEY_A, KEY_START, KEY_DOWN = 0x01, 0x08, 0x80
 local f, phase, seeded, confirmed = 0, "title", false, false
@@ -175,6 +178,27 @@ end
 
 callbacks:add("frame", function()
   f = f + 1
+  if patrol_age then
+    patrol_age = patrol_age + 1
+    if patrol_age > PATROL then emu:setKeys(0); return end
+    local keys = math.floor((patrol_age-1)/180)%2==0 and 64 or 128
+    emu:setKeys(keys)
+    native_assistance.write(0xDCBB, 0xF0)
+    local w=emu.memory.wram
+    patrol_trace:write(string.format('%d\t%d\t%d\t%d\t%d\t%d\t%d\n',
+      patrol_age,keys,w:read8(0x1880),
+      w:read8(0x1C00)+256*w:read8(0x1C01),w:read8(0x1C02)+256*w:read8(0x1C03),
+      emu:read8(0xFF43),emu:read8(0xFF42)))
+    if patrol_age==1 or patrol_age%30==0 or patrol_age==PATROL then
+      emu:screenshot(string.format('%s.patrol-%04d.png',OUT,patrol_age))
+      emu:saveStateFile(string.format('%s.patrol-%04d.ss0',OUT,patrol_age))
+    end
+    if patrol_age==PATROL then
+      patrol_trace:close()
+      local done=assert(io.open(OUT..'.done','w')); done:write('complete\n'); done:close()
+    end
+    return
+  end
   if not seeded and f >= 100 then seed_sram(); seeded = true end
 
   if phase == "title" then
@@ -221,7 +245,13 @@ callbacks:add("frame", function()
   -- samples. The normal palette service briefly maps its bank between frame
   -- callbacks; the saved state is still taken only on an exact scene/bank
   -- match, while the later-stage soak independently validates terrain.
-  if stable_frames == 120 then capture() end
+  if stable_frames == 120 then
+    if PATROL>0 then
+      patrol_age=0
+      patrol_trace=assert(io.open(OUT..'.patrol.tsv','w'))
+      patrol_trace:write('frame\tkeys\tscene\tx\ty\tscx\tscy\n')
+    else capture() end
+  end
   -- The source-built native map route reaches the correct scene near frame
   -- 2200 on the cold Stage-2 path.  The old cutoff could fire during the
   -- required 120-frame settling window even though D880/FFC1/FFBA were all

@@ -91,6 +91,17 @@ def release_lock_scene_read(rom_bytes: bytes, helpers: list[bytes]) -> bool:
     """
     import release_lock_lineage
 
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom_bytes):
+        spans = []
+        for bank in STAGE1_HELPER_SOURCE_BANKS:
+            for address, size in (
+                (RUNTIME_HELPER_SOURCE_A, RUNTIME_HELPER_SPLIT),
+                (RUNTIME_HELPER_SOURCE_B, RUNTIME_HELPER_SIZE - RUNTIME_HELPER_SPLIT),
+            ):
+                start = bank_offset(bank, address)
+                spans.append((start, start + size))
+        rom_bytes = successor.authenticated_parent(rom_bytes, *spans)
     if not release_lock_lineage.is_candidate(rom_bytes):
         return False
     start = 0xDABB - RUNTIME_HELPER_ADDR

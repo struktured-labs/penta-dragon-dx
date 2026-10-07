@@ -7,6 +7,13 @@ PALETTE_STORAGE_SHA256 = "6e5e7a61ddd1a44c0db6aed123528477c5531716fa16d73b083c67
 def arena_palette_table(rom: bytes, target: int) -> bytes:
     if not 0 <= target <= 8:
         raise ValueError("invalid arena target")
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        # #61: authenticate both table regions and the source selector.
+        return arena_palette_table(successor.authenticated_parent(
+            rom, (23 * 0x4000, 24 * 0x4000),
+            (13 * 0x4000 + 0x3200, 13 * 0x4000 + 0x3B00),
+            (13 * 0x4000 + 0x2FD5, 13 * 0x4000 + 0x2FE0)), target)
     relocated = hashlib.sha256(rom).hexdigest() in {
         PALETTE_STORAGE_SHA256,
         "8234bd8400f7284d115fe622ccccd44bc354e4b5322591c24332028c83dcb2b4",

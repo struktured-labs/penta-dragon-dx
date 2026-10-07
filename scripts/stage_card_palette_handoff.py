@@ -618,6 +618,24 @@ def _inspect_release_lock_handoff(rom: bytes | bytearray) -> dict | None:
 
 
 def inspect_stage_card_palette_handoff(rom: bytes | bytearray) -> dict:
+    from diagnostics import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        # Prove all inherited handoff components unchanged. Live raster,
+        # card retirement, timing and first-map checks still run on the child.
+        ancestor = successor.authenticated_parent(rom,
+            (STAGE1_BG0_OFFSET, STAGE1_BG0_OFFSET+8),
+            (TITLE_BG0_OFFSET, TITLE_BG0_OFFSET+8),
+            (PRIVATE_OFFSET, PRIVATE_OFFSET+0x80),
+            (STAGE1_ENTRY_GATE_OFFSET, STAGE1_ENTRY_GATE_OFFSET+13),
+            (0x37CFC, 0x37D2D),
+            (VBLANK_COMMIT_OFFSET, VBLANK_COMMIT_OFFSET+0x100),
+            (CGB_FLAG_OFFSET, CGB_FLAG_OFFSET+1),
+            (0x42A7, 0x436E),
+            (RUNTIME_SOURCE_B_OFFSET-0x30, RUNTIME_SOURCE_C_OFFSET+5),
+            (HANDOFF_EXTENSION_OFFSET, HANDOFF_EXTENSION_OFFSET+12))
+        result = dict(inspect_stage_card_palette_handoff(ancestor))
+        result['variant'] = 'playtest-successor-' + str(result.get('variant'))
+        return result
     release_lock = _inspect_release_lock_handoff(rom)
     if release_lock is not None:
         return release_lock

@@ -166,7 +166,7 @@ def shadow_matches(row: dict[str, object], body: list[tuple[int, int, int, int, 
     return False
 
 
-def summarize(trace: Path) -> int:
+def summarize(trace: Path, rom: bytes | None = None) -> int:
     rows = load_rows(trace)
     if not rows:
         print("FAIL: title/demo trace is empty")
@@ -305,7 +305,13 @@ def summarize(trace: Path) -> int:
     # 0xFF entries are Sara, whose palette follows her form (FFBE).
     from build_v301_teleport import build_obj_pal_table
 
-    obj_lut = build_obj_pal_table()
+    if rom is None:
+        obj_lut = build_obj_pal_table()
+    else:
+        # #57/#61: same independently compiled, exact-source-authenticated
+        # enemy/player role mapping as the gameplay sprite verifier.
+        from diagnostics.verify_gameplay_obj_palettes import expected_obj_table
+        obj_lut = expected_obj_table(rom)
     stage_obj_samples = 0
     stage_obj_sprites = 0
     stage_obj_bad = 0
@@ -583,7 +589,7 @@ def main() -> int:
         trace = args.keep.resolve()
         trace.parent.mkdir(parents=True, exist_ok=True)
         run_probe(args.mgba, args.rom.resolve(), trace, args.frames, args.timeout)
-        return summarize(trace)
+        return summarize(trace, args.rom.read_bytes())
 
     temp_root = ROOT / "tmp"
     temp_root.mkdir(parents=True, exist_ok=True)
@@ -592,7 +598,7 @@ def main() -> int:
     ) as directory:
         trace = Path(directory) / "inventory.tsv"
         run_probe(args.mgba, args.rom.resolve(), trace, args.frames, args.timeout)
-        return summarize(trace)
+        return summarize(trace, args.rom.read_bytes())
 
 
 if __name__ == "__main__":

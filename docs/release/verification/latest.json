@@ -1,9 +1,9 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-10-05T03:31:21.275791+00:00",
-  "git_head_at_run": "86237fffbca71c2287677522512323849597a696",
-  "source_fingerprint": "5e1565e96369231fd4b8d82a69f73e2d989bf5ebf2d08126c5dc7786d84441cc",
+  "generated_at": "2026-10-07T04:00:56.490168+00:00",
+  "git_head_at_run": "3384e3b29bb24585a0bb7694d6a8e10d8aaa7c1e",
+  "source_fingerprint": "aed5eed4073d5ac2cba9f46aa7c7a6a4cafa7e1b7d76a01e4d7ea24b4c9c07f0",
   "source_inputs": [
     {
       "path": ".claude/settings.json",
@@ -147,8 +147,8 @@
     },
     {
       "path": "scripts/build_release_bundle.py",
-      "sha256": "684ab3ad45dcfb784e281ce4d02f2653dba7245daaf07061677b3ae26c9ee452",
-      "size": 24422
+      "sha256": "44a5bece0cbf2f5045a855ea0a8856cd1a82a557c94abdb0cf8d87df9c66011e",
+      "size": 24876
     },
     {
       "path": "scripts/build_restart_candidate.py",
@@ -157,8 +157,8 @@
     },
     {
       "path": "scripts/build_stream_regression_candidate.py",
-      "sha256": "00eb064cb94b5f330553f26a0dbef095433758404cfa309f1967b991b18ad74d",
-      "size": 19605
+      "sha256": "177ffc40b914d5985cb364ca839fdd57ede76687c909bb171bb739295398e0ec",
+      "size": 23714
     },
     {
       "path": "scripts/build_ted_expanded_candidate.py",
@@ -242,13 +242,13 @@
     },
     {
       "path": "scripts/diagnostics/arena_bank20_r455.py",
-      "sha256": "97a2f3f72239808476dfc33c1daf56ddb96bd927a41f093b871aa045686e0a84",
-      "size": 5384
+      "sha256": "9852f2e7b1d9d09256ae329f5eeb47a33bb2939d8876de77a9f9c041fa4d17f1",
+      "size": 6453
     },
     {
       "path": "scripts/diagnostics/arena_palette_storage.py",
-      "sha256": "1da52bc9f7db540f76e217935e02a918db5cc2e9f2ee800de6623bc00b0b797e",
-      "size": 8478
+      "sha256": "fe3e24d9dc9a7731d053e8c0c180eccfedc68b35331cda50ea43498b674318fd",
+      "size": 8874
     },
     {
       "path": "scripts/diagnostics/audit_later_generation_cache_r264.py",
@@ -336,6 +336,26 @@
       "size": 10020
     },
     {
+      "path": "scripts/diagnostics/build_boss_prelude_bank_rearm.py",
+      "sha256": "e303d11be3cd56fec8496dea716a58a09e404e6ed3021a44f0120111269122b2",
+      "size": 2198
+    },
+    {
+      "path": "scripts/diagnostics/build_boss_prelude_inline_rearm.py",
+      "sha256": "e5ca6a71c2ff4bdb43948543a2641d2ecb15f6efea667249dd17babf811a92f5",
+      "size": 2226
+    },
+    {
+      "path": "scripts/diagnostics/build_boss_prelude_late_rearm.py",
+      "sha256": "09fa41ba43bda7f80bdbe3696dc13090f3da8f06c8a2698d324b2f122e7caf3b",
+      "size": 2422
+    },
+    {
+      "path": "scripts/diagnostics/build_boss_prelude_rearm.py",
+      "sha256": "bd1c8e6dbde78489209047bf0ace3302188c11352991faa2c744c0e55ee9ea29",
+      "size": 3034
+    },
+    {
       "path": "scripts/diagnostics/build_boss_shadow_atomic.py",
       "sha256": "29ed119afd61b8eaf3ea4ca354033d577b0a2f7a1679071eb57abd91c673ee34",
       "size": 1948
@@ -359,6 +379,11 @@
       "path": "scripts/diagnostics/build_card_route_ablation.py",
       "sha256": "7d84c976fd88a9b5344e8d76dfa2d5fddf11f47eabcd8a444d748648890064f6",
       "size": 2183
+    },
+    {
+      "path": "scripts/diagnostics/build_clean_stage_headers.py",
+      "sha256": "1446f59098cb5e0edbf666c883afa1e26ece4801afab3aa308f2667ecad96e4a",
+      "size": 4560
     },
     {
       "path": "scripts/diagnostics/build_cold_art_vblank_guard_r392.py",
@@ -439,6 +464,11 @@
       "path": "scripts/diagnostics/build_eight_tile_groups_r401.py",
       "sha256": "b49ef86e6184f84a3348c319e20244d2beb0bc1cd2cb94ec7718cbbdd6427268",
       "size": 2854
+    },
+    {
+      "path": "scripts/diagnostics/build_enemy_projectile_palette.py",
+      "sha256": "e62d36da85d203369c77882110176cadb9e596e37cb65a064b799ea39c74df56",
+      "size": 2504
     },
     {
       "path": "scripts/diagnostics/build_exact_source_dirty_r385.py",
@@ -924,6 +954,16 @@
       "path": "scripts/diagnostics/build_scene_table_clear_trial.py",
       "sha256": "b7a43dd468aab3c615bad5eaa4fe01045fa6075b6b21b7ef0ff63559ce4e520c",
       "size": 1903
+    },
+    {
+      "path": "scripts/diagnostics/build_score_attr_clear.py",
+      "sha256": "69e5cd8feda67ba66b25a30c6a066564f0fcddfa2d81a81157ecf15cb30beb85",
+      "size": 3043
+    },
+    {
+      "path": "scripts/diagnostics/build_score_oam_publish.py",
+      "sha256": "60a64ee4e0037824dc344c8a160ff9dda7ad61db164d0b202e881e1af9c85e3b",
+      "size": 2363
     },
     {
       "path": "scripts/diagnostics/build_secret_alias_chunk_trial.py",
@@ -1942,8 +1982,8 @@
     },
     {
       "path": "scripts/diagnostics/build_stream_source_candidate.py",
-      "sha256": "1b35bd2805f715355ba372b6340713480cbbc702ce4e7338bebfaf4de6043f1a",
-      "size": 11064
+      "sha256": "637e96b8ca4df7aa93c38c3c2e259ba99642dde81a634a0fcd50cd45fda56538",
+      "size": 11747
     },
     {
       "path": "scripts/diagnostics/build_tail_coordinate_wait_r433.py",
@@ -2061,6 +2101,11 @@
       "size": 12514
     },
     {
+      "path": "scripts/diagnostics/check_boss_prelude_handoff.py",
+      "sha256": "618a73beca7fd51d25a5d8a53eaf6a9a8d8e6564ea9c3615c9612786adc24658",
+      "size": 4146
+    },
+    {
       "path": "scripts/diagnostics/check_cram_timing.py",
       "sha256": "79959c3e9b58f73b102f264f92cf8f3e17c5a8a35315938cab9576dadf78bb2e",
       "size": 1471
@@ -2096,9 +2141,19 @@
       "size": 1294
     },
     {
+      "path": "scripts/diagnostics/check_projectile_ownership.py",
+      "sha256": "2aac42c8f43d7d9df555da37680e1c46e908cd51b976cb80754fb8a0337c59c7",
+      "size": 4380
+    },
+    {
       "path": "scripts/diagnostics/check_sara_runtime_pixels.py",
       "sha256": "b617288f151486512cfac9aed98598c1b62148ed3ec44f0be4311bd3c100a3ed",
       "size": 4641
+    },
+    {
+      "path": "scripts/diagnostics/check_score_oam_transition.py",
+      "sha256": "d903bb3fa8e2f99c49efb57693174fdf2aabfab17372d96e34c6a0f782e9b860",
+      "size": 4472
     },
     {
       "path": "scripts/diagnostics/check_secret_dma_safety.py",
@@ -2387,8 +2442,8 @@
     },
     {
       "path": "scripts/diagnostics/expansion_bank_ownership_r456.py",
-      "sha256": "4748f470a71d6ee78e6835d95205d25ac62cf53fba52291495e5915c292b4778",
-      "size": 6489
+      "sha256": "0d35b0d31658538115929a86bc1bef1737dac71df5a43153ebc6b265a76e5932",
+      "size": 7087
     },
     {
       "path": "scripts/diagnostics/expansion_banks26_30_r456.py",
@@ -2447,8 +2502,8 @@
     },
     {
       "path": "scripts/diagnostics/generate_stream_boss_states.py",
-      "sha256": "585a2fd2e29c9e0220c77e426d9cbd10254666c0dd084f6023760d52de7c9cbe",
-      "size": 57736
+      "sha256": "f0f331e3b092e7ed4c31f5bdb8b18f1d3355206a0027860813194b835dfa7e85",
+      "size": 58921
     },
     {
       "path": "scripts/diagnostics/generate_stream_stage_states.py",
@@ -2462,8 +2517,8 @@
     },
     {
       "path": "scripts/diagnostics/hazard_mutations_r442.py",
-      "sha256": "8445f38e10fcfaadeb3e48bafcc71a8a1e0af0cacac663d4ed346f84701888ab",
-      "size": 5665
+      "sha256": "a6b1e47665e7c20d869eb37ba535737d17ddf3627830970625a3a9e879837d23",
+      "size": 6254
     },
     {
       "path": "scripts/diagnostics/inspect_ted_block_major_exact_fit.py",
@@ -2477,8 +2532,8 @@
     },
     {
       "path": "scripts/diagnostics/inventory_attract_reel.py",
-      "sha256": "23c53fd16d74abb185c65583919393e74bbce381bce73dc98e89951e9c3b9f24",
-      "size": 21580
+      "sha256": "6faa972a39adfc4353fc0471b70d31eb3e176222c806c4b4e4f43dd3a96bbaa1",
+      "size": 21952
     },
     {
       "path": "scripts/diagnostics/inventory_final_cutscene.py",
@@ -2522,8 +2577,8 @@
     },
     {
       "path": "scripts/diagnostics/menu_commit_protocol.py",
-      "sha256": "57690bb608296b7648fcdad77503b6117960830569b1ab84efd55871a2b0999f",
-      "size": 3256
+      "sha256": "fccf1a699fda375171ead9469ac3d8254a0b00ad8e937568240d02f70221825a",
+      "size": 3747
     },
     {
       "path": "scripts/diagnostics/montage.py",
@@ -2599,6 +2654,11 @@
       "path": "scripts/diagnostics/patch_v78_service_ret_isolation.py",
       "sha256": "6fb8536d0d723fdc81c8797f5d90f47c72e7fdb13194c0d54d170ce19781782e",
       "size": 4235
+    },
+    {
+      "path": "scripts/diagnostics/playtest_successor_lineage.py",
+      "sha256": "971233f8c5a46b3fc971b0bed9e43744ded5fc9cc3d67bfe4973da6db2e9ec6c",
+      "size": 5316
     },
     {
       "path": "scripts/diagnostics/prepare_ted_forced_cold_state.py",
@@ -2756,6 +2816,11 @@
       "size": 557
     },
     {
+      "path": "scripts/diagnostics/probe_clean_stage_headers.lua",
+      "sha256": "cd91673b90717e22a0d4e363e6a14015006ce02b65e19825a53c9e46769a71af",
+      "size": 1578
+    },
+    {
       "path": "scripts/diagnostics/probe_continue_input.lua",
       "sha256": "fec273d24fbede41e16118293ce464821c890d000f4d662cf119564899177049",
       "size": 3304
@@ -2892,8 +2957,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_generate_boss_state.lua",
-      "sha256": "7558286376d60a19fbf134373eb5e589621246234356332fb235684d1d9b1f86",
-      "size": 45202
+      "sha256": "176cb37c9dc2fbc5fca70d8a3a19031a3b72027ab27b154f9dbe8a0fbf119d18",
+      "size": 45949
     },
     {
       "path": "scripts/diagnostics/probe_generate_ending_tail_state.lua",
@@ -3036,6 +3101,11 @@
       "size": 1110
     },
     {
+      "path": "scripts/diagnostics/probe_projectile_ownership.lua",
+      "sha256": "eba58e16d3f79c7e0ebd45bacad03b0591fc819814fac4c25225a63e8e5f11f0",
+      "size": 1478
+    },
+    {
       "path": "scripts/diagnostics/probe_projectile_visual_audit.lua",
       "sha256": "b6d6d5f3609c2ad346371d0c4c44d94df322df0ec6a4725db321d3cfb9408956",
       "size": 8678
@@ -3086,9 +3156,19 @@
       "size": 43667
     },
     {
+      "path": "scripts/diagnostics/probe_secret_map_rotation.lua",
+      "sha256": "53e4e1c22e2301a3d50168a7bb0805014122baa96d7835e4e1a7521cd85430ce",
+      "size": 796
+    },
+    {
       "path": "scripts/diagnostics/probe_shal_multishot.lua",
       "sha256": "1ee321cb15a3c89358d447232839c68370c6583c1be003e06614569a340e51b4",
       "size": 3332
+    },
+    {
+      "path": "scripts/diagnostics/probe_shalamar_transition.lua",
+      "sha256": "b6fa90d9d62ca5c7224947513b1a90cc56303b519c7993b3c15e65ebac3ef2c6",
+      "size": 3342
     },
     {
       "path": "scripts/diagnostics/probe_slot1_trace.lua",
@@ -3232,8 +3312,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage_integrity.lua",
-      "sha256": "65ecb67f5f8d88c2d721cc0d6c6099148b382ce9633a157a49a93002872c4a89",
-      "size": 9055
+      "sha256": "03be1079f706cef92b946329b2b9e61e88fc8a8e534326a914569af926ec16f7",
+      "size": 10248
     },
     {
       "path": "scripts/diagnostics/probe_stage_intro_menu.lua",
@@ -3606,14 +3686,29 @@
       "size": 31347
     },
     {
+      "path": "scripts/diagnostics/run_projectile_ownership.py",
+      "sha256": "a971ff1e0bb96f02f07059d0599959a146a308069ec237cd13ccf47fb6eca3b2",
+      "size": 3378
+    },
+    {
       "path": "scripts/diagnostics/run_scene_bg5_integration.py",
       "sha256": "8792c627f39c236d27c6bf856bc991e73a08f87855c3068b0655eec3aa8acc00",
       "size": 3031
     },
     {
       "path": "scripts/diagnostics/run_secret_entry_probe.py",
-      "sha256": "e64acf922a1ba618c4d329f20bdb04ba9d258a9f2a654289630a732a60d70687",
-      "size": 7121
+      "sha256": "e02b3eda848a74b15294493c3e4db04ec4261020b2c58cd8de8354b64402e524",
+      "size": 7139
+    },
+    {
+      "path": "scripts/diagnostics/run_shalamar_transition.py",
+      "sha256": "3a340771be2005c3cab1c9a7d6f4beafe30b37f7daccb6254ba6a6bf995a3e6d",
+      "size": 5410
+    },
+    {
+      "path": "scripts/diagnostics/run_stage_patrol.py",
+      "sha256": "deff41675cccbc539c8efd0ffcf82aad36349583e9f638a13f226eefebd72048",
+      "size": 2904
     },
     {
       "path": "scripts/diagnostics/runtime_tools.py",
@@ -3647,7 +3742,7 @@
     },
     {
       "path": "scripts/diagnostics/stream_source_profile.py",
-      "sha256": "75c80ca4249c59e6d3ca1cac0cdb5b18277b2952dfa1207fdf4e718f54873daa",
+      "sha256": "881ee3c3c0212a3505745e3b9eaddbccd44a26c1e04b621b24ffaa2b1f8c2b5b",
       "size": 1830
     },
     {
@@ -3717,8 +3812,8 @@
     },
     {
       "path": "scripts/diagnostics/test_stream_source_profile.py",
-      "sha256": "08e05c616c23712b49eabed34e05c0cfa5f79ebb6cfffbc0395684f5035eb625",
-      "size": 3548
+      "sha256": "fc6b0334ea51e06fbbb008ea7cdaf46fb9c95540505c559cc2ed3d3fcd3bae31",
+      "size": 4034
     },
     {
       "path": "scripts/diagnostics/title_color_shot.lua",
@@ -3757,8 +3852,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_boss_atomic_attr_contract.py",
-      "sha256": "5ce3ff5f6f0daf1937ae567a8762305247098cb86e07d100ef1db6b0b300d40d",
-      "size": 12368
+      "sha256": "2794c19e127771373bdcb15fa97211da7fcd23f02a140ac08b27715c048ddf30",
+      "size": 13054
     },
     {
       "path": "scripts/diagnostics/verify_boss_geometry.py",
@@ -3796,6 +3891,11 @@
       "size": 974
     },
     {
+      "path": "scripts/diagnostics/verify_clean_stage_headers.py",
+      "sha256": "f321b713c8f31c9e51050f5fe8dbe0bdf86ec72338f60d4272131a19e8ba20d0",
+      "size": 7034
+    },
+    {
       "path": "scripts/diagnostics/verify_continue_input.py",
       "sha256": "57eccefbd5acaf453d45d8b46ac214fa4b67b6178ffd1c5c08cbdf05e8fecce3",
       "size": 5291
@@ -3807,8 +3907,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_crystal_dragon_ghost.py",
-      "sha256": "73ea991013f1a3ff4d700e6155a0334e8e0a3bc973b42103e3856e0e1cfd70c2",
-      "size": 16472
+      "sha256": "b5548de886b79e33e4cade1e609f7751e38e94af87882af1a47dba45a8ab97ad",
+      "size": 17689
     },
     {
       "path": "scripts/diagnostics/verify_death_gameover.py",
@@ -3882,8 +3982,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_gameplay_obj_palettes.py",
-      "sha256": "2f418f4e9e7ba70d010b5daa165435a3c8e6723e383796a281f8f27c13266b70",
-      "size": 7723
+      "sha256": "4ed7a503cc1b00949c0e3419f538d570ac228442d822008eda13e5c6b753fdf6",
+      "size": 8625
     },
     {
       "path": "scripts/diagnostics/verify_hardware_gate.py",
@@ -3897,8 +3997,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_later_stage_soak.py",
-      "sha256": "7b68184eff2beebede8e45364cd6c9341dc37e83c5e4758873b7f6a0adb60245",
-      "size": 36278
+      "sha256": "f6662693913193f57c0e8dbc9b9d9fc28393d4c543a74632b4ed9ee2bbb9179e",
+      "size": 36819
     },
     {
       "path": "scripts/diagnostics/verify_levelselect_screen.py",
@@ -3912,13 +4012,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_live_regression.py",
-      "sha256": "9d8774a3236e983b0779e88d5592912ec8af4760097d0df3492813f4bc96b0ed",
-      "size": 12733
+      "sha256": "b377ef8494863aaeef86f7b7e4a64fdca48d07a75e62a1d82873bfad4d4e8abb",
+      "size": 12844
     },
     {
       "path": "scripts/diagnostics/verify_low_health_flicker.py",
-      "sha256": "7685725038c7b66f0047e8280afff06691e413ec5dfb8c802187512a992313b4",
-      "size": 68572
+      "sha256": "35d452ac6bb24621031111f4ec503d9353b0a727d1b41d77e82460f3674a40c1",
+      "size": 68948
     },
     {
       "path": "scripts/diagnostics/verify_low_health_hazard_determinism.py",
@@ -3927,8 +4027,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_menu_icon_palettes.py",
-      "sha256": "f554920f0c00e07e2ae596ff095464a98c0c8675955d56195191191e8ebbbd5e",
-      "size": 15895
+      "sha256": "d82cf8af0bfca63fd73d39ea11c79dbae594b3453e2aab5eb541c6c7e0a4a686",
+      "size": 16488
     },
     {
       "path": "scripts/diagnostics/verify_menu_phase_sweep.py",
@@ -4027,13 +4127,23 @@
     },
     {
       "path": "scripts/diagnostics/verify_pickup_live_palettes.py",
-      "sha256": "9b22921627956837cea89a3f16cd54c0812df9ae0108634b5835c223417e1ddc",
-      "size": 32946
+      "sha256": "7ac8d4ad88ac9fd786657be6f0d0597416c0a4c53203ac32feaa523ce9d82341",
+      "size": 33481
     },
     {
       "path": "scripts/diagnostics/verify_pickup_live_retry.py",
       "sha256": "94251b9b76943ce2616fd8cf1be043f6a827e98652626268f0118ea8075358bb",
       "size": 6847
+    },
+    {
+      "path": "scripts/diagnostics/verify_playtest_boss_handoff.py",
+      "sha256": "bf62cead1a48fb5ecd8531564b954cfc44ba24039a6d48e340b8b140b71b8b9d",
+      "size": 3396
+    },
+    {
+      "path": "scripts/diagnostics/verify_playtest_header_regression.py",
+      "sha256": "036da3b68e930fbc73ef2771a0ce875174218c9d706bee01f7693c1bf4d422ab",
+      "size": 2333
     },
     {
       "path": "scripts/diagnostics/verify_pocket_visual_receipts.py",
@@ -4047,8 +4157,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_release_candidate.py",
-      "sha256": "015733f550a181f61f20a13b47880a58551839fb7c50010a2748b55d94f95756",
-      "size": 71153
+      "sha256": "7d341de66b11710f2e3dee10f678415506555236b23f3bcfaa85ff22978737d8",
+      "size": 73103
     },
     {
       "path": "scripts/diagnostics/verify_release_matrix_resume_contract.py",
@@ -4081,6 +4191,11 @@
       "size": 6846
     },
     {
+      "path": "scripts/diagnostics/verify_secret_map_rotation.py",
+      "sha256": "3853dc8c203a1c49291aa94c82c7fa96af0a8c7db4eff46da4b247b524b351f3",
+      "size": 5461
+    },
+    {
       "path": "scripts/diagnostics/verify_split_stage_speed_qualification.py",
       "sha256": "89a83af6b1a16d06a0db822f88f58f9dad015def649d91e6368d41b40cf0f162",
       "size": 24711
@@ -4092,8 +4207,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_captured_menu.py",
-      "sha256": "4aa1f570317e8922ef38ec6d7e5ff65e5006ea46631e672f9e6d83b09057124e",
-      "size": 21647
+      "sha256": "6b4fb89940c70aeab1af0b3c554d177cebd7280bc9b525bb34bf6666c3a39925",
+      "size": 22447
     },
     {
       "path": "scripts/diagnostics/verify_stage1_carry_dirty_signal.py",
@@ -4127,8 +4242,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_exact_destination_mutation.py",
-      "sha256": "066a2a70eee03fb58a96bbe4386dfab335874e4342f71ddeac9066a03118c262",
-      "size": 12925
+      "sha256": "6c34a76dc25cbc7d49ba65a39ba8bcb5fe74eedbd401edb4c7b59899b3fedb4a",
+      "size": 13362
     },
     {
       "path": "scripts/diagnostics/verify_stage1_hazard_batch_r103_static.py",
@@ -4177,8 +4292,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_no_bleed.py",
-      "sha256": "35be69716fb3b0fea4b3c2e26c2754cf0901f3c9a6e97bb1c6f5d20baff721eb",
-      "size": 38009
+      "sha256": "7441c6c999ab344b7a28e49fb827883e79b044b7e46c917a9bdcfdbaa4fbc826",
+      "size": 38233
     },
     {
       "path": "scripts/diagnostics/verify_stage1_north_integrity.py",
@@ -4192,8 +4307,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_pickup_art.py",
-      "sha256": "a608c4938a8871ef734b1a943fdaf00deee374b6176fa0fbfc31430d98ff2bc8",
-      "size": 15071
+      "sha256": "e01d4a0b0d5824f52c25d1bda174f31e92aded0d835b67b33a631a2ef4510957",
+      "size": 15287
     },
     {
       "path": "scripts/diagnostics/verify_stage1_r265_hazard_menu_receipt.py",
@@ -4237,13 +4352,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_spike_palettes.py",
-      "sha256": "66d07457b4fb461d2ebcd8bd9f94883cfb0d979ae6524c0aad787b6cdc3f11fc",
-      "size": 181858
+      "sha256": "5fa01f965aee46c991aad3f89c6cebc417ce27e6bfd5e2ac26e206ec4ec3af7a",
+      "size": 182947
     },
     {
       "path": "scripts/diagnostics/verify_stage1_tilemap_copy.py",
-      "sha256": "6e44b3273870394d2fb10e44bd014efd3378de8528b7db45c7d0ae63fee4e16d",
-      "size": 57022
+      "sha256": "9ec17d75d706f5d4fe730ec81781c8fd30e95170bbcab99fda562dd103937495",
+      "size": 57440
     },
     {
       "path": "scripts/diagnostics/verify_stage1_transition_key.py",
@@ -4397,8 +4512,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_suite_receipt.py",
-      "sha256": "07c4abc855e365b95f1cad8be4185a3eac5e1caa0dfc32a8bf89fef0c0c11c0b",
-      "size": 11753
+      "sha256": "c83e8178de4c573e31354838491376ad911bbade1012d1b9a6aef9e8aa9ee296",
+      "size": 11807
     },
     {
       "path": "scripts/diagnostics/verify_ted_block_major_mask_model.py",
@@ -4442,8 +4557,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_ted_expanded_integration.py",
-      "sha256": "45857e8368ef7c33cc2bc47c2c4304c19072910848abba9705a234df8741f121",
-      "size": 20639
+      "sha256": "ec0faea1c7ebfc6b4e24f89b117df847d578de6a63c719ea363a0cc6c66e175c",
+      "size": 20945
     },
     {
       "path": "scripts/diagnostics/verify_ted_incremental_cell_contract.py",
@@ -4787,8 +4902,8 @@
     },
     {
       "path": "scripts/stage_card_palette_handoff.py",
-      "sha256": "61c3ddb341f4a4e9e3b08948513c38375957409b5517162867dde3d8342e8ce9",
-      "size": 47603
+      "sha256": "70e605eb623377887864ab8344e6da13af87203c9b0a659d83ca94f7d6dbdce1",
+      "size": 48625
     },
     {
       "path": "src/penta_dragon_dx/__init__.py",
@@ -4847,7 +4962,7 @@
     }
   ],
   "build_profile": {
-    "name": "stream-release-lock-original-source-v1",
+    "name": "stream-release-lock-original-source-v2",
     "expanded_ted": true,
     "native_sparse": true,
     "native_pose_table": true,
@@ -4855,27 +4970,27 @@
   },
   "candidate": {
     "size": 1048576,
-    "md5": "c2bff28a6a73781ba1a29f4fa9c332bc",
-    "sha256": "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb"
+    "md5": "3fe93e9ff14962d3605c12ea92d62d1c",
+    "sha256": "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228"
   },
   "deterministic_build": {
     "passes": 2,
     "byte_identical": true,
-    "build_a_sha256": "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb",
-    "build_b_sha256": "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb"
+    "build_a_sha256": "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228",
+    "build_b_sha256": "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228"
   },
   "matrix": {
     "status": "emulator-pass",
     "scope": "full",
-    "gate_count": 94,
+    "gate_count": 97,
     "failures": 0,
-    "manifest_sha256": "85f16e93e1729501b97a569c370b0c5a6bb49a7a559e48ad2bea71328016d3a4",
+    "manifest_sha256": "583425959da604857ddf4e93634c41456cbdb13df200a6a983e249e5228ad9e5",
     "results": [
       {
         "name": "emulator_singleflight_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.366
+        "duration_seconds": 0.317
       },
       {
         "name": "stage1_visual_contract_controls",
@@ -4887,7 +5002,19 @@
         "name": "release_matrix_resume_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.065
+        "duration_seconds": 0.033
+      },
+      {
+        "name": "playtest_header_data_and_timing",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 57.389
+      },
+      {
+        "name": "playtest_secret_boss_handoff",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 21.34
       },
       {
         "name": "title_footer_integration",
@@ -4899,115 +5026,115 @@
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.22
+        "duration_seconds": 1.227
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.385
+        "duration_seconds": 0.42
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.502
+        "duration_seconds": 15.621
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.874
+        "duration_seconds": 4.385
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.133
+        "duration_seconds": 9.413
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.272
+        "duration_seconds": 2.542
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.13
+        "duration_seconds": 6.425
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.818
+        "duration_seconds": 6.631
       },
       {
         "name": "menu_icon_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.037
+        "duration_seconds": 4.686
       },
       {
         "name": "menu_window_publish_order",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.722
+        "duration_seconds": 3.229
       },
       {
         "name": "stage1_captured_menu_stationary",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.98
+        "duration_seconds": 5.199
       },
       {
         "name": "stale_gameplay_window",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.123
+        "duration_seconds": 2.132
       },
       {
         "name": "stage_card_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 28.532
+        "duration_seconds": 30.151
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 118.915
+        "duration_seconds": 116.602
       },
       {
         "name": "game_start_after_attract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.28
+        "duration_seconds": 5.125
       },
       {
         "name": "opening_to_stage1_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.868
+        "duration_seconds": 11.686
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 210.923
+        "duration_seconds": 172.309
       },
       {
         "name": "gameplay_movement_stress",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 419.753
+        "duration_seconds": 372.892
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.87
+        "duration_seconds": 19.95
       },
       {
         "name": "pickup_class_palettes",
@@ -5019,211 +5146,211 @@
         "name": "attract_pickup_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.879
+        "duration_seconds": 7.527
       },
       {
         "name": "stage1_current_hazard_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.777
+        "duration_seconds": 3.571
       },
       {
         "name": "stage1_current_hazard_menu",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 76.797
+        "duration_seconds": 74.635
       },
       {
         "name": "stage1_current_hazard_mutations",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 13.352
+        "duration_seconds": 12.741
       },
       {
         "name": "stage1_exact_destination_mutation",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 16.802
+        "duration_seconds": 16.344
       },
       {
         "name": "stage1_current_pickup_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.173
+        "duration_seconds": 1.971
       },
       {
         "name": "stage1_current_pickup_host_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 33.153
+        "duration_seconds": 31.289
       },
       {
         "name": "pickup_live_retry_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.166
+        "duration_seconds": 0.165
       },
       {
         "name": "pickup_live_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 30.721
+        "duration_seconds": 28.172
       },
       {
         "name": "stage1_pickup_art",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.654
+        "duration_seconds": 1.969
       },
       {
         "name": "bonus_stage_live",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.274
+        "duration_seconds": 1.819
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 87.316
+        "duration_seconds": 50.751
       },
       {
         "name": "stage1_tilemap_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 36.318
+        "duration_seconds": 21.71
       },
       {
         "name": "stage1_north_route_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.695
+        "duration_seconds": 8.882
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 34.573
+        "duration_seconds": 22.42
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 122.658
+        "duration_seconds": 67.927
       },
       {
         "name": "low_health_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.096
+        "duration_seconds": 8.13
       },
       {
         "name": "low_health_scene0b_publication",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.657
+        "duration_seconds": 8.279
       },
       {
         "name": "pocket_stage1_visual_incident",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.325
+        "duration_seconds": 0.917
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.597
+        "duration_seconds": 8.432
       },
       {
         "name": "stage1_miniboss_continue_palette",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 10.03
+        "duration_seconds": 7.029
       },
       {
         "name": "sara_overhang_priority",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.503
+        "duration_seconds": 3.821
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.565
+        "duration_seconds": 1.527
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 89.421
+        "duration_seconds": 58.276
       },
       {
         "name": "stage2_stream_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.12
+        "duration_seconds": 9.581
       },
       {
         "name": "stage_side_by_side_all7",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 71.367
+        "duration_seconds": 42.305
       },
       {
         "name": "boss_atomic_attr_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.616
+        "duration_seconds": 11.134
       },
       {
         "name": "ted_expanded_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.955
+        "duration_seconds": 11.183
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 49.946
+        "duration_seconds": 32.384
       },
       {
         "name": "ted_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.832
+        "duration_seconds": 3.922
       },
       {
         "name": "ted_og_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.12
+        "duration_seconds": 3.523
       },
       {
         "name": "ted_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.225
+        "duration_seconds": 13.944
       },
       {
         "name": "boss_geometry_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 28.819
+        "duration_seconds": 18.304
       },
       {
         "name": "ted_determinism",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 25.499
+        "duration_seconds": 15.842
       },
       {
         "name": "ted_release_readiness_receipt",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.035
+        "duration_seconds": 0.034
       },
       {
         "name": "ted_candidate_delta",
@@ -5235,208 +5362,214 @@
         "name": "ted_release_readiness",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.066
+        "duration_seconds": 0.033
       },
       {
         "name": "boss_semantic_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 35.094
+        "duration_seconds": 23.967
       },
       {
         "name": "boss_og_states",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 24.919
+        "duration_seconds": 16.602
       },
       {
         "name": "boss_og_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 47.949
+        "duration_seconds": 39.246
       },
       {
         "name": "boss_og_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.171
+        "duration_seconds": 0.115
       },
       {
         "name": "boss_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 121.227
+        "duration_seconds": 82.09
       },
       {
         "name": "boss_trajectory_pairing_null",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.636
+        "duration_seconds": 8.33
       },
       {
         "name": "boss_trajectory_pairing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 98.801
+        "duration_seconds": 94.132
       },
       {
         "name": "boss_publication_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 97.052
+        "duration_seconds": 81.335
+      },
+      {
+        "name": "current_stage_control_states",
+        "status": "passed",
+        "returncode": 0,
+        "duration_seconds": 10.188
       },
       {
         "name": "crystal_dragon_ghost",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.406
+        "duration_seconds": 7.229
       },
       {
         "name": "boss_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 41.301
+        "duration_seconds": 40.15
       },
       {
         "name": "boss_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.116
+        "duration_seconds": 0.115
       },
       {
         "name": "boss_material_side_by_side",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.215
+        "duration_seconds": 0.166
       },
       {
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 34.886
+        "duration_seconds": 36.692
       },
       {
         "name": "sara_walking_pose_atomicity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.78
+        "duration_seconds": 10.493
       },
       {
         "name": "sara_firing_pose_atomicity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.185
+        "duration_seconds": 10.648
       },
       {
         "name": "gameover_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.424
+        "duration_seconds": 5.43
       },
       {
         "name": "gameover_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.273
+        "duration_seconds": 6.338
       },
       {
         "name": "gameover_saved_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.224
+        "duration_seconds": 6.33
       },
       {
         "name": "title_idle_reel",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.025
+        "duration_seconds": 5.329
       },
       {
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 38.384
+        "duration_seconds": 49.317
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.094
+        "duration_seconds": 5.289
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.708
+        "duration_seconds": 12.614
       },
       {
         "name": "pre_final_inventory",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.676
+        "duration_seconds": 6.954
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.882
+        "duration_seconds": 11.05
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.184
+        "duration_seconds": 11.548
       },
       {
         "name": "ending_discriminators",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.116
+        "duration_seconds": 0.12
       },
       {
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.559
+        "duration_seconds": 45.842
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.693
+        "duration_seconds": 46.074
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 100.517
+        "duration_seconds": 121.725
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 19.576
+        "duration_seconds": 22.232
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.274
+        "duration_seconds": 5.69
       },
       {
         "name": "candidate_ips_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.165
+        "duration_seconds": 0.216
       },
       {
         "name": "mister_reservation_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.316
+        "duration_seconds": 0.417
       }
     ],
-    "manifest_path": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-14/tmp/rl-suite-overhang-02/matrix/manifest.json"
+    "manifest_path": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/inline-rearm-full-suite-03/matrix/manifest.json"
   },
   "release_ledger": {
     "schema": "penta-release-ledger-v1",
@@ -5583,8 +5716,8 @@
         "scope": "riff",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1432664756446993,
-        "deviation_percent": 14.32664756446993,
+        "ratio_dx_over_og": 1.1604584527220632,
+        "deviation_percent": 16.045845272206314,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5594,8 +5727,8 @@
         "scope": "riff",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.9234693877551021,
-        "deviation_percent": 7.653061224489788,
+        "ratio_dx_over_og": 0.8826530612244898,
+        "deviation_percent": 11.734693877551017,
         "target_percent": 2.0,
         "pairing_confidence": "thin",
         "policy": "accepted_bounded_speedup",
@@ -5606,8 +5739,8 @@
         "scope": "riff",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1036508721135512,
-        "deviation_percent": 10.365087211355117,
+        "ratio_dx_over_og": 1.1416184564277974,
+        "deviation_percent": 14.161845642779735,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -5617,8 +5750,8 @@
         "scope": "shalamar",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.0563798219584568,
-        "deviation_percent": 5.637982195845681,
+        "ratio_dx_over_og": 1.0534124629080117,
+        "deviation_percent": 5.3412462908011715,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5628,8 +5761,8 @@
         "scope": "shalamar",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.9416276097145292,
-        "deviation_percent": 5.837239028547081,
+        "ratio_dx_over_og": 0.945888368129527,
+        "deviation_percent": 5.411163187047297,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5734,10 +5867,10 @@
         "classification": "paired",
         "matched_transitions": 42,
         "slip_aware_matched": 42,
-        "ratio_dx_over_og_frames_per_iter": 0.9234693877551019,
-        "slowdown_percent": -7.65306122448981,
+        "ratio_dx_over_og_frames_per_iter": 0.8826530612244896,
+        "slowdown_percent": -11.734693877551038,
         "within_two_percent": false,
-        "transition_slowdown_percent": -7.653061224489788,
+        "transition_slowdown_percent": -11.734693877551017,
         "transition_within_two_percent": false,
         "pairing_confidence": "thin",
         "policy_status": "accepted_bounded_speedup",
@@ -5748,10 +5881,10 @@
         "classification": "paired",
         "matched_transitions": 425,
         "slip_aware_matched": 425,
-        "ratio_dx_over_og_frames_per_iter": 0.9416276097145291,
-        "slowdown_percent": -5.837239028547092,
+        "ratio_dx_over_og_frames_per_iter": 0.945888368129527,
+        "slowdown_percent": -5.411163187047297,
         "within_two_percent": false,
-        "transition_slowdown_percent": -5.837239028547081,
+        "transition_slowdown_percent": -5.411163187047297,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5797,38 +5930,38 @@
     "evidence": {
       "title_attract": {
         "path": "artifacts/title-idle-reel.summary.json",
-        "sha256": "0dd87ab2cb785da5a7eea266b2cef7e39e9c780dc9ce8790de1c2b46fe674419"
+        "sha256": "83094b84e50f8100ee01e1348b82a45c0a2ffe4c9d6d20c181b9eca95ef66846"
       },
       "gameplay_speed": {
         "path": "artifacts/gameplay-speed/manifest.json",
-        "sha256": "541feb4808c5d6737d8062caa4035782270262c6118e515dc67cb6b32bee5261"
+        "sha256": "0fde78bc652346799513c6d7e2a9905656664824e5ca1d39f885204e154d4e81"
       },
       "gameplay_movement_stress": {
         "path": "artifacts/gameplay-movement-stress/receipt.json",
-        "sha256": "002019448b626287f99dafd18922695c12237e22a3b2b6cc2ef10a43ca5cd3e3"
+        "sha256": "1546f84c0fc2376de7dd98c224fd8978dfcf2e8387c510e7fc9ef350ffcd7e33"
       },
       "boss_speed": {
         "path": "artifacts/boss-speed-parity.json",
-        "sha256": "c29b16d2c883e1e8e2358615bc125f33a56c8a162c26a39e8727e1768c2d1f68"
+        "sha256": "67ee9cbf316a29d8481201e05171042f43551638b6becbe45b455f06f9a167a9"
       },
       "boss_publication": {
         "path": "artifacts/boss-publication-cadence.json",
-        "sha256": "a35a326754951a43febf02357050ea53098fe105dd0de830f18560e508dc6e5a"
+        "sha256": "5b37e338ceb9f8fa8ca851535652549baccb408f1943dd7fc598d8aa2923a7fe"
       },
       "boss_trajectory": {
         "path": "artifacts/boss-trajectory-pairing.json",
-        "sha256": "28c601e41e692ffca9acd39ea5d19533d180bb3fd0c41264f4a8b6b8aadd44fb"
+        "sha256": "aa91d93963a125698fb27838b9a6ac7d1fed9c2683163fe300a57023d1f9c744"
       },
       "boss_trajectory_null": {
         "path": "artifacts/boss-trajectory-pairing-null.json",
-        "sha256": "f34042d0889c8956aa9162ed799bf7c1af03d13e066f2f05982fc5db28a22439"
+        "sha256": "601fe6580ff981b5a54aac32bf08ea87da83c3ea9a9de249deb2150f2760cd79"
       },
       "ted_readiness": {
         "path": "artifacts/ted-release-readiness/report.json",
-        "sha256": "fcb2a8dcfcd50e2a9b4a322124ce51fe13ac75d2df705d0e9155af7069ac9338"
+        "sha256": "3fda307231474ddad05b3965bc94ce7ac8f9e16f8118fa83b73bfebe6bbe5bf4"
       }
     },
-    "profile": "stream-release-lock-original-source-v1",
+    "profile": "stream-release-lock-original-source-v2",
     "stage7_world_position": {
       "classification": "EQUAL_START_WORLD_COMBINED_SEEDS_FLOOR_97",
       "metric": {
@@ -6117,20 +6250,20 @@
       },
       "evidence": "gameplay_movement_stress"
     },
-    "ledger_sha256": "befa208526d48e86693bdc390757e60c217e8a387b678fa717be7ec0be58f903"
+    "ledger_sha256": "3b8f9c7772f82a4c68b069e44844ec0d93082a6dc66caf5586076a50a21390a9"
   },
   "rom_committed": false,
   "hardware_status": "pending-reservation-backed-mister",
   "source_builds": [
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-14/tmp/rl-suite-overhang-02/build/source-a/build-receipt.json",
-      "receipt_sha256": "9a9e48fbcefa488c994cf18b7f8cce7e2409aaa8b09215cd42c43e9697818e0c",
-      "source_fingerprint": "5e1565e96369231fd4b8d82a69f73e2d989bf5ebf2d08126c5dc7786d84441cc"
+      "receipt": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/inline-rearm-full-suite-03/build/source-a/build-receipt.json",
+      "receipt_sha256": "b57492a12797a9fd787450d623b7dccd286ae9c77c24ccbacaeaf4a822c10512",
+      "source_fingerprint": "aed5eed4073d5ac2cba9f46aa7c7a6a4cafa7e1b7d76a01e4d7ea24b4c9c07f0"
     },
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-14/tmp/rl-suite-overhang-02/build/source-b/build-receipt.json",
-      "receipt_sha256": "c030ab8b23d54748a800975a3293522292c6ad4c9b24f4771568f378dcd5aa5e",
-      "source_fingerprint": "5e1565e96369231fd4b8d82a69f73e2d989bf5ebf2d08126c5dc7786d84441cc"
+      "receipt": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/inline-rearm-full-suite-03/build/source-b/build-receipt.json",
+      "receipt_sha256": "03c994292ccde810a7d283cc46bbd9aaa48b7a8dd68657d26b9bb78540ff0786",
+      "source_fingerprint": "aed5eed4073d5ac2cba9f46aa7c7a6a4cafa7e1b7d76a01e4d7ea24b4c9c07f0"
     }
   ]
 }

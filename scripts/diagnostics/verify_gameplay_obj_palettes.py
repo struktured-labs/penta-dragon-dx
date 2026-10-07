@@ -36,6 +36,25 @@ DEFAULT_STATES = (
 )
 
 
+def expected_obj_table(rom: bytes) -> bytes:
+    """Source-authenticated #57 tile0F separation; all other roles unchanged."""
+    from diagnostics import playtest_successor_lineage as successor
+    from diagnostics import build_enemy_projectile_palette as projectile
+    expected = bytearray(build_obj_pal_table())
+    if successor.is_candidate(rom):
+        # Authenticate the complete delta and both live initializer images.
+        successor.authenticated_parent(rom, (0x42A7, 0x436E))
+        code = projectile.payload()
+        for bank in projectile.BANKS:
+            offset = projectile.offset(bank)
+            if rom[offset:offset+len(code)] != code:
+                raise ValueError('enemy projectile initializer differs')
+        if expected[15] != 0:
+            raise ValueError('parent enemy projectile role changed')
+        expected[15] = 3
+    return bytes(expected)
+
+
 def parse_result(path: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for line in path.read_text().splitlines():
@@ -144,7 +163,7 @@ def main() -> int:
         temporary = tempfile.TemporaryDirectory(prefix="penta-gameplay-obj-",dir=scratch)
         output = Path(temporary.name)
     try:
-        (output / "obj_palette_lut.bin").write_bytes(build_obj_pal_table())
+        (output / "obj_palette_lut.bin").write_bytes(expected_obj_table(rom.read_bytes()))
         total_checked = 0
         total_mismatches = 0
         sampled_states = 0

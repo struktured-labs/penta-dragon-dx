@@ -14,7 +14,7 @@ reserves savestate slot 4, and supports primary palettes only. Generated
 ROMs/states stay out of Git; release ROMs and YAML are not overwritten.
 See [setup, limitations, and hardware evidence](docs/mister_palette_lab.md).
 
-This is a tooling milestone, **not a game-release readiness claim**. Reported
+This is a tooling milestone, **not a game-release readiness claim**.
 The Game Over/title/new-game repair passes emulator regression; its final
 hardware replay is still pending.
 
@@ -30,17 +30,37 @@ testing remain.
 
 ## Current status
 
+October 6 playtest repairs passed the full source-bound emulator suite on
+October 7: **97/97 checks and two byte-identical builds**. Human retest candidate SHA-256:
+`6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228`.
+Changes address corrupt stage-header data, stale score-card sprites/attributes,
+shared enemy/player projectile palettes, and inherited graphics state at boss
+entry. This candidate is **ready for human retesting, not a final release or
+hardware sign-off**. The [verification receipt](docs/release/verification/latest.json)
+binds the exact candidate, source, and retained emulator evidence.
+The recorded Stage 2 screen-fixed lake artifact still needs direct confirmation.
+See the [investigation and test scope](docs/audit/playtest_20261006.md) and
+[continuous retest route](docs/audit/oct06_retest_route.md).
+
+Build this candidate with
+`python3 scripts/diagnostics/build_stream_source_candidate.py --out-dir tmp/playtest-build`;
+run its complete serial emulator suite with
+`python3 scripts/diagnostics/run_deterministic_suite.py --stream-source`.
+Use fresh output directories and the project's configured emulator runtime.
+Older results below do not qualify this newer candidate.
+
+### Previously qualified restart baseline
+
 **v3.01 restart-fix candidate — 90/90 emulator checks passed;
 final human/Ted-presentation, audience-palette, and hardware sign-off pending.**
 
 - Title footer: `DX V3.01 STRUK LABS`
-- Current pinned candidate: SHA-256
+- Historical restart candidate: SHA-256
   `c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d`.
 - The 2026-09-16 publication run passed all **90 integration gates** and
   produced two byte-identical original-cartridge builds. The full unit sweep
-  passed **1,195 tests**. The checked-in
-  [verification receipt](docs/release/verification/latest.json) binds the
-  repaired candidate to the qualified source and retained emulator evidence.
+  passed **1,195 tests**. These are historical baseline results; the latest
+  checked-in verification receipt now covers the October playtest candidate above.
 - Issues #7–#10: repaired Game Over attribute cleanup, title color reinitialization,
   both Stage 01 cards, and restarted gameplay. Three restart routes run two
   death/restart cycles each, including blank-SRAM and saved-game paths. The

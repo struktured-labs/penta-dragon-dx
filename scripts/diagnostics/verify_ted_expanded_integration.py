@@ -71,6 +71,14 @@ def exact(rom: bytes, offset: int, expected: bytes) -> bool:
     return rom[offset:offset + len(expected)] == expected
 
 
+def expanded_release_header(rom: bytes) -> bool:
+    """#61: exact successor inherits the unchanged MBC5/1MiB header."""
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        rom = successor.authenticated_parent(rom, (0x147, 0x149))
+    return release_lock_lineage.is_candidate(rom)
+
+
 def native_pose_bank_matches(actual: bytes, expected: bytes, cgb_flag: int) -> bool:
     if actual == expected:
         return True
@@ -315,12 +323,12 @@ def main() -> int:
     checks = {
         "penta_visible_seam_runtime_exact": visible_seam_matches(rom),
         "rom_is_512k_32_banks": len(rom) == 32 * BANK_SIZE
-            or release_lock_lineage.is_candidate(rom),
+            or expanded_release_header(rom),
         "mapper_is_mbc5_ram_battery": len(rom) > 0x0148
             and rom[0x0147] == 0x1B,
         "header_declares_512k": len(rom) > 0x0148 and (
             rom[0x0148] == 0x04
-            or (release_lock_lineage.is_candidate(rom) and rom[0x0148] == 0x05)),
+            or (expanded_release_header(rom) and rom[0x0148] == 0x05)),
         "header_checksum": len(rom) >= 0x150
             and rom[0x014D] == header_checksum(bytearray(rom)),
         "global_checksum": len(rom) >= 0x150

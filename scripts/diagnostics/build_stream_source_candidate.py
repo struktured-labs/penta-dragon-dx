@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the release-lock stream candidate (ffc29f4e) as a release source profile.
+"""Build the combined playtest candidate (6c4a9654) as a release source profile.
 
 Wraps scripts/build_stream_regression_candidate.py with the full stream chain
 (presentation, arena alias, completion-safe, secret sound alias, return fade
@@ -12,6 +12,10 @@ original-source restart build; no retained candidate ROM is an input. #35
 (title local guard) remains in the chain with its accepted footer timing. A final
 title-glyph-window stage confines the v3.01 footer glyph GDMA to mode 0/1.
 Construction evidence only: not hardware approval and not audience approval.
+
+Version2 additionally relocates native stage headers, clears score-card OAM
+and attributes, separates enemy bullets, and rearms boss scene setup. These
+changes remain subject to the full runtime matrix; construction is not approval.
 """
 from __future__ import annotations
 
@@ -39,9 +43,13 @@ FLAGS = {
     "return_fade": True,
     "experimental_late_return_fade": False,
     "release_lock": True,
+    "clean_stage_headers": True,
+    "score_card_cleanup": True,
+    "separate_enemy_projectiles": True,
+    "boss_prelude_rearm": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v1",
+    "schema": "penta-stream-release-lock-original-source-build-v2",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -57,6 +65,8 @@ CONTRACT = {
         "secret-alias-chunks", "return-initial-map", "return-cgb-fade",
         "return-card-deadline", "return-card-compact", "title-glyph-window",
         "continue-miniboss-reload", "sara-overhang-priority",
+        "clean-stage-headers", "score-oam-publish", "score-attribute-clear",
+        "enemy-projectile-palette", "boss-prelude-rearm",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -65,7 +75,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb"
+        "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -163,7 +173,10 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
     if nested.get("retained_candidate_inputs") is not False:
         raise ValueError("stream receipt consumed retained candidates")
     for key, value in FLAGS.items():
-        if key == "release_lock":
+        if key in {"clean_stage_headers", "score_card_cleanup",
+                   "separate_enemy_projectiles", "boss_prelude_rearm"}:
+            name = "experimental_" + key
+        elif key == "release_lock":
             name = "release_lock_chain"
         else:
             name = key if key.startswith("experimental_") else "experimental_" + key

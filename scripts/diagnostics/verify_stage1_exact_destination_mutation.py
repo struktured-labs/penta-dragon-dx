@@ -140,7 +140,15 @@ def main() -> int:
     # later in this same allocation. The executable prefix through this
     # instruction remains exact and is the only portion this mutation owns.
     prefix_end = relative + len(AUTHORITATIVE_DESTINATION)
-    source_sha256 = digest(source)
+    # #61 ABI selection only. The executed clean/mutant ROMs and receipt
+    # identities below continue to use the actual source bytes.
+    import playtest_successor_lineage as successor
+    contract_rom = source
+    if successor.is_candidate(source):
+        contract_rom = successor.authenticated_parent(source,
+            (STAGE1_HAZARD_PURE_MAP_ADDR, STAGE1_HAZARD_PURE_MAP_ADDR + 5),
+            (19 * 0x4000, 20 * 0x4000))
+    source_sha256 = digest(contract_rom)
     expected_prefix = (
         R451C_HELPER_PREFIX
         if source_sha256 in {R451C_SHA256, R453_SHA256, R455_SHA256, R456C_SHA256, R456D_SHA256, R527_SHA256, R528_SHA256, R529_SHA256, R530_SHA256, R531_SHA256, R532_SHA256, R533_SHA256, R534_SHA256, R535_TILE_RETIRE_SHA256, R535_STAGE_CARD_BLACK_SHA256, R536_PENTA_SEAM_SHA256, "e709869c85edfd647dd01dbca0c222a493b335ee6759adaa573416143a66e45b", "c693eafb50e7872fa884d0d26ce3fbfd4f2fac0dba246ff738931643e7f0ba5d", "4f5a67b8a9afb178ac0760daa2357de74fd7eb7f3de4de010385c50ea4cb08f5", "ffc29f4e29f2c2f9995f132c08676624ad92a206b822b3afdf835be3ad072feb", R535_STAGE1_ONLY_CARD_BLACK_SHA256, R536_STAGE1_ONLY_CARD_BLACK_SHA256}

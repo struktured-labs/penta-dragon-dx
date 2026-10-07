@@ -240,7 +240,17 @@ def run_stage(mgba: str, rom: Path, target: int, frames: int,
     if r265_window_equivalence:
         env["SOAK_WINDOW_HELPER_ADDR"] = str(WINDOW_HELPER_ADDR)
         env["SOAK_WINDOW_HELPER_BANK"] = str(WINDOW_HELPER_BANK)
-    if sha256(rom) in {
+    # #61: select observer locations only after authenticating every unchanged
+    # fixed/banked publication instruction. All samples still use this ROM.
+    import playtest_successor_lineage as successor
+    observer_sha = sha256(rom)
+    if successor.is_candidate(rom.read_bytes()):
+        parent = successor.authenticated_parent(rom.read_bytes(),
+            (0x12F4, 0x12FC),
+            (13*0x4000+0x3457, 13*0x4000+0x3459),
+            (13*0x4000+0x3462, 13*0x4000+0x3464))
+        observer_sha = hashlib.sha256(parent).hexdigest()
+    if observer_sha in {
         "44ac932aca17701ae97596fd511f77fa0eae8f98761d61e618262a7f71bf9702",
         "ea53ebb1f8cef8480b6ad3b4472b74f11bab6b0ea9f03660ea8e5ca7bcde1a46",
         "7a3766bde681b591013e77163be75880e44dfde106648a98f1173888b1eb2b23",
