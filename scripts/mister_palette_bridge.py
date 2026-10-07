@@ -29,6 +29,9 @@ STAR_PIN = 'd744124d3d161247e0584bb39e8db1243ade4e428cbc15f82a85c10d0a4ac4d5'
 RETURN_FADE_PIN = '126dd0b7fff1e03eb6b224f818b85398593c7109ffb676cc538c1bd90742304b'
 # Experimental late-return source build: primary-row editing only, not readiness.
 LATE_RETURN_PIN = '46eb95a0c0f770fb3cf8c3211b8030a9e881f59077e558b93703ba08da71d3fb'
+# #19: October playtest repairs; primary-table support is not hardware approval.
+PLAYTEST_PIN = '6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228'
+PLAYTEST_LAYOUT_PIN = '53e25cf01602fe9a4b9546d61845e1a9d17a581f2b2ad104734d92c280de5327'
 # Exact late-return layout with ONLY primary rows/global checksum normalized.
 STAGE1_LAYOUT_PIN = '3521f83aaf36fdf9a5f82fdefd603e7b289fa9a58fa46447c17d441209cf83c2'
 SOURCE = ROOT / 'tmp/stream-tonight/Penta Dragon DX v3.01.gbc'
@@ -80,18 +83,33 @@ def decode(row):
             for s in (0, 5, 10)) for v in struct.unpack('<4H', row)]
 
 
-def stage1_layout_supported(rom):
+def primary_layout_digest(rom):
     if len(rom) != 1048576:
-        return False
+        return None
     normalized = bytearray(rom)
     for offset in OFFSETS:
         normalized[offset:offset+8] = bytes(8)
     normalized[0x14E:0x150] = bytes(2)
-    return sha(normalized) == STAGE1_LAYOUT_PIN
+    return sha(normalized)
+
+
+def stage1_layout_supported(rom):
+    return primary_layout_digest(rom) in (STAGE1_LAYOUT_PIN, PLAYTEST_LAYOUT_PIN)
+
+
+def labels_for_rom(rom):
+    """Keep stable API keys, but describe this exact layout's projectile roles."""
+    labels = list(LABELS)
+    if primary_layout_digest(rom) == PLAYTEST_LAYOUT_PIN:
+        labels[7] = ('Sara’s weapon shots & effects',
+                     'OBJ0 · Player weapon primary palette; dragon-shot overrides are separate. Historical API key: EnemyProjectile.')
+        labels[10] = ('Enemy bullets & crows',
+                      'OBJ3 · Enemy bullet tile 0F now shares this primary row with crows and other actors using OBJ3. Historical API key: SaraProjectileAndCrow.')
+    return labels
 
 
 def stage1_owned_positions(rom, state):
-    """#39 fixed primary slots for settled ordinary Stage1 on exact46eb layout.
+    """#39 fixed primary slots for settled Stage1 on exact supported layouts.
 
     MiSTer B0CA: header8 + registers512 + WRAM32768 + VRAM16384 +
     OAM160 + HRAM128. Physical WRAM bank1 contains D880/DF4C.
@@ -196,7 +214,7 @@ class Bridge:
         WORK.mkdir(parents=True, exist_ok=True)
         self.rom = Path(source).read_bytes()
         self.source_pin = sha(self.rom)
-        if self.source_pin not in (PIN, ROW_GUARD_PIN, SARA_ATOMIC_PIN, TED_MENU_PIN, STAR_PIN, RETURN_FADE_PIN, LATE_RETURN_PIN):
+        if self.source_pin not in (PIN, ROW_GUARD_PIN, SARA_ATOMIC_PIN, TED_MENU_PIN, STAR_PIN, RETURN_FADE_PIN, LATE_RETURN_PIN, PLAYTEST_PIN):
             raise ValueError('Starting ROM does not match an exact supported pin')
         self.stem = 'Penta-Dragon-DX-' + self.source_pin[:12]
         self.history = []
@@ -355,7 +373,7 @@ def serve(port, resume_edit=None, source=SOURCE):
             if self.path == '/palettes':
                 return self.send_json([dict(name=n, label=label, description=description,
                                            colors=decode(bridge.rom[o:o+8]))
-                                       for n, o, (label, description) in zip(NAMES, OFFSETS, LABELS)])
+                                       for n, o, (label, description) in zip(NAMES, OFFSETS, labels_for_rom(bridge.rom))])
             if self.path != '/':
                 return self.send_json({'error': 'Not found'}, 404)
             page = '''<!doctype html><meta charset="utf-8"><title>Rivalmage Palette Lab</title>

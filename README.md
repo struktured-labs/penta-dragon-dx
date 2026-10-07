@@ -9,8 +9,9 @@ uses descriptive labels and explains shared palettes—for example, **BG5:
 Rotating spike bodies & power pickups** (not the protruding teeth).
 
 Run `python3 scripts/mister_palette_bridge.py`, then open
-<http://127.0.0.1:8078>. This first version requires the pinned r536 ROM,
-reserves savestate slot 4, and supports primary palettes only. Generated
+<http://127.0.0.1:8078>. Use `--source PATH` for an explicitly supported ROM,
+including the October retest candidate below; the default remains r536.
+The bridge reserves savestate slot 4 and supports primary palettes only. Generated
 ROMs/states stay out of Git; release ROMs and YAML are not overwritten.
 See [setup, limitations, and hardware evidence](docs/mister_palette_lab.md).
 
