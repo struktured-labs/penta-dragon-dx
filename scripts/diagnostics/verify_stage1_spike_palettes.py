@@ -2841,6 +2841,7 @@ def live_receipt(
         checks.update({
             "warning health is held after the menu/item sequence": (
                 low_health_forced_frames >= 120
+                and low_health_scene_frames >= 120
             ),
             "post-menu warning mode leaves floors, endpoints and hazards exact": (
                 post_menu_floor_mismatch_frames == 0
@@ -3052,6 +3053,9 @@ def live_receipt(
         "recurring_phase_raster": recurring_phase_raster,
         "low_health_forced_frames": low_health_forced_frames,
         "low_health_scene_frames": low_health_scene_frames,
+        "native_raw_scene": values.get("native_raw_scene", ""),
+        "canonical_scene": values.get("canonical_scene", ""),
+        "stage_index": values.get("stage_index", ""),
         "floor_lut_trace": values["floor_lut_trace"],
         "floor_lut_mismatch_frames": floor_lut_mismatch_frames,
         "atomic_floor_lut_mismatch_hits": atomic_floor_lut_mismatch_hits,

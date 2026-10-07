@@ -137,7 +137,7 @@ FIXED_INPUTS = (
 
 INPUT_TREES = (
     ("palettes", {".yaml", ".yml"}),
-    ("scripts/diagnostics", {".py", ".lua", ".sh"}),
+    ("scripts/diagnostics", {".py", ".lua", ".sh", ".c"}),
     ("scripts/probes", {".py", ".lua", ".sh"}),
     ("src/penta_dragon_dx", {".py"}),
 )

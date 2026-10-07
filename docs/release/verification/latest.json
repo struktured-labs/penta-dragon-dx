@@ -1,9 +1,9 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-10-07T05:08:19.843222+00:00",
-  "git_head_at_run": "55a7b0ca523a80c1209208c7a6a019953d20a8e3",
-  "source_fingerprint": "3f2c77f0ce62055310048674f764157473a94e2f45fcd6cd8c8577a7daaf9ffe",
+  "generated_at": "2026-10-07T12:17:20.496404+00:00",
+  "git_head_at_run": "e87c24568cf2fa6afd7a7f3e4d092ea008adee74",
+  "source_fingerprint": "44a8c559cfa1e06a7864d7127d57f27f40ee2bbd0dc8df7b62b248ecc6cf5357",
   "source_inputs": [
     {
       "path": ".claude/settings.json",
@@ -157,8 +157,8 @@
     },
     {
       "path": "scripts/build_stream_regression_candidate.py",
-      "sha256": "177ffc40b914d5985cb364ca839fdd57ede76687c909bb171bb739295398e0ec",
-      "size": 23714
+      "sha256": "08d3c88e5b264ba6a0a372cf58535735d957d3082076bf7087c4f0100b347581",
+      "size": 29008
     },
     {
       "path": "scripts/build_ted_expanded_candidate.py",
@@ -616,6 +616,11 @@
       "size": 3498
     },
     {
+      "path": "scripts/diagnostics/build_later_compile_timer_yield.py",
+      "sha256": "d86b6939fedcc2ae64223c37d5a3d4f8aab824a37f82ad47ce77ba3112314fe0",
+      "size": 4792
+    },
+    {
       "path": "scripts/diagnostics/build_later_dungeon_steady_fast_r180.py",
       "sha256": "4ff0cc28eef9e9afd51bcf227119b66e56f8f019d5abc649150ed15217a90e19",
       "size": 3628
@@ -644,6 +649,11 @@
       "path": "scripts/diagnostics/build_later_key_only_r181.py",
       "sha256": "95cf2b5bdcffad29fb3538d3ae9917c1fe53264cafe4dabc15e71671b38a23cf",
       "size": 2651
+    },
+    {
+      "path": "scripts/diagnostics/build_later_lowhealth_dispatch.py",
+      "sha256": "29db19aba43f53f34dec971e8b5c5d67983c54639ec04e6febcb3fb6137aabf5",
+      "size": 2415
     },
     {
       "path": "scripts/diagnostics/build_later_metatile_overlap.py",
@@ -694,6 +704,11 @@
       "path": "scripts/diagnostics/build_later_vblank_copy_r444.py",
       "sha256": "742067d125a85122f58ddda0b3c698f0c5cc10cb69e8dededc5828e59ef1a5a0",
       "size": 1942
+    },
+    {
+      "path": "scripts/diagnostics/build_lowhealth_deferred_dma.py",
+      "sha256": "62cebf42b27eed5a5ac0214c25492065540f67a91e6e89dd7fa09c44f1c86624",
+      "size": 2048
     },
     {
       "path": "scripts/diagnostics/build_menu_quartet_trial.py",
@@ -1876,6 +1891,16 @@
       "size": 12827
     },
     {
+      "path": "scripts/diagnostics/build_stage7_lowhealth_camera.py",
+      "sha256": "b12c6446ffbe0da7983208c92801039d9c754f5463db9c2a521e8306323a702d",
+      "size": 2381
+    },
+    {
+      "path": "scripts/diagnostics/build_stage7_lowhealth_fastpath.py",
+      "sha256": "adab6fa7ae4864b1feb2b87106a681c00494fc724643bd39eb53da7137c29dec",
+      "size": 3550
+    },
+    {
       "path": "scripts/diagnostics/build_stage7_menu_signature_gate_rebind_r265.py",
       "sha256": "d30aa91b1a56141e0bee1416d1861fc3cd3b085921c72983d803cd794e78eef5",
       "size": 13534
@@ -1982,8 +2007,8 @@
     },
     {
       "path": "scripts/diagnostics/build_stream_source_candidate.py",
-      "sha256": "637e96b8ca4df7aa93c38c3c2e259ba99642dde81a634a0fcd50cd45fda56538",
-      "size": 11747
+      "sha256": "4ff67f9f9d6917e9d9d303c595008e66d006c5faf84ee0319685c23adb61b057",
+      "size": 12290
     },
     {
       "path": "scripts/diagnostics/build_tail_coordinate_wait_r433.py",
@@ -2009,6 +2034,16 @@
       "path": "scripts/diagnostics/build_title_exit_defer_trial_r535.py",
       "sha256": "000ad88cd455e0120e13124bb3e101a5b796cf30b8aeeba0b998dafdaab58c86",
       "size": 6169
+    },
+    {
+      "path": "scripts/diagnostics/build_title_glyph_read_window.py",
+      "sha256": "ce800964f1a3f034564f4fe0c24c01ecc9f325c95f2eb7b554ba973f24358490",
+      "size": 3184
+    },
+    {
+      "path": "scripts/diagnostics/build_title_glyph_retry_window.py",
+      "sha256": "232a08bdd6d44bf77e452dca5ad0fff82b9f8f624031f67e9b7b26fd151843a3",
+      "size": 2853
     },
     {
       "path": "scripts/diagnostics/build_title_glyph_window_trial.py",
@@ -2042,8 +2077,8 @@
     },
     {
       "path": "scripts/diagnostics/build_visual_audit.py",
-      "sha256": "fad2922efdda71e81a483d11653fb1a94ff66db29658bde6ae39a74375c5ec8b",
-      "size": 59183
+      "sha256": "e36590ee4c9ae775d4e3cf0d1389e407c55289cc43fdb52e2c124bbd6d04acca",
+      "size": 60989
     },
     {
       "path": "scripts/diagnostics/build_warning_source_tracking_r439.py",
@@ -2126,9 +2161,29 @@
       "size": 2008
     },
     {
+      "path": "scripts/diagnostics/check_lowhealth_compiler_timer.py",
+      "sha256": "7553a213d22e2c8b175315283d6ad425505e04b2a41fb9abd6a933a3a057344d",
+      "size": 2954
+    },
+    {
+      "path": "scripts/diagnostics/check_lowhealth_patrol_cadence.py",
+      "sha256": "a199f3c82e8696f99c68b6b272e9168281f2f523b7fcfb803a2d4721c80c4cab",
+      "size": 2795
+    },
+    {
+      "path": "scripts/diagnostics/check_lowhealth_stage2_attributes.py",
+      "sha256": "ca404fcd03aba14544b472720bbe004826da264eecd2592765c9765b97b0b686",
+      "size": 2529
+    },
+    {
       "path": "scripts/diagnostics/check_menu_row_stack.py",
       "sha256": "af1b9fa1e991d24e291f2a03658470c0c5a71d78a962fef2ff794c6a9f9d4817",
       "size": 2382
+    },
+    {
+      "path": "scripts/diagnostics/check_mgba_cgb_latches.c",
+      "sha256": "e6431446e48dc6d79c065754f6df886a2010e82663e33b3738902ab9ba57039d",
+      "size": 1051
     },
     {
       "path": "scripts/diagnostics/check_natural_obj_pixels.py",
@@ -2189,6 +2244,16 @@
       "path": "scripts/diagnostics/check_select_latch_writes.py",
       "sha256": "bd5af5477761522ea848ca51b2d06716e83618929186461bd1e81dd5c318e8c9",
       "size": 1032
+    },
+    {
+      "path": "scripts/diagnostics/check_stage2_scrolling.py",
+      "sha256": "2d98551a4d6cb250bc1e0adc56b3b36bb51ca83622f7435e3ac7115503c5244b",
+      "size": 6207
+    },
+    {
+      "path": "scripts/diagnostics/check_stage7_visible_attributes.py",
+      "sha256": "c2734c0b3a9f3a83ada524fe67ba253400a00ae9aa2816eca2e18e2d2f755738",
+      "size": 2092
     },
     {
       "path": "scripts/diagnostics/compose_arena_palette_storage_r455.py",
@@ -2447,8 +2512,8 @@
     },
     {
       "path": "scripts/diagnostics/expansion_bank_ownership_r456.py",
-      "sha256": "0d35b0d31658538115929a86bc1bef1737dac71df5a43153ebc6b265a76e5932",
-      "size": 7087
+      "sha256": "12833dbabfd6b73fa1a1649bada8c9f100ef19f3f19d72cc20a123b318d1bf85",
+      "size": 7957
     },
     {
       "path": "scripts/diagnostics/expansion_banks26_30_r456.py",
@@ -2566,6 +2631,11 @@
       "size": 7481
     },
     {
+      "path": "scripts/diagnostics/lowhealth_candidate_lineage.py",
+      "sha256": "633f28c46f14a984380f2ba2696aae945f43d858d53514787b871e1d1f1b7389",
+      "size": 6945
+    },
+    {
       "path": "scripts/diagnostics/make_cgb_test_rom.py",
       "sha256": "950a8e15d8de0bdc6d7ed1259f8ed9061d1be275bdc6071e7ed5144bf38ed193",
       "size": 766
@@ -2589,6 +2659,11 @@
       "path": "scripts/diagnostics/montage.py",
       "sha256": "aa64762e6f980b306a0513f019981ba0cb1203cb197941cd62fb1ea11eee2ed2",
       "size": 1615
+    },
+    {
+      "path": "scripts/diagnostics/native_av_tap.c",
+      "sha256": "c259aa6616f6dd8586ef7047ef15c56245ee13fc41ca0bc5837c133ead2ebb6d",
+      "size": 10545
     },
     {
       "path": "scripts/diagnostics/normalize_mgba_state_pc.py",
@@ -2662,8 +2737,13 @@
     },
     {
       "path": "scripts/diagnostics/playtest_successor_lineage.py",
-      "sha256": "971233f8c5a46b3fc971b0bed9e43744ded5fc9cc3d67bfe4973da6db2e9ec6c",
-      "size": 5316
+      "sha256": "a78c5066e24b71c19e0f0145bc388cc0b9fbeed1ad93ccf4ce40e1a18f129619",
+      "size": 5588
+    },
+    {
+      "path": "scripts/diagnostics/prepare_native_replay.py",
+      "sha256": "ec550edb2a37207c22ef6f6ab47664d374a2f5d9b216b1406081ea5dea96c998",
+      "size": 3966
     },
     {
       "path": "scripts/diagnostics/prepare_ted_forced_cold_state.py",
@@ -3022,8 +3102,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_low_health_flicker.lua",
-      "sha256": "c065ab82f3b23a851ecbe26313405d9dc2119b9c30630534961e9048d0d7e533",
-      "size": 73052
+      "sha256": "6d90811198b245061ab942c1817a221a72e0da96466f5e2b40d45af31ff0bfec",
+      "size": 73042
     },
     {
       "path": "scripts/diagnostics/probe_low_health_transition_liveness.lua",
@@ -3122,8 +3202,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_sara_overhang_priority.lua",
-      "sha256": "56ac64a5513a98cd161b33067935d078053073e72c40ec9b68c0302148601789",
-      "size": 2349
+      "sha256": "ec74629e9186693506bbe21d07a75b349f0237156215af1c146f75ba44e3ba6b",
+      "size": 2682
     },
     {
       "path": "scripts/diagnostics/probe_savestate_cram.lua",
@@ -3172,8 +3252,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_shalamar_transition.lua",
-      "sha256": "b6fa90d9d62ca5c7224947513b1a90cc56303b519c7993b3c15e65ebac3ef2c6",
-      "size": 3342
+      "sha256": "466925118c3d4184b81fb6e0c026d3223ac759e5147cabb976bd8f0a02035494",
+      "size": 3923
     },
     {
       "path": "scripts/diagnostics/probe_slot1_trace.lua",
@@ -3262,8 +3342,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage1_spike_palettes.lua",
-      "sha256": "99a56d933104e50f6675ea0914ef4a83f6f398922b8f310cce84b697eab1b45a",
-      "size": 105436
+      "sha256": "7a93c9c36ac42272d4f81bb65b6e721acd97c46c9168d6683c6d064860c30409",
+      "size": 106490
     },
     {
       "path": "scripts/diagnostics/probe_stage1_tilemap_copy.lua",
@@ -3307,8 +3387,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage7_state_patrol.lua",
-      "sha256": "3901c46cb7c062fad5481a7d6d4b94d9e06a49f42b9084c31e91ed9c2a03d287",
-      "size": 5859
+      "sha256": "7012597ffae3e8f1fdc359c0c3a619aa7a677c0237fe27b0f5347c5551653651",
+      "size": 6548
     },
     {
       "path": "scripts/diagnostics/probe_stage_card_stability.lua",
@@ -3332,8 +3412,8 @@
     },
     {
       "path": "scripts/diagnostics/probe_stage_speed.lua",
-      "sha256": "5fa4f6180e2721d663c133daf6a0f9c4ef6f5282aae2d36b0aac58611516ea08",
-      "size": 83019
+      "sha256": "f8be46f037658e92344d1cdfb0d6622889649c5d20e093fd64653964dfdd0794",
+      "size": 87516
     },
     {
       "path": "scripts/diagnostics/probe_stale_window_state.lua",
@@ -3687,8 +3767,8 @@
     },
     {
       "path": "scripts/diagnostics/run_deterministic_suite.py",
-      "sha256": "0595b6d2cb4977375dc807a78af134a7dc1c471749fc5875293e8c40663cf7a9",
-      "size": 31347
+      "sha256": "f4878fc329ac2e7e9cf26f737df1b4abf9e45f23fc8a963f89733564f67d540c",
+      "size": 33152
     },
     {
       "path": "scripts/diagnostics/run_projectile_ownership.py",
@@ -3707,8 +3787,8 @@
     },
     {
       "path": "scripts/diagnostics/run_shalamar_transition.py",
-      "sha256": "3a340771be2005c3cab1c9a7d6f4beafe30b37f7daccb6254ba6a6bf995a3e6d",
-      "size": 5410
+      "sha256": "0d9c16aaeb2246a24f8384aaab8a0720e33f7fa517f0104a1fe89b967101b3cd",
+      "size": 5955
     },
     {
       "path": "scripts/diagnostics/run_stage_patrol.py",
@@ -3747,7 +3827,7 @@
     },
     {
       "path": "scripts/diagnostics/stream_source_profile.py",
-      "sha256": "881ee3c3c0212a3505745e3b9eaddbccd44a26c1e04b621b24ffaa2b1f8c2b5b",
+      "sha256": "22a2109196a46f32ffcd344dd3e4878632b7d5cbfab1972d490bade944705a09",
       "size": 1830
     },
     {
@@ -3757,8 +3837,8 @@
     },
     {
       "path": "scripts/diagnostics/suite_contract.py",
-      "sha256": "5f75cc8e537e5fc1897f0e5baae362a3de4574731fbe046f137706dceb4f08ed",
-      "size": 7834
+      "sha256": "5c56492ec60758e04595a31b56744c79c0810d199ebdf4193a4cdef5e5a9c5fb",
+      "size": 7840
     },
     {
       "path": "scripts/diagnostics/suite_release_ledger.py",
@@ -3797,8 +3877,8 @@
     },
     {
       "path": "scripts/diagnostics/test_native_capture_barrier_adoption.py",
-      "sha256": "3737058857c08c7e0eb94eda27f32655eb8b286612327311a9fb68ec474b5194",
-      "size": 5080
+      "sha256": "b4f5e15d1b88fe809d820dba6e942695e7dff573ed39e172fbe71f1b82d35813",
+      "size": 5132
     },
     {
       "path": "scripts/diagnostics/test_precommit_artifact_policy.py",
@@ -3817,8 +3897,8 @@
     },
     {
       "path": "scripts/diagnostics/test_stream_source_profile.py",
-      "sha256": "fc6b0334ea51e06fbbb008ea7cdaf46fb9c95540505c559cc2ed3d3fcd3bae31",
-      "size": 4034
+      "sha256": "59690fd98fbef6c9cb7da3d1b79a5cdf3b7bde6537918c2c1325bc09de3650b1",
+      "size": 4335
     },
     {
       "path": "scripts/diagnostics/title_color_shot.lua",
@@ -3857,8 +3937,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_boss_atomic_attr_contract.py",
-      "sha256": "2794c19e127771373bdcb15fa97211da7fcd23f02a140ac08b27715c048ddf30",
-      "size": 13054
+      "sha256": "49998a8c2ba48a37f9a3903d1ec57f95cc3fb4c76284375a5070e64ba4c57cc1",
+      "size": 13506
     },
     {
       "path": "scripts/diagnostics/verify_boss_geometry.py",
@@ -4022,13 +4102,13 @@
     },
     {
       "path": "scripts/diagnostics/verify_low_health_flicker.py",
-      "sha256": "35d452ac6bb24621031111f4ec503d9353b0a727d1b41d77e82460f3674a40c1",
-      "size": 68948
+      "sha256": "7b281d48e73b884e8e35b9251e67bd1cb78726c28048258aed7b19f1640a8c32",
+      "size": 70839
     },
     {
       "path": "scripts/diagnostics/verify_low_health_hazard_determinism.py",
-      "sha256": "ee4294987648e25f58628e6a9b3ddcb16346ee42b6119ce38dc0a8b2d315f44c",
-      "size": 10863
+      "sha256": "3e3a9ae8e611058ceab99cc29437a35947502e35ca9e1c103373689c8015a23b",
+      "size": 13294
     },
     {
       "path": "scripts/diagnostics/verify_menu_icon_palettes.py",
@@ -4142,8 +4222,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_playtest_boss_handoff.py",
-      "sha256": "93c2fbd19c4785b923ca08e1b8c6548cdb662f19c0d291ddef1cf98527e5d55e",
-      "size": 4491
+      "sha256": "efc4d36ecab548a6278b7aff251b81647d0676af223aff9ff6f12bac290c217f",
+      "size": 10662
     },
     {
       "path": "scripts/diagnostics/verify_playtest_header_regression.py",
@@ -4162,8 +4242,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_release_candidate.py",
-      "sha256": "7d341de66b11710f2e3dee10f678415506555236b23f3bcfaa85ff22978737d8",
-      "size": 73103
+      "sha256": "335b6d974da6af1b9afa550e6f5ec1e2fbc09c6bb86243c729d50d3219bcc51c",
+      "size": 73409
     },
     {
       "path": "scripts/diagnostics/verify_release_matrix_resume_contract.py",
@@ -4177,8 +4257,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_sara_overhang_priority.py",
-      "sha256": "eb0694664d1407c9441ad45b19b5d3abaf712ed3c4c726d4a924c3a708e561c4",
-      "size": 8196
+      "sha256": "36baab00cc3d513731f22233cdb335a84e5a8c77250237b572cc13d8252fe16c",
+      "size": 8249
     },
     {
       "path": "scripts/diagnostics/verify_sara_palette.py",
@@ -4212,8 +4292,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_captured_menu.py",
-      "sha256": "6b4fb89940c70aeab1af0b3c554d177cebd7280bc9b525bb34bf6666c3a39925",
-      "size": 22447
+      "sha256": "a4dbb3503c43b50384389112b56154384c928b1edb233ee2e568b8250d67622d",
+      "size": 23669
     },
     {
       "path": "scripts/diagnostics/verify_stage1_carry_dirty_signal.py",
@@ -4232,8 +4312,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_current_hazard_menu.py",
-      "sha256": "15358a449c76f99a6e108f7be8885a03295e772281f4ff1284501008b7150027",
-      "size": 11215
+      "sha256": "4599cada8e250af6d3cf6f9043d347945e503af01d851da4cad59b7c9ace1f59",
+      "size": 11477
     },
     {
       "path": "scripts/diagnostics/verify_stage1_current_hazard_mutations.py",
@@ -4247,8 +4327,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_exact_destination_mutation.py",
-      "sha256": "6c34a76dc25cbc7d49ba65a39ba8bcb5fe74eedbd401edb4c7b59899b3fedb4a",
-      "size": 13362
+      "sha256": "d4cc9a101df05a642716d8b7e20fc68467e210890d16ff23bb859b3af0cc4d75",
+      "size": 14136
     },
     {
       "path": "scripts/diagnostics/verify_stage1_hazard_batch_r103_static.py",
@@ -4267,8 +4347,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_hazard_menu.py",
-      "sha256": "d72d15fcddaa1a41a1c9389e708bf71cf2ac82554df3c8dbbd6beb31d74eadbd",
-      "size": 19429
+      "sha256": "b57e34e97c3fe2aec25dcfb91ef69eec117d1a35f152377ed0b29d5c33215a9e",
+      "size": 19500
     },
     {
       "path": "scripts/diagnostics/verify_stage1_hazard_menu_mutation.py",
@@ -4357,8 +4437,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_spike_palettes.py",
-      "sha256": "5fa01f965aee46c991aad3f89c6cebc417ce27e6bfd5e2ac26e206ec4ec3af7a",
-      "size": 182947
+      "sha256": "aa5521441abfcc1ab8874c61a45ec38996d3904b03b1c7c83becdb148f48cc5d",
+      "size": 183178
     },
     {
       "path": "scripts/diagnostics/verify_stage1_tilemap_copy.py",
@@ -4372,8 +4452,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_visual_contract_controls.py",
-      "sha256": "163a764411d6d4855034c9adfa614b84d5805bc63c99c2f750f5da666a62514e",
-      "size": 31648
+      "sha256": "cff612efd250d650c8ed60be2bcd999206dc11017cd6c3ac454ec13ed5930f7f",
+      "size": 31883
     },
     {
       "path": "scripts/diagnostics/verify_stage2_flip_attributes.py",
@@ -4497,8 +4577,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage_speed_matrix.py",
-      "sha256": "bbcf60aa142ca27f52acf92cc50b85a0d261809ae07f7f6bca8b1e8f84406d4a",
-      "size": 62368
+      "sha256": "0b2aed570dc68b5671332dc599ebf7dc17ba5582d8bbcc7c5b7c272b96a8fe2c",
+      "size": 65095
     },
     {
       "path": "scripts/diagnostics/verify_stale_window_state.py",
@@ -4517,7 +4597,7 @@
     },
     {
       "path": "scripts/diagnostics/verify_suite_receipt.py",
-      "sha256": "c83e8178de4c573e31354838491376ad911bbade1012d1b9a6aef9e8aa9ee296",
+      "sha256": "0f2a401cec064f8de740000f5ec444ebea7869fe2ec39ea45418eaebda609aba",
       "size": 11807
     },
     {
@@ -4562,8 +4642,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_ted_expanded_integration.py",
-      "sha256": "ec0faea1c7ebfc6b4e24f89b117df847d578de6a63c719ea363a0cc6c66e175c",
-      "size": 20945
+      "sha256": "37feef1e1ab3df2105d636774051abb850da814220dd7f8c5b4d6f9fd4dc8066",
+      "size": 21583
     },
     {
       "path": "scripts/diagnostics/verify_ted_incremental_cell_contract.py",
@@ -4907,8 +4987,8 @@
     },
     {
       "path": "scripts/stage_card_palette_handoff.py",
-      "sha256": "70e605eb623377887864ab8344e6da13af87203c9b0a659d83ca94f7d6dbdce1",
-      "size": 48625
+      "sha256": "d1c2abf3c1913505f48b7868a6b26ddbf90327b77b16d46f2e9a6bb75000628a",
+      "size": 49787
     },
     {
       "path": "src/penta_dragon_dx/__init__.py",
@@ -4967,7 +5047,7 @@
     }
   ],
   "build_profile": {
-    "name": "stream-release-lock-original-source-v2",
+    "name": "stream-release-lock-original-source-v3",
     "expanded_ted": true,
     "native_sparse": true,
     "native_pose_table": true,
@@ -4975,33 +5055,33 @@
   },
   "candidate": {
     "size": 1048576,
-    "md5": "3fe93e9ff14962d3605c12ea92d62d1c",
-    "sha256": "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228"
+    "md5": "aaf9b1a5178051c4bebf6ee0587527a1",
+    "sha256": "126861281b75edaf8daace834ccbe41e53ed0c9eebb71e50fe3bd6823e8b6941"
   },
   "deterministic_build": {
     "passes": 2,
     "byte_identical": true,
-    "build_a_sha256": "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228",
-    "build_b_sha256": "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228"
+    "build_a_sha256": "126861281b75edaf8daace834ccbe41e53ed0c9eebb71e50fe3bd6823e8b6941",
+    "build_b_sha256": "126861281b75edaf8daace834ccbe41e53ed0c9eebb71e50fe3bd6823e8b6941"
   },
   "matrix": {
     "status": "emulator-pass",
     "scope": "full",
     "gate_count": 97,
     "failures": 0,
-    "manifest_sha256": "5935cf38409c7a7b28bd9880d6d81b22ab42463b2a7c24a0d6900a48f55b85a5",
+    "manifest_sha256": "0a6eadc83b7f8f1fd0b9a47c7546a07b54920ab4a2a85088a5a87ea48eab657d",
     "results": [
       {
         "name": "emulator_singleflight_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.265
+        "duration_seconds": 0.266
       },
       {
         "name": "stage1_visual_contract_controls",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.416
+        "duration_seconds": 0.317
       },
       {
         "name": "release_matrix_resume_contract",
@@ -5013,433 +5093,433 @@
         "name": "playtest_header_data_and_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 56.884
+        "duration_seconds": 55.094
       },
       {
         "name": "playtest_secret_boss_handoff",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.059
+        "duration_seconds": 32.414
       },
       {
         "name": "title_footer_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.52
+        "duration_seconds": 0.47
       },
       {
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.367
+        "duration_seconds": 1.47
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.522
+        "duration_seconds": 0.468
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.556
+        "duration_seconds": 15.395
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.675
+        "duration_seconds": 3.521
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.338
+        "duration_seconds": 7.187
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.373
+        "duration_seconds": 2.426
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.933
+        "duration_seconds": 3.64
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.038
+        "duration_seconds": 5.977
       },
       {
         "name": "menu_icon_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.727
+        "duration_seconds": 4.328
       },
       {
         "name": "menu_window_publish_order",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.22
+        "duration_seconds": 2.571
       },
       {
         "name": "stage1_captured_menu_stationary",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.025
+        "duration_seconds": 4.983
       },
       {
         "name": "stale_gameplay_window",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.821
+        "duration_seconds": 2.047
       },
       {
         "name": "stage_card_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.357
+        "duration_seconds": 27.121
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 115.881
+        "duration_seconds": 116.842
       },
       {
         "name": "game_start_after_attract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.175
+        "duration_seconds": 6.679
       },
       {
         "name": "opening_to_stage1_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.634
+        "duration_seconds": 14.763
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 173.569
+        "duration_seconds": 211.418
       },
       {
         "name": "gameplay_movement_stress",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 372.358
+        "duration_seconds": 486.292
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 19.849
+        "duration_seconds": 20.176
       },
       {
         "name": "pickup_class_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.165
+        "duration_seconds": 0.216
       },
       {
         "name": "attract_pickup_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.427
+        "duration_seconds": 8.74
       },
       {
         "name": "stage1_current_hazard_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.722
+        "duration_seconds": 4.693
       },
       {
         "name": "stage1_current_hazard_menu",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 74.885
+        "duration_seconds": 151.0
       },
       {
         "name": "stage1_current_hazard_mutations",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.242
+        "duration_seconds": 18.044
       },
       {
         "name": "stage1_exact_destination_mutation",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 16.097
+        "duration_seconds": 23.258
       },
       {
         "name": "stage1_current_pickup_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.082
+        "duration_seconds": 2.272
       },
       {
         "name": "stage1_current_pickup_host_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 33.448
+        "duration_seconds": 36.255
       },
       {
         "name": "pickup_live_retry_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.166
+        "duration_seconds": 0.165
       },
       {
         "name": "pickup_live_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 31.354
+        "duration_seconds": 32.028
       },
       {
         "name": "stage1_pickup_art",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.02
+        "duration_seconds": 2.374
       },
       {
         "name": "bonus_stage_live",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.868
+        "duration_seconds": 2.021
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 52.049
+        "duration_seconds": 60.633
       },
       {
         "name": "stage1_tilemap_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.705
+        "duration_seconds": 30.858
       },
       {
         "name": "stage1_north_route_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.032
+        "duration_seconds": 11.682
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.273
+        "duration_seconds": 26.627
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 67.331
+        "duration_seconds": 99.032
       },
       {
         "name": "low_health_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.181
+        "duration_seconds": 12.956
       },
       {
         "name": "low_health_scene0b_publication",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.38
+        "duration_seconds": 11.641
       },
       {
         "name": "pocket_stage1_visual_incident",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.867
+        "duration_seconds": 0.866
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.481
+        "duration_seconds": 8.65
       },
       {
         "name": "stage1_miniboss_continue_palette",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.078
+        "duration_seconds": 7.595
       },
       {
         "name": "sara_overhang_priority",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.776
+        "duration_seconds": 4.131
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.484
+        "duration_seconds": 1.63
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 57.468
+        "duration_seconds": 67.448
       },
       {
         "name": "stage2_stream_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.482
+        "duration_seconds": 12.046
       },
       {
         "name": "stage_side_by_side_all7",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 41.396
+        "duration_seconds": 52.696
       },
       {
         "name": "boss_atomic_attr_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.184
+        "duration_seconds": 14.653
       },
       {
         "name": "ted_expanded_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.185
+        "duration_seconds": 15.049
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 33.038
+        "duration_seconds": 36.718
       },
       {
         "name": "ted_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.082
+        "duration_seconds": 4.392
       },
       {
         "name": "ted_og_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.524
+        "duration_seconds": 4.079
       },
       {
         "name": "ted_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.139
+        "duration_seconds": 16.629
       },
       {
         "name": "boss_geometry_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.3
+        "duration_seconds": 21.538
       },
       {
         "name": "ted_determinism",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.696
+        "duration_seconds": 17.262
       },
       {
         "name": "ted_release_readiness_receipt",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.033
+        "duration_seconds": 0.066
       },
       {
         "name": "ted_candidate_delta",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.033
+        "duration_seconds": 0.066
       },
       {
         "name": "ted_release_readiness",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.033
+        "duration_seconds": 0.065
       },
       {
         "name": "boss_semantic_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.031
+        "duration_seconds": 26.262
       },
       {
         "name": "boss_og_states",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 16.535
+        "duration_seconds": 18.429
       },
       {
         "name": "boss_og_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 39.514
+        "duration_seconds": 41.007
       },
       {
         "name": "boss_og_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.174
+        "duration_seconds": 0.216
       },
       {
         "name": "boss_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 83.603
+        "duration_seconds": 95.316
       },
       {
         "name": "boss_trajectory_pairing_null",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.332
+        "duration_seconds": 9.348
       },
       {
         "name": "boss_trajectory_pairing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 101.34
+        "duration_seconds": 109.556
       },
       {
         "name": "boss_publication_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 94.253
+        "duration_seconds": 90.648
       },
       {
         "name": "current_stage_control_states",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.615
+        "duration_seconds": 11.556
       },
       {
         "name": "crystal_dragon_ghost",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.395
+        "duration_seconds": 8.193
       },
       {
         "name": "boss_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 42.621
+        "duration_seconds": 41.991
       },
       {
         "name": "boss_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.216
+        "duration_seconds": 0.22
       },
       {
         "name": "boss_material_side_by_side",
@@ -5451,142 +5531,142 @@
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 38.767
+        "duration_seconds": 38.622
       },
       {
         "name": "sara_walking_pose_atomicity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.45
+        "duration_seconds": 9.579
       },
       {
         "name": "sara_firing_pose_atomicity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.746
+        "duration_seconds": 9.237
       },
       {
         "name": "gameover_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.279
+        "duration_seconds": 4.379
       },
       {
         "name": "gameover_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.696
+        "duration_seconds": 5.891
       },
       {
         "name": "gameover_saved_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.54
+        "duration_seconds": 5.929
       },
       {
         "name": "title_idle_reel",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.384
+        "duration_seconds": 5.292
       },
       {
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 51.653
+        "duration_seconds": 46.87
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.729
+        "duration_seconds": 4.849
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.823
+        "duration_seconds": 11.043
       },
       {
         "name": "pre_final_inventory",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.348
+        "duration_seconds": 7.238
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.115
+        "duration_seconds": 10.438
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.718
+        "duration_seconds": 10.409
       },
       {
         "name": "ending_discriminators",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.117
+        "duration_seconds": 0.065
       },
       {
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.873
+        "duration_seconds": 45.72
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 46.315
+        "duration_seconds": 45.919
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 120.84
+        "duration_seconds": 112.737
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.48
+        "duration_seconds": 21.067
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.879
+        "duration_seconds": 4.878
       },
       {
         "name": "candidate_ips_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.268
+        "duration_seconds": 0.217
       },
       {
         "name": "mister_reservation_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.267
+        "duration_seconds": 0.366
       }
     ],
-    "manifest_path": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/return-visibility-full-suite-01/matrix/manifest.json"
+    "manifest_path": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/title-retry-source-suite-02/matrix/manifest.json"
   },
   "release_ledger": {
     "schema": "penta-release-ledger-v1",
-    "accepted_deviation_count": 19,
+    "accepted_deviation_count": 21,
     "accepted_deviations": [
       {
         "id": "boss_angela_loop_speedup",
         "scope": "angela",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1984732824427482,
-        "deviation_percent": 19.84732824427482,
+        "ratio_dx_over_og": 1.1704834605597965,
+        "deviation_percent": 17.048346055979646,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5596,8 +5676,8 @@
         "scope": "angela",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8315905338470005,
-        "deviation_percent": 16.840946615299945,
+        "ratio_dx_over_og": 0.8427561837455831,
+        "deviation_percent": 15.724381625441685,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5608,8 +5688,8 @@
         "scope": "angela",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1808924633545206,
-        "deviation_percent": 18.08924633545206,
+        "ratio_dx_over_og": 1.1846153846153844,
+        "deviation_percent": 18.46153846153844,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -5630,8 +5710,8 @@
         "scope": "cameo",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.836424957841484,
-        "deviation_percent": 16.357504215851606,
+        "ratio_dx_over_og": 0.8372681281618887,
+        "deviation_percent": 16.27318718381113,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5653,8 +5733,8 @@
         "scope": "faze",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1274238227146816,
-        "deviation_percent": 12.742382271468156,
+        "ratio_dx_over_og": 1.1301939058171746,
+        "deviation_percent": 13.01939058171746,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5664,8 +5744,8 @@
         "scope": "faze",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8795025728987993,
-        "deviation_percent": 12.049742710120071,
+        "ratio_dx_over_og": 0.8813120414328872,
+        "deviation_percent": 11.868795856711278,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5676,8 +5756,8 @@
         "scope": "faze",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1564426854799392,
-        "deviation_percent": 15.644268547993923,
+        "ratio_dx_over_og": 1.146000343563903,
+        "deviation_percent": 14.600034356390301,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -5687,8 +5767,8 @@
         "scope": "penta_dragon",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1408045977011494,
-        "deviation_percent": 14.080459770114938,
+        "ratio_dx_over_og": 1.132183908045977,
+        "deviation_percent": 13.218390804597702,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5698,8 +5778,8 @@
         "scope": "penta_dragon",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8905674281503315,
-        "deviation_percent": 10.943257184966848,
+        "ratio_dx_over_og": 0.8703770197486534,
+        "deviation_percent": 12.962298025134656,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5710,8 +5790,8 @@
         "scope": "penta_dragon",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1244937753112343,
-        "deviation_percent": 12.449377531123428,
+        "ratio_dx_over_og": 1.1454431494276889,
+        "deviation_percent": 14.544314942768889,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -5721,8 +5801,8 @@
         "scope": "riff",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1604584527220632,
-        "deviation_percent": 16.045845272206314,
+        "ratio_dx_over_og": 1.1289398280802292,
+        "deviation_percent": 12.893982808022919,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5732,8 +5812,8 @@
         "scope": "riff",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8826530612244898,
-        "deviation_percent": 11.734693877551017,
+        "ratio_dx_over_og": 0.9244186046511629,
+        "deviation_percent": 7.558139534883712,
         "target_percent": 2.0,
         "pairing_confidence": "thin",
         "policy": "accepted_bounded_speedup",
@@ -5744,8 +5824,8 @@
         "scope": "riff",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1416184564277974,
-        "deviation_percent": 14.161845642779735,
+        "ratio_dx_over_og": 1.0952898806581457,
+        "deviation_percent": 9.52898806581457,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -5755,8 +5835,8 @@
         "scope": "shalamar",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.0534124629080117,
-        "deviation_percent": 5.3412462908011715,
+        "ratio_dx_over_og": 1.0243079323659863,
+        "deviation_percent": 2.4307932365986273,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5766,31 +5846,54 @@
         "scope": "shalamar",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.945888368129527,
-        "deviation_percent": 5.411163187047297,
+        "ratio_dx_over_og": 0.9548359608010226,
+        "deviation_percent": 4.516403919897738,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_trajectory"
       },
       {
-        "id": "boss_shalamar_publication_phase_deviation",
-        "scope": "shalamar",
+        "id": "boss_ted_publication_phase_deviation",
+        "scope": "ted",
         "measurement": "publication_event_rate",
-        "direction": "faster",
-        "ratio_dx_over_og": 1.032565228545128,
-        "deviation_percent": 3.256522854512811,
+        "direction": "slower",
+        "ratio_dx_over_og": 0.9849210051683668,
+        "deviation_percent": 1.507899483163322,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
+      },
+      {
+        "id": "stage_5_speed",
+        "scope": "stage_5",
+        "measurement": "input_identical_gameplay_throughput",
+        "direction": "slower",
+        "ratio_dx_over_og": 0.9646,
+        "deviation_percent": 3.5399999999999987,
+        "target_percent": 2.0,
+        "accepted_floor_ratio": 0.95,
+        "policy": "accepted_slowdown_floor",
+        "evidence": "gameplay_speed"
+      },
+      {
+        "id": "ted_publication_cadence",
+        "scope": "ted",
+        "measurement": "publication_event_rate",
+        "direction": "slower",
+        "ratio_dx_over_og": 0.9849210051683668,
+        "deviation_percent": 1.507899483163322,
+        "target_percent": 1.0,
+        "policy": "accepted_phase_deviation",
+        "evidence": "ted_readiness"
       },
       {
         "id": "title_attract_combined_duration",
         "scope": "title_attract_demo",
         "measurement": "combined_route_duration",
         "direction": "slower",
-        "ratio_dx_over_og": 1.1066192803198578,
-        "deviation_percent": 10.661928031985779,
+        "ratio_dx_over_og": 1.0955131052865392,
+        "deviation_percent": 9.551310528653921,
         "release_envelope_percent": 15.0,
         "policy": "accepted_combined_route_envelope",
         "evidence": "title_attract"
@@ -5800,12 +5903,12 @@
       {
         "boss": "angela",
         "classification": "paired",
-        "matched_transitions": 314,
-        "slip_aware_matched": 314,
-        "ratio_dx_over_og_frames_per_iter": 0.8315905338470007,
-        "slowdown_percent": -16.840946615299934,
+        "matched_transitions": 380,
+        "slip_aware_matched": 380,
+        "ratio_dx_over_og_frames_per_iter": 0.8444902499672818,
+        "slowdown_percent": -15.550975003271816,
         "within_two_percent": false,
-        "transition_slowdown_percent": -16.840946615299945,
+        "transition_slowdown_percent": -15.724381625441685,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5816,10 +5919,10 @@
         "classification": "paired",
         "matched_transitions": 435,
         "slip_aware_matched": 435,
-        "ratio_dx_over_og_frames_per_iter": 0.8364249578414841,
-        "slowdown_percent": -16.35750421585159,
+        "ratio_dx_over_og_frames_per_iter": 0.8372681281618888,
+        "slowdown_percent": -16.27318718381112,
         "within_two_percent": false,
-        "transition_slowdown_percent": -16.357504215851606,
+        "transition_slowdown_percent": -16.27318718381113,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5830,10 +5933,10 @@
         "classification": "paired",
         "matched_transitions": 288,
         "slip_aware_matched": 288,
-        "ratio_dx_over_og_frames_per_iter": 1.0272965879265092,
-        "slowdown_percent": 2.729658792650924,
+        "ratio_dx_over_og_frames_per_iter": 1.025721784776903,
+        "slowdown_percent": 2.57217847769029,
         "within_two_percent": false,
-        "transition_slowdown_percent": 2.729658792650902,
+        "transition_slowdown_percent": 2.572178477690268,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_operator_slowdown",
@@ -5842,12 +5945,12 @@
       {
         "boss": "faze",
         "classification": "paired",
-        "matched_transitions": 455,
-        "slip_aware_matched": 455,
-        "ratio_dx_over_og_frames_per_iter": 0.8813980525817708,
-        "slowdown_percent": -11.860194741822916,
+        "matched_transitions": 452,
+        "slip_aware_matched": 452,
+        "ratio_dx_over_og_frames_per_iter": 0.8813120414328872,
+        "slowdown_percent": -11.868795856711278,
         "within_two_percent": false,
-        "transition_slowdown_percent": -12.049742710120071,
+        "transition_slowdown_percent": -11.868795856711278,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5856,12 +5959,12 @@
       {
         "boss": "penta_dragon",
         "classification": "paired",
-        "matched_transitions": 485,
-        "slip_aware_matched": 485,
-        "ratio_dx_over_og_frames_per_iter": 0.892276770622789,
-        "slowdown_percent": -10.772322937721102,
+        "matched_transitions": 499,
+        "slip_aware_matched": 499,
+        "ratio_dx_over_og_frames_per_iter": 0.8720038926827631,
+        "slowdown_percent": -12.799610731723687,
         "within_two_percent": false,
-        "transition_slowdown_percent": -10.943257184966848,
+        "transition_slowdown_percent": -12.962298025134656,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5870,12 +5973,12 @@
       {
         "boss": "riff",
         "classification": "paired",
-        "matched_transitions": 42,
-        "slip_aware_matched": 42,
-        "ratio_dx_over_og_frames_per_iter": 0.8826530612244896,
-        "slowdown_percent": -11.734693877551038,
+        "matched_transitions": 37,
+        "slip_aware_matched": 37,
+        "ratio_dx_over_og_frames_per_iter": 0.9244186046511629,
+        "slowdown_percent": -7.558139534883712,
         "within_two_percent": false,
-        "transition_slowdown_percent": -11.734693877551017,
+        "transition_slowdown_percent": -7.558139534883712,
         "transition_within_two_percent": false,
         "pairing_confidence": "thin",
         "policy_status": "accepted_bounded_speedup",
@@ -5886,10 +5989,10 @@
         "classification": "paired",
         "matched_transitions": 425,
         "slip_aware_matched": 425,
-        "ratio_dx_over_og_frames_per_iter": 0.945888368129527,
-        "slowdown_percent": -5.411163187047297,
+        "ratio_dx_over_og_frames_per_iter": 0.9548359608010226,
+        "slowdown_percent": -4.516403919897738,
         "within_two_percent": false,
-        "transition_slowdown_percent": -5.411163187047297,
+        "transition_slowdown_percent": -4.516403919897738,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -5898,12 +6001,12 @@
       {
         "boss": "ted",
         "classification": "paired",
-        "matched_transitions": 290,
-        "slip_aware_matched": 290,
-        "ratio_dx_over_og_frames_per_iter": 1.0103578154425612,
-        "slowdown_percent": 1.0357815442561202,
+        "matched_transitions": 288,
+        "slip_aware_matched": 288,
+        "ratio_dx_over_og_frames_per_iter": 1.0188365650969529,
+        "slowdown_percent": 1.8836565096952862,
         "within_two_percent": true,
-        "transition_slowdown_percent": 1.0357815442561202,
+        "transition_slowdown_percent": 1.8836565096952862,
         "transition_within_two_percent": true,
         "pairing_confidence": "deep",
         "policy_status": "within_target",
@@ -5914,10 +6017,10 @@
         "classification": "paired",
         "matched_transitions": 178,
         "slip_aware_matched": 254,
-        "ratio_dx_over_og_frames_per_iter": 1.014800834052344,
-        "slowdown_percent": 1.4800834052344003,
+        "ratio_dx_over_og_frames_per_iter": 1.0053314639056659,
+        "slowdown_percent": 0.5331463905665856,
         "within_two_percent": true,
-        "transition_slowdown_percent": 0.1436781609195359,
+        "transition_slowdown_percent": -0.5747126436781547,
         "transition_within_two_percent": true,
         "pairing_confidence": "deep",
         "policy_status": "within_target",
@@ -5935,38 +6038,38 @@
     "evidence": {
       "title_attract": {
         "path": "artifacts/title-idle-reel.summary.json",
-        "sha256": "a9afed7cce7f43d41d8d56f36e05c29dc50e73cf63b4cf6a17e63dd51cdb2c4d"
+        "sha256": "2b4c76f4c53fec5bde5dd9296578b888b81642f29f5b36b9c7b189f9df9601e5"
       },
       "gameplay_speed": {
         "path": "artifacts/gameplay-speed/manifest.json",
-        "sha256": "7c999377587901ee7ac25546a264370f8f6ce0b0018a66b3a15db336ad1dd3b4"
+        "sha256": "aaee83624c1ae087f39c95e09498fdd07d2590f478f3f0a6baef31be626c4fe7"
       },
       "gameplay_movement_stress": {
         "path": "artifacts/gameplay-movement-stress/receipt.json",
-        "sha256": "57707d80cb4654bec19593082f59fdfce95881e261e886d1045a1f1faed23696"
+        "sha256": "28682047d8fda0cfd4c68c24b1a9470074a98addbfc9450fabe4ce2d34cefa59"
       },
       "boss_speed": {
         "path": "artifacts/boss-speed-parity.json",
-        "sha256": "c349fcbd8e602a90adc942b624f340b2af896b163fdafd2e77ce86ada1507215"
+        "sha256": "cbc5adec84f19efc07bbbe6b26432be31f2e4931bb042b2fc90038c34b6d5430"
       },
       "boss_publication": {
         "path": "artifacts/boss-publication-cadence.json",
-        "sha256": "d172b6de213f2eddb47510ed9c14b83b79624196a6e6b39a31a862dee73fa003"
+        "sha256": "ca55a482ec061ebc074aec7ff70c9d7a27999687b9cce38e6badcbaeedea83ea"
       },
       "boss_trajectory": {
         "path": "artifacts/boss-trajectory-pairing.json",
-        "sha256": "a87a222332ecc31f043c5fbf99a6a3313e5eab15219e5a7a566a7f9461872e08"
+        "sha256": "c9507290f1f5f06e45716390839a264f2e1b99ae88b2ee70ff051cd4dc7c0016"
       },
       "boss_trajectory_null": {
         "path": "artifacts/boss-trajectory-pairing-null.json",
-        "sha256": "afcc3b89f54050697d8741c21180322e479f2d072d3f021df7655b434dc64359"
+        "sha256": "3695930195ac9a2788a6a473f4bffcaa9cf44fb26db4ffd7ea1be8439b548de4"
       },
       "ted_readiness": {
         "path": "artifacts/ted-release-readiness/report.json",
-        "sha256": "e16ece1822a186b34f4e6020f141398c2c199bca375846810c0fffdb741611a2"
+        "sha256": "4b19a13beba40f942321a375c3b5c1dac7c54886e7ae7c48b02eb68cf1247328"
       }
     },
-    "profile": "stream-release-lock-original-source-v2",
+    "profile": "stream-release-lock-original-source-v3",
     "stage7_world_position": {
       "classification": "EQUAL_START_WORLD_COMBINED_SEEDS_FLOOR_97",
       "metric": {
@@ -5994,17 +6097,17 @@
         ],
         "minimum_usable_seeds": 7,
         "minimum_combined_half_cycles": 120,
-        "measured_half_cycles": 220,
+        "measured_half_cycles": 231,
         "maximum_uncontested_loop_delta": 20,
         "elapsed_frames": {
-          "original_a": 12988,
-          "original_b": 12988,
-          "dx_a": 13230,
-          "dx_b": 13230
+          "original_a": 13624,
+          "original_b": 13624,
+          "dx_a": 13998,
+          "dx_b": 13998
         },
         "throughput_ratio_by_replay": {
-          "a": 0.981708238851096,
-          "b": 0.981708238851096
+          "a": 0.9732818974139162,
+          "b": 0.9732818974139162
         },
         "target_floor": 0.97,
         "target_ceiling": 1.02,
@@ -6015,16 +6118,16 @@
         "per_seed": {
           "0": {
             "usable": true,
-            "measured_half_cycles": 21,
+            "measured_half_cycles": 3,
             "elapsed_frames": {
-              "original_a": 1251,
-              "original_b": 1251,
-              "dx_a": 1251,
-              "dx_b": 1251
+              "original_a": 184,
+              "original_b": 184,
+              "dx_a": 187,
+              "dx_b": 187
             },
             "throughput_ratio_by_replay": {
-              "a": 1.0,
-              "b": 1.0
+              "a": 0.983957219251337,
+              "b": 0.983957219251337
             },
             "contact_affected_half_cycles": [
               26,
@@ -6032,7 +6135,20 @@
               28,
               29,
               30,
-              31
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44
             ],
             "settle_half_cycle_by_trace": {
               "original_a": 22,
@@ -6043,76 +6159,42 @@
           },
           "10": {
             "usable": true,
-            "measured_half_cycles": 37,
+            "measured_half_cycles": 32,
             "elapsed_frames": {
-              "original_a": 2189,
-              "original_b": 2189,
-              "dx_a": 2208,
-              "dx_b": 2208
+              "original_a": 1894,
+              "original_b": 1894,
+              "dx_a": 1911,
+              "dx_b": 1911
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9913949275362319,
-              "b": 0.9913949275362319
+              "a": 0.9911041339612768,
+              "b": 0.9911041339612768
             },
             "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
               "original_a": 20,
               "original_b": 20,
-              "dx_a": 20,
-              "dx_b": 20
+              "dx_a": 22,
+              "dx_b": 22
             }
           },
           "20": {
             "usable": true,
             "measured_half_cycles": 16,
             "elapsed_frames": {
-              "original_a": 942,
-              "original_b": 942,
-              "dx_a": 984,
-              "dx_b": 984
+              "original_a": 947,
+              "original_b": 947,
+              "dx_a": 986,
+              "dx_b": 986
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9573170731707317,
-              "b": 0.9573170731707317
+              "a": 0.960446247464503,
+              "b": 0.960446247464503
             },
             "contact_affected_half_cycles": [
-              32,
-              33,
-              34,
-              35,
-              36,
-              37,
-              38,
-              39,
-              40,
-              41
-            ],
-            "settle_half_cycle_by_trace": {
-              "original_a": 22,
-              "original_b": 22,
-              "dx_a": 20,
-              "dx_b": 20
-            }
-          },
-          "30": {
-            "usable": true,
-            "measured_half_cycles": 16,
-            "elapsed_frames": {
-              "original_a": 954,
-              "original_b": 954,
-              "dx_a": 1005,
-              "dx_b": 1005
-            },
-            "throughput_ratio_by_replay": {
-              "a": 0.9492537313432836,
-              "b": 0.9492537313432836
-            },
-            "contact_affected_half_cycles": [
-              27,
-              28,
-              29,
-              30,
-              31,
+              41,
+              42,
+              43,
               44,
               45,
               46
@@ -6120,91 +6202,118 @@
             "settle_half_cycle_by_trace": {
               "original_a": 22,
               "original_b": 22,
-              "dx_a": 22,
-              "dx_b": 22
+              "dx_a": 24,
+              "dx_b": 24
             }
           },
-          "50": {
+          "30": {
             "usable": true,
-            "measured_half_cycles": 32,
+            "measured_half_cycles": 26,
             "elapsed_frames": {
-              "original_a": 1897,
-              "original_b": 1897,
-              "dx_a": 1911,
-              "dx_b": 1911
+              "original_a": 1544,
+              "original_b": 1544,
+              "dx_a": 1552,
+              "dx_b": 1552
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9926739926739927,
-              "b": 0.9926739926739927
-            },
-            "contact_affected_half_cycles": [],
-            "settle_half_cycle_by_trace": {
-              "original_a": 20,
-              "original_b": 20,
-              "dx_a": 22,
-              "dx_b": 22
-            }
-          },
-          "60": {
-            "usable": true,
-            "measured_half_cycles": 34,
-            "elapsed_frames": {
-              "original_a": 2001,
-              "original_b": 2001,
-              "dx_a": 2031,
-              "dx_b": 2031
-            },
-            "throughput_ratio_by_replay": {
-              "a": 0.9852289512555391,
-              "b": 0.9852289512555391
+              "a": 0.9948453608247423,
+              "b": 0.9948453608247423
             },
             "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
               "original_a": 22,
               "original_b": 22,
+              "dx_a": 24,
+              "dx_b": 24
+            }
+          },
+          "50": {
+            "usable": true,
+            "measured_half_cycles": 37,
+            "elapsed_frames": {
+              "original_a": 2191,
+              "original_b": 2191,
+              "dx_a": 2244,
+              "dx_b": 2244
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9763814616755794,
+              "b": 0.9763814616755794
+            },
+            "contact_affected_half_cycles": [],
+            "settle_half_cycle_by_trace": {
+              "original_a": 20,
+              "original_b": 20,
               "dx_a": 20,
               "dx_b": 20
             }
           },
-          "70": {
+          "60": {
             "usable": true,
-            "measured_half_cycles": 26,
+            "measured_half_cycles": 31,
             "elapsed_frames": {
-              "original_a": 1538,
-              "original_b": 1538,
-              "dx_a": 1553,
-              "dx_b": 1553
+              "original_a": 1826,
+              "original_b": 1826,
+              "dx_a": 1857,
+              "dx_b": 1857
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9903412749517064,
-              "b": 0.9903412749517064
+              "a": 0.9833064081852451,
+              "b": 0.9833064081852451
+            },
+            "contact_affected_half_cycles": [
+              54
+            ],
+            "settle_half_cycle_by_trace": {
+              "original_a": 22,
+              "original_b": 22,
+              "dx_a": 22,
+              "dx_b": 22
+            }
+          },
+          "70": {
+            "usable": true,
+            "measured_half_cycles": 23,
+            "elapsed_frames": {
+              "original_a": 1364,
+              "original_b": 1364,
+              "dx_a": 1414,
+              "dx_b": 1414
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9646393210749646,
+              "b": 0.9646393210749646
             },
             "contact_affected_half_cycles": [
               29,
               30,
               31,
               32,
-              33
+              33,
+              49,
+              50,
+              51,
+              52
             ],
             "settle_half_cycle_by_trace": {
               "original_a": 20,
               "original_b": 20,
-              "dx_a": 22,
-              "dx_b": 22
+              "dx_a": 20,
+              "dx_b": 20
             }
           },
           "80": {
             "usable": true,
-            "measured_half_cycles": 33,
+            "measured_half_cycles": 30,
             "elapsed_frames": {
-              "original_a": 1924,
-              "original_b": 1924,
-              "dx_a": 1970,
-              "dx_b": 1970
+              "original_a": 1749,
+              "original_b": 1749,
+              "dx_a": 1876,
+              "dx_b": 1876
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9766497461928934,
-              "b": 0.9766497461928934
+              "a": 0.9323027718550106,
+              "b": 0.9323027718550106
             },
             "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
@@ -6216,34 +6325,18 @@
           },
           "90": {
             "usable": true,
-            "measured_half_cycles": 5,
+            "measured_half_cycles": 33,
             "elapsed_frames": {
-              "original_a": 292,
-              "original_b": 292,
-              "dx_a": 317,
-              "dx_b": 317
+              "original_a": 1925,
+              "original_b": 1925,
+              "dx_a": 1971,
+              "dx_b": 1971
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9211356466876972,
-              "b": 0.9211356466876972
+              "a": 0.9766615930999493,
+              "b": 0.9766615930999493
             },
-            "contact_affected_half_cycles": [
-              27,
-              28,
-              29,
-              30,
-              31,
-              32,
-              33,
-              34,
-              35,
-              36,
-              37,
-              38,
-              39,
-              41,
-              42
-            ],
+            "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
               "original_a": 22,
               "original_b": 22,
@@ -6255,20 +6348,20 @@
       },
       "evidence": "gameplay_movement_stress"
     },
-    "ledger_sha256": "50d4175fff717e021244352f0ef9d5759a1167b921017dfa85d2e5226ee646e2"
+    "ledger_sha256": "efb533211d4dd6c3812dd8ce1aea57dfa4880e3099da74d95b066a5bef7e65f1"
   },
   "rom_committed": false,
   "hardware_status": "pending-reservation-backed-mister",
   "source_builds": [
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/return-visibility-full-suite-01/build/source-a/build-receipt.json",
-      "receipt_sha256": "5b1ee95945d48a7d20e5a4b48289a4a5cca21c430fff5684eb062a2ae3f96d66",
-      "source_fingerprint": "3f2c77f0ce62055310048674f764157473a94e2f45fcd6cd8c8577a7daaf9ffe"
+      "receipt": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/title-retry-source-suite-02/build/source-a/build-receipt.json",
+      "receipt_sha256": "807c5684bd1957363efe1cb465759a2efd8922f541fe1205366468ffaba0b6a3",
+      "source_fingerprint": "44a8c559cfa1e06a7864d7127d57f27f40ee2bbd0dc8df7b62b248ecc6cf5357"
     },
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/return-visibility-full-suite-01/build/source-b/build-receipt.json",
-      "receipt_sha256": "6b1c89e1a4551919402810db7f02864ff8b7883ff5ae00968b426bc481729c7c",
-      "source_fingerprint": "3f2c77f0ce62055310048674f764157473a94e2f45fcd6cd8c8577a7daaf9ffe"
+      "receipt": "/home/struktured/projects/penta-dragon-dx-claude/tmp/oct06-playtest-source/tmp/title-retry-source-suite-02/build/source-b/build-receipt.json",
+      "receipt_sha256": "421622752ecc7c06aa681ecd9683c618323205cc756214fcf6abbb30646815d0",
+      "source_fingerprint": "44a8c559cfa1e06a7864d7127d57f27f40ee2bbd0dc8df7b62b248ecc6cf5357"
     }
   ]
 }

@@ -4,6 +4,12 @@ local frame=0
 local defeat_frame=tonumber(os.getenv('TRANSITION_DEFEAT_FRAME') or '180')
 local score_poll=false
 local event_injected=false
+local function native_shalamar_scene(scene,native_scene)
+ -- #59: the broken control intentionally retains cached scene0A. Never
+ -- require the graphics cache under test to be repaired before delivering
+ -- the boss-HP stimulus. Native scene identity alone owns this decision.
+ return scene==0x0C or (scene==0x0B and native_scene==0x0C)
+end
 local edges=assert(io.open(out..'/score-edges.tsv','w'))
 edges:write('frame\tpc\tbank\n')
 if os.getenv('TRANSITION_NATIVE_EVENT')=='1' then
@@ -57,7 +63,7 @@ callbacks:add('frame',function()
   -- Native bank2:406F..4079 checks DDA3/4 for zero before JP4244.
   -- Do not touch Sara health DCBB, scene, palette, OAM or code.
   local scene=w:read8(0x1880)
-  assert(scene==0x0C or (scene==0x0B and emu:read8(0xFFB7)==0x0C and w:read8(0x1F0D)==0x0C),'must stimulate live Shalamar, not another scene')
+  assert(native_shalamar_scene(scene,emu:read8(0xFFB7)), 'must stimulate live Shalamar, not another scene')
   w:write8(0x1DA3,0); w:write8(0x1DA4,0)
  end
  trace:write(string.format('%d\t%02X\t%02X\t%d\t%02X\t%d\t%d\t%d\n',
@@ -70,4 +76,9 @@ dofile(assert(os.getenv('SECRET_REPLAY_PROBE')))
 -- card remains visible for inspection; resume its native A pulses at1600.
 callbacks:add('frame',function()
  if frame>=defeat_frame and frame<defeat_frame+1420 then emu:setKeys(0) end
+ local close_at=tonumber(os.getenv('TRANSITION_CLOSE_MENU_FRAME') or '-1000')
+ if frame==close_at then
+  edges:write(string.format('%d\tSELECT_CLOSE_INPUT\t%02X\n',frame,emu:read8(0xFF99)));edges:flush()
+ end
+ if frame>=close_at and frame<close_at+6 then emu:setKeys(4) end
 end)

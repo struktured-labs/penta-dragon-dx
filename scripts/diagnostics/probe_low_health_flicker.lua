@@ -29,8 +29,6 @@ local REQUIRE_SCENE0B = os.getenv("LOW_HEALTH_REQUIRE_SCENE0B") == "1"
 local SCENE0B_FRAMES = tonumber(
   os.getenv("LOW_HEALTH_SCENE0B_FRAMES") or "120")
 local SCENE0B_HEALTH = 0x40
-local HEALTHY_MAIN = tonumber(os.getenv("LOW_HEALTH_HEALTHY_MAIN") or "1")
-local LOW_SUB = tonumber(os.getenv("LOW_HEALTH_LOW_SUB") or "12")
 local POST_TRIGGER_KEYS = tonumber(
   os.getenv("LOW_HEALTH_POST_TRIGGER_KEYS") or "0")
 local RECOVERY_DRIVE_FRAMES = tonumber(os.getenv("LOW_HEALTH_RECOVERY_DRIVE_FRAMES") or "0")
@@ -1454,12 +1452,10 @@ callbacks:add("frame", function()
     and (frame <= SETTLE_DRIVE_FRAMES or published_expected_planes[displayed_map] == nil)
   emu:setKeys(settling_unowned and SETTLE_KEYS
     or (post_trigger_frame > 0 and drive_publication and POST_TRIGGER_KEYS or 0))
-  -- The historical receipt began inside the warning band, so it could never
-  -- exercise the exact health/music transition reported by the player. Hold
-  -- the checked-in fixture one unit above the threshold through settling and
-  -- the requested pre-trigger sample window, then cross to its original
-  -- survivable low-health value exactly once.
-  local stimulus_phase = "legacy"
+  -- #37: all profiles use native health, never the inventory cursor pair.
+  -- The bounded profile additionally verifies recovery; the default holds
+  -- the warning tier through the rest of the requested observation window.
+  local stimulus_phase = "pre"
   if REQUIRE_SCENE0B then
     if post_trigger_frame <= 0 then
       native_assistance.write(0xDCBB, 0xFF)
@@ -1476,13 +1472,10 @@ callbacks:add("frame", function()
       stimulus_phase = "recovered"
     end
   elseif frame <= SETTLE + PRE_TRIGGER then
-    native_assistance.write(0xDCDD, HEALTHY_MAIN)
+    native_assistance.write(0xDCBB, 0xFF)
     stimulus_phase = "pre"
   elseif frame >= SETTLE + PRE_TRIGGER + 1 then
-    -- Legacy warning/music profile.  It controls the displayed health pair;
-    -- the distinct scene-$0B profile above owns the real DCBB state machine.
-    native_assistance.write(0xDCDC, LOW_SUB)
-    native_assistance.write(0xDCDD, 0)
+    native_assistance.write(0xDCBB, SCENE0B_HEALTH)
     stimulus_phase = "low"
   end
   if frame <= SETTLE then return end
@@ -1545,7 +1538,7 @@ callbacks:add("frame", function()
     "\t%d\t%d\t%s\t%d\t%d\t%s\t%s\t%s\t%s" ..
     "\t%s\t%02X\t%02X\t%02X\t%02X\t%02X" ..
     "\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%04X\n",
-    sample, frame, hp_main == 0 and "low" or "pre",
+    sample, frame, emu.memory.wram:read8(0x1CBB) < 0x80 and "low" or "pre",
     pc, dma_source, dma_unreadable and 1 or 0,
     compiler_unreadable and 1 or 0,
     scene, emu:read8(0xFFC1),
@@ -1680,3 +1673,12 @@ callbacks:add("frame", function()
     os.exit(0)
   end
 end)
+
+-- #67 diagnostic use of the existing #43 pre-first-CPU barrier. The native
+-- adapter releases execution only after exact-state restore and all observer
+-- callbacks are installed. This does not edit or rewind emulated state.
+if os.getenv("ENTRY_NATIVE_START_GATE") then
+  local ready = assert(io.open(os.getenv("ENTRY_NATIVE_START_GATE"), "w"))
+  ready:write("low-health observer initialization complete\n")
+  ready:close()
+end

@@ -141,6 +141,19 @@ def stage7_guarded_menu_prelude(base: bytes) -> bytes:
     return bytes(code)
 
 
+def lowhealth_menu_prelude_exact(rom: bytes, base: bytes) -> bool:
+    """#59 owns the local resolver in the formerly empty selector tail."""
+    import lowhealth_candidate_lineage as lowhealth
+    if not lowhealth.is_candidate(rom):
+        return False
+    parent, rebuilt = lowhealth.source_replay(rom)
+    offset = bank_offset(menu_icons.MENU_PRELUDE_BANK, menu_icons.MENU_PRELUDE_ADDR)
+    inherited = stage7_guarded_menu_prelude(base)
+    if not exact(parent, offset, inherited):
+        return False
+    return exact(rom, offset, rebuilt[offset:offset + len(inherited)])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom", type=Path)
@@ -490,7 +503,7 @@ def main() -> int:
                 rom,
                 bank_offset(menu_icons.MENU_PRELUDE_BANK, menu_icons.MENU_PRELUDE_ADDR),
                 stage7_guarded_menu_prelude(menu_window_prelude),
-            ),
+            ) or lowhealth_menu_prelude_exact(rom, menu_window_prelude),
         })
     status = all(checks.values())
     receipt = {

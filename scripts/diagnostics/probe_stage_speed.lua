@@ -38,7 +38,7 @@ local camera_trace = os.getenv("STAGE_SPEED_CAMERA_TRACE") == "1"
   and assert(io.open(OUT .. ".camera.tsv", "w")) or nil
 local loop_trace = camera_trace and assert(io.open(OUT .. ".loops.tsv", "w")) or nil
 if loop_trace then
-  loop_trace:write("loop\tframe\tscene\troom\tworld_x\tworld_y\tsection_cycle\tarena\tlast_polled_keys\tffc8\tffc9\tffca\tffd3\tffeb\tffe4\tcycle\tly\tdiv\ttima\tiflag\tie\n")
+  loop_trace:write("loop\tframe\tscene\troom\tworld_x\tworld_y\tsection_cycle\tarena\tlast_polled_keys\tffc8\tffc9\tffca\tffd3\tffeb\tffe4\tcycle\tly\tdiv\ttima\tiflag\tie\tsara_form\tpowerup\tdc81_raw\thealth\n")
 end
 if camera_trace then
   camera_trace:write("frame\tphase\tscene\tstage\troom\tscx\tscy\tworld_x\tworld_y\tpending_map\tlatched_x\tlcdc\tmode97\tmain_loop_hits\ttile_copy_hits\tsection_cycle\n")
@@ -90,7 +90,8 @@ local WINDOW_HELPER_ADDR = tonumber(
   os.getenv("STAGE_SPEED_WINDOW_HELPER_ADDR") or "0")
 local WINDOW_HELPER_BANK = tonumber(
   os.getenv("STAGE_SPEED_WINDOW_HELPER_BANK") or "0")
-local EXPECTED_SCENE = TARGET + 2
+local EXPECTED_SCENE = tonumber(os.getenv("STAGE_SPEED_HEALTH") or "255") == 109
+  and 11 or TARGET + 2
 local KEY_A, KEY_START = 0x01, 0x08
 local KEY_RIGHT, KEY_LEFT, KEY_UP, KEY_DOWN = 0x10, 0x20, 0x40, 0x80
 
@@ -127,7 +128,14 @@ end
 local atomic_call_indices = {}
 local trace_addr_hits, trace_addr_samples, trace_readiness_samples, trace_addrs = {}, {}, {}, {}
 local pc_sample_counts = {}
-local native_assistance = {writes = 0, bank_shadow_counts = {}}
+local native_assistance = {writes = 0, bank_shadow_counts = {},
+  health = tonumber(os.getenv("STAGE_SPEED_HEALTH") or "255"),
+  start_policy = os.getenv("STAGE_SPEED_START_POLICY") or "stable-120-frames"}
+assert(native_assistance.start_policy == "stable-120-frames"
+  or (native_assistance.start_policy == "first-lowhealth-loop"
+    and native_assistance.health == 109), "unsupported measurement start policy")
+assert(native_assistance.health == 255 or native_assistance.health == 109,
+  "unsupported health assistance")
 function native_assistance.write(address, value)
   local svbk = emu:read8(0xFF70) & 7
   native_assistance.writes = native_assistance.writes + 1
@@ -144,7 +152,7 @@ for raw in string.gmatch(TRACE_ADDRS_RAW, "[^,]+") do
   if address then
     trace_addrs[#trace_addrs + 1] = address
     trace_addr_hits[address] = 0
-    trace_addr_samples[address] = {bank_shadow_hits = {}}
+    trace_addr_samples[address] = {bank_shadow_hits = {}, code_hits = {}}
     trace_readiness_samples[address] = {}
   end
 end
@@ -580,7 +588,25 @@ breakpoints_available = pcall(function()
     -- measurement after scene stability, then open it only on this real
     -- main-loop anchor so input, telemetry, and both replay windows share an
     -- exact CPU boundary.
+    if phase == "loading" and native_assistance.start_policy == "first-lowhealth-loop"
+        and emu.memory.wram:read8(0x1880) == EXPECTED_SCENE
+        and emu:read8(0xFFBA) == TARGET then
+      -- #66 diagnostic only: omit the display-frame hold, not native
+      -- encounters. No RNG, enemy, movement or interrupt-state writes.
+      phase = "sync"
+    end
     if phase == "sync" then
+      -- #66: a display-frame loading hold does not synchronize native
+      -- encounters. Preserve the actual initial slots and RNG, without
+      -- mutating them, before the first measured input/loop.
+      local w = assert(emu.memory.wram)
+      local slots = {}
+      for address = 0x1C80, 0x1CAF do
+        slots[#slots + 1] = string.format("%02x", w:read8(address))
+      end
+      native_assistance.initial_encounter = string.format(
+        '"slots_dc80_dcaf":"%s","rng_ffd1":%d,"stride_ffc1":%d',
+        table.concat(slots), emu:read8(0xFFD1), emu:read8(0xFFC1))
       phase = "play"
       play_frames = 0
       previous_scx = emu:read8(0xFF43)
@@ -590,7 +616,7 @@ breakpoints_available = pcall(function()
       main_loop_hits = main_loop_hits + 1
       if loop_trace then
         local wram = assert(emu.memory.wram)
-        loop_trace:write(string.format("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+        loop_trace:write(string.format("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
           main_loop_hits, play_frames, wram:read8(0x1880), emu:read8(0xFFBD),
           wram:read8(0x1C00) + 256 * wram:read8(0x1C01),
           wram:read8(0x1C02) + 256 * wram:read8(0x1C03),
@@ -598,7 +624,8 @@ breakpoints_available = pcall(function()
           emu:read8(0xFFC8), emu:read8(0xFFC9), emu:read8(0xFFCA),
           emu:read8(0xFFD3), emu:read8(0xFFEB), emu:read8(0xFFE4),
           emu:currentCycle(),emu:read8(0xFF44),emu:read8(0xFF04),
-          emu:read8(0xFF05),emu:read8(0xFF0F),emu:read8(0xFFFF)))
+          emu:read8(0xFF05),emu:read8(0xFF0F),emu:read8(0xFFFF),
+          emu:read8(0xFFBE),emu:read8(0xFFC0),wram:read8(0x1C81),wram:read8(0x1CBB)))
       end
       -- Separate diagnostic routes: choose input at the CPU loop anchor,
       -- not at a host-frame boundary. Keep the original timed routes intact.
@@ -615,6 +642,26 @@ breakpoints_available = pcall(function()
       last_main_loop_frame = play_frames
     end
   end, 0x016C)
+  if camera_trace and os.getenv("STAGE_SPEED_MOVE_WRITES") == "1" then
+    local moves = assert(io.open(OUT .. ".moves.tsv", "w"))
+    moves:write("frame\tloop\taddress\tpc\tbank\tbc\tde\thl\tffb0_d0\tdc00_40\n")
+    moves:flush()
+    local is_cgb = (emu:read8(0x0143) & 0x80) ~= 0
+    for _,address in ipairs({0xDC00,0xDC02,0xFFC1}) do
+      local target=address
+      emu:setWatchpoint(function()
+        if phase~="play" or (target ~= 0xFFC1 and play_frames>150) then return end
+        if target < 0xE000 and is_cgb and (emu:read8(0xFF70)&7)>1 then return end
+        local hram,ram={},{}
+        for p=0xFFB0,0xFFD0 do hram[#hram+1]=string.format("%02X",emu:read8(p)) end
+        for p=0x1C00,0x1C40 do ram[#ram+1]=string.format("%02X",emu.memory.wram:read8(p)) end
+        moves:write(string.format("%d\t%d\t%04X\t%04X\t%02X\t%04X\t%04X\t%04X\t%s\t%s\n",
+          play_frames,main_loop_hits,target,read_register("PC"),emu:read8(0xFF99),
+          read_register("BC"),read_register("DE"),read_register("HL"),table.concat(hram),table.concat(ram)))
+        moves:flush()
+      end,target,C.WATCHPOINT_TYPE.WRITE)
+    end
+  end
   if WINDOW_HELPER_ADDR > 0 and WINDOW_HELPER_BANK > 0 then
     emu:setBreakpoint(function()
       if (phase ~= "play" and phase ~= "drain")
@@ -937,6 +984,14 @@ breakpoints_available = pcall(function()
         -- for execution of the scene detector under investigation (#27).
         samples.bank_shadow_hits[emu:read8(0xFF99)] =
           (samples.bank_shadow_hits[emu:read8(0xFF99)] or 0) + 1
+        -- #66: record visible instruction bytes, not merely the mapper
+        -- shadow. A CPU address can belong to several unrelated routines.
+        local code = ""
+        for offset = 0, 7 do
+          code = code .. string.format("%02X", emu:read8(address + offset))
+        end
+        code = code .. string.format("/FFC1=%02X", emu:read8(0xFFC1))
+        samples.code_hits[code] = (samples.code_hits[code] or 0) + 1
         if #samples < 64 then
           -- FFA5 is the exact completed-map destination/dirty latch. Keeping
           -- it in generic trace samples lets carry-signal experiments prove
@@ -1248,7 +1303,14 @@ finish = function()
   local final_scene, final_scene_compiler_unreadable = scene_sample()
   if final_scene_compiler_unreadable then final_scene = EXPECTED_SCENE end
   handle:write(string.format('  "final_scene": %d,\n', final_scene))
+  handle:write(string.format('  "health_assistance": %d,\n', native_assistance.health))
+  handle:write(string.format('  "canonical_scene": %d,\n', emu:read8(0xFFB7)))
+  handle:write(string.format('  "selected_stage": %d,\n', emu:read8(0xFFBA)))
   handle:write(string.format('  "frames": %d,\n', play_frames))
+  handle:write(string.format('  "start_policy": "%s",\n', native_assistance.start_policy))
+  handle:write('  "initial_encounter": '
+    .. (native_assistance.initial_encounter
+      and ('{' .. native_assistance.initial_encounter .. '}') or 'null') .. ',\n')
   handle:write(string.format('  "sync_delay_frames": %d,\n', SYNC_DELAY))
   handle:write(string.format(
     '  "safe_boundary_drain_enabled": %s,\n',
@@ -1505,6 +1567,16 @@ finish = function()
   end
   handle:write(string.format(
     '  "trace_addr_bank_shadow_hits": {%s},\n', table.concat(trace_parts, ",")))
+  trace_parts = {}
+  for _, address in ipairs(trace_addrs) do
+    for code, count in pairs(trace_addr_samples[address].code_hits) do
+      trace_parts[#trace_parts + 1] = string.format(
+        '"0x%04X/%s":%d', address, code, count)
+    end
+  end
+  table.sort(trace_parts)
+  handle:write(string.format(
+    '  "trace_addr_code_hits": {%s},\n', table.concat(trace_parts, ",")))
   local trace_sample_parts = {}
   for _, address in ipairs(trace_addrs) do
     local samples = trace_addr_samples[address]
@@ -1706,7 +1778,7 @@ callbacks:add("frame", function()
   end
 
   -- #37: inventory cursor/state are not health; keep them native.
-  native_assistance.write(0xDCBB, 0xFF)
+  native_assistance.write(0xDCBB, native_assistance.health)
 
   if phase == "loading" then
     emu:write8(0xFFBA, TARGET)
@@ -1773,6 +1845,13 @@ callbacks:add("frame", function()
   end
 
   play_frames = play_frames + 1
+  -- #66: optional visual/state evidence alongside the measured route.
+  -- Never substitute these sparse samples for full-route qualification.
+  if os.getenv("STAGE_SPEED_CAPTURE_CHECKPOINTS") == "1"
+      and (play_frames == 1 or play_frames % 300 == 0) then
+    emu:screenshot(string.format("%s.frame-%04d.png", OUT, play_frames))
+    emu:saveStateFile(string.format("%s.frame-%04d.ss0", OUT, play_frames))
+  end
   local sampled_ffe4 = emu:read8(0xFFE4)
   if sampled_ffe4 == 0 then
     ffe4_zero_play_frames = ffe4_zero_play_frames + 1

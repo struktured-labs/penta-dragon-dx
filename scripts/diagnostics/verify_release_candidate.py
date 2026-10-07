@@ -1589,7 +1589,14 @@ def build_gates(
         }
         gates = [gate for gate in gates if gate.name not in legacy_ted_gates]
     import playtest_successor_lineage
-    if candidate_sha256 == playtest_successor_lineage.CANDIDATE_SHA:
+    import lowhealth_candidate_lineage
+    # #68: publication derives its roster from an authenticated SHA without
+    # materializing a placeholder ROM. Require these gates in both paths.
+    if candidate_sha256 in {
+        playtest_successor_lineage.CANDIDATE_SHA,
+        lowhealth_candidate_lineage.CANDIDATE_SHA,
+        *lowhealth_candidate_lineage.TITLE_SHAS,
+    }:
         gates.insert(3, Gate(
             "playtest_secret_boss_handoff",
             script("scripts/diagnostics/verify_playtest_boss_handoff.py", r,

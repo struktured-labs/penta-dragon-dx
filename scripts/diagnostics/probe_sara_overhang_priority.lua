@@ -1,7 +1,9 @@
 -- #14 Sara overhang priority probe (used by verify_sara_overhang_priority.py).
 -- Cold boot, native title route (Start, A x4, Select), one position assist
 -- (DC00..DC03 := 1240/1344 at frame 1201, the pre-secret corridor below the
--- black ceiling overhang), Down held for frames 1202..1212, no input after.
+-- black ceiling overhang), bounded Down approach to native world Y=1356.
+-- Stop by frame1230 even if the target is not reached; exact pose checks
+-- then fail. No camera/OAM correction or sample retiming is allowed.
 -- Assistance: DCBB := FF from frame 1201 (health only). Samples are exact
 -- frames; each writes one JSON line and a native 160x144 screenshot.
 local out = assert(os.getenv('PSO_OUT'))
@@ -26,8 +28,11 @@ callbacks:add('frame', function()
   if (n >= 193 and n < 199) or (n >= 241 and n < 247) or (n >= 291 and n < 297)
       or (n >= 391 and n < 397) then keys = 0x01 end
   if n >= 341 and n < 347 then keys = 0x08 end
-  if n > 1201 and n <= 1212 then keys = 0x80 end
+  local world_y = wram:read8(0x1C02) + 256 * wram:read8(0x1C03)
+  if n > 1201 and n <= 1230 and world_y < 1356 then keys = 0x80 end
   emu:setKeys(keys)
+  events:write(string.format(
+    '{"kind":"input","frame":%d,"keys":%d,"world_y":%d}\n', n, keys, world_y))
   if n == 1201 then
     wram:write8(0x1C00, 1240 & 255); wram:write8(0x1C01, 1240 >> 8)
     wram:write8(0x1C02, 1344 & 255); wram:write8(0x1C03, 1344 >> 8)

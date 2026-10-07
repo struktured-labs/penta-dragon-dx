@@ -10,9 +10,10 @@
 -- both ROMs receive the same native world image (D800-D8FF scene/player
 -- state, DC00-DCFF entity tables, FFD4-FFD5 frame counters) captured from the
 -- stock ROM, then the RNG cursor FFD1 is set to STAGE7_WORLD_SEED. Stock and
--- DX therefore start the measured patrol from identical game state. Every
+-- DX therefore start with these sampled fields equal, NOT complete machine
+-- state parity (other WRAM, audio and hardware phase remain native). Every
 -- run dumps the post-injection image to OUT .. '.world.bin' so the verifier
--- can prove the four traces started equal.
+-- can check equality of exactly those copied fields.
 
 local base_path = assert(os.getenv("STAGE7_STATE_PATROL_BASE_PROBE"))
 local file = assert(io.open(base_path, "r"))
@@ -21,8 +22,8 @@ file:close()
 
 local count
 source, count = source:gsub(
-  '    if phase == "sync" then\n      phase = "play"\n      play_frames = 0\n      previous_scx = emu:read8%(0xFF43%)\n      previous_scy = emu:read8%(0xFF42%)\n    end',
-  '    if phase == "sync" then return end')
+  '    if phase == "sync" then\n.-\n    end\n    if phase == "play" then',
+  '    if phase == "sync" then return end\n    if phase == "play" then')
 assert(count == 1, "checked main-loop sync anchor changed")
 
 source, count = source:gsub(
@@ -43,8 +44,13 @@ source, count = source:gsub(
     local handle = assert(io.open(image_path, 'rb'))
     world_image = handle:read('*a')
     handle:close()
-    world_seed = assert(tonumber(os.getenv('STAGE7_WORLD_SEED')),
-      'equal-world mode requires STAGE7_WORLD_SEED')
+    assert(#world_image == 515 or #world_image == 516, 'world image size mismatch')
+    -- #66: accept the complete stock dump directly, retaining its observed
+    -- RNG cursor when no explicit diagnostic seed override was requested.
+    world_seed = tonumber(os.getenv('STAGE7_WORLD_SEED'))
+      or (#world_image == 516 and world_image:byte(516))
+    world_seed = assert(world_seed, 'equal-world mode requires a captured or explicit seed')
+    world_image = world_image:sub(1, 515)
     assert(world_seed >= 0 and world_seed < 100 and world_seed % 1 == 0,
       'RNG cursor seed must be an integer in [0, 100)')
   end
@@ -56,7 +62,11 @@ source, count = source:gsub(
         local offset = 1
         for _, range in ipairs(WORLD_RANGES) do
           for address = range[1], range[1] + range[2] - 1 do
-            emu:write8(address, world_image:byte(offset))
+            if address >= 0xD000 and address < 0xE000 then
+              emu.memory.wram:write8(address - 0xC000, world_image:byte(offset))
+            else
+              emu:write8(address, world_image:byte(offset))
+            end
             offset = offset + 1
           end
         end
@@ -66,7 +76,9 @@ source, count = source:gsub(
       local dump = assert(io.open(OUT .. '.world.bin', 'wb'))
       for _, range in ipairs(WORLD_RANGES) do
         for address = range[1], range[1] + range[2] - 1 do
-          dump:write(string.char(emu:read8(address)))
+          local value = address >= 0xD000 and address < 0xE000
+            and emu.memory.wram:read8(address - 0xC000) or emu:read8(address)
+          dump:write(string.char(value))
         end
       end
       dump:write(string.char(emu:read8(0xFFD1)))

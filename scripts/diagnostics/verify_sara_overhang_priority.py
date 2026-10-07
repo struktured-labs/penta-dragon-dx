@@ -4,8 +4,9 @@
 Two cold-boot runs (original cartridge, then the candidate) go through the
 fail-closed single-flight launcher with the same input recipe
 (probe_sara_overhang_priority.lua): native title route, one position assist to
-the pre-secret corridor (world 1240/1344 at frame 1201), Down for frames
-1202..1212, then no input. Sara settles at world 1240/1356, camera $0C08,
+the pre-secret corridor (world 1240/1344 at frame 1201), Down until native
+Y reaches1356 or frame1230, then no input. All input frames are recorded.
+Sara must settle at world 1240/1356, camera $0C08,
 under the black overhang.
 
 Frame-exact acceptance, per run:

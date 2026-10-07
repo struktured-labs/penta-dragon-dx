@@ -320,9 +320,12 @@ def main() -> int:
         "menu_item_dispatch_hits": 1,
         "menu_selected_item_trace": "f240:g00:i01",
         "low_health_forced_frames": 180,
+        "low_health_scene_frames": 180,
     })
     compound_low_health_mutant = dict(compound_clean)
     compound_low_health_mutant["low_health_forced_frames"] = 0
+    compound_unobserved_mutant = dict(compound_clean)
+    compound_unobserved_mutant.pop("low_health_scene_frames")
     missing_menu_anchor_mutant = dict(compound_clean)
     missing_menu_anchor_mutant["menu_anchor_frame"] = -1
     stationary_hazard_clean = dict(compound_clean)
@@ -502,6 +505,7 @@ def main() -> int:
             and not replay_is_clean(
                 compound_low_health_mutant, 320, 240, 430
             )
+            and not replay_is_clean(compound_unobserved_mutant, 320, 240, 430)
             and "use-item-low-health" in hazard_source
             and "low_health_frame=low_health_frame" in hazard_source
         ),
@@ -716,7 +720,7 @@ def main() -> int:
             and bool(window_failures(legacy_window))
         ),
         "human audit consumes deterministic low-health and menu receipts": (
-            "penta-low-health-hazard-determinism-v1" in gallery_source
+            "penta-low-health-hazard-determinism-v2" in gallery_source
             and 'root / "stage1-hazard-menu"' in gallery_source
             and "no movement is permitted" in gallery_source
         ),

@@ -10,6 +10,7 @@ an explicit hash-bound supplemental receipt (currently miniboss/projectile).
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import html
 import json
@@ -28,6 +29,70 @@ DEFAULT_PALETTE = ROOT / "palettes/penta_palettes_v097.yaml"
 ASSET_ROOT = Path(__file__).with_name("visual_audit_assets")
 SITE_SCHEMA = "penta-dragon-dx-visual-audit-v1"
 OWNERSHIP_MARKER = ".penta-visual-audit-owned"
+
+
+def exact_low_health_pair(receipt: dict, candidate_hash: str) -> bool:
+    """#67: shifted/v1 or visual-only passes cannot qualify the current audit."""
+    required = (
+        "both low-health hazard replays pass",
+        "full unshifted state trace and rendered corpus are byte-exact",
+        "complete native audio video state and input timeline are byte-exact",
+    )
+    if (receipt.get("schema") != "penta-low-health-hazard-determinism-v2"
+            or receipt.get("passed") is not True
+            or receipt.get("rom_sha256") != candidate_hash
+            or receipt.get("statuses") != [0, 0]
+            or not all(receipt.get("checks", {}).get(key) is True for key in required)):
+        return False
+    exact = receipt.get("exact_comparison", {})
+    counts = exact.get("row_counts", [])
+    samples = receipt.get("samples", 0)
+    if (exact.get("passed") is not True or not isinstance(samples, int) or samples <= 0
+            or len(counts) != 2 or counts[0] != counts[1]
+            or not isinstance(counts[0], int) or not samples <= counts[0] <= samples + 8
+            or exact.get("compared_frames") != counts[0]
+            or exact.get("row_mismatch_samples") != []
+            or exact.get("image_mismatch_samples") != []
+            or exact.get("extra_images") != [[], []]):
+        return False
+    replays = receipt.get("replays", [])
+    if len(replays) != 2:
+        return False
+    for replay in replays:
+        native = replay.get("native_capture", {})
+        if (replay.get("passed") is not True or replay.get("rom_sha256") != candidate_hash
+                or native.get("status") != "COMPLETE_CAPTURE_FILES"
+                or native.get("restored_replay_epoch", {}).get("status") != "PASS"):
+            return False
+    for suffix in ("s16le", "video", "states", "timeline.tsv"):
+        hashes = [replay["native_capture"].get("hashes", {}).get("native." + suffix)
+                  for replay in replays]
+        if (not isinstance(hashes[0], str) or not re.fullmatch(r"[0-9a-f]{64}", hashes[0])
+                or hashes[0] != hashes[1]):
+            return False
+    return True
+
+
+def observed_low_health_images(directory: Path) -> list[tuple[int, Path]]:
+    """Select gallery illustrations by observed warning, not assumed timing.
+
+    This does not filter acceptance: the admitted v2 pair already compared
+    the entire corpus. Healthy recovery must not be captioned low-health.
+    """
+    with (directory / "low-health.frames.tsv").open() as stream:
+        rows = list(csv.DictReader(stream, delimiter="\t"))
+    selected = []
+    for expected, row in enumerate(rows, 1):
+        if int(row["sample"]) != expected:
+            raise RuntimeError("missing or reordered low-health gallery sample")
+        image = directory / f"low-health.frame{expected:04d}.png"
+        if not image.is_file():
+            raise RuntimeError("missing low-health gallery image")
+        if row.get("health_phase") == "low" and row.get("dd06") == "01":
+            selected.append((expected, image))
+    if not selected:
+        raise RuntimeError("no observed native warning for low-health gallery")
+    return selected
 
 BG_NAMES = ("Dungeon", "BG1", "BG2", "BG3", "BG4", "BG5", "BG6", "BG7")
 OBJ_NAMES = (
@@ -799,18 +864,7 @@ def build_current_hazards(
 
     low_directory = root / "low-health-flicker"
     low_outer = read_json(low_directory / "receipt.json")
-    if (
-        low_outer.get("schema") != "penta-low-health-hazard-determinism-v1"
-        or not low_outer.get("passed")
-        or low_outer.get("rom_sha256") != candidate_hash
-        or not any(
-            low_outer.get("checks", {}).get(key)
-            for key in (
-                "frame trace and rendered corpus are byte-exact across replays",
-                "event-aligned state trace and rendered corpus are byte-exact",
-            )
-        )
-    ):
+    if not exact_low_health_pair(low_outer, candidate_hash):
         raise RuntimeError(
             "low-health deterministic wrapper is not clean and candidate-bound"
         )
@@ -818,14 +872,8 @@ def build_current_hazards(
     low = read_json(low_directory / "receipt.json")
     if not low.get("passed") or low.get("rom_sha256") != candidate_hash:
         raise RuntimeError("low-health flicker receipt is not bound to the candidate")
-    low_first = int(low.get("music_transition_sample", 0)) + int(
-        low.get("settle_frames", 0)
-    )
-    low_rows: list[tuple[int, Path]] = []
-    for path in sorted(low_directory.glob("low-health.frame*.png")):
-        match = re.search(r"frame(\d+)$", path.stem)
-        if match and int(match.group(1)) >= low_first:
-            low_rows.append((int(match.group(1)), path))
+    low_rows = observed_low_health_images(low_directory)
+    low_first = low_rows[0][0]
     low_lookup = {path: frame for frame, path in low_rows}
     low_paths = spread_best([path for _, path in low_rows], 8)
 
@@ -842,7 +890,7 @@ def build_current_hazards(
         ),
         (
             "Low-health gameplay", low_paths, low_lookup,
-            f"Low-health/music-transition capture after frame {low_first}; the "
+            f"Observed native low-health warning from sample {low_first}; the "
             "rendered corpus is byte-exact across both replays.",
         ),
     )
@@ -927,34 +975,17 @@ def build_hazards(
 
     low_directory = root / "low-health-flicker"
     low_outer = read_json(low_directory / "receipt.json")
-    if low_outer.get("schema") == "penta-low-health-hazard-determinism-v1":
-        if (
-            not low_outer.get("passed")
-            or not low_outer.get("checks", {}).get(
-                "frame trace and rendered corpus are byte-exact across replays"
-            )
-            or low_outer.get("rom_sha256") != candidate_hash
-        ):
-            raise RuntimeError(
-                "low-health deterministic wrapper is not clean and candidate-bound"
-            )
-        low_directory = low_directory / "replay-1"
-        low = read_json(low_directory / "receipt.json")
-    else:
-        low = low_outer
+    if not exact_low_health_pair(low_outer, candidate_hash):
+        raise RuntimeError("low-health deterministic wrapper is not clean and candidate-bound")
+    low_directory = low_directory / "replay-1"
+    low = read_json(low_directory / "receipt.json")
     if (
         not low.get("passed")
         or str(low.get("rom_sha256", "")) != candidate_hash
     ):
         raise RuntimeError("low-health flicker receipt is not bound to the candidate")
-    low_first = int(low.get("music_transition_sample", 0)) + int(
-        low.get("settle_frames", 0)
-    )
-    low_rows: list[tuple[int, Path]] = []
-    for path in sorted(low_directory.glob("low-health.frame*.png")):
-        match = re.search(r"frame(\d+)$", path.stem)
-        if match and int(match.group(1)) >= low_first:
-            low_rows.append((int(match.group(1)), path))
+    low_rows = observed_low_health_images(low_directory)
+    low_first = low_rows[0][0]
     low_lookup = {path: frame for frame, path in low_rows}
     low_paths = spread_best([path for _, path in low_rows], 8)
 
@@ -1019,7 +1050,7 @@ def build_hazards(
         ),
         (
             "low-health", "Low-health gameplay", low_paths, low_lookup,
-            f"Low-health/music-transition capture after frame {low_first}; "
+            f"Observed native low-health warning from sample {low_first}; "
             "the flicker gate passed across the full measured run.",
         ),
         (
