@@ -127,6 +127,20 @@ def main():
                            cwd=ROOT, env=clean_env, check=True)
             report['runs'].append(name)
         report['comparison'] = checker.compare(out / 'control-transition', out / 'candidate-transition')
+        # #60/#67: repeat the exact candidate/state/inputs, require complete
+        # native equality and clean score/card sprites and attributes.
+        repeat = out / 'candidate-transition-repeat'
+        subprocess.run([sys.executable, str(Path(__file__).with_name('run_shalamar_transition.py')),
+                        '--rom', str(out / 'candidate.gb'),
+                        '--state', str(out / 'candidate-secret/frame-7200.ss0'),
+                        '--output', str(repeat), '--live-boss-entry',
+                        '--defeat-frame', '900', '--frames', '3300'],
+                       cwd=ROOT, env=clean_env, check=True)
+        repeat_report = out / 'transition-repeat.json'
+        subprocess.run([sys.executable, str(Path(__file__).with_name('check_shalamar_repeat.py')),
+                        str(out / 'candidate-transition'), str(repeat),
+                        '--output', str(repeat_report)], cwd=ROOT, check=True)
+        report['transition_repeat'] = json.loads(repeat_report.read_text())
         # #59: normal-health soaks do not exercise raw scene0B. Keep the
         # dedicated low-health boss-to-Stage2 recipe in the release gate,
         # using this exact candidate's own independently captured cold state.

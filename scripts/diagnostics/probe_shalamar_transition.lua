@@ -47,7 +47,7 @@ emu:setBreakpoint(function() score_poll=false end,0x7598,1)
 emu:setBreakpoint(function() score_poll=true end,0x4603,63)
 emu:setBreakpoint(function() score_poll=false end,0x460A,63)
 local trace=assert(io.open(out..'/transition.tsv','w'))
-trace:write('frame\tscene\tstage\tboss_hp\tlcdc\tvisible_oam\tshadow_oam\tscore_poll\n')
+trace:write('frame\tscene\tstage\tboss_hp\tlcdc\tvisible_oam\tshadow_oam\tscore_poll\tnative_scene\n')
 local function visible(base)
  local count=0
  for i=0,39 do
@@ -66,9 +66,9 @@ callbacks:add('frame',function()
   assert(native_shalamar_scene(scene,emu:read8(0xFFB7)), 'must stimulate live Shalamar, not another scene')
   w:write8(0x1DA3,0); w:write8(0x1DA4,0)
  end
- trace:write(string.format('%d\t%02X\t%02X\t%d\t%02X\t%d\t%d\t%d\n',
+ trace:write(string.format('%d\t%02X\t%02X\t%d\t%02X\t%d\t%d\t%d\t%02X\n',
   frame,w:read8(0x1880),emu:read8(0xFFBA),
-  w:read8(0x1DA3)+256*w:read8(0x1DA4),emu:read8(0xFF40),visible(0xFE00),visible(0xC000),score_poll and 1 or 0))
+  w:read8(0x1DA3)+256*w:read8(0x1DA4),emu:read8(0xFF40),visible(0xFE00),visible(0xC000),score_poll and 1 or 0,emu:read8(0xFFB7)))
  trace:flush()
 end)
 dofile(assert(os.getenv('SECRET_REPLAY_PROBE')))
@@ -82,3 +82,12 @@ callbacks:add('frame',function()
  end
  if frame>=close_at and frame<close_at+6 then emu:setKeys(4) end
 end)
+-- #67: the outer probe owns the barrier, including the final input override.
+-- The shared replay must not release the CPU before this callback is installed.
+local startup_gate=os.getenv('ENTRY_NATIVE_START_GATE')
+if startup_gate then
+ assert(os.getenv('ENTRY_NATIVE_DEFER_START')=='1','outer probe must own startup')
+ local ready=assert(io.open(startup_gate,'w'))
+ ready:write('transition probe and final input override installed\n')
+ ready:close()
+end

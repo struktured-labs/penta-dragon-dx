@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 import zlib
 
-sys.path.insert(0,str(Path('/home/struktured/projects/penta-dragon-dx/scripts/diagnostics')))
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 from normalize_mgba_state_pc import png_chunks
 
 def attribute_errors(raw):
@@ -18,11 +18,29 @@ def attribute_errors(raw):
     if raw[0x340]&8:raise ValueError('unexpected card tilemap')
     return [i for i,x in enumerate(raw[0x3C00:0x4000]) if x!=0]
 
-def assess(rows):
+def input_recipe(report,folder):
+    """Normalize only validated output-owned paths, never gameplay inputs."""
+    recipe=dict(report['inputs_environment'])
+    if recipe.get('ENTRY_OUT')!=str(folder.resolve()):
+        raise ValueError('receipt output path differs')
+    recipe['ENTRY_OUT']='<output>'
+    if 'ENTRY_NATIVE_START_GATE' in recipe:
+        if recipe['ENTRY_NATIVE_START_GATE']!=str(folder.resolve()/'native-runtime/ready'):
+            raise ValueError('startup marker is not owned by this replay')
+        recipe['ENTRY_NATIVE_START_GATE']='<output>/native-runtime/ready'
+    return recipe
+
+def assess(rows, expected_frames=2400):
+    if not isinstance(expected_frames,int) or expected_frames<1:
+        raise ValueError('positive expected frame count required')
     cards=[r for r in rows if r['scene']=='18' and r['stage']=='01']
     scores=[r for r in rows if r['score_poll']=='1']
-    gameplay=[r for r in rows if r['scene']=='03' and r['stage']=='01']
-    return dict(complete=len(rows)==2400 and rows[-1]['frame']=='2400',
+    # Low health uses scene0B in both dungeons and arenas. Only the native
+    # owner proves Stage2 gameplay; never accept every alias as a dungeon.
+    gameplay=[r for r in rows if r['stage']=='01' and
+              (r['scene']=='03' or (r['scene']=='0B' and r.get('native_scene')=='03'))]
+    return dict(complete=[int(r['frame']) for r in rows]==list(range(1,expected_frames+1)),
+                expected_frames=expected_frames,
                 card_frames=len(cards),
                 card_dirty_frames=sum(int(r['visible_oam'])>0 for r in cards),
                 card_shadow_dirty_frames=sum(int(r['shadow_oam'])>0 for r in cards),
@@ -40,7 +58,7 @@ def load(folder):
         if hashlib.sha256((folder/name).read_bytes()).hexdigest()!=record['sha256']:
             raise ValueError(f'artifact changed: {name}')
     with (folder/'transition.tsv').open() as f: rows=list(csv.DictReader(f,delimiter='\t'))
-    result=assess(rows)
+    result=assess(rows,int(report['inputs_environment']['ENTRY_FRAMES']))
     frames={int(r['frame']) for r in rows if r['score_poll']=='1' or (r['scene']=='18' and r['stage']=='01')}
     captures=[]
     for path in sorted(folder.glob('frame-*.ss0')):
@@ -65,7 +83,7 @@ def main():
     if any(before[k]!=after[k] for k in ('first_score','first_card','first_gameplay')):
         failures.append('transition frame timing changed')
     if parent['runtime']!=candidate['runtime']:failures.append('runtime mismatch')
-    if parent['inputs_environment']!={**candidate['inputs_environment'],'ENTRY_OUT':parent['inputs_environment']['ENTRY_OUT']}:
+    if input_recipe(parent,a.parent)!=input_recipe(candidate,a.candidate):
         failures.append('input recipe mismatch')
     for key in ('probe','replay','runner'):
         if parent['inputs'][key]['sha256']!=candidate['inputs'][key]['sha256']:failures.append(key+' mismatch')

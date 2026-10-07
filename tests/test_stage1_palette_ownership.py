@@ -6,6 +6,7 @@ import hashlib
 import json
 
 import pytest
+from palette_test_fixtures import current_states, rom_fixture_path
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('stage1_bridge', ROOT/'scripts/mister_palette_bridge.py')
@@ -14,8 +15,7 @@ spec.loader.exec_module(m)
 
 
 def fixture():
-    rom = (ROOT/'tmp/stream-late-return-source-01/candidate.gb').read_bytes()
-    assert m.sha(rom) == m.LATE_RETURN_PIN
+    rom = rom_fixture_path().read_bytes()
     state = bytearray(181040)
     struct.pack_into('<I', state, 4, 0xB0CA)
     state[520+0x1880] = 2
@@ -69,6 +69,10 @@ def test_real_emulator_stage1_memory_has_expected_complete_layout():
     # Translation is an offline parser/ownership check, NOT a runnable MiSTer
     # checkpoint or proof of hardware restore. CPU/register formats differ.
     rom, _, positions = fixture()
+    if m.sha(rom)!=m.LATE_RETURN_PIN:
+        for raw in current_states(rom,1):
+            assert_emulator_stage1_memory(rom,raw,positions)
+        return
     receipt = json.loads((ROOT/'tmp/final-fade-late-window-exit-01/receipt.json').read_text())
     assert receipt['rom_sha256'] == m.sha(rom)
     stream = Path(receipt['native_capture_directory'])/'native.states'
@@ -77,16 +81,20 @@ def test_real_emulator_stage1_memory_has_expected_complete_layout():
         for frame in (4800, 5000, 6000):
             f.seek((frame-1)*71680)
             raw = f.read(71680)
-            state = bytearray(181040)
-            struct.pack_into('<I', state, 4, 0xB0CA)
-            state[520:520+32768] = raw[0x4400:0xC400]
-            state[49832:49960] = raw[0x380:0x400]
-            state[96:224] = raw[0xD4:0x154]
-            assert m.stage1_owned_positions(rom, state) == positions
-            alias, resumed, _ = m.patch(rom, state, 0, m.decode(rom[m.OFFSETS[1]:m.OFFSETS[1]+8]))
-            _, restored, matches = m.patch(alias, resumed, 0, ['#123456']*4)
-            assert matches == [96]
-            assert restored[104:112] == state[104:112]
+            assert_emulator_stage1_memory(rom,raw,positions)
+
+
+def assert_emulator_stage1_memory(rom,raw,positions):
+    state = bytearray(181040)
+    struct.pack_into('<I', state, 4, 0xB0CA)
+    state[520:520+32768] = raw[0x4400:0xC400]
+    state[49832:49960] = raw[0x380:0x400]
+    state[96:224] = raw[0xD4:0x154]
+    assert m.stage1_owned_positions(rom, state) == positions
+    alias, resumed, _ = m.patch(rom, state, 0, m.decode(rom[m.OFFSETS[1]:m.OFFSETS[1]+8]))
+    _, restored, matches = m.patch(alias, resumed, 0, ['#123456']*4)
+    assert matches == [96]
+    assert restored[104:112] == state[104:112]
 
 
 @pytest.mark.parametrize('offset,value', [

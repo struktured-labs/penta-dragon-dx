@@ -15,6 +15,8 @@ HOST=Path('/home/struktured/projects/penta-dragon-dx').resolve()
 sys.path.insert(0,str(ROOT/'scripts/diagnostics'))
 from normalize_mgba_state_pc import png_chunks
 from runtime_tools import emulator_runtime_snapshot, reject_known_broken_cgb_runtime
+from prepare_native_replay import prepare
+from finalize_native_av_capture import finalize
 
 def identity(path):
  return dict(path=str(path.resolve()),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
@@ -64,6 +66,10 @@ def main():
   if rom[0x1A2B:0x1A2F]!=bytes.fromhex('F0BFA7C0'):raise ValueError('boss entry preimage changed')
   env['TRANSITION_LIVE_ENTRY']='1'
   report['assistance']+='; once at mainloop016C after120 frames push016C on current stack and call native1A2B; no scene/cache/palette resets; synthetic boss call, not ordinary-input entry'
+ # #67: restore and install every observer before the first CPU instruction.
+ # Preparation builds the adapter for the exact resolved core; no cached tap.
+ report['native_runtime']=prepare(out,env)
+ env['ENTRY_NATIVE_DEFER_START']='1'
  report['inputs_environment']={k:v for k,v in env.items() if k.startswith(('ENTRY_','TRANSITION_'))}
  try:
   with (out/'emulator.log').open('w') as log:
@@ -72,6 +78,11 @@ def main():
     '-t',str(out/'identity.ss0'),'--script',str(out/'probe.lua'),str(out/'candidate.gb')],
     cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=50)
   report['status']=result.returncode
+  if result.returncode==0:
+   report['native_capture']=finalize(Path(report['native_runtime']['capture_directory']))
+   capture=report['native_capture']
+   if capture['restored_replay_epoch']['status']!='PASS' or capture['metadata']['frames']!=a.frames:
+    raise RuntimeError('invalid native restore epoch or incomplete native capture')
   report['complete']=result.returncode==0 and (out/f'frame-{a.frames:04d}.png').exists()
   rows=list(csv.DictReader((out/'transition.tsv').open(),delimiter='\t'))
   report['complete']=report['complete'] and [int(r['frame']) for r in rows]==list(range(1,a.frames+1))
