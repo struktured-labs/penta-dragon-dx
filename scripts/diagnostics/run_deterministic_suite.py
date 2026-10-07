@@ -76,6 +76,33 @@ def configure_repo_temp(output: Path) -> Path:
     return runtime_tmp
 
 
+def check_gate_inventory(candidate: Path, profile: dict) -> None:
+    """#68: catch runtime/publication roster drift before the long campaign."""
+    from verify_release_candidate import build_gates
+    placeholder = candidate.parent / "inventory-only-missing.gb"
+    if placeholder.exists():
+        raise ValueError("gate inventory placeholder must not exist")
+    options = dict(expanded_candidate_override=profile['expanded_ted'],
+                   menu_icon_candidate_override=profile['menu_icon_colors'],
+                   candidate_sha256=sha256_file(candidate))
+    actual = build_gates(candidate, candidate.parent / 'inventory', **options)
+    virtual = build_gates(placeholder, candidate.parent / 'inventory', **options)
+    if [gate.name for gate in actual] != [gate.name for gate in virtual]:
+        raise ValueError("runtime and hash-only publication gate inventories differ")
+
+
+def check_source_evidence(run: dict, path: Path, phase: str, check) -> bool:
+    """Record terminal evidence failures; never leave a dead run marked running."""
+    try:
+        check()
+    except (SystemExit, ValueError, RuntimeError, OSError, KeyError, TypeError) as error:
+        run.update(status=phase, error=str(error), finished_at=utc_now())
+        write_json(path, run)
+        print(f"FAIL: {phase}: {error}")
+        return False
+    return True
+
+
 def run_logged(command: list[str], log: Path, *, environment: dict | None = None) -> int:
     with log.open("w") as handle:
         result = subprocess.run(
@@ -703,6 +730,9 @@ def main() -> int:
         f"MD5 {build_md5_a}"
     )
 
+    if not check_source_evidence(run, run_manifest, "gate-inventory-failed",
+                                 lambda: check_gate_inventory(candidate_a, build_profile)):
+        return 1
     run.update(
         status="matrix-running",
         candidate_sha256=build_sha256_a,
@@ -825,7 +855,9 @@ def main() -> int:
             from r536_suite_evidence import matrix_evidence
         else:
             from r534_suite_evidence import matrix_evidence
-        matrix_evidence(matrix_manifest, candidate_a.read_bytes())
+        if not check_source_evidence(run, run_manifest, "matrix-evidence-failed",
+                lambda: matrix_evidence(matrix_manifest, candidate_a.read_bytes())):
+            return 1
     try:
         release_ledger = collect_release_ledger(
             matrix_dir,
@@ -883,7 +915,9 @@ def main() -> int:
             from r534_suite_evidence import verify
         receipt["source_builds"] = source_bindings
         receipt["matrix"]["manifest_path"] = str(matrix_manifest)
-        verify(receipt)
+        if not check_source_evidence(run, run_manifest, "receipt-evidence-failed",
+                                     lambda: verify(receipt)):
+            return 1
     write_json(args.receipt.resolve(), receipt)
     run.update(
         status="passed",

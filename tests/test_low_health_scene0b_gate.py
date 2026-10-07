@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import importlib.util
+import sys
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts' / 'diagnostics'))
 
 
 class LowHealthScene0BGateTests(unittest.TestCase):
@@ -39,6 +41,10 @@ class LowHealthScene0BGateTests(unittest.TestCase):
         self.assertNotIn("emu:write8(0xDCBB", self.probe)  # #41 physical bank1
         self.assertNotIn("emu:write8(0xDD06", self.probe)
         self.assertNotIn("emu:write8(0xD880", self.probe)
+        self.assertNotIn("native_assistance.write(0xDCDC", self.probe)
+        self.assertNotIn("native_assistance.write(0xDCDD", self.probe)
+        self.assertNotIn('hp_main == 0 and "low"', self.probe)
+        self.assertNotIn('row["hp_main"] == "00"', self.verifier)
         self.assertIn(r"\troom\tffe5\tscy", self.probe)
         self.assertIn(r"\tstimulus_phase\tdcbb\tdd06\tffb7\tffbf\tffba", self.probe)
 

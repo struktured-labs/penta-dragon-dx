@@ -282,7 +282,8 @@ def replay_is_clean(
         )
         and (
             low_health_frame < 0
-            or receipt["low_health_forced_frames"] >= 120
+            or (receipt["low_health_forced_frames"] >= 120
+                and receipt.get("low_health_scene_frames", 0) >= 120)
         )
     )
     if not base_clean:

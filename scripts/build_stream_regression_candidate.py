@@ -186,7 +186,19 @@ def late_return_fade_chain(parent):
 def build(output, presentation=False, arena_alias=False, arena_completion_safe=False,
           secret_sound_alias=False, return_fade=False, experimental_late_return_fade=False,
           release_lock=False, clean_stage_headers=False, score_card_cleanup=False,
-          separate_enemy_projectiles=False, boss_prelude_rearm=False):
+          separate_enemy_projectiles=False, boss_prelude_rearm=False,
+          later_lowhealth_timer=False, later_lowhealth_camera=False,
+          title_glyph_read_window=False, title_glyph_retry_window=False):
+    if title_glyph_read_window and title_glyph_retry_window:
+        raise ValueError('title glyph experiments are mutually exclusive')
+    if title_glyph_retry_window and not later_lowhealth_camera:
+        raise ValueError('title glyph retry requires the exact low-health camera chain')
+    if title_glyph_read_window and not later_lowhealth_camera:
+        raise ValueError('title glyph read window requires the exact low-health camera chain')
+    if later_lowhealth_camera and not later_lowhealth_timer:
+        raise ValueError('low-health camera requires the exact Timer-yield chain')
+    if later_lowhealth_timer and not boss_prelude_rearm:
+        raise ValueError('later low-health compiler requires the exact boss-rearm chain')
     if boss_prelude_rearm and not separate_enemy_projectiles:
         raise ValueError('boss rearm requires the exact projectile chain')
     if separate_enemy_projectiles and not score_card_cleanup:
@@ -307,6 +319,44 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
                             builder=str(Path(rearm.__file__).resolve()),
                             builder_sha256=digest(Path(rearm.__file__).read_bytes())))
         parent = result
+    if later_lowhealth_timer:
+        import build_later_lowhealth_dispatch as lowhealth
+        import build_later_compile_timer_yield as timer_yield
+        for name, module in (('later-lowhealth-dispatch', lowhealth),
+                             ('later-lowhealth-timer-yield', timer_yield)):
+            result = module.build(parent)
+            records.append(dict(name=name, parent_sha256=digest(parent),
+                                candidate_sha256=digest(result),
+                                builder=str(Path(module.__file__).resolve()),
+                                builder_sha256=digest(Path(module.__file__).read_bytes())))
+            parent = result
+    if later_lowhealth_camera:
+        import build_stage7_lowhealth_fastpath as fastpath
+        import build_stage7_lowhealth_camera as camera
+        for name, module in (('stage7-lowhealth-fastpath', fastpath),
+                             ('stage7-lowhealth-camera', camera)):
+            result = module.build(parent)
+            records.append(dict(name=name, parent_sha256=digest(parent),
+                                candidate_sha256=digest(result),
+                                builder=str(Path(module.__file__).resolve()),
+                                builder_sha256=digest(Path(module.__file__).read_bytes())))
+            parent = result
+    if title_glyph_read_window:
+        import build_title_glyph_read_window as glyph_read
+        result = glyph_read.build(parent)
+        records.append(dict(name='title-glyph-read-window', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(glyph_read.__file__).resolve()),
+                            builder_sha256=digest(Path(glyph_read.__file__).read_bytes())))
+        parent = result
+    if title_glyph_retry_window:
+        import build_title_glyph_retry_window as glyph_retry
+        result = glyph_retry.build(parent)
+        records.append(dict(name='title-glyph-retry-window', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(glyph_retry.__file__).resolve()),
+                            builder_sha256=digest(Path(glyph_retry.__file__).read_bytes())))
+        parent = result
     if source.read_bytes() != source_bytes:
         raise ValueError('palette source changed during construction')
     (output / 'candidate.gb').write_bytes(parent)
@@ -337,6 +387,10 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['experimental_score_card_cleanup'] = score_card_cleanup
     receipt['experimental_separate_enemy_projectiles'] = separate_enemy_projectiles
     receipt['experimental_boss_prelude_rearm'] = boss_prelude_rearm
+    receipt['experimental_later_lowhealth_timer'] = later_lowhealth_timer
+    receipt['experimental_later_lowhealth_camera'] = later_lowhealth_camera
+    receipt['experimental_title_glyph_read_window'] = title_glyph_read_window
+    receipt['experimental_title_glyph_retry_window'] = title_glyph_retry_window
     if release_lock:
         receipt['deferred_issues'] = [34]
     if secret_sound_alias:
@@ -350,6 +404,16 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
             'is not globally qualified; 414 full-route audio sample frames differ '
             'from the native-fade control. Broader routes and hardware remain '
             'unqualified; not deployment approval.')
+    if later_lowhealth_timer:
+        receipt['qualification_warning'] = (
+            'Experimental issue59 low-health compiler trial03. Full-route audio '
+            'and default Stage7 route comparisons remain unresolved; source '
+            'reproduction is not release qualification or deployment approval.')
+    if later_lowhealth_camera:
+        receipt['qualification_warning'] = (
+            'Experimental issue59/66 camera candidate: sampled visible maps and '
+            'settled patrol cadence pass; native-start timing and full-route audio '
+            'remain unresolved. Not release qualification or deployment approval.')
     (output / 'build-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return receipt
 
@@ -379,6 +443,14 @@ if __name__ == '__main__':
                         help='requires --score-card-cleanup; enemy bullets use stable red OBJ3, independent of weapon OBJ0 (#57)')
     parser.add_argument('--boss-prelude-rearm', action='store_true',
                         help='requires --separate-enemy-projectiles; rearm scene setup after miniboss history (#27/#59), experimental')
+    parser.add_argument('--later-lowhealth-timer', action='store_true',
+                        help='requires --boss-prelude-rearm; experimental #59 compiler with Timer service; not release promotion')
+    parser.add_argument('--later-lowhealth-camera', action='store_true',
+                        help='requires --later-lowhealth-timer; experimental Stage7 alias/camera correction, not release promotion')
+    parser.add_argument('--title-glyph-read-window', action='store_true',
+                        help='requires --later-lowhealth-camera; guard returned-title footer VRAM predicates (#8), experimental')
+    parser.add_argument('--title-glyph-retry-window', action='store_true',
+                        help='requires --later-lowhealth-camera; retry blocked footer predicate while preserving successful-path timing (#8), experimental')
     args = parser.parse_args()
     print(json.dumps(build(args.output, presentation=args.presentation, arena_alias=args.arena_alias,
                            arena_completion_safe=args.arena_completion_safe,
@@ -389,4 +461,8 @@ if __name__ == '__main__':
                            clean_stage_headers=args.clean_stage_headers,
                            score_card_cleanup=args.score_card_cleanup,
                            separate_enemy_projectiles=args.separate_enemy_projectiles,
-                           boss_prelude_rearm=args.boss_prelude_rearm), indent=2))
+                           boss_prelude_rearm=args.boss_prelude_rearm,
+                           later_lowhealth_timer=args.later_lowhealth_timer,
+                           later_lowhealth_camera=args.later_lowhealth_camera,
+                           title_glyph_read_window=args.title_glyph_read_window,
+                           title_glyph_retry_window=args.title_glyph_retry_window), indent=2))

@@ -111,6 +111,22 @@ def inspect_release_lock_tail(rom):
 
 
 def inspect_tail(rom):
+    import lowhealth_candidate_lineage as lowhealth
+    if lowhealth.is_candidate(rom):
+        parent, rebuilt = lowhealth.source_replay(rom)
+        ancestor = inspect_tail(parent)
+        rows = {}
+        for bank in range(21, 32):
+            start, end = bank * SIZE, (bank + 1) * SIZE
+            rows[str(bank)] = {
+                'exact': rom[start:end] == rebuilt[start:end],
+                'expected_sha256': hashlib.sha256(rebuilt[start:end]).hexdigest(),
+                'actual_sha256': hashlib.sha256(rom[start:end]).hexdigest(),
+                'method': 'authenticated-parent plus low-health source-builder replay',
+            }
+        return {'exact': ancestor['exact'] and all(row['exact'] for row in rows.values()),
+                'mode': 'low-health-source-over-playtest-successor',
+                'parent_ownership': ancestor, 'banks': rows}
     import release_lock_lineage
     import playtest_successor_lineage as successor
     if successor.is_candidate(rom):

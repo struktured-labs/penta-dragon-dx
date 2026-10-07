@@ -42,9 +42,14 @@ RUNS = (
 )
 
 def is_candidate(rom):
-    return len(rom) == 0x100000 and hashlib.sha256(rom).hexdigest() == CANDIDATE_SHA
+    import lowhealth_candidate_lineage
+    return (len(rom) == 0x100000 and hashlib.sha256(rom).hexdigest() == CANDIDATE_SHA
+            or lowhealth_candidate_lineage.is_candidate(rom))
 
 def authenticated_parent(rom, *ranges):
+    import lowhealth_candidate_lineage
+    if lowhealth_candidate_lineage.is_candidate(rom):
+        rom = lowhealth_candidate_lineage.authenticated_parent(rom, *ranges)
     if not is_candidate(rom):
         raise ValueError("not the exact playtest successor")
     if not ranges:

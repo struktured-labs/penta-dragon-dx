@@ -24,6 +24,7 @@ STATE = "tmp/secret-alias-chunk-lowhealth-return-01/frame-0960.ss0"
 ROM = "tmp/secret-alias-chunk-trial-01/candidate.gb"
 TAP = ROOT / "scripts/diagnostics/native_av_tap.c"  # any existing file; never loaded
 CAPTURE_RUNNERS = (
+    "scripts/diagnostics/prepare_native_replay.py",
     "scripts/diagnostics/run_secret_entry_probe.py",
     "scripts/diagnostics/replay_boss_menu_roundtrips.py",
     "scripts/probes/verify_phantom_d887.py",

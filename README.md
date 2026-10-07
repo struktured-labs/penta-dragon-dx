@@ -31,15 +31,22 @@ testing remain.
 
 ## Current status
 
-October 6 playtest repairs passed the full source-bound emulator suite on
-October 7: **97/97 checks and two byte-identical builds**. Human retest candidate SHA-256:
-`6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228`.
+The latest October playtest repair candidate is SHA-256:
+`126861281b75edaf8daace834ccbe41e53ed0c9eebb71e50fe3bd6823e8b6941`.
+It passed **97/97 source-bound serial emulator gates** and two byte-identical
+fresh builds on October 7. The current verification receipt identifies this
+exact revision, including the 240-frame low-health Stage 2 scrolling regression.
+This qualifies an emulator-tested candidate, not every outstanding issue.
 Changes address corrupt stage-header data, stale score-card sprites/attributes,
 shared enemy/player projectile palettes, and inherited graphics state at boss
-entry. This candidate is **ready for human retesting, not a final release or
-hardware sign-off**. The [verification receipt](docs/release/verification/latest.json)
-binds the exact candidate, source, and retained emulator evidence.
-The recorded Stage 2 screen-fixed lake artifact still needs direct confirmation.
+entry. The new revision also repairs later-stage low-health palette dispatch,
+camera refresh and returned-title glyph retries, while bounding Timer service
+during attribute compilation. It is **not a final release or hardware sign-off**.
+The recorded Stage 2 lake artifact still needs direct human confirmation;
+the new scrolling test requires actual movement and visible water, checks every
+captured frame, and rejects the broken parent. Mild Sara sprite tearing remains
+deferred for the first release. See the
+[latest low-health/restart evidence and limitations](docs/audit/later_lowhealth_dispatch_20261007.md).
 See the [investigation and test scope](docs/audit/playtest_20261006.md) and
 [continuous retest route](docs/audit/oct06_retest_route.md).
 

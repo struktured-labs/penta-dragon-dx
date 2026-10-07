@@ -618,6 +618,26 @@ def _inspect_release_lock_handoff(rom: bytes | bytearray) -> dict | None:
 
 
 def inspect_stage_card_palette_handoff(rom: bytes | bytearray) -> dict:
+    from diagnostics import lowhealth_candidate_lineage as lowhealth
+    if lowhealth.is_candidate(rom):
+        # #59 changes only four resolver operands in the shared runtime.
+        # Prove those components against their explicit new owner before
+        # inspecting the inherited palette/bridge contract. Live rendering
+        # and timing gates still execute the supplied child ROM.
+        parent = lowhealth.dispatcher_component_parent(rom,
+            (STAGE1_BG0_OFFSET, STAGE1_BG0_OFFSET+8),
+            (TITLE_BG0_OFFSET, TITLE_BG0_OFFSET+8),
+            (PRIVATE_OFFSET, PRIVATE_OFFSET+0x80),
+            (STAGE1_ENTRY_GATE_OFFSET, STAGE1_ENTRY_GATE_OFFSET+13),
+            (0x37CFC, 0x37D2D),
+            (VBLANK_COMMIT_OFFSET, VBLANK_COMMIT_OFFSET+0x100),
+            (CGB_FLAG_OFFSET, CGB_FLAG_OFFSET+1),
+            (0x42A7, 0x436E),
+            (RUNTIME_SOURCE_B_OFFSET-0x30, RUNTIME_SOURCE_C_OFFSET+5),
+            (HANDOFF_EXTENSION_OFFSET, HANDOFF_EXTENSION_OFFSET+12))
+        result = dict(inspect_stage_card_palette_handoff(parent))
+        result['variant'] = 'lowhealth-dispatcher-' + str(result.get('variant'))
+        return result
     from diagnostics import playtest_successor_lineage as successor
     if successor.is_candidate(rom):
         # Prove all inherited handoff components unchanged. Live raster,

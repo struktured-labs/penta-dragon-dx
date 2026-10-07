@@ -57,6 +57,7 @@ def stable_summary(receipt: dict, directory: Path) -> dict:
         "render_metrics": receipt["render_metrics"],
         "checks": receipt["checks"],
         "passed": receipt["passed"],
+        "native_capture": receipt.get("native_capture"),
         "frames_tsv_sha256": digest(directory / "low-health.frames.tsv"),
         "render_corpus_sha256": corpus_digest(directory),
     }
@@ -70,7 +71,7 @@ def rows(path: Path) -> list[dict[str, str]]:
 def aligned_corpus_comparison(
     first: Path, second: Path, samples: int,
 ) -> dict[str, int | bool]:
-    """Require byte-exact rendered/state evidence after startup alignment.
+    """Diagnostic only: inspect overlap after startup alignment (#67).
 
     mGBA can resume the same savestate on either side of one emulated frame.
     Comparing equal sample numbers therefore reports a false nondeterminism
@@ -138,6 +139,43 @@ def aligned_corpus_comparison(
         ):
             best = candidate
     return best
+
+
+def exact_corpus_comparison(first: Path, second: Path, samples: int) -> dict:
+    """#67: compare every delivered row/image without shifts or field masks.
+
+    The child may deliver up to eight extra frames to finish an in-flight
+    publication. Compare those too; neither missing nor extra frames disappear
+    into an overlapping prefix.
+    """
+    traces = [rows(path / "low-health.frames.tsv") for path in (first, second)]
+    row_differences = []
+    image_differences = []
+    count = max(map(len, traces))
+    for index in range(count):
+        pair = [trace[index] if index < len(trace) else None for trace in traces]
+        if pair[0] != pair[1]:
+            row_differences.append(index + 1)
+        images = [path / f"low-health.frame{index + 1:04d}.png"
+                  for path in (first, second)]
+        if (not all(path.is_file() for path in images)
+                or images[0].read_bytes() != images[1].read_bytes()):
+            image_differences.append(index + 1)
+    expected = {f"low-health.frame{index + 1:04d}.png" for index in range(count)}
+    extra_images = [sorted(path.name for path in directory.glob("low-health.frame*.png")
+                           if path.name not in expected)
+                    for directory in (first, second)]
+    return {
+        "passed": (samples <= len(traces[0]) <= samples + 8
+                   and len(traces[0]) == len(traces[1])
+                   and not row_differences and not image_differences
+                   and not any(extra_images)),
+        "row_counts": list(map(len, traces)),
+        "compared_frames": count,
+        "row_mismatch_samples": row_differences,
+        "image_mismatch_samples": image_differences,
+        "extra_images": extra_images,
+    }
 
 
 def main() -> int:
@@ -236,17 +274,27 @@ def main() -> int:
     aligned = aligned_corpus_comparison(
         output / "replay-1", output / "replay-2", args.samples
     )
+    exact = exact_corpus_comparison(
+        output / "replay-1", output / "replay-2", args.samples
+    )
     inner_passed = statuses == [0, 0] and all(
         replay["passed"] for replay in replays
     )
     checks = {
         "both low-health hazard replays pass": inner_passed,
-        "event-aligned state trace and rendered corpus are byte-exact": (
-            bool(aligned["passed"])
+        "full unshifted state trace and rendered corpus are byte-exact": (
+            bool(exact["passed"])
+        ),
+        "complete native audio video state and input timeline are byte-exact": (
+            all(replay.get("native_capture", {}).get("restored_replay_epoch", {}).get("status")
+                == "PASS" for replay in replays)
+            and all(replays[0]["native_capture"]["hashes"]["native." + suffix]
+                    == replays[1]["native_capture"]["hashes"]["native." + suffix]
+                    for suffix in ("s16le", "video", "states", "timeline.tsv"))
         ),
     }
     receipt = {
-        "schema": "penta-low-health-hazard-determinism-v1",
+        "schema": "penta-low-health-hazard-determinism-v2",
         "rom": str(args.rom.resolve()),
         "rom_sha256": digest(args.rom),
         "samples": args.samples,
@@ -254,7 +302,8 @@ def main() -> int:
         "scene0b_stimulus_frames": args.scene0b_frames,
         "statuses": statuses,
         "replays": replays,
-        "alignment": aligned,
+        "diagnostic_alignment_only": aligned,
+        "exact_comparison": exact,
         "checks": checks,
         "passed": all(checks.values()),
     }

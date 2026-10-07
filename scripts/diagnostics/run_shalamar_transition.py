@@ -27,9 +27,12 @@ def main():
  p.add_argument('--native-event-entry',action='store_true',help='inject only native event29 at the live dispatcher; preserve gameplay palette/transition state')
  p.add_argument('--live-boss-entry',action='store_true',help='call native1A2B once from a live016C loop; retain existing scene/cache/palette state')
  p.add_argument('--keys',type=int,default=1)
+ p.add_argument('--close-menu-frame',type=int,help='optional six-frame Select pulse before defeat; ordinary input for native low-health auto-menu')
  a=p.parse_args(); out=a.output.resolve()
  if a.defeat_frame<1 or a.frames<a.defeat_frame+2220: p.error('require defeat stimulus and complete 2220-frame transition tail')
  if not 0<=a.keys<=255:p.error('keys must be an 8-bit controller mask')
+ if a.close_menu_frame is not None and not 1<=a.close_menu_frame<a.defeat_frame-6:
+  p.error('menu-close pulse must finish before defeat stimulus')
  if a.native_event_entry and a.live_boss_entry:p.error('choose one entry diagnostic')
  if out.exists() or (ROOT/'tmp').resolve() not in out.parents: p.error('fresh worktree tmp output required')
  rom=a.rom.read_bytes(); raw=zlib.decompress(dict(png_chunks(a.state.read_bytes()))[b'gbAs'])
@@ -48,6 +51,10 @@ def main():
    TRANSITION_DEFEAT_FRAME=str(a.defeat_frame),
    ENTRY_CAPTURE_EVERY='30',ENTRY_KEYS=str(a.keys),ENTRY_PULSE_A='1',ENTRY_AUDIO_ENABLED='1',
    SECRET_REPLAY_PROBE=str(out/'replay.lua'),QT_QPA_PLATFORM='offscreen',SDL_AUDIODRIVER='dummy')
+ env.pop('TRANSITION_CLOSE_MENU_FRAME',None)
+ if a.close_menu_frame is not None:
+  env['TRANSITION_CLOSE_MENU_FRAME']=str(a.close_menu_frame)
+  report['assistance']+=f'; ordinary six-frame Select pulse at{a.close_menu_frame}; no menu memory writes'
  if a.native_event_entry:
   if rom[0x13F4:0x13F9]!=bytes.fromhex('21761BE0D3') or rom[0x1BC8:0x1BCA]!=bytes.fromhex('2B1A'):
    raise ValueError('native event dispatch preimage changed')

@@ -13,6 +13,32 @@ function native_assistance.write(address, value)
     :write8(address - 0xC000, value)
 end
 
+function native_assistance.read(address)
+  return assert(emu.memory and emu.memory.wram,
+    "physical WRAM required for assistance"):read8(address - 0xC000)
+end
+
+function native_assistance.seed_item()
+  -- Explicit one-time fixture: item1, group0, first slot and its cursor X.
+  -- These are inventory/cursor writes, never a health approximation (#37).
+  native_assistance.write(0xDCBD, 1)
+  native_assistance.write(0xDCDB, 0)
+  native_assistance.write(0xDCDC, 0x0C)
+  native_assistance.write(0xDCDD, 0)
+end
+
+function native_assistance.set_health(phase)
+  local values = {healthy=0xFF, item=0xC0, warning=0x40}
+  native_assistance.write(0xDCBB, assert(values[phase], "unknown health phase"))
+end
+
+function native_assistance.warning_observed()
+  return native_assistance.read(0xDCBB) == 0x40
+    and native_assistance.read(0xDD06) == 1
+    and native_assistance.read(0xD880) == 0x0B
+    and emu:read8(0xFFB7) == 2 and emu:read8(0xFFBA) == 0
+end
+
 local OUT = assert(os.getenv("STAGE1_SPIKE_OUT"))
 -- Open the startup trace before any reviewed-ROM contract checks.  A failed
 -- publisher identity must leave a deterministic breadcrumb instead of
@@ -1017,8 +1043,9 @@ pcall(function()
     if state_loaded then
       menu_item_dispatch_hits = menu_item_dispatch_hits + 1
       menu_selected_item_trace[#menu_selected_item_trace + 1] = string.format(
-        "f%d:g%02X:i%02X", frame, emu:read8(0xDCDB),
-        emu:read8(0xDCBD + emu:read8(0xDCDB)))
+        "f%d:g%02X:i%02X:c%02X", frame, native_assistance.read(0xDCDB),
+        native_assistance.read(0xDCBD + 10 * native_assistance.read(0xDCDB)
+          + native_assistance.read(0xDCDD)), native_assistance.read(0xDCDD))
     end
   end, 0x1E08, -1)
   emu:setBreakpoint(function()
@@ -1597,6 +1624,8 @@ local function finish()
   -- used by the live oracle, instead of turning a teardown-time FF/00 sample
   -- into replay nondeterminism.
   handle:write(string.format("scene=%02X\n", last_readable_scene))
+  handle:write(string.format("native_raw_scene=%02X\ncanonical_scene=%02X\nstage_index=%02X\n",
+    native_assistance.read(0xD880), emu:read8(0xFFB7), emu:read8(0xFFBA)))
   handle:write(string.format("room=%02X\n", emu:read8(0xFFBD)))
   handle:write(string.format("source=%02X%02X\n",
     emu:read8(0xDC0F), emu:read8(0xDC0E)))
@@ -1968,8 +1997,7 @@ callbacks:add("frame", function()
     -- The historical hazard fixtures do not guarantee a usable selection.
     -- Seed canonical item 1 into group/slot zero so A must cross the real
     -- nonzero item dispatcher and redraw the native menu.
-    emu:write8(0xDCBD, 0x01)
-    emu:write8(0xDCDB, 0x00)
+    native_assistance.seed_item()
   end
   local menu_timeline_ready = menu_anchor_room < 0 or menu_anchor_frame >= 0
   local keys = input_mask
@@ -2038,8 +2066,7 @@ callbacks:add("frame", function()
   if effective_menu_use_frame >= 0
       and frame == effective_menu_use_frame - 1 then
     menu_hud_before_use = menu_hud_checksum()
-    menu_hp_before_use = emu:read8(0xDCDC)
-      | (emu:read8(0xDCDD) << 8)
+    menu_hp_before_use = native_assistance.read(0xDCBB)
   end
   if menu_visible then
     menu_open_frames = menu_open_frames + 1
@@ -2066,7 +2093,7 @@ callbacks:add("frame", function()
       menu_hud_change_frame = frame
       emu:screenshot(OUT .. "-item-use-redraw.png")
     end
-    local current_hp = emu:read8(0xDCDC) | (emu:read8(0xDCDD) << 8)
+    local current_hp = native_assistance.read(0xDCBB)
     if menu_hp_before_use >= 0 and frame > effective_menu_use_frame
         and menu_hp_change_frame < 0 and current_hp ~= menu_hp_before_use then
       menu_hp_change_frame = frame
@@ -2266,21 +2293,19 @@ callbacks:add("frame", function()
     -- Reproduce the hardware report as one uninterrupted state sequence:
     -- use an item, close the menu without moving, then enter the warning
     -- band while the same hazard rows remain visible.
-    native_assistance.write(0xDCDD, 0x00)
-    native_assistance.write(0xDCDC, 0x0C)
+    native_assistance.set_health("warning")
     low_health_forced_frames = low_health_forced_frames + 1
-    if emu:read8(0xD880) == 0x0A then
+    if native_assistance.warning_observed() then
       low_health_scene_frames = low_health_scene_frames + 1
     end
   elseif effective_menu_use_frame >= 0
       and frame < effective_menu_use_frame then
     -- Make the selected healing item usable; the historical fixture is at
     -- full health, so an A pulse otherwise exercises no redraw at all.
-    native_assistance.write(0xDCDD, 0x01)
-    native_assistance.write(0xDCDC, 0x20)
-  elseif effective_menu_use_frame < 0 or menu_closed_frame >= 0 then
+    native_assistance.set_health("item")
+  else
+    native_assistance.set_health("healthy")
   end
-  native_assistance.write(0xDCBB, 0xFF)
   if frame >= 80 then
     if frame >= transient_check_start then
       local bg5_text = words_text(palette_words(5))

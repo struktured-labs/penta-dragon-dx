@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the combined playtest candidate (6c4a9654) as a release source profile.
+"""Build the combined playtest candidate (12686128) as a release source profile.
 
 Wraps scripts/build_stream_regression_candidate.py with the full stream chain
 (presentation, arena alias, completion-safe, secret sound alias, return fade
@@ -16,6 +16,9 @@ Construction evidence only: not hardware approval and not audience approval.
 Version2 additionally relocates native stage headers, clears score-card OAM
 and attributes, separates enemy bullets, and rearms boss scene setup. These
 changes remain subject to the full runtime matrix; construction is not approval.
+
+Version3 adds later-dungeon low-health scene dispatch, bounded Timer service,
+camera fast-path admission, and the returned-title blocked-read retry.
 """
 from __future__ import annotations
 
@@ -47,9 +50,12 @@ FLAGS = {
     "score_card_cleanup": True,
     "separate_enemy_projectiles": True,
     "boss_prelude_rearm": True,
+    "later_lowhealth_timer": True,
+    "later_lowhealth_camera": True,
+    "title_glyph_retry_window": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v2",
+    "schema": "penta-stream-release-lock-original-source-build-v3",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -67,6 +73,9 @@ CONTRACT = {
         "continue-miniboss-reload", "sara-overhang-priority",
         "clean-stage-headers", "score-oam-publish", "score-attribute-clear",
         "enemy-projectile-palette", "boss-prelude-rearm",
+        "later-lowhealth-dispatch", "later-lowhealth-timer-yield",
+        "stage7-lowhealth-fastpath", "stage7-lowhealth-camera",
+        "title-glyph-retry-window",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -75,7 +84,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228"
+        "126861281b75edaf8daace834ccbe41e53ed0c9eebb71e50fe3bd6823e8b6941"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -174,7 +183,9 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
         raise ValueError("stream receipt consumed retained candidates")
     for key, value in FLAGS.items():
         if key in {"clean_stage_headers", "score_card_cleanup",
-                   "separate_enemy_projectiles", "boss_prelude_rearm"}:
+                   "separate_enemy_projectiles", "boss_prelude_rearm",
+                   "later_lowhealth_timer", "later_lowhealth_camera",
+                   "title_glyph_retry_window"}:
             name = "experimental_" + key
         elif key == "release_lock":
             name = "release_lock_chain"

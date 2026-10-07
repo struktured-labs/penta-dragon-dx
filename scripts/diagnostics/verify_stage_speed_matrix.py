@@ -21,6 +21,43 @@ DEFAULT_ORIGINAL = ROOT / "rom/Penta Dragon (J).gb"
 DEFAULT_DX = ROOT / "rom/working/penta_dragon_dx_FIXED.gb"
 
 
+def compare_initial_encounters(original: dict, candidate: dict) -> dict:
+    """#66 diagnostic: matching these samples alone cannot qualify matched work."""
+    fields = ("slots_dc80_dcaf", "rng_ffd1", "stride_ffc1")
+    samples = [row.get("initial_encounter") for row in (original, candidate)]
+    def valid(sample):
+        if not isinstance(sample, dict):
+            return False
+        slots = sample.get(fields[0])
+        return (isinstance(slots, str) and len(slots) == 96
+                and all(c in "0123456789abcdef" for c in slots)
+                and type(sample.get(fields[1])) is int
+                and 0 <= sample[fields[1]] < 100
+                and type(sample.get(fields[2])) is int
+                and 0 <= sample[fields[2]] <= 255)
+    if not all(valid(sample) for sample in samples):
+        return {"status": "UNKNOWN", "sampled_state_equal": False,
+                "differing_fields": [], "matched_work_qualified": False}
+    differing = [key for key in fields if samples[0][key] != samples[1][key]]
+    return {"status": "DIFFERENT" if differing else "SAMPLED_FIELDS_EQUAL",
+            "sampled_state_equal": not differing, "differing_fields": differing,
+            "matched_work_qualified": False}
+
+
+def health_scene_ok(result: dict, target: int, health: int) -> bool:
+    """#59 preserve raw low-health identity, not a normalized scene proxy."""
+    expected = 11 if health == 109 else target + 2
+    return (
+        result.get("health_assistance") == health
+        and result.get("expected_scene") == expected
+        and result.get("final_scene") == expected
+        and (health != 109 or (
+            result.get("canonical_scene") == target + 2
+            and result.get("selected_stage") == target
+        ))
+    )
+
+
 def md5(path: Path) -> str:
     digest = hashlib.md5()
     with path.open("rb") as handle:
@@ -847,6 +884,7 @@ def run_one(
     dump_metatile_state: bool,
     output: Path,
     timeout: float,
+    health: int = 255,
 ) -> dict:
     dma_command_addrs = normalize_dma_command_addrs(dma_command_addrs)
     run_dir = output / f"stage{target + 1}-{label}-{mode}"
@@ -872,6 +910,7 @@ def run_one(
             "QT_QPA_PLATFORM": "offscreen",
             "SDL_AUDIODRIVER": "dummy",
             "STAGE_SPEED_TARGET": str(target),
+            "STAGE_SPEED_HEALTH": str(health),
             "STAGE_SPEED_OUT": str(receipt),
             "STAGE_SPEED_DONE": str(marker),
             "STAGE_SPEED_TRACE": str(run_dir / "attr-events.tsv"),
@@ -1011,6 +1050,8 @@ def main() -> int:
         default="right",
     )
     parser.add_argument("--frames", type=int, default=600)
+    parser.add_argument("--health", type=int, choices=(255, 109), default=255,
+                        help="Explicit physical health assistance; 109 tests low-health scene 11 (#59).")
     parser.add_argument("--atomic-addr", type=lambda value: int(value, 0), default=0)
     parser.add_argument(
         "--dma-command-addr",
@@ -1079,6 +1120,11 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=45.0)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    start_policy = os.environ.get("STAGE_SPEED_START_POLICY", "stable-120-frames")
+    if start_policy not in ("stable-120-frames", "first-lowhealth-loop"):
+        parser.error("unsupported STAGE_SPEED_START_POLICY")
+    if start_policy == "first-lowhealth-loop" and args.health != 109:
+        parser.error("first-lowhealth-loop requires --health 109")
     try:
         dma_command_addrs = normalize_dma_command_addrs(
             args.dma_command_addr
@@ -1160,6 +1206,7 @@ def main() -> int:
         "stages": [target + 1 for target in args.targets],
         "input_mode": args.input_mode,
         "frames": args.frames,
+        "health_assistance": args.health,
         "atomic_addr": args.atomic_addr,
         # Keep the legacy scalar for old receipt readers while making the
         # complete, ordered command-site contract explicit.
@@ -1252,6 +1299,7 @@ def main() -> int:
                     "native",
                     args.dump_metatile_state,
                     output, args.timeout,
+                    health=args.health,
                 )
                 for replay in ("a", "b")
             ]
@@ -1264,6 +1312,7 @@ def main() -> int:
                     args.stage1_decider_mode,
                     args.dump_metatile_state,
                     output, args.timeout,
+                    health=args.health,
                 )
                 for replay in ("a", "b")
             ]
@@ -1398,8 +1447,8 @@ def main() -> int:
             and candidate["breakpoints_available"]
             and baseline["frames"] == args.frames
             and candidate["frames"] == args.frames
-            and baseline["final_scene"] == target + 2
-            and candidate["final_scene"] == target + 2
+            and health_scene_ok(baseline, target, args.health)
+            and health_scene_ok(candidate, target, args.health)
             and baseline["expected_scene_frames"] == args.frames
             and candidate_scene_ok
             and baseline_continuity_ok
@@ -1412,6 +1461,8 @@ def main() -> int:
         row = {
             "target": target,
             "stage": target + 1,
+            "initial_encounter_comparison": compare_initial_encounters(
+                baseline, candidate),
             "ratio": round(ratio, 4),
             "ratio_exact": ratio,
             "accepted_slowdown_floor": accepted_floor,
@@ -1558,6 +1609,8 @@ def main() -> int:
 
     manifest = {
         "schema": "penta-stage-speed-matrix-v2",
+        "start_policy": start_policy,
+        "diagnostic_start_policy": start_policy != "stable-120-frames",
         "status": "pass" if not failures else "fail",
         "mode": args.input_mode,
         "frames": args.frames,

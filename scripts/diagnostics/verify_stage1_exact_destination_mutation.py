@@ -111,6 +111,24 @@ def run_gate(rom: Path, output: Path, timeout: float, state: Path | None = None,
     return completed.returncode, receipt, completed.stdout
 
 
+def mutant_pair_is_exact(receipt: dict) -> bool:
+    """#67: expected visual rejection must still reproduce without alignment.
+
+    Both child visual checks are supposed to fail for this mutation. Require
+    the independent full-corpus and native-output comparisons to pass instead
+    of accidentally requiring the combined child-pass verdict.
+    """
+    return (
+        receipt.get("schema") == "penta-low-health-hazard-determinism-v2"
+        and receipt.get("statuses") == [1, 1]
+        and receipt.get("exact_comparison", {}).get("passed") is True
+        and all(receipt.get("checks", {}).get(key) is True for key in (
+            "full unshifted state trace and rendered corpus are byte-exact",
+            "complete native audio video state and input timeline are byte-exact",
+        ))
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("rom", type=Path)
@@ -227,9 +245,8 @@ def main() -> int:
             len(mutant_visible_failures) == 2
             and all(count > 0 for count in mutant_visible_failures)
         ),
-        "mutant replays remain deterministic after bounded phase alignment": (
-            mutated.get("alignment", {}).get("passed") is True
-        ),
+        "mutant replays reproduce full unshifted corpus and native output":
+            mutant_pair_is_exact(mutated),
         "mutation changes only destination selection to the peer map": (
             sum(left != right for left, right in zip(source, mutant))
             == sum(

@@ -50,6 +50,11 @@ def menu_contract_rom(rom: bytes) -> bytes:
     spans = [(20 * 0x4000, 21 * 0x4000)]
     spans.extend((source, source + length)
                  for _, source, length in RELEASE_LOCK_WRAM_IMAGES)
+    import lowhealth_candidate_lineage as lowhealth
+    if lowhealth.is_candidate(rom):
+        # #59 owns four resolver immediates within the refreshed WRAM images.
+        # Validate that explicit delta; never label these bytes unchanged.
+        rom = lowhealth.dispatcher_component_parent(rom, *spans)
     return successor.authenticated_parent(rom, *spans)
 
 
@@ -96,6 +101,7 @@ def release_lock_boundary(raw: bytes, rom: bytes) -> dict:
     """CPU PC and every stacked word stay outside the release-lock rewrites."""
     import release_lock_lineage as lineage
     import playtest_successor_lineage as successor
+    import lowhealth_candidate_lineage as lowhealth
 
     sp = int.from_bytes(raw[CPU_SP:CPU_SP + 2], "little")
     pc = int.from_bytes(raw[CPU_PC:CPU_PC + 2], "little")
@@ -105,8 +111,23 @@ def release_lock_boundary(raw: bytes, rom: bytes) -> dict:
     words = [pc] + [raw[0x4400 + 0x1000 + a - 0xD000] | raw[0x4400 + 0x1000 + a + 1 - 0xD000] << 8
                     for a in range(sp, 0xDFFE, 2)]
     hits = []
+    successor_runs = successor.RUNS if successor.is_candidate(rom) else ()
+    lowhealth_runs = lowhealth.RUNS if lowhealth.is_candidate(rom) else ()
     for index, word in enumerate(words):
         if word >= 0x8000:
+            # The copied dispatcher is executable WRAM too. Its resolver
+            # operands must not be replaced under an executing/returning PC.
+            span = (word - 8, word + 8) if index == 0 else (word - 3, word + 1)
+            for address, source, length in RELEASE_LOCK_WRAM_IMAGES:
+                for offset, _, after in lowhealth_runs:
+                    if source <= offset < source + length:
+                        start = address + offset - source
+                        if span[0] < start + len(bytes.fromhex(after)) and start < span[1]:
+                            hits.append(f"{word:04X}")
+                            break
+                else:
+                    continue
+                break
             continue
         base = word if word < 0x4000 else bank * 0x4000 + word - 0x4000
         # PC: the executing neighbourhood must be byte-identical. Stacked
@@ -114,9 +135,9 @@ def release_lock_boundary(raw: bytes, rom: bytes) -> dict:
         # at) must be unchanged, so they resume on an instruction boundary
         # shared by both ABIs; later candidate code may legitimately differ.
         span = (base - 8, base + 8) if index == 0 else (base - 3, base + 1)
-        successor_hit = successor.is_candidate(rom) and any(
+        successor_hit = any(
             span[0] < offset + len(bytes.fromhex(after)) and offset < span[1]
-            for offset, _, after in successor.RUNS)
+            for offset, _, after in (*successor_runs, *lowhealth_runs))
         if lineage.touched(*span) or successor_hit:
             hits.append(f"{word:04X}")
     # #33 replaces the bank-20 menu row prologue ($404A) and re-enters native

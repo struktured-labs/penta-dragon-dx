@@ -56,6 +56,13 @@ from build_stage1_runtime_epoch_r312 import CAPTURED_STALE_DAD7
 
 def component_overlay(rom: bytes, offset: int, payload: bytes, owners: set) -> bytes:
     """#61: inherit an oracle only for authenticated, unchanged fragments."""
+    import lowhealth_candidate_lineage as lowhealth
+    if lowhealth.is_candidate(rom):
+        # #59 explicitly owns four resolver immediates; do not describe these
+        # changed fragments as inherited unchanged or exempt their other bytes.
+        parent = lowhealth.authenticated_parent(rom, (0x147, 0x149))
+        expected = component_overlay(parent, offset, payload, owners)
+        return lowhealth.dispatcher_overlay(rom, offset, expected)
     import playtest_successor_lineage as successor
     contract = rom
     if successor.is_candidate(rom):

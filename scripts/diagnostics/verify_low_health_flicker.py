@@ -16,6 +16,8 @@ import zlib
 from PIL import Image, ImageChops, ImageStat
 
 from normalize_mgba_state_pc import normalize, png_chunks, write_png
+from prepare_native_replay import prepare as prepare_native_replay
+from finalize_native_av_capture import finalize as finalize_native_capture
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -178,6 +180,16 @@ def owner_address(rom_bytes: bytes) -> int:
 
 
 def bulk_compiler_profile(rom_bytes: bytes) -> str:
+    import lowhealth_candidate_lineage as lowhealth
+    if lowhealth.is_candidate(rom_bytes):
+        # #59 adds a later-dungeon branch/helper. The Stage-1 (FFBA=0)
+        # compiler body and completion ABI stay unchanged. Authenticate the
+        # entire new source-built image before identifying that inherited
+        # Stage-1 observer profile; never replay the reconstructed parent.
+        parent, rebuilt = lowhealth.source_replay(rom_bytes)
+        if rebuilt != rom_bytes:
+            raise ValueError("low-health compiler source replay differs")
+        return bulk_compiler_profile(parent)
     if observer_profile_sha(rom_bytes) not in {
         R453_SHA256,
         R453_WRONG_DESTINATION_SHA256,
@@ -881,10 +893,18 @@ def main() -> int:
         environment["LOW_HEALTH_WATCH_COMPILER_HANG"] = "1"
         environment["LOW_HEALTH_DIAGNOSTIC_LIGHT"] = "1"
     log = args.output / "mgba.log"
+    # #67: never inherit host mute/fast-forward settings for replay audio.
+    # This Qt core treats nonnegative fastForwardMute as an override; -1
+    # retains the explicit normal volume (same contract as native captures).
+    audio_options = ["mute=0", "volume=256", "fastForwardMute=-1",
+                     "fastForwardVolume=256"]
+    audio_arguments = [argument for option in audio_options
+                       for argument in ("-C", option)]
+    native_replay = prepare_native_replay(args.output, environment)
     with log.open("w") as stream:
         completed = subprocess.run(
             [
-                str(args.mgba.resolve()), "--fastforward", "-t",
+                str(args.mgba.resolve()), "--fastforward", *audio_arguments, "-t",
                 str(normalized), "--script", str(PROBE),
                 str(args.rom.resolve()),
             ],
@@ -910,6 +930,10 @@ def main() -> int:
             return 0
     if completed.returncode != 0 or not marker.is_file():
         print(f"FAIL: mGBA status {completed.returncode}; see {log}")
+        return 1
+    native_capture = finalize_native_capture(Path(native_replay["capture_directory"]))
+    if native_capture["restored_replay_epoch"]["status"] != "PASS":
+        print("FAIL: native replay produced output before restoration")
         return 1
     if args.state_out is not None and not args.state_out.is_file():
         print(f"FAIL: requested chained state was not written: {args.state_out}")
@@ -1065,9 +1089,9 @@ def main() -> int:
                 (
                     {"02", "0B"}
                     if args.require_scene0b_low_health
-                    else {"02", "0A"}
+                    else {"02", "0A", "0B"}
                     if args.require_music_transition
-                    else {"02"}
+                    else {"02", "0B"}
                 )
             )
             and row["ffc1"] == "01"
@@ -1087,8 +1111,12 @@ def main() -> int:
                 - len(dma_unreadable)
                 - len(compiler_unreadable)
             )
-            and all(row["hp_main"] == "01" for row in pre_frames)
-            and all(row["hp_main"] == "00" for row in low_frames)
+            and all(row["dcbb"] == "FF" for row in pre_frames)
+            and all(row["dcbb"] == "40" for row in low_frames)
+            and len([row for row in low_frames
+                     if row["d880"] == "0B" and row["dd06"] == "01"
+                     and row["ffb7"] == "02" and row["ffba"] == "00"])
+                >= min(60, len(low_frames) // 2)
             )
         ),
         "BGP remains normal E4 at every rendered frame": all(
@@ -1363,6 +1391,9 @@ def main() -> int:
                 ),
             })
     receipt = {
+        "native_replay": native_replay,
+        "native_capture": native_capture,
+        "audio_options": audio_options,
         "rom": str(args.rom.resolve()),
         "rom_sha256": digest(args.rom),
         "state": str(args.state.resolve()),

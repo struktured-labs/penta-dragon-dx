@@ -210,7 +210,11 @@ def main() -> int:
             replay["machine_state_preserved"] for replay in replays
         ),
         "both replays remain in live Stage-1 gameplay": all(
-            replay["scene"] == "02"
+            (replay["scene"] == "02" or (
+                replay["scene"] == replay.get("native_raw_scene") == "0B"
+                and replay.get("canonical_scene") == "02"
+                and replay.get("stage_index") == "00"
+                and replay.get("low_health_scene_frames", 0) >= 120))
             for replay in replays
         ),
         "both menu/item/close/low-health replays are clean": clean,
