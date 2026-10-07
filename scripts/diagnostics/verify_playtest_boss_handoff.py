@@ -65,6 +65,20 @@ def main():
                            cwd=ROOT, env=clean_env, check=True)
             report['runs'].append(name)
         report['comparison'] = checker.compare(out / 'control-transition', out / 'candidate-transition')
+        # #45: every-frame return visibility, using this candidate's own cold
+        # checkpoint. This replay adds no memory assistance or state retargeting.
+        boundary_env = {k: v for k, v in os.environ.items()
+                        if not k.startswith(('ENTRY_', 'TRANSITION_'))}
+        boundary_env.update(ENTRY_ROM=str(out / 'candidate.gb'), ENTRY_FRAMES='240',
+                            ENTRY_CAPTURE_EVERY='1', ENTRY_KEYS='1', ENTRY_PULSE_A='1')
+        boundary = out / 'candidate-return'
+        subprocess.run([sys.executable, str(Path(__file__).with_name('run_secret_entry_probe.py')),
+                        str(out / 'candidate-secret/frame-6960.ss0'), str(boundary)],
+                       cwd=ROOT, env=boundary_env, check=True)
+        subprocess.run([sys.executable, str(Path(__file__).with_name('check_secret_return_visibility.py')),
+                        str(boundary), '--output', str(out / 'return-visibility.json')],
+                       cwd=ROOT, check=True)
+        report['return_visibility'] = json.loads((out / 'return-visibility.json').read_text())
         report['passed'] = True
     finally:
         (out / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
