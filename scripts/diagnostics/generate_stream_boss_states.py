@@ -200,6 +200,11 @@ PENTA_SYNC_INHERITORS_SHA256 = {
 
 
 def relocated_ted_latches(rom: bytes) -> bool:
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        # #61: recognize only the unchanged Ted bank, not fixture retargeting.
+        return relocated_ted_latches(successor.authenticated_parent(
+            rom, (17 * 0x4000, 18 * 0x4000)))
     if hashlib.sha256(rom).hexdigest() not in {
         # #30/#34 trial02: entire Ted bank17 equals recognized4f5a; this
         # identifies latch storage only, not a Penta fixture-retarget approval.
@@ -683,6 +688,10 @@ def generate_one(
                 if artifact.is_file():
                     shutil.copy2(artifact, output / f"{failed_stem}{suffix}")
             raise
+        finally:
+            prelude_trace = prefix.with_suffix(".prelude.tsv")
+            if prelude_trace.is_file():
+                shutil.copy2(prelude_trace, output / f"boss{target}_{name}.prelude.tsv")
         required = (
             "status=ok",
             f"target={target}",
@@ -1362,6 +1371,7 @@ def main() -> int:
                 )
                 for target in fresh_targets
             )
+    penta_fixture = None
     if 8 in targets and cold_penta:
         # r454 restores synchronous arena publication, so Penta can be seeded
         # from this ROM's cold boot too. Require a separate sustained replay;
@@ -1377,6 +1387,9 @@ def main() -> int:
             shutil.copy2(audit / f"{stem}{suffix}", output / f"{stem}{suffix}")
         results = [(target, text) for target, text in results if target != 8] + [detail]
     elif 8 in targets:
+        source_fixture = (OG_PENTA_FIXTURE if stock_rom else
+                          args.source_states.resolve() / "boss8_penta_dragon.ss0")
+        fixture_sha = hashlib.sha256(source_fixture.read_bytes()).hexdigest()
         results.extend(
             recapture_from_fixtures(
                 args.mgba,
@@ -1388,6 +1401,13 @@ def main() -> int:
                 False,
             )
         )
+        if hashlib.sha256(source_fixture.read_bytes()).hexdigest() != fixture_sha:
+            raise ValueError("Penta source fixture changed during recapture")
+        penta_fixture = {
+            "path": str(source_fixture.resolve()), "sha256": fixture_sha,
+            "cold_boot": False,
+            "adaptation": "existing machine-preserved fixture normalization; current-ROM replay",
+        }
     results.sort()
 
     manifest = {
@@ -1402,6 +1422,7 @@ def main() -> int:
             {"target": target, "name": BOSS_NAMES[target]}
             for target, _detail in results
         ],
+        "penta_source_fixture": penta_fixture,
     }
     if args.target is None:
         if runtime is not None:

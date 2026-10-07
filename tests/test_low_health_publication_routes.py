@@ -3,12 +3,13 @@ import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts/diagnostics'))
 from verify_low_health_flicker import publication_route_profile, publication_routes_exact
+from source_observer_fixtures import observer_fixtures
 
 
 class PublicationRoutes(unittest.TestCase):
     def test_exact_rom_and_counter_negative_controls(self):
         root=Path(__file__).resolve().parents[1]
-        rom=(root/'tmp/room03-animation-envelope-r440/candidate.gb').read_bytes()
+        rom=observer_fixtures()['r440']
         profile=publication_route_profile(rom)
         self.assertEqual(profile,'r440-bounded-room03')
         modified=bytearray(rom);modified[19*0x4000+0x2B81]^=1

@@ -89,8 +89,18 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def observer_profile_sha(rom_bytes: bytes) -> str:
+    """#61 identify unchanged observer instructions, not the executed ROM."""
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom_bytes):
+        rom_bytes = successor.authenticated_parent(
+            rom_bytes, (19 * 0x4000, 22 * 0x4000),
+            (0x42A7, 0x436E), (0x09BE, 0x09C4))
+    return hashlib.sha256(rom_bytes).hexdigest()
+
+
 def publication_route_profile(rom_bytes: bytes) -> str:
-    if hashlib.sha256(rom_bytes).hexdigest() not in {
+    if observer_profile_sha(rom_bytes) not in {
         R453_SHA256,
         R453_WRONG_DESTINATION_SHA256,
         R455_SHA256, *R456C_PROFILE_SHAS,
@@ -106,7 +116,7 @@ def publication_route_profile(rom_bytes: bytes) -> str:
         raise ValueError("dispatcher instruction boundary changed")
     if rom_bytes[offset:offset+21] != bytes.fromhex("CB 58 28 06 C3 B7 61 01 02 03 F0 BD FE 03 C2 B7 61 C1 D1 C5 C9"):
         raise ValueError("room03 bypass ABI changed")
-    if hashlib.sha256(rom_bytes).hexdigest() in {
+    if observer_profile_sha(rom_bytes) in {
             R453_SHA256,
             R453_WRONG_DESTINATION_SHA256,
             R455_SHA256, *R456C_PROFILE_SHAS,
@@ -143,7 +153,7 @@ def publication_routes_exact(counts: dict, profile: str) -> bool:
 
 def owner_address(rom_bytes: bytes) -> int:
     """Select the observed tag only for reviewed exact ROM identities."""
-    if hashlib.sha256(rom_bytes).hexdigest() in {
+    if observer_profile_sha(rom_bytes) in {
         R453_SHA256,
         R453_WRONG_DESTINATION_SHA256,
         R455_SHA256, *R456C_PROFILE_SHAS,
@@ -168,7 +178,7 @@ def owner_address(rom_bytes: bytes) -> int:
 
 
 def bulk_compiler_profile(rom_bytes: bytes) -> str:
-    if hashlib.sha256(rom_bytes).hexdigest() not in {
+    if observer_profile_sha(rom_bytes) not in {
         R453_SHA256,
         R453_WRONG_DESTINATION_SHA256,
         R455_SHA256, *R456C_PROFILE_SHAS,
@@ -195,19 +205,19 @@ def bulk_compiler_profile(rom_bytes: bytes) -> str:
         raise ValueError("bulk compiler completion ABI mismatch")
     import build_exact_source_dirty_r385 as dirty
     decider = (R451C_DIRTY_DECIDER
-               if hashlib.sha256(rom_bytes).hexdigest()
+               if observer_profile_sha(rom_bytes)
                in {R453_SHA256, R453_WRONG_DESTINATION_SHA256,
                    R455_SHA256, *R456C_PROFILE_SHAS, R455_WRONG_DESTINATION_SHA256,
                    "b331c5e0339c26672651d0592dc658ebd9c42f4d759c1e5227e18115d0661892"}
                else dirty.decider())
-    if hashlib.sha256(rom_bytes).hexdigest() == "ea53ebb1f8cef8480b6ad3b4472b74f11bab6b0ea9f03660ea8e5ca7bcde1a46":
+    if observer_profile_sha(rom_bytes) == "ea53ebb1f8cef8480b6ad3b4472b74f11bab6b0ea9f03660ea8e5ca7bcde1a46":
         import build_stage1_subscene_tracking_r442 as subscene
         assert decider.startswith(subscene.OLD)
         decider = subscene.NEW + decider[len(subscene.OLD):]
         for offset in subscene.SITES:
             if rom_bytes[offset:offset+5] != subscene.NEW:
                 raise ValueError("Stage1 subscene tracking ABI mismatch")
-    if hashlib.sha256(rom_bytes).hexdigest() == "24bbce66e2cd0d7c94e032488c18ff1f3946269b61199ffa4ee5d0c1cda1a137":
+    if observer_profile_sha(rom_bytes) == "24bbce66e2cd0d7c94e032488c18ff1f3946269b61199ffa4ee5d0c1cda1a137":
         import build_warning_source_tracking_r439 as warning
         decider = decider.replace(warning.OLD, warning.NEW)
         for bank, address, original in warning.blocks():
@@ -1238,7 +1248,7 @@ def main() -> int:
             ] = (
                 room_register_handoffs["exact"]
                 or (
-                    hashlib.sha256(rom_bytes).hexdigest() in {
+                    observer_profile_sha(rom_bytes) in {
                     R453_SHA256,
                     R453_WRONG_DESTINATION_SHA256,
                     R455_SHA256, *R456C_PROFILE_SHAS,

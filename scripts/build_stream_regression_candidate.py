@@ -185,7 +185,16 @@ def late_return_fade_chain(parent):
 
 def build(output, presentation=False, arena_alias=False, arena_completion_safe=False,
           secret_sound_alias=False, return_fade=False, experimental_late_return_fade=False,
-          release_lock=False):
+          release_lock=False, clean_stage_headers=False, score_card_cleanup=False,
+          separate_enemy_projectiles=False, boss_prelude_rearm=False):
+    if boss_prelude_rearm and not separate_enemy_projectiles:
+        raise ValueError('boss rearm requires the exact projectile chain')
+    if separate_enemy_projectiles and not score_card_cleanup:
+        raise ValueError('projectile separation requires the exact score-card chain')
+    if score_card_cleanup and not clean_stage_headers:
+        raise ValueError('score card cleanup requires clean stage headers')
+    if clean_stage_headers and not release_lock:
+        raise ValueError('clean stage headers requires the exact release-lock chain')
     if release_lock and not return_fade:
         raise ValueError('release lock re-pins the full return-fade chain only')
     if release_lock and experimental_late_return_fade:
@@ -263,6 +272,41 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     if experimental_late_return_fade:
         parent, late_records = late_return_fade_chain(parent)
         records.extend(late_records)
+    if clean_stage_headers:
+        import build_clean_stage_headers as clean_headers
+        result = clean_headers.build(parent, stock)
+        records.append(dict(name='clean-stage-headers', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(clean_headers.__file__).resolve()),
+                            builder_sha256=digest(Path(clean_headers.__file__).read_bytes())))
+        parent = result
+    if score_card_cleanup:
+        import build_score_oam_publish
+        import build_score_attr_clear
+        for name, module in [('score-oam-publish', build_score_oam_publish),
+                             ('score-attribute-clear', build_score_attr_clear)]:
+            result = module.build(parent)
+            records.append(dict(name=name, parent_sha256=digest(parent),
+                                candidate_sha256=digest(result),
+                                builder=str(Path(module.__file__).resolve()),
+                                builder_sha256=digest(Path(module.__file__).read_bytes())))
+            parent = result
+    if separate_enemy_projectiles:
+        import build_enemy_projectile_palette as bullets
+        result = bullets.build(parent)
+        records.append(dict(name='enemy-projectile-palette', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(bullets.__file__).resolve()),
+                            builder_sha256=digest(Path(bullets.__file__).read_bytes())))
+        parent = result
+    if boss_prelude_rearm:
+        import build_boss_prelude_inline_rearm as rearm
+        result = rearm.build(parent)
+        records.append(dict(name='boss-prelude-rearm', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(rearm.__file__).resolve()),
+                            builder_sha256=digest(Path(rearm.__file__).read_bytes())))
+        parent = result
     if source.read_bytes() != source_bytes:
         raise ValueError('palette source changed during construction')
     (output / 'candidate.gb').write_bytes(parent)
@@ -289,6 +333,10 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['experimental_return_fade_chain'] = return_fade
     receipt['experimental_late_return_fade_chain'] = experimental_late_return_fade
     receipt['release_lock_chain'] = release_lock
+    receipt['experimental_clean_stage_headers'] = clean_stage_headers
+    receipt['experimental_score_card_cleanup'] = score_card_cleanup
+    receipt['experimental_separate_enemy_projectiles'] = separate_enemy_projectiles
+    receipt['experimental_boss_prelude_rearm'] = boss_prelude_rearm
     if release_lock:
         receipt['deferred_issues'] = [34]
     if secret_sound_alias:
@@ -323,10 +371,22 @@ if __name__ == '__main__':
                         help='requires --return-fade; reproduce46eb for offline testing; fixed-ROM allocation unqualified')
     parser.add_argument('--release-lock', action='store_true',
                         help='requires --return-fade; defer #14 and #34 with re-pinned downstream stages')
+    parser.add_argument('--clean-stage-headers', action='store_true',
+                        help='with --release-lock, isolate native stage data from live DX helpers (#54); experimental')
+    parser.add_argument('--score-card-cleanup', action='store_true',
+                        help='requires --clean-stage-headers; clear stale boss sprites and attributes on score cards (#60)')
+    parser.add_argument('--separate-enemy-projectiles', action='store_true',
+                        help='requires --score-card-cleanup; enemy bullets use stable red OBJ3, independent of weapon OBJ0 (#57)')
+    parser.add_argument('--boss-prelude-rearm', action='store_true',
+                        help='requires --separate-enemy-projectiles; rearm scene setup after miniboss history (#27/#59), experimental')
     args = parser.parse_args()
     print(json.dumps(build(args.output, presentation=args.presentation, arena_alias=args.arena_alias,
                            arena_completion_safe=args.arena_completion_safe,
                            secret_sound_alias=args.secret_sound_alias,
                            return_fade=args.return_fade,
                            experimental_late_return_fade=args.experimental_late_return_fade,
-                           release_lock=args.release_lock), indent=2))
+                           release_lock=args.release_lock,
+                           clean_stage_headers=args.clean_stage_headers,
+                           score_card_cleanup=args.score_card_cleanup,
+                           separate_enemy_projectiles=args.separate_enemy_projectiles,
+                           boss_prelude_rearm=args.boss_prelude_rearm), indent=2))

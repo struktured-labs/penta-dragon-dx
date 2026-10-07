@@ -41,20 +41,33 @@ RELEASE_LOCK_WRAM_IMAGES = (
 )
 
 
+def menu_contract_rom(rom: bytes) -> bytes:
+    """#61: authenticate unchanged menu ABI; never execute this reconstructed ROM."""
+    import playtest_successor_lineage as successor
+
+    if not successor.is_candidate(rom):
+        return rom
+    spans = [(20 * 0x4000, 21 * 0x4000)]
+    spans.extend((source, source + length)
+                 for _, source, length in RELEASE_LOCK_WRAM_IMAGES)
+    return successor.authenticated_parent(rom, *spans)
+
+
 def release_lock_runtime_refresh(raw: bytearray, rom: bytes) -> list | None:
     import release_lock_lineage as lineage
 
-    if not lineage.is_candidate(rom):
+    contract = menu_contract_rom(rom)
+    if not lineage.is_candidate(contract):
         return None
     parent = lineage.ancestor_bytes(
-        rom, 0, 32 * 0x4000, set().union(*lineage.RUN_OWNERS.values()))
+        contract, 0, 32 * 0x4000, set().union(*lineage.RUN_OWNERS.values()))
     records = []
     for address, source, length in RELEASE_LOCK_WRAM_IMAGES:
         offset = 0x4400 + 0x1000 + address - 0xD000
         if bytes(raw[offset:offset + length]) != parent[source:source + length]:
             raise ValueError(f"operator WRAM ${address:04X} is not the 4f5a installer image")
         for start, end in [(source, source + length)]:
-            lineage.ancestor_bytes(rom, start, end,
+            lineage.ancestor_bytes(contract, start, end,
                                    {"arena-completion-safe", "arena-graphics-owner"})
         raw[offset:offset + length] = rom[source:source + length]
         records.append({"wram": f"{address:04X}", "rom_offset": f"{source:05X}",
@@ -82,6 +95,7 @@ def _gbas(state_bytes: bytes) -> tuple[list, int, bytes]:
 def release_lock_boundary(raw: bytes, rom: bytes) -> dict:
     """CPU PC and every stacked word stay outside the release-lock rewrites."""
     import release_lock_lineage as lineage
+    import playtest_successor_lineage as successor
 
     sp = int.from_bytes(raw[CPU_SP:CPU_SP + 2], "little")
     pc = int.from_bytes(raw[CPU_PC:CPU_PC + 2], "little")
@@ -100,7 +114,10 @@ def release_lock_boundary(raw: bytes, rom: bytes) -> dict:
         # at) must be unchanged, so they resume on an instruction boundary
         # shared by both ABIs; later candidate code may legitimately differ.
         span = (base - 8, base + 8) if index == 0 else (base - 3, base + 1)
-        if lineage.touched(*span):
+        successor_hit = successor.is_candidate(rom) and any(
+            span[0] < offset + len(bytes.fromhex(after)) and offset < span[1]
+            for offset, _, after in successor.RUNS)
+        if lineage.touched(*span) or successor_hit:
             hits.append(f"{word:04X}")
     # #33 replaces the bank-20 menu row prologue ($404A) and re-enters native
     # code at $406F. A frame frozen in [$4040,$406F) was built by the native
@@ -126,7 +143,7 @@ def settle_on_ancestor(state_bytes: bytes, rom: bytes, work: Path) -> tuple[byte
     import release_lock_lineage as lineage
 
     ancestor = lineage.ancestor_bytes(
-        rom, 0, 32 * 0x4000, set().union(*lineage.RUN_OWNERS.values()))
+        menu_contract_rom(rom), 0, 32 * 0x4000, set().union(*lineage.RUN_OWNERS.values()))
     if hashlib.sha256(ancestor).hexdigest() != lineage.SARA_SHA256:
         raise ValueError("release-lock ancestor reconstruction failed")
     chunks, index, raw = _gbas(state_bytes)
@@ -316,7 +333,7 @@ def main() -> int:
         try:
             settled = settle = None
             import release_lock_lineage
-            if release_lock_lineage.is_candidate(rom_bytes):
+            if release_lock_lineage.is_candidate(menu_contract_rom(rom_bytes)):
                 if out.exists():
                     parser.error("output must be a fresh directory below repository tmp/")
                 settled, settle = settle_on_ancestor(

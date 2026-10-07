@@ -871,6 +871,12 @@ if SEMANTIC_LEGACY_CONTEXT_TRAMPOLINE != bytes.fromhex(
 
 
 def semantic_expansion_is_exact(rom: bytes) -> bool:
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        # #61: unchanged publishers, bridges, private LUTs and source table.
+        return semantic_expansion_is_exact(successor.authenticated_parent(
+            rom, (19 * 0x4000, 21 * 0x4000),
+            (BG_TABLE_OFFSET, BG_TABLE_OFFSET + 256)))
     import release_lock_lineage
     if release_lock_lineage.is_candidate(rom):
         # Every semantic helper/bridge/LUT span is outside the release-lock
@@ -1427,6 +1433,20 @@ def parse_live_report(path: Path) -> dict[str, str]:
 
 def publication_boundary(rom: bytes) -> dict[str, int | str]:
     """Return the one reviewed physical-page LCDC publication site."""
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        ancestor = successor.authenticated_parent(
+            rom, (PRIMARY_PUBLISHER_ADDR, PRIMARY_PUBLISHER_END))
+        result = publication_boundary(ancestor)
+        contract = PUBLICATION_VARIANTS[str(result['variant'])]
+        extras = contract.get('extras')
+        if extras is None and 'extra' in contract:
+            extras = (contract['extra'],)
+        for offset, expected in extras or ():
+            successor.authenticated_parent(rom, (int(offset), int(offset)+len(expected)))
+            if rom[int(offset):int(offset)+len(expected)] != expected:
+                raise RuntimeError('successor publisher extra differs')
+        return result
     import release_lock_lineage
     if release_lock_lineage.is_candidate(rom):
         # The release-lock delta leaves the primary publisher untouched; the

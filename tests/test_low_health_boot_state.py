@@ -9,13 +9,16 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts/diagnostics"))
 import verify_low_health_flicker as gate
+from source_observer_fixtures import observer_fixtures
 
 
 class BootStateTest(unittest.TestCase):
     def test_r453_release_uses_authenticated_current_hazard_fixture(self):
         import verify_release_candidate as release
-        rom = ROOT / "tmp/title-nightfall-port/d82-r453-title-attract-recovery/candidate.gb"
-        selected = {item.name: item for item in release.build_gates(rom, ROOT / "tmp/test-release-fixture")}
+        with tempfile.TemporaryDirectory(dir=ROOT / "tmp") as directory:
+            rom = Path(directory) / "candidate.gb"
+            rom.write_bytes(observer_fixtures()['r453'])
+            selected = {item.name: item for item in release.build_gates(rom, Path(directory) / "out")}
         check = selected["low_health_flicker"]
         self.assertEqual(check.dependencies, ("stage1_current_hazard_state",))
         for flag in ("--boot-derived-state", "--hazard-state-receipt",
@@ -25,7 +28,7 @@ class BootStateTest(unittest.TestCase):
         self.assertIn("stage1-hazard.ss0", check.command[check.command.index("--state") + 1])
 
     def test_r453_observer_identity_rejects_changed_rom(self):
-        rom = (ROOT / "tmp/title-nightfall-port/d82-r453-title-attract-recovery/candidate.gb").read_bytes()
+        rom = observer_fixtures()['r453']
         self.assertEqual(gate.owner_address(rom), 0xFF01)
         self.assertEqual(gate.bulk_compiler_profile(rom), "r426-bulk-v1")
         self.assertEqual(gate.publication_route_profile(rom), "r451c-bounded-room03")
@@ -38,7 +41,7 @@ class BootStateTest(unittest.TestCase):
     def test_r453_negative_control_uses_same_observer(self):
         import hashlib
         import verify_stage1_exact_destination_mutation as mutation
-        rom = bytearray((ROOT / "tmp/title-nightfall-port/d82-r453-title-attract-recovery/candidate.gb").read_bytes())
+        rom = bytearray(observer_fixtures()['r453'])
         offset = 0x4EBD4
         self.assertEqual(rom[offset:offset + 12], mutation.AUTHORITATIVE_DESTINATION)
         rom[offset:offset + 12] = mutation.FORCED_WRONG_DESTINATION
@@ -79,16 +82,16 @@ class BootStateTest(unittest.TestCase):
                 counts, "unreviewed", prefix=prefix))
 
     def test_owner_binding_is_exact(self):
-        rom = (ROOT / "tmp/stage5-private-pointer-r424/candidate.gb").read_bytes()
+        rom = observer_fixtures()['r424']
         self.assertEqual(gate.owner_address(rom), 0xFF01)
         self.assertEqual(gate.owner_address(rom + b"mutation"), 0xFFA5)
         self.assertEqual(gate.owner_address(b"unknown"), 0xFFA5)
-        current = (ROOT / "tmp/stage5-dead-pointer-moves-r435/candidate.gb").read_bytes()
+        current = observer_fixtures()['r435']
         self.assertEqual(gate.owner_address(current), 0xFF01)
         self.assertEqual(gate.owner_address(current + b"mutation"), 0xFFA5)
         self.assertEqual(gate.bulk_compiler_profile(current), "r426-bulk-v1")
         self.assertEqual(gate.bulk_compiler_profile(current + b"mutation"), "")
-        recovery = (ROOT / "tmp/single-recovery-art-r436/candidate.gb").read_bytes()
+        recovery = observer_fixtures()['r436']
         self.assertEqual(gate.owner_address(recovery), 0xFF01)
         self.assertEqual(gate.bulk_compiler_profile(recovery), "r426-bulk-v1")
         self.assertEqual(gate.owner_address(recovery + b"mutation"), 0xFFA5)

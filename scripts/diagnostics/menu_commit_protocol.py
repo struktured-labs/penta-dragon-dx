@@ -36,6 +36,14 @@ def expected_parts():
 
 
 def authenticate(rom):
+    import playtest_successor_lineage
+    if playtest_successor_lineage.is_candidate(rom):
+        # #61: recognize only the exact successor, proving every protocol
+        # span unchanged before following the existing ancestor checks.
+        rom = playtest_successor_lineage.authenticated_parent(rom, *(
+            (bank*0x4000+address-(0x4000 if bank else 0),
+             bank*0x4000+address-(0x4000 if bank else 0)+len(code))
+            for bank, address, code in expected_parts()))
     import release_lock_lineage
     if release_lock_lineage.is_candidate(rom):
         # The release-lock delta leaves every protocol span byte-identical.

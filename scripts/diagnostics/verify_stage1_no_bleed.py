@@ -39,6 +39,10 @@ EXPECTED_TABLE_HISTOGRAM = dict(sorted(Counter(EXPECTED_TABLE).items()))
 
 def expected_stage1_table(rom: bytes) -> bytes:
     """YAML ownership plus exact, source-built tooth/star data profiles."""
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        return expected_stage1_table(successor.authenticated_parent(
+            rom, (DUNGEON_TABLE_OFFSET, DUNGEON_TABLE_OFFSET+256)))
     expected = bytearray(EXPECTED_TABLE)
     pin = hashlib.sha256(rom).hexdigest()
     if pin in {

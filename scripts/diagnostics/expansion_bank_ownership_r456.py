@@ -76,10 +76,21 @@ def owned_bank_variants():
     return variants
 
 
+@lru_cache(maxsize=1)
+def source_spike_tail():
+    """#61: original-source replay, without historical scratch inputs."""
+    from arena_bank20_r455 import expected_penta_seam_rom
+    import build_gameover_row_guard as row
+    import build_spike_death_trial as spike
+    image = spike.build(row.build(expected_penta_seam_rom()))
+    return {bank: image[bank * SIZE:(bank + 1) * SIZE]
+            for bank in range(21, 32)}
+
+
 def inspect_release_lock_tail(rom):
     """Banks 21..31 equal the spike-death owner outside reviewed delta runs."""
     import release_lock_lineage as lineage
-    expected = owned_bank_variants()['reconstructed-spike-death-cleanup']
+    expected = source_spike_tail()
     rows = {}
     for bank, image in sorted(expected.items()):
         base = bank * SIZE
@@ -101,6 +112,10 @@ def inspect_release_lock_tail(rom):
 
 def inspect_tail(rom):
     import release_lock_lineage
+    import playtest_successor_lineage as successor
+    if successor.is_candidate(rom):
+        parent = successor.authenticated_parent(rom, (21 * SIZE, 32 * SIZE))
+        return inspect_release_lock_tail(parent)
     if release_lock_lineage.is_candidate(rom):
         return inspect_release_lock_tail(rom)
     if len(rom)!=32*SIZE:

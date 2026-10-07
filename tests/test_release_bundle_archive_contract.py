@@ -17,13 +17,12 @@ import build_release_bundle as bundle
 
 class ReleaseBundleArchiveContractTests(unittest.TestCase):
     def test_packaged_readme_names_the_authoritative_gate_count(self) -> None:
-        template = bundle.README_TEMPLATE.read_text()
-        normalized = " ".join(template.split())
-        self.assertIn(
-            f"passed all {bundle.EXPECTED_GATE_COUNT} serial emulator release gates",
-            normalized,
-        )
-        self.assertNotIn("33 isolated emulator release gates", normalized)
+        for count in (bundle.EXPECTED_GATE_COUNT, 97):
+            rendered = bundle.render_readme(False, dict(
+                size=1048576, md5='m', sha1='s1', sha256='s256', crc32='crc'), count)
+            normalized = " ".join(rendered.decode().split())
+            self.assertIn(f"passed all {count} serial emulator release gates", normalized)
+            self.assertNotIn("33 isolated emulator release gates", normalized)
 
     def test_zip_bytes_metadata_and_order_are_deterministic(self) -> None:
         files = {

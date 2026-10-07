@@ -68,7 +68,16 @@ def build_gates(
     *,
     expanded_candidate_override: bool | None = None,
     menu_icon_candidate_override: bool | None = None,
+    candidate_sha256: str | None = None,
 ) -> list[Gate]:
+    # Receipt/packaging inventories need candidate-specific gates even when
+    # their placeholder ROM path does not exist. A real ROM always wins and
+    # must agree with any explicitly supplied identity.
+    if rom.is_file():
+        actual_sha256 = hashlib.sha256(rom.read_bytes()).hexdigest()
+        if candidate_sha256 is not None and candidate_sha256 != actual_sha256:
+            raise ValueError("gate inventory candidate identity differs from ROM")
+        candidate_sha256 = actual_sha256
     py = sys.executable
     r = str(rom)
     artifacts = output / "artifacts"
@@ -110,6 +119,12 @@ def build_gates(
             "ffb6a829cfdbf41fc5b2ebd5f6691a5a5bf5fd6ce5bad4dc7ab2e6c874d15f63",
         }
     )
+    if rom.is_file():
+        import playtest_successor_lineage as successor
+        if successor.is_candidate(rom.read_bytes()):
+            from verify_low_health_flicker import observer_profile_sha
+            current_hazard_fixture_candidate = (
+                observer_profile_sha(rom.read_bytes()) == successor.PARENT_SHA)
     expanded_candidate = rom.is_file() and rom.stat().st_size > 0x40000
     menu_icon_candidate = False
     if rom.is_file() and rom.stat().st_size > 0x1B53:
@@ -1265,17 +1280,27 @@ def build_gates(
             dependencies=("boss_arenas", "boss_og_states"),
         ),
         Gate(
+            "current_stage_control_states",
+            script("scripts/diagnostics/generate_stream_stage_states.py", r,
+                   "--output", str(artifacts / "current-stage-control-states"),
+                   "--force"),
+            180,
+        ),
+        Gate(
             "crystal_dragon_ghost",
             script(
                 "scripts/diagnostics/verify_crystal_dragon_ghost.py",
                 r,
                 "--states",
                 str(artifacts / "boss-arenas"),
+                "--stage3-state",
+                str(artifacts / "current-stage-control-states/stage3.ss0"),
+                "--stage3-exact-rom",
                 "--frames",
                 "720",
             ),
             90,
-            dependencies=("boss_arenas",),
+            dependencies=("boss_arenas", "current_stage_control_states"),
         ),
         Gate(
             "boss_material_gallery_all9",
@@ -1563,6 +1588,20 @@ def build_gates(
             "ted_incremental_mask_corpus",
         }
         gates = [gate for gate in gates if gate.name not in legacy_ted_gates]
+    import playtest_successor_lineage
+    if candidate_sha256 == playtest_successor_lineage.CANDIDATE_SHA:
+        gates.insert(3, Gate(
+            "playtest_secret_boss_handoff",
+            script("scripts/diagnostics/verify_playtest_boss_handoff.py", r,
+                   "--output", str(artifacts / "playtest-boss-handoff")),
+            240,
+        ))
+        gates.insert(3, Gate(
+            "playtest_header_data_and_timing",
+            script("scripts/diagnostics/verify_playtest_header_regression.py", r,
+                   "--output", str(artifacts / "playtest-header-contract")),
+            180,
+        ))
     return gates
 
 

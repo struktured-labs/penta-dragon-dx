@@ -11,8 +11,8 @@ if len(sys.argv) != 3:
 source=(root/sys.argv[1]).resolve()
 rom=(root/os.environ['ENTRY_ROM']).resolve()
 out=(root/'tmp'/sys.argv[2]).resolve()
-if out.parent != (root/'tmp').resolve():
- raise ValueError('output must be a fresh immediate child of repository tmp')
+if (root/'tmp').resolve() not in out.parents:
+ raise ValueError('output must be a fresh descendant of repository tmp')
 cold=sys.argv[1]=='cold'
 if not cold:
  raw=zlib.decompress(dict(png_chunks(source.read_bytes()))[b'gbAs'])
@@ -25,7 +25,8 @@ if not cold: shutil.copyfile(source,out/'identity.ss0')
 shutil.copyfile(rom,out/'candidate.gb')
 shutil.copyfile(Path(__file__).with_name('probe_secret_entry.lua'),out/'probe.lua')
 env=os.environ.copy()
-env.update(ENTRY_OUT=str(out),QT_QPA_PLATFORM='offscreen',SDL_AUDIODRIVER='dummy',LD_LIBRARY_PATH=str(root/'tmp/mgba-cgb-latches-r454/build'))
+env.update(ENTRY_OUT=str(out),QT_QPA_PLATFORM='offscreen',SDL_AUDIODRIVER='dummy')
+env.setdefault('LD_LIBRARY_PATH',str(root/'tmp/mgba-cgb-latches-r454/build'))
 # #43: cold state generation must use the same explicit audio configuration as
 # native restored captures. Implicit Qt mute/fast-forward settings can change
 # serialized filter capacitors despite identical gameplay telemetry.

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "scripts/diagnostics"))
 import release_lock_lineage  # noqa: E402
+import playtest_successor_lineage  # noqa: E402
 from menu_icon_colorization import (  # noqa: E402
     MENU_LUT_OVERRIDES,
     MENU_SEMANTIC_FAMILIES,
@@ -64,6 +65,14 @@ MENU_RESERVED_HAZARDS = {
 
 
 def menu_oracle(data: bytes) -> tuple[bytes, frozenset[int]]:
+    if playtest_successor_lineage.is_candidate(data):
+        # #61: inherit authored expectations only after authenticating the
+        # complete delta and proving both tables and entry are unchanged.
+        return menu_oracle(playtest_successor_lineage.authenticated_parent(
+            data, (BANK13_LUT, BANK13_LUT + 0x100),
+            (BANK20_LUT, BANK20_LUT + 0x100),
+            (MENU_FIRST_ENTRY, MENU_FIRST_ENTRY + len(MENU_WRAPPER_PREFIX)),
+        ))
     from build_sara_atomic_pose import CANDIDATE_SHA as SARA_SHA, authenticated_parent as sara_parent
     if hashlib.sha256(data).hexdigest() == SARA_SHA:
         return menu_oracle(sara_parent(data))
@@ -251,7 +260,9 @@ def main() -> int:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     data = rom.read_bytes()
-    if len(data) != 32 * BANK_SIZE and not release_lock_lineage.is_candidate(data):
+    if (len(data) != 32 * BANK_SIZE
+            and not release_lock_lineage.is_candidate(data)
+            and not playtest_successor_lineage.is_candidate(data)):
         print(f"FAIL: expected a 512 KiB ROM, got {len(data)} bytes")
         return 1
     canonical_lut = data[BANK13_LUT:BANK13_LUT + 0x100]

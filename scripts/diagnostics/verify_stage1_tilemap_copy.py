@@ -214,8 +214,17 @@ def reviewed_lut_identity(table: bytes) -> str:
     return raw if raw in REVIEWED_STAGE1_LUT_SHA256S else CANONICAL_STAGE1_LUT_SHA256
 
 
+def copier_contract_rom(rom_bytes: bytes) -> bytes:
+    """#61 authenticate unchanged copier ancestry; never execute this image."""
+    from diagnostics import playtest_successor_lineage as successor
+    if successor.is_candidate(rom_bytes):
+        return successor.authenticated_parent(rom_bytes, (COPIER_START, COPIER_END))
+    return rom_bytes
+
+
 def reviewed_postcomputed_copier(rom_bytes: bytes) -> bytes:
     """Return one exact reviewed ordinary compiler/publication layout."""
+    rom_bytes = copier_contract_rom(rom_bytes)
     copier = rom_bytes[COPIER_START:COPIER_END]
     digest = sha256_bytes(copier)
     if release_lock_lineage.is_candidate(rom_bytes):
@@ -630,7 +639,7 @@ def run_state(
         # #27 completion-safe moves the equivalent completion guard from
         # DBF1 to DBF3 (DBF1 now holds the direct scene resolver's RET).
         completion_call = bytes.fromhex(
-            "CD F3 DB" if release_lock_lineage.is_candidate(rom_bytes)
+            "CD F3 DB" if release_lock_lineage.is_candidate(copier_contract_rom(rom_bytes))
             else "CD F1 DB"
         )
         r417_calls = [

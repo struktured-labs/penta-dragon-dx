@@ -2,13 +2,44 @@ from pathlib import Path
 import sys
 import unittest
 import tempfile
+from unittest.mock import patch
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts/diagnostics"))
 from verify_stage1_captured_menu import summarize, room01_lut, operator_retarget, incident_raster
+import verify_stage1_captured_menu as verifier
+import playtest_successor_lineage as successor
 
 
 class CapturedMenuTests(unittest.TestCase):
+    def test_successor_authenticates_menu_bank_and_every_runtime_image(self):
+        spans = [(20 * 0x4000, 21 * 0x4000)]
+        spans.extend((source, source + length)
+                     for _, source, length in verifier.RELEASE_LOCK_WRAM_IMAGES)
+        with patch.object(successor, "is_candidate", return_value=True), patch.object(
+            successor, "authenticated_parent", return_value=b"parent"
+        ) as parent:
+            self.assertEqual(verifier.menu_contract_rom(b"child"), b"parent")
+            parent.assert_called_once_with(b"child", *spans)
+
+    def test_changed_menu_abi_cannot_inherit_operator_fixture(self):
+        with patch.object(successor, "is_candidate", return_value=True), patch.object(
+            successor, "authenticated_parent", side_effect=ValueError("changed ABI")
+        ):
+            with self.assertRaisesRegex(ValueError, "changed ABI"):
+                verifier.menu_contract_rom(b"child")
+
+    def test_successor_execution_boundary_rejects_changed_native_call(self):
+        raw = bytearray(71680)
+        raw[verifier.CPU_SP:verifier.CPU_SP + 2] = (0xDFFE).to_bytes(2, "little")
+        raw[verifier.CPU_PC:verifier.CPU_PC + 2] = (0x1A43).to_bytes(2, "little")
+        with patch.object(successor, "is_candidate", return_value=True), patch(
+            "release_lock_lineage.touched", return_value=False
+        ):
+            result = verifier.release_lock_boundary(raw, b"child")
+        self.assertFalse(result["safe"])
+        self.assertEqual(result["release_lock_hits"], ["1A43"])
+
     def test_clean_memory_cannot_hide_one_rendered_splatter_frame(self):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(dir=root / "tmp", prefix="menu-raster-test-") as temp:

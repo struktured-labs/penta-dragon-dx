@@ -33,9 +33,16 @@ class StreamSourceProfileTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, 2)
 
     def test_profile_and_contract_pins(self):
-        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v1")
+        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v2")
         self.assertTrue(profile.PROFILE["expanded_ted"])
-        self.assertEqual(builder.CONTRACT["candidate_sha256"][:8], "ffc29f4e")
+        self.assertEqual(builder.CONTRACT["candidate_sha256"],
+                         "6c4a9654b5c6dad70c8ea21bfd39b6e53766a3cd1a642153c6085774392ec228")
+        self.assertEqual(builder.CONTRACT['construction_order'][-5:], [
+            'clean-stage-headers', 'score-oam-publish', 'score-attribute-clear',
+            'enemy-projectile-palette', 'boss-prelude-rearm'])
+        for flag in ('clean_stage_headers', 'score_card_cleanup',
+                     'separate_enemy_projectiles', 'boss_prelude_rearm'):
+            self.assertIs(builder.FLAGS[flag], True)
         self.assertTrue(builder.CONTRACT["chain_flags"]["release_lock"])
         self.assertEqual(builder.CONTRACT["deferred_issues"], [34])
         self.assertNotIn("select-buffer", builder.CONTRACT["construction_order"])
