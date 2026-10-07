@@ -8,6 +8,7 @@ import zlib
 import pytest
 
 from test_stage1_palette_ownership import ROOT, fixture, m
+from palette_test_fixtures import current_states
 
 
 def stage2_fixture():
@@ -63,6 +64,10 @@ def test_retained_exact_rom_stage2_state_confirms_mapping():
     sys.path.insert(0, str(ROOT/'scripts/diagnostics'))
     from normalize_mgba_state_pc import png_chunks
     rom, _ = stage2_fixture()
+    if m.sha(rom)!=m.LATE_RETURN_PIN:
+        for raw in current_states(rom,2):
+            assert_emulator_stage2_memory(rom,raw)
+        return
     folder = ROOT/'tmp/late-return-stage2-continue-a-01'
     receipt = json.loads((folder/'receipt.json').read_text())
     encoded = (folder/'entry.ss0').read_bytes()
@@ -71,6 +76,10 @@ def test_retained_exact_rom_stage2_state_confirms_mapping():
     raw = zlib.decompress(dict(png_chunks(encoded))[b'gbAs'])
     assert len(raw) == 71680
     assert int.from_bytes(raw[4:8], 'little') == zlib.crc32(rom)
+    assert_emulator_stage2_memory(rom,raw)
+
+
+def assert_emulator_stage2_memory(rom,raw):
     state = bytearray(181040)
     struct.pack_into('<I', state, 4, 0xB0CA)
     state[520:520+32768] = raw[0x4400:0xC400]

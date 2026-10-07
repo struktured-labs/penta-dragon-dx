@@ -8,6 +8,7 @@ import tempfile
 import pytest
 
 from test_stage1_palette_ownership import ROOT, fixture, m
+from palette_test_fixtures import rom_fixture_path
 
 
 def test_failure_receipt_storage_error_preserves_original_error_and_undo(monkeypatch):
@@ -16,7 +17,7 @@ def test_failure_receipt_storage_error_preserves_original_error_and_undo(monkeyp
     with tempfile.TemporaryDirectory(dir=ROOT/'tmp') as work:
         monkeypatch.setattr(m, 'WORK', Path(work))
         monkeypatch.setattr(m.subprocess, 'run', lambda *a, **kw: pytest.fail('real device access'))
-        bridge = m.Bridge(ROOT/'tmp/stream-late-return-source-01/candidate.gb')
+        bridge = m.Bridge(rom_fixture_path())
         original_stem = bridge.stem
         remote = {}
         monkeypatch.setattr(bridge, 'checkpoint', lambda _: state)
@@ -62,7 +63,7 @@ def test_sequential_alias_apply_resume_and_undo(monkeypatch, second_failure, sta
         monkeypatch.setattr(m, 'WORK', Path(work))
         monkeypatch.setattr(m.time, 'sleep', lambda _: None)
         monkeypatch.setattr(m.subprocess, 'run', lambda *a, **kw: pytest.fail('real process/device access'))
-        bridge = m.Bridge(ROOT/'tmp/stream-late-return-source-01/candidate.gb')
+        bridge = m.Bridge(rom_fixture_path())
         initial_stem = bridge.stem
         remote = {'/media/fat/games/GBC/'+initial_stem+'.gbc': rom}
         live = bytearray(initial_state)

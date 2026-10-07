@@ -872,7 +872,7 @@ callbacks:add('frame',function()
 end)
 -- #43 signal only after every callback and initial input is installed.
 local startupGate = os.getenv('ENTRY_NATIVE_START_GATE')
-if startupGate then
+if startupGate and os.getenv('ENTRY_NATIVE_DEFER_START')~='1' then
  local ready = assert(io.open(startupGate, 'w'))
  ready:write('probe initialization complete\n')
  ready:close()

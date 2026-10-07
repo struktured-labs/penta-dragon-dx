@@ -17,6 +17,41 @@ class CardEvidenceTest(unittest.TestCase):
   self.assertEqual(check.assess(self.rows(True))['score_dirty_frames'],100)
  def test_truncated_route_not_complete(self):
   self.assertFalse(check.assess(self.rows()[:-1])['complete'])
+ def test_extended_route_requires_exact_ordered_requested_frames(self):
+  rows=self.rows()
+  rows.extend(dict(rows[-1],frame=str(i)) for i in range(2401,3301))
+  self.assertTrue(check.assess(rows,3300)['complete'])
+  self.assertFalse(check.assess(rows)['complete'])
+  rows[500]=dict(rows[499])
+  self.assertFalse(check.assess(rows,3300)['complete'])
+ def test_empty_and_reordered_routes_fail_closed(self):
+  self.assertFalse(check.assess([])['complete'])
+  self.assertFalse(check.assess(list(reversed(self.rows())))['complete'])
+ def test_lowhealth_requires_native_dungeon_owner(self):
+  rows=self.rows()
+  for r in rows:
+   if r['scene']=='03':r.update(scene='0B',native_scene='03')
+  self.assertEqual(check.assess(rows)['first_gameplay'],200)
+  for r in rows:r['native_scene']='0C'
+  self.assertIsNone(check.assess(rows)['first_gameplay'])
+  for r in rows:r.pop('native_scene')
+  self.assertIsNone(check.assess(rows)['first_gameplay'])
+ def test_invalid_frame_contract_rejected(self):
+  for frames in (0,-1,'3300'):
+   with self.assertRaises(ValueError):check.assess([],frames)
+ def test_recipe_normalizes_only_owned_output_paths(self):
+  a=Path(__file__).resolve().parents[1]/'tmp/recipe-a'
+  b=a.with_name('recipe-b')
+  def receipt(folder):
+   return {'inputs_environment':{'ENTRY_OUT':str(folder),
+     'ENTRY_NATIVE_START_GATE':str(folder/'native-runtime/ready'),
+     'ENTRY_NATIVE_DEFER_START':'1','ENTRY_FRAMES':'3300','ENTRY_KEYS':'1'}}
+  x,y=receipt(a),receipt(b)
+  self.assertEqual(check.input_recipe(x,a),check.input_recipe(y,b))
+  y['inputs_environment']['ENTRY_KEYS']='0'
+  self.assertNotEqual(check.input_recipe(x,a),check.input_recipe(y,b))
+  y['inputs_environment']['ENTRY_NATIVE_START_GATE']=str(a/'native-runtime/ready')
+  with self.assertRaises(ValueError):check.input_recipe(y,b)
  def test_other_stage_does_not_supply_coverage(self):
   rows=self.rows()
   for r in rows:r['stage']='02'
