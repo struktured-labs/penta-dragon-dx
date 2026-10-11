@@ -32,6 +32,7 @@ LIVE_GATES = (
     "release_matrix_resume_contract",
     "playtest_header_data_and_timing",
     "playtest_secret_boss_handoff",
+    "native_stage_records",
     "title_footer_integration",
     "title_animation_frames",
     "flash_attribution",

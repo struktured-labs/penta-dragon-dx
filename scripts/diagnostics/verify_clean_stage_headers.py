@@ -27,13 +27,16 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def contract_differences(values, control, target, require_native_common_timing):
+def contract_differences(values, control, target, require_native_common_timing,
+                         require_native_timing_all_records=False):
     failures=[]
     for key in ('af_after','bc_after','de_after','hl_after','sp_after','bank','dc09_after'):
         if values[key]!=control[key]:
             failures.append(f'stage{target}: {key} differs from original')
     if require_native_common_timing and target < 7 and values['cycles']!=control['cycles']:
         failures.append(f'stage{target}: common header timing differs from original')
+    if require_native_timing_all_records and target >= 7 and values['cycles']!=control['cycles']:
+        failures.append(f'stage{target}: native record timing differs from original (#54)')
     return failures
 
 
@@ -44,6 +47,8 @@ def main():
     p.add_argument('--targets',default='0,1,2,3,4,5,6,7,8')
     p.add_argument('--require-native-common-timing',action='store_true',
                    help='require exact native elapsed cycles for unaffected records0..6 (#62)')
+    p.add_argument('--require-native-timing-all-records',action='store_true',
+                   help='also require exact native elapsed cycles for records 7/8 (#54 native loader)')
     a=p.parse_args()
     a.output=a.output.resolve()
     if a.output.exists() or (ROOT/'tmp').resolve() not in a.output.parents:
@@ -115,7 +120,8 @@ def main():
             if role=='candidate':
                 control=runs['original',target]['values']
                 report['failures'].extend(contract_differences(
-                    values,control,target,a.require_native_common_timing))
+                    values,control,target,a.require_native_common_timing,
+                    a.require_native_timing_all_records))
     bad=[t for t in targets if not runs['parent',t]['header_matches']]
     report['negative_control_failed_targets']=bad
     if any(t in (7,8) for t in targets) and not bad:
@@ -129,6 +135,7 @@ def main():
         report['failures'].append('runtime changed during run')
     report['passed']=not report['failures']
     report['require_native_common_timing']=a.require_native_common_timing
+    report['require_native_timing_all_records']=a.require_native_timing_all_records
     (a.output/'receipt.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(dict(passed=report['passed'],failures=report['failures'],negative_control=bad)))
     return 0 if report['passed'] else 1

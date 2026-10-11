@@ -7,16 +7,32 @@ import subprocess
 import sys
 
 import build_clean_stage_headers as layout
+import build_native_stage_records as native_records
 import playtest_successor_lineage as lineage
 
 ROOT=Path(__file__).resolve().parents[2]
 STOCK_SHA='2f32570cff62b8664bfa06b939988c3fd6a7efabf870a990a5fa65bab37eac30'
 
 
+def native_layout(rom):
+    """#54 final stage: bank-1 records/loader are the exact cartridge bytes."""
+    stock=(ROOT/'rom/Penta Dragon (J).gb').read_bytes()
+    return (rom[native_records.NATIVE_START:native_records.NATIVE_END]
+            ==stock[native_records.NATIVE_START:native_records.NATIVE_END]
+            and not native_records.verify_installed(rom,stock))
+
+
 def corrupt_control(rom):
     if not lineage.is_candidate(rom):
         raise ValueError('exact combined playtest candidate required')
     result=bytearray(rom)
+    if native_layout(rom):
+        # Native loader reads bank 1 directly: replay the played defect there.
+        for address,payload in ((native_records.TED_TAIL_OLD,native_records.TED_TAIL),
+                                (native_records.DEATH_RETURN_OLD,native_records.DEATH_RETURN)):
+            result[address:address+9]=payload
+        result[0x14E:0x150]=((sum(result[:0x14E])+sum(result[0x150:]))&65535).to_bytes(2,'big')
+        return bytes(result)
     # Deliberately replay the original defect: the two code helpers become
     # header bytes. Do not patch the real candidate or change its code path.
     for address in (0x7C91,0x7CAE):
@@ -47,6 +63,7 @@ def main():
         '--original',str(stock),'--parent',str(broken),
         '--candidate',str(a.rom.resolve()),'--output',str(out/'contracts'),
         '--require-native-common-timing',
+        *(('--require-native-timing-all-records',) if native_layout(a.rom.read_bytes()) else ()),
     ],cwd=ROOT,check=False).returncode
 
 

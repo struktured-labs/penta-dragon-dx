@@ -23,10 +23,13 @@ class ReceiptInventoryTests(unittest.TestCase):
                     expanded_candidate_override=True, menu_icon_candidate_override=True,
                     candidate_sha256=identity)]
         current = names(lineage.CANDIDATE_SHA)
-        self.assertEqual(len(current), 97)
+        self.assertEqual(len(current), 98)
         self.assertEqual(current[3:5], ['playtest_header_data_and_timing',
                                       'playtest_secret_boss_handoff'])
-        self.assertEqual([n for n in current if not n.startswith('playtest_')], names(None))
+        # #54: native_stage_records is candidate-specific like the playtest gates.
+        self.assertEqual(current[5], 'native_stage_records')
+        self.assertEqual([n for n in current if not n.startswith('playtest_')
+                          and n != 'native_stage_records'], names(None))
         self.assertEqual(names('0' * 64), names(None))
 
     def test_existing_rom_rejects_conflicting_inventory_identity(self):
@@ -62,7 +65,7 @@ class ReceiptInventoryTests(unittest.TestCase):
             self.assertIs(check(manifest), manifest)
             missing = copy.deepcopy(manifest)
             missing['results'].pop(3)
-            with self.assertRaisesRegex(SystemExit, 'expected 97'):
+            with self.assertRaisesRegex(SystemExit, 'expected 98'):
                 check(missing)
             reordered = copy.deepcopy(manifest)
             reordered['results'][3:5] = reversed(reordered['results'][3:5])

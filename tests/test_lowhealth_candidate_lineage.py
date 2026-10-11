@@ -85,8 +85,9 @@ class ActualCandidate(unittest.TestCase):
         self.assertEqual(rebuilt, rom)
         gates = verify_release_candidate.build_gates(path, ROOT / 'tmp/unused-lowhealth-roster')
         names = [gate.name for gate in gates]
-        self.assertEqual(len(names), 97)
+        self.assertEqual(len(names), 98)
         for name in ('playtest_header_data_and_timing', 'playtest_secret_boss_handoff',
+                     'native_stage_records',
                      'low_health_flicker', 'gameplay_movement_stress'):
             self.assertIn(name, names)
         broken = verify_playtest_boss_handoff.broken_control(rom)
