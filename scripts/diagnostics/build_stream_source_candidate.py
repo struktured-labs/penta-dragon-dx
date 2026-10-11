@@ -19,6 +19,11 @@ changes remain subject to the full runtime matrix; construction is not approval.
 
 Version3 adds later-dungeon low-health scene dispatch, bounded Timer service,
 camera fast-path admission, and the returned-title blocked-read retry.
+
+Version4 (#54) appends native-stage-records: the bank-1 stage-record table and
+its native loader are restored to the exact cartridge bytes, the bank-63 mirror
+is retired, and the two helpers that collided with records 7/8 move to fixed
+bank-0 fill with cycle-identical entry jumps.
 """
 from __future__ import annotations
 
@@ -53,9 +58,10 @@ FLAGS = {
     "later_lowhealth_timer": True,
     "later_lowhealth_camera": True,
     "title_glyph_retry_window": True,
+    "native_stage_records": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v3",
+    "schema": "penta-stream-release-lock-original-source-build-v4",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -75,7 +81,7 @@ CONTRACT = {
         "enemy-projectile-palette", "boss-prelude-rearm",
         "later-lowhealth-dispatch", "later-lowhealth-timer-yield",
         "stage7-lowhealth-fastpath", "stage7-lowhealth-camera",
-        "title-glyph-retry-window",
+        "title-glyph-retry-window", "native-stage-records",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -84,7 +90,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "126861281b75edaf8daace834ccbe41e53ed0c9eebb71e50fe3bd6823e8b6941"
+        "050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98323ed4"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -189,6 +195,8 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
             name = "experimental_" + key
         elif key == "release_lock":
             name = "release_lock_chain"
+        elif key == "native_stage_records":
+            name = key
         else:
             name = key if key.startswith("experimental_") else "experimental_" + key
             name += "_chain"

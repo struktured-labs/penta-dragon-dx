@@ -188,7 +188,10 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
           release_lock=False, clean_stage_headers=False, score_card_cleanup=False,
           separate_enemy_projectiles=False, boss_prelude_rearm=False,
           later_lowhealth_timer=False, later_lowhealth_camera=False,
-          title_glyph_read_window=False, title_glyph_retry_window=False):
+          title_glyph_read_window=False, title_glyph_retry_window=False,
+          native_stage_records=False):
+    if native_stage_records and not (title_glyph_retry_window and clean_stage_headers):
+        raise ValueError('native stage records require the exact title-retry chain')
     if title_glyph_read_window and title_glyph_retry_window:
         raise ValueError('title glyph experiments are mutually exclusive')
     if title_glyph_retry_window and not later_lowhealth_camera:
@@ -357,6 +360,16 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
                             builder=str(Path(glyph_retry.__file__).resolve()),
                             builder_sha256=digest(Path(glyph_retry.__file__).read_bytes())))
         parent = result
+    if native_stage_records:
+        # #54: restore the native bank-1 stage-record table/loader and move
+        # the two colliding helpers to fixed-bank fill (cycle-identical).
+        import build_native_stage_records as native_records
+        result = native_records.build(parent, stock)
+        records.append(dict(name='native-stage-records', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(native_records.__file__).resolve()),
+                            builder_sha256=digest(Path(native_records.__file__).read_bytes())))
+        parent = result
     if source.read_bytes() != source_bytes:
         raise ValueError('palette source changed during construction')
     (output / 'candidate.gb').write_bytes(parent)
@@ -391,6 +404,7 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['experimental_later_lowhealth_camera'] = later_lowhealth_camera
     receipt['experimental_title_glyph_read_window'] = title_glyph_read_window
     receipt['experimental_title_glyph_retry_window'] = title_glyph_retry_window
+    receipt['native_stage_records'] = native_stage_records
     if release_lock:
         receipt['deferred_issues'] = [34]
     if secret_sound_alias:
@@ -451,6 +465,8 @@ if __name__ == '__main__':
                         help='requires --later-lowhealth-camera; guard returned-title footer VRAM predicates (#8), experimental')
     parser.add_argument('--title-glyph-retry-window', action='store_true',
                         help='requires --later-lowhealth-camera; retry blocked footer predicate while preserving successful-path timing (#8), experimental')
+    parser.add_argument('--native-stage-records', action='store_true',
+                        help='requires --title-glyph-retry-window; restore the native bank-1 stage records/loader and move the colliding helpers (#54)')
     args = parser.parse_args()
     print(json.dumps(build(args.output, presentation=args.presentation, arena_alias=args.arena_alias,
                            arena_completion_safe=args.arena_completion_safe,
@@ -465,4 +481,5 @@ if __name__ == '__main__':
                            later_lowhealth_timer=args.later_lowhealth_timer,
                            later_lowhealth_camera=args.later_lowhealth_camera,
                            title_glyph_read_window=args.title_glyph_read_window,
-                           title_glyph_retry_window=args.title_glyph_retry_window), indent=2))
+                           title_glyph_retry_window=args.title_glyph_retry_window,
+                           native_stage_records=args.native_stage_records), indent=2))

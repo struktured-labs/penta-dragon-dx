@@ -1609,6 +1609,15 @@ def build_gates(
                    "--output", str(artifacts / "playtest-header-contract")),
             180,
         ))
+        # #54: bank-1 stage records 7/8 are cartridge data again; their
+        # FFAE-FFB6 HRAM image, registers and loader cycles equal the
+        # original, with a played-layout negative control.
+        gates.insert(5, Gate(
+            "native_stage_records",
+            script("scripts/diagnostics/verify_native_stage_records.py", r,
+                   "--output", str(artifacts / "native-stage-records")),
+            180,
+        ))
     return gates
 
 

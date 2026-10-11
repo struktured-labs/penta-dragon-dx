@@ -79,6 +79,13 @@ def expanded_release_header(rom: bytes) -> bool:
     return release_lock_lineage.is_candidate(rom)
 
 
+def native_stage_record_layout(rom: bytes) -> bool:
+    """#54: the final stage moved both helpers out of bank-1 records 7/8."""
+    import build_native_stage_records as records
+    return (exact(rom, records.TED_JUMP, records.jp(records.TED_TAIL_NEW))
+            or exact(rom, records.DEATH_JUMP, records.jp(records.DEATH_RETURN_NEW)))
+
+
 def native_pose_bank_matches(actual: bytes, expected: bytes, cgb_flag: int) -> bool:
     if actual == expected:
         return True
@@ -204,6 +211,15 @@ def main() -> int:
     ] = english_addon.ENGLISH_OPENING_REARM_HELPER
     english_menu_window_prelude = bytes(english_menu_window_prelude)
 
+    # #54: with native stage records the tail and the death return live in
+    # fixed-bank fill; bank-1 records 7/8 must then be exact cartridge data.
+    import build_native_stage_records as native_records
+    relocated = native_stage_record_layout(rom)
+    tail_address = native_records.TED_TAIL_NEW if relocated else TRAMPOLINE_TAIL
+    tail_offset = tail_address if relocated else bank_offset(1, TRAMPOLINE_TAIL)
+    death_return_address = (native_records.DEATH_RETURN_NEW if relocated
+                            else build.DEATH_FINAL_PUBLISH_RETURN_ADDR)
+    stock_rom = (ROOT / "rom/Penta Dragon (J).gb").read_bytes()
     call_site = bytes([
         0xCD, TRAMPOLINE_FRONT & 0xFF, TRAMPOLINE_FRONT >> 8,
     ])
@@ -211,7 +227,7 @@ def main() -> int:
         0xFA, 0x80, 0xD8,
         0xFE, 0x10,
         0xC2, 0x95, 0x42,
-        0xC3, TRAMPOLINE_TAIL & 0xFF, TRAMPOLINE_TAIL >> 8,
+        0xC3, tail_address & 0xFF, tail_address >> 8,
     ])
     tail = bytes([
         0x3E, EXPANDED_BANK,
@@ -307,7 +323,7 @@ def main() -> int:
     # expander itself asserts this exact post-DX preimage before preserving it;
     # verify the shipped owner here instead of the retired stock padding.
     death_fixed_publish_leaf = build.build_death_final_publish_leaf(
-        build.DEATH_FINAL_PUBLISH_RETURN_ADDR
+        death_return_address
     )
     # The inline copier grew three bytes in the current builder. Identify
     # its exact title-safe entry rather than calling into the preceding JP.
@@ -351,8 +367,12 @@ def main() -> int:
         "scene_gated_front_trampoline": exact(
             rom, bank_offset(1, TRAMPOLINE_FRONT), front
         ),
-        "bank_safe_tail_trampoline": exact(
-            rom, bank_offset(1, TRAMPOLINE_TAIL), tail
+        "bank_safe_tail_trampoline": exact(rom, tail_offset, tail),
+        "native_stage_records_exact": (not relocated) or (
+            rom[native_records.NATIVE_START:native_records.NATIVE_END]
+            == stock_rom[native_records.NATIVE_START:native_records.NATIVE_END]
+            and rom[native_records.FILL_START:native_records.TED_TAIL_NEW]
+            == stock_rom[native_records.FILL_START:native_records.TED_TAIL_NEW]
         ),
         "expanded_bank_entry_abi": exact(
             rom, EXPANDED_BANK * BANK_SIZE, expanded_entry
@@ -379,7 +399,7 @@ def main() -> int:
             rom, LATER_PUBLISH_DISPATCH_STUB, death_fixed_publish_leaf
         ),
         "death_bank1_publish_return_exact": copy_entry is not None and exact(
-            rom, build.DEATH_FINAL_PUBLISH_RETURN_ADDR, death_publish_return
+            rom, death_return_address, death_publish_return
         ),
         "death_transition_exact": exact(
             rom, build.DEATH_TRANSITION_ADDR, death_transition

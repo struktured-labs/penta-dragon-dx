@@ -33,20 +33,20 @@ class StreamSourceProfileTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, 2)
 
     def test_profile_and_contract_pins(self):
-        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v3")
+        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v4")
         self.assertTrue(profile.PROFILE["expanded_ted"])
         self.assertEqual(builder.CONTRACT["candidate_sha256"],
-                         "126861281b75edaf8daace834ccbe41e53ed0c9eebb71e50fe3bd6823e8b6941")
-        self.assertEqual(builder.CONTRACT['construction_order'][-10:], [
+                         "050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98323ed4")
+        self.assertEqual(builder.CONTRACT['construction_order'][-11:], [
             'clean-stage-headers', 'score-oam-publish', 'score-attribute-clear',
             'enemy-projectile-palette', 'boss-prelude-rearm',
             'later-lowhealth-dispatch', 'later-lowhealth-timer-yield',
             'stage7-lowhealth-fastpath', 'stage7-lowhealth-camera',
-            'title-glyph-retry-window'])
+            'title-glyph-retry-window', 'native-stage-records'])
         for flag in ('clean_stage_headers', 'score_card_cleanup',
                      'separate_enemy_projectiles', 'boss_prelude_rearm',
                      'later_lowhealth_timer', 'later_lowhealth_camera',
-                     'title_glyph_retry_window'):
+                     'title_glyph_retry_window', 'native_stage_records'):
             self.assertIs(builder.FLAGS[flag], True)
         self.assertTrue(builder.CONTRACT["chain_flags"]["release_lock"])
         self.assertEqual(builder.CONTRACT["deferred_issues"], [34])

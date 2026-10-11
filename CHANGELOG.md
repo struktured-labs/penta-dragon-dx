@@ -2,6 +2,15 @@
 
 ## [Unreleased] - Restart fixes
 
+- Fix #54 native stage records 7/8: move the Ted bank-16 trampoline tail and
+  the death final-publication return out of bank-1 records 7/8 into unused
+  fixed-bank fill (`$00D0`/`$00D9`), retarget their two `JP`s, and restore the
+  original bank-1 loader and record table (`01:7B91-7CB7`). #63 had fixed the
+  HRAM values via a bank-63 mirror but left the table corrupt and cost +800
+  loader cycles on records 7/8; the mirror is erased. Cycle-identical to
+  12686128 (attract lockstep 0-26000 unmasked, Stage-7 patrol). New gate
+  `native_stage_records`. #23 stays resolved. Candidate:
+  `050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98323ed4`.
 - Fix #14 Sara drawn over black ceiling overhangs: restore the original OBJ-to-BG
   priority for Sara's quadrants (bank1 quadrant flags plus a private copy at
   `$C0C0`, fused flash/priority helper at `$11A0`, emitter call sites at

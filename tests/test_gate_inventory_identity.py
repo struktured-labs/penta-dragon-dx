@@ -30,9 +30,11 @@ class GateInventoryIdentity(unittest.TestCase):
         for pin in (successor.CANDIDATE_SHA, low.CANDIDATE_SHA, *sorted(low.TITLE_SHAS)):
             with self.subTest(pin=pin):
                 names = self.names(self.root/'absent.gb', pin)
-                self.assertEqual(len(names), 97)
+                self.assertEqual(len(names), 98)
                 self.assertEqual(names[3:5], ['playtest_header_data_and_timing',
                                              'playtest_secret_boss_handoff'])
+                # #54: native bank-1 stage records gate follows the handoff.
+                self.assertEqual(names[5], 'native_stage_records')
                 self.assertEqual(len(names), len(set(names)))
 
     def test_unknown_hash_does_not_gain_candidate_specific_gates(self):
