@@ -697,6 +697,21 @@ if os.getenv('ENTRY_WAIT_TRACE')=='1' then
   registers[key]=(registers[key] or 0)+1
  end,0x7F21,20)
 end
+local doorway=nil
+local function doorwayFail(msg)
+ local f=assert(io.open(out..'/doorway-failure.txt','w'));f:write(msg..'\n');f:close()
+ if doorway then doorway.log:close() end
+ io.stderr:write('DOORWAY ORACLE FAILURE: '..msg..'\n');os.exit(3)
+end
+if os.getenv('ENTRY_DOORWAY_ADAPTIVE')=='1' then
+ assert(os.getenv('ENTRY_COLD')=='1' and os.getenv('ENTRY_COLD_WARP')=='1','adaptive doorway requires cold warp recipe')
+ assert(not os.getenv('ENTRY_KEY_FRAMES'),'adaptive doorway replaces ENTRY_KEY_FRAMES')
+ doorway={phase='hold',y=tonumber(os.getenv('ENTRY_HOLD_UNTIL_Y') or '1356'),cam=(os.getenv('ENTRY_WAIT_CAMERA') or '0C08'):upper(),
+  holdCap=tonumber(os.getenv('ENTRY_HOLD_CAP') or '1260'),settleCap=tonumber(os.getenv('ENTRY_CAMERA_CAP') or '1290'),
+  log=assert(io.open(out..'/doorway-inputs.tsv','w'))}
+ assert(frames>=doorway.settleCap+1,'ENTRY_FRAMES must exceed the camera cap')
+ doorway.log:write('frame\tphase\tworld_y\tcamera\tkeys\n')
+end
 local trace=assert(io.open(out..'/trace.tsv','w'))
 trace:write('frame\tscene\tstage\tbonus\tmode\troom\tx\ty\thp\tworld_x\tworld_y\tc2\tc3\tc4\tc5\n')
 callbacks:add('frame',function()
@@ -736,6 +751,32 @@ callbacks:add('frame',function()
   if n>=180 and n<186 then keys=0x80 end
   if (n>=193 and n<199) or (n>=241 and n<247) or (n>=291 and n<297) or (n>=391 and n<397) then keys=1 end
   if n>=341 and n<347 then keys=8 end
+ end
+ -- #14 doorway oracle: condition-driven joypad input instead of a fixed
+ -- key-release frame. Hold ENTRY_KEYS until Sara's world Y reaches the target,
+ -- release, then wait for the camera (SCY/SCX) target and capture once.
+ -- Reads only; frame caps abort loudly. Every input is logged.
+ if doorway and n>=warpFrame then
+  local wy=wram:read8(0x1C02)+256*wram:read8(0x1C03)
+  local cam=string.format('%02X%02X',emu:read8(0xFF42),emu:read8(0xFF43))
+  if n>warpFrame and doorway.phase=='hold' and wy>=doorway.y then
+   if wy~=doorway.y then doorwayFail(string.format('world Y overshot %d at frame %d',wy,n)) end
+   doorway.phase='wait';doorway.reached=n
+  end
+  if doorway.phase=='hold' and n>doorway.holdCap then doorwayFail(string.format('hold cap %d hit, world Y %d',doorway.holdCap,wy)) end
+  if doorway.phase=='wait' then
+   if wy~=doorway.y then doorwayFail(string.format('world Y moved to %d at frame %d',wy,n)) end
+   -- SCY/SCX latched this frame take effect on the next rendered frame, so
+   -- capture once a full frame has been drawn with the target camera.
+   if cam==doorway.cam then
+    if doorway.cameraSeen then doorway.phase='capture' else doorway.cameraSeen=n end
+   else doorway.cameraSeen=nil end
+   if doorway.phase=='wait' and n>doorway.settleCap then doorwayFail(string.format('camera cap %d hit, camera %s',doorway.settleCap,cam)) end
+  end
+  keys=doorway.phase=='hold' and keys or 0
+  doorway.log:write(string.format('%d\t%s\t%d\t%s\t%02X\n',n,doorway.phase,wy,cam,keys));doorway.log:flush()
+ elseif doorway then
+  doorway.log:write(string.format('%d\tpre\t%d\t%02X%02X\t%02X\n',n,wram:read8(0x1C02)+256*wram:read8(0x1C03),emu:read8(0xFF42),emu:read8(0xFF43),keys))
  end
  if os.getenv('ENTRY_FLOOR_PATROL')=='1' and n>1200 then
   keys=math.floor((n-1201)/100)%2==0 and 32 or 16
@@ -834,7 +875,17 @@ callbacks:add('frame',function()
   emu:screenshot(string.format('%s/frame-%04d.png',out,n))
   emu:saveStateFile(string.format('%s/frame-%04d.ss0',out,n))
  end
+ if doorway and doorway.phase=='capture' then
+  emu:screenshot(out..'/doorway.png');emu:saveStateFile(out..'/doorway.ss0')
+  local j=assert(io.open(out..'/doorway-capture.json','w'))
+  j:write(string.format('{"rule":"hold keys %d until world_y==%d, release, wait camera==%s, capture first frame rendered with it","hold_released_frame":%d,"camera_first_read_frame":%d,"capture_frame":%d,"hold_cap":%d,"camera_cap":%d,"state":"doorway.ss0","screenshot":"doorway.png"}\n',tonumber(os.getenv('ENTRY_KEYS') or '0'),doorway.y,doorway.cam,doorway.reached,doorway.cameraSeen,n,doorway.holdCap,doorway.settleCap))
+  j:close();doorway.phase='done'
+ end
  previousScene,previousStage=scene,stage
+ if doorway and n==frames then
+  if doorway.phase~='done' then doorwayFail('run ended before doorway capture') end
+  doorway.log:close()
+ end
  if n==frames then
   if soundTiming then soundTiming:close() end
   if soundCommands then soundCommands:close() end
