@@ -104,6 +104,11 @@ WRAM = 0x4400
 WRAM_START = 0xC000
 DCBB = WRAM + (0xDCBB - WRAM_START)
 DCFD = WRAM + (0xDCFD - WRAM_START)
+DCE7 = WRAM + (0xDCE7 - WRAM_START)
+PENTA_TARGET = 8
+FAZE_TARGET = 6
+PENTA_FINAL_ENTRY = 0x54E6  # bank 1 (ROM offset == address)
+PENTA_FINAL_CALL = 0x5502
 DF53 = WRAM + (0xDF53 - WRAM_START)
 DF54 = WRAM + (0xDF54 - WRAM_START)
 DBFF = WRAM + (0xDBFF - WRAM_START)
@@ -416,6 +421,22 @@ def write_png(path: Path, chunks: list[tuple[bytes, bytes]]) -> None:
     path.write_bytes(data)
 
 
+def normalize_story_script_state(path: Path) -> None:
+    """Clear DCE7, the 0:34CA story-script interpreter byte, in a capture.
+
+    The synthetic Stage-1 dispatcher entry leaves DCE7=$84, while natural
+    play reaches Faze's aftermath with $00. Faze's kill runs the bank-1 54C0
+    script through 34CA, which with $84 executes data and stalls in scene 19.
+    Nothing in the arena loop writes DCE7, so the natural value persists.
+    """
+    chunks = png_chunks(path.read_bytes())
+    index = [i for i, (kind, _p) in enumerate(chunks) if kind == b"gbAs"][0]
+    raw = bytearray(zlib.decompress(chunks[index][1]))
+    raw[DCE7] = 0
+    chunks[index] = (b"gbAs", zlib.compress(bytes(raw), level=9))
+    write_png(path, chunks)
+
+
 def patch_state(
     source: Path,
     destination: Path,
@@ -455,17 +476,55 @@ def patch_state(
         if target == 4 and not stock_rom
         else []
     )
+    if target == PENTA_TARGET:
+        # Penta Dragon is never reached through the 1A2B stage dispatcher.
+        # The native final route is Faze's bank-1 aftermath script, whose
+        # tail at 1:54E6 selects FFBA=8, publishes the arena (759B/1EC0), and
+        # CALLs 1296 so the boss loop returns through 129E into the ending at
+        # 1:5505.  A synthetic CALL 1A2B instead returns to 1A72 and routes the
+        # kill to the ordinary stage-boss exit (18 -> 07), so jump straight to
+        # that native tail with bank 1 mapped and an empty stack.
+        if rom is not None:
+            rom_bytes = rom.read_bytes()
+            tail = rom_bytes[PENTA_FINAL_ENTRY:PENTA_FINAL_ENTRY + 4]
+            call = rom_bytes[PENTA_FINAL_CALL:PENTA_FINAL_CALL + 3]
+            if tail != bytes.fromhex("3E08E0BA") or call != bytes.fromhex("CD9612"):
+                raise RuntimeError(
+                    f"native Penta entry moved: 1:54E6={tail.hex()} "
+                    f"1:5502={call.hex()}"
+                )
+        entry = [
+            0x3E, 0x01,                     # LD A,$01
+            0xEA, 0x00, 0x21,               # map ROM bank 1
+            0xE0, 0x99,                     # publish FF99 bank shadow
+            0xC3, 0xE6, 0x54,               # JP 1:54E6 (native final tail)
+        ]
+    elif target == FAZE_TARGET:
+        # Natural play reaches 1A2B through the 13E5 jump table with
+        # SP=$DFFF and no caller frame; Faze's kill continues 1A72 -> 54C0
+        # into the story script and ending, which must not see a synthetic
+        # landing-pad return address on the stack. JP instead of CALL.
+        entry = [
+            0x3E, 0x03,                     # LD A,$03
+            0xEA, 0x00, 0x21,               # map ROM bank 3
+            0xE0, 0x99,                     # publish FF99 bank shadow
+            0xC3, BOSS_ENTRY & 0xFF, BOSS_ENTRY >> 8,
+        ]
+    else:
+        entry = [
+            0x3E, 0x03,                     # LD A,$03
+            0xEA, 0x00, 0x21,               # map ROM bank 3
+            0xE0, 0x99,                     # publish FF99 bank shadow
+            0xCD, BOSS_ENTRY & 0xFF, BOSS_ENTRY >> 8,
+            0x18, 0xFE,                     # defensive loop if it returns
+        ]
     landing = bytes([
         0xF3,                               # DI while phase-aligning
         0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, # wait until VBlank
         0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, # wait for next line 0
         *palette_normalization,
         0xFB, 0x00,                         # EI; activation delay
-        0x3E, 0x03,                         # LD A,$03
-        0xEA, 0x00, 0x21,                   # map ROM bank 3
-        0xE0, 0x99,                         # publish FF99 bank shadow
-        0xCD, BOSS_ENTRY & 0xFF, BOSS_ENTRY >> 8,
-        0x18, 0xFE,                         # defensive loop if it returns
+        *entry,
     ])
     landing_offset = WRAM + (LANDING_PAD - WRAM_START)
     raw[landing_offset:landing_offset + len(landing)] = landing
@@ -487,6 +546,16 @@ def patch_state(
     raw[FF99] = 3
     raw[FFBA] = target
     raw[FFBF] = 0
+    # DCE7 is the 0:34CA story-script interpreter's bank/state byte. The
+    # Stage-1 source leaves $84 there; natural play reaches Faze and Penta
+    # with $00. Faze's aftermath (1:54C0 -> 34CA) otherwise executes data and
+    # the final route stalls in scene 19.
+    if target in (FAZE_TARGET, PENTA_TARGET):
+        raw[DCE7] = 0
+    if target == PENTA_TARGET:
+        # Mirror the 1A2B dispatcher prologue the native final tail relies on.
+        for address in (*range(0xFFC2, 0xFFC6), *range(0xFFB2, 0xFFB7), 0xFFFB):
+            raw[HRAM + address - 0xFF80] = 0
     # The source fixture is already a settled Stage-1 scene. Preserve that
     # scene identity until the stock boss dispatcher changes D880 to the arena;
     # forging FF91=1 here falsely replays Stage-1 entry and arms a redundant
@@ -866,6 +935,8 @@ def generate_one(
                 f"{name}: rendered frame has only {rendered_colors} colors"
             )
         stem = f"boss{target}_{name}"
+        if target == FAZE_TARGET:
+            normalize_story_script_state(state)
         shutil.move(state, output / f"{stem}.ss0")
         shutil.move(report, output / f"{stem}.report")
         shutil.move(screenshot, output / f"{stem}.png")
@@ -1338,12 +1409,10 @@ def main() -> int:
     # legitimately fall through into final-story state before a long palette
     # hold. Generate the ordinary eight from Stage 1, then retarget the curated
     # live Penta fixture with the candidate's exact runtime/table payloads.
-    cold_penta = hashlib.sha256(rom_bytes).hexdigest() in {
-        PENTA_SYNC_DMA_SHA256,
-        PALETTE_STORAGE_SHA256,
-        *ENTRY_WHITE_SHA256,
-        *PENTA_SYNC_INHERITORS_SHA256,
-    }
+    # Penta is now seeded through its native final tail (1:54E6), so every
+    # ROM generates it fresh and the ending route is the real one. The
+    # curated fixtures returned to 1A72 and routed the kill to 18 -> 07.
+    cold_penta = True
     fresh_targets = [target for target in targets if target != 8 or cold_penta]
     results: list[tuple[int, str]] = []
     if fresh_targets:
@@ -1372,7 +1441,9 @@ def main() -> int:
                 for target in fresh_targets
             )
     penta_fixture = None
-    if 8 in targets and cold_penta:
+    if 8 in targets and cold_penta and not stock_rom:
+        # The sustained replay audit checks DX palette payloads; the stock ROM
+        # keeps its ordinary fresh-dispatcher receipt from generate_one.
         # r454 restores synchronous arena publication, so Penta can be seeded
         # from this ROM's cold boot too. Require a separate sustained replay;
         # entry alone passed even when the r443 deferred DMA left stale colors.
@@ -1386,7 +1457,7 @@ def main() -> int:
         for suffix in (".ss0", ".report", ".png"):
             shutil.copy2(audit / f"{stem}{suffix}", output / f"{stem}{suffix}")
         results = [(target, text) for target, text in results if target != 8] + [detail]
-    elif 8 in targets:
+    elif 8 in targets and not cold_penta:
         source_fixture = (OG_PENTA_FIXTURE if stock_rom else
                           args.source_states.resolve() / "boss8_penta_dragon.ss0")
         fixture_sha = hashlib.sha256(source_fixture.read_bytes()).hexdigest()
