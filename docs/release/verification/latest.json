@@ -1,8 +1,8 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-10-29T18:35:40.935826+00:00",
-  "git_head_at_run": "def4ebb08fe5bb0cfb2b3bb22d70186f746f57d4",
+  "generated_at": "2026-10-29T19:54:37.115555+00:00",
+  "git_head_at_run": "9238abf21974325f9a7f1e8943a3bb80a711753e",
   "source_fingerprint": "81920bacdf3e2b2f06d7abb899b545053508de34bcd627ef503b97f4f01f609b",
   "source_inputs": [
     {
@@ -5104,133 +5104,133 @@
     "scope": "full",
     "gate_count": 98,
     "failures": 0,
-    "manifest_sha256": "1d17519c8e0362ce0ea9dd2d8b98f1cd758fa58cdb98fc0aa55b239313e2ce0d",
+    "manifest_sha256": "33938ce96c2c7c64a15d1c7c9776dd4db2f0916a080f273d8e441c81aa89d566",
     "results": [
       {
         "name": "emulator_singleflight_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.265
+        "duration_seconds": 0.266
       },
       {
         "name": "stage1_visual_contract_controls",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.266
+        "duration_seconds": 0.316
       },
       {
         "name": "release_matrix_resume_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.065
+        "duration_seconds": 0.033
       },
       {
         "name": "playtest_header_data_and_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 44.157
+        "duration_seconds": 46.905
       },
       {
         "name": "playtest_secret_boss_handoff",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 35.224
+        "duration_seconds": 35.823
       },
       {
         "name": "native_stage_records",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.764
+        "duration_seconds": 46.913
       },
       {
         "name": "title_footer_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.418
+        "duration_seconds": 0.467
       },
       {
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.019
+        "duration_seconds": 1.072
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.316
+        "duration_seconds": 0.368
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.139
+        "duration_seconds": 15.091
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.92
+        "duration_seconds": 2.822
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.676
+        "duration_seconds": 5.673
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.869
+        "duration_seconds": 1.919
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.275
+        "duration_seconds": 3.22
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.224
+        "duration_seconds": 5.24
       },
       {
         "name": "menu_icon_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.672
+        "duration_seconds": 3.825
       },
       {
         "name": "menu_window_publish_order",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.219
+        "duration_seconds": 2.371
       },
       {
         "name": "stage1_captured_menu_stationary",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.424
+        "duration_seconds": 4.627
       },
       {
         "name": "stale_gameplay_window",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.718
+        "duration_seconds": 1.82
       },
       {
         "name": "stage_card_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.251
+        "duration_seconds": 21.755
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 115.554
+        "duration_seconds": 115.15
       },
       {
         "name": "game_start_after_attract",
@@ -5242,73 +5242,73 @@
         "name": "opening_to_stage1_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.738
+        "duration_seconds": 11.685
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 172.736
+        "duration_seconds": 171.643
       },
       {
         "name": "gameplay_movement_stress",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 393.403
+        "duration_seconds": 374.969
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 19.895
+        "duration_seconds": 19.949
       },
       {
         "name": "pickup_class_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.165
+        "duration_seconds": 0.168
       },
       {
         "name": "attract_pickup_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.526
+        "duration_seconds": 7.428
       },
       {
         "name": "stage1_current_hazard_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.675
+        "duration_seconds": 3.722
       },
       {
         "name": "stage1_current_hazard_menu",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 117.951
+        "duration_seconds": 118.398
       },
       {
         "name": "stage1_current_hazard_mutations",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.238
+        "duration_seconds": 12.538
       },
       {
         "name": "stage1_exact_destination_mutation",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.799
+        "duration_seconds": 19.349
       },
       {
         "name": "stage1_current_pickup_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.92
+        "duration_seconds": 2.069
       },
       {
         "name": "stage1_current_pickup_host_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 28.575
+        "duration_seconds": 31.44
       },
       {
         "name": "pickup_live_retry_contract",
@@ -5320,157 +5320,157 @@
         "name": "pickup_live_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 25.764
+        "duration_seconds": 28.283
       },
       {
         "name": "stage1_pickup_art",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.972
+        "duration_seconds": 1.918
       },
       {
         "name": "bonus_stage_live",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.619
+        "duration_seconds": 1.818
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 47.644
+        "duration_seconds": 48.639
       },
       {
         "name": "stage1_tilemap_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.85
+        "duration_seconds": 22.306
       },
       {
         "name": "stage1_north_route_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.98
+        "duration_seconds": 9.182
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.36
+        "duration_seconds": 22.318
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 67.172
+        "duration_seconds": 66.722
       },
       {
         "name": "low_health_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 10.984
+        "duration_seconds": 10.833
       },
       {
         "name": "low_health_scene0b_publication",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.084
+        "duration_seconds": 11.74
       },
       {
         "name": "pocket_stage1_visual_incident",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.866
+        "duration_seconds": 0.983
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.63
+        "duration_seconds": 9.738
       },
       {
         "name": "stage1_miniboss_continue_palette",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.676
+        "duration_seconds": 7.341
       },
       {
         "name": "sara_overhang_priority",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.722
+        "duration_seconds": 4.134
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.581
+        "duration_seconds": 1.575
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 57.975
+        "duration_seconds": 57.524
       },
       {
         "name": "stage2_stream_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.681
+        "duration_seconds": 9.581
       },
       {
         "name": "stage_side_by_side_all7",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 43.351
+        "duration_seconds": 40.992
       },
       {
         "name": "boss_atomic_attr_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.734
+        "duration_seconds": 11.782
       },
       {
         "name": "ted_expanded_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.333
+        "duration_seconds": 11.382
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 34.589
+        "duration_seconds": 34.69
       },
       {
         "name": "ted_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.926
+        "duration_seconds": 4.022
       },
       {
         "name": "ted_og_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.374
+        "duration_seconds": 3.421
       },
       {
         "name": "ted_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 14.043
+        "duration_seconds": 13.943
       },
       {
         "name": "boss_geometry_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.801
+        "duration_seconds": 17.863
       },
       {
         "name": "ted_determinism",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.49
+        "duration_seconds": 15.441
       },
       {
         "name": "ted_release_readiness_receipt",
@@ -5488,73 +5488,73 @@
         "name": "ted_release_readiness",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.033
+        "duration_seconds": 0.034
       },
       {
         "name": "boss_semantic_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.715
+        "duration_seconds": 22.664
       },
       {
         "name": "boss_og_states",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 16.246
+        "duration_seconds": 16.147
       },
       {
         "name": "boss_og_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 39.046
+        "duration_seconds": 39.49
       },
       {
         "name": "boss_og_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.115
+        "duration_seconds": 0.116
       },
       {
         "name": "boss_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 80.684
+        "duration_seconds": 83.084
       },
       {
         "name": "boss_trajectory_pairing_null",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.08
+        "duration_seconds": 7.98
       },
       {
         "name": "boss_trajectory_pairing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 91.945
+        "duration_seconds": 101.856
       },
       {
         "name": "boss_publication_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 79.882
+        "duration_seconds": 80.539
       },
       {
         "name": "current_stage_control_states",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.933
+        "duration_seconds": 10.262
       },
       {
         "name": "crystal_dragon_ghost",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.928
+        "duration_seconds": 7.331
       },
       {
         "name": "boss_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 39.845
+        "duration_seconds": 39.988
       },
       {
         "name": "boss_silhouette_gallery",
@@ -5566,37 +5566,37 @@
         "name": "boss_material_side_by_side",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.166
+        "duration_seconds": 0.165
       },
       {
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 34.764
+        "duration_seconds": 35.249
       },
       {
         "name": "sara_walking_pose_atomicity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.63
+        "duration_seconds": 7.628
       },
       {
         "name": "sara_firing_pose_atomicity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.58
+        "duration_seconds": 7.779
       },
       {
         "name": "gameover_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.974
+        "duration_seconds": 4.073
       },
       {
         "name": "gameover_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.073
+        "duration_seconds": 4.977
       },
       {
         "name": "gameover_saved_spike_restart",
@@ -5614,73 +5614,73 @@
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 36.373
+        "duration_seconds": 36.525
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.973
+        "duration_seconds": 3.923
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.181
+        "duration_seconds": 9.331
       },
       {
         "name": "pre_final_inventory",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.324
+        "duration_seconds": 5.375
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.48
+        "duration_seconds": 8.379
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.632
+        "duration_seconds": 8.328
       },
       {
         "name": "ending_discriminators",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.065
+        "duration_seconds": 0.066
       },
       {
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 46.543
+        "duration_seconds": 46.922
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.64
+        "duration_seconds": 46.465
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 103.205
+        "duration_seconds": 119.537
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 19.023
+        "duration_seconds": 18.826
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.123
+        "duration_seconds": 4.072
       },
       {
         "name": "candidate_ips_roundtrip",
@@ -5695,7 +5695,7 @@
         "duration_seconds": 0.316
       }
     ],
-    "manifest_path": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-softreset/tmp/rl-suite-sr-02/matrix/manifest.json"
+    "manifest_path": "/home/struktured/projects/penta-dragon-dx-issues/tmp/english-variant/tmp/rl-suite-en-01/matrix/manifest.json"
   },
   "release_ledger": {
     "schema": "penta-release-ledger-v1",
@@ -6079,35 +6079,35 @@
     "evidence": {
       "title_attract": {
         "path": "artifacts/title-idle-reel.summary.json",
-        "sha256": "ff711f0ff5edfe6fc5c61f1bfa545d891a757a154e7f1b530672c408f1c57e61"
+        "sha256": "adcfd5ddfc087ecda3f8f1f14eccf0377f5c51e021f0043cc611a3c40823da26"
       },
       "gameplay_speed": {
         "path": "artifacts/gameplay-speed/manifest.json",
-        "sha256": "3b18d47e99dc85b5149f4bd8b3e7b491dc7b8daa5932780e29b6a80cc303cb35"
+        "sha256": "9520c31e29031ab5f708349712be5049d4bdcc10afd894ba7a295e260c32af4d"
       },
       "gameplay_movement_stress": {
         "path": "artifacts/gameplay-movement-stress/receipt.json",
-        "sha256": "508510c3c7d23fb94d2cc6587ee597e9a641aebaa9affb7b0cab44c920376075"
+        "sha256": "966856c13117d439b96c8f3955a5239f05c820adc094de414e30ed3292cf2d65"
       },
       "boss_speed": {
         "path": "artifacts/boss-speed-parity.json",
-        "sha256": "bb6928e12de96d8ea2a920cde26d2bce942c204cc03c154dccdb5feac2231d47"
+        "sha256": "38a518de622c7c0538cc5bb111550fc8bd9225fda5bac9d307e7a38e5719bdcc"
       },
       "boss_publication": {
         "path": "artifacts/boss-publication-cadence.json",
-        "sha256": "23df2e84c3dd2d472d63fadacbc56ea791a347b626d266cd1abd8e6c653ca8b7"
+        "sha256": "c31c49ae903e740e9945e6804c620f21067f8e79ac2bf09e0cb961e23fe7ea27"
       },
       "boss_trajectory": {
         "path": "artifacts/boss-trajectory-pairing.json",
-        "sha256": "9efa8950b21e0fc65e6979ca1447884cc90570656209024b231c57c5378ffd1d"
+        "sha256": "18c45bca7a9586169487d914380a618c90eb55269d0f74adf9c174c59d412aa6"
       },
       "boss_trajectory_null": {
         "path": "artifacts/boss-trajectory-pairing-null.json",
-        "sha256": "d3a95fb298eb28f19300363b08c2d33294c6425d112f85b47940cca3e8c2acdc"
+        "sha256": "9ffc08ff3426ddcad2bb289ff637271dfdeeb2ab5a714c0bc5fc3005d7cad8ca"
       },
       "ted_readiness": {
         "path": "artifacts/ted-release-readiness/report.json",
-        "sha256": "d35ba3e28a4eb80bb18ec0925fd910dab024648b04f0ff486b54281bae6b40ae"
+        "sha256": "ace0cf4a896ee0fc3adf9d4258b7287160afe0c96ed0a7c8dd6e3e90e306b79e"
       }
     },
     "profile": "stream-release-lock-original-source-v5",
@@ -6389,19 +6389,19 @@
       },
       "evidence": "gameplay_movement_stress"
     },
-    "ledger_sha256": "eeb99d6203a6fef194bb532a46b9460e6ffefe2bb22f9e17fb762c03d786f957"
+    "ledger_sha256": "2894702dacf37d0ce15b718c7a47cbaecf1b99b0cbc6ff35990328a5b8f5c66e"
   },
   "rom_committed": false,
   "hardware_status": "pending-reservation-backed-mister",
   "source_builds": [
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-softreset/tmp/rl-suite-sr-02/build/source-a/build-receipt.json",
-      "receipt_sha256": "372f22700963de63b64a27a0cdf0fa97910636431a791f14296176deb1c7038f",
+      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/english-variant/tmp/rl-suite-en-01/build/source-a/build-receipt.json",
+      "receipt_sha256": "3d4d9d4114c034505d65dc2c50d24fc87301499d9f0c78da6d23a39983cf6514",
       "source_fingerprint": "81920bacdf3e2b2f06d7abb899b545053508de34bcd627ef503b97f4f01f609b"
     },
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-softreset/tmp/rl-suite-sr-02/build/source-b/build-receipt.json",
-      "receipt_sha256": "afc99f1fe51925c766b8672342fa968f9991aa33a21535ce770b91311ad10386",
+      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/english-variant/tmp/rl-suite-en-01/build/source-b/build-receipt.json",
+      "receipt_sha256": "9e736589fc6b4427702acdd749100320679fb68fde6beac6b62a0e39cd064a85",
       "source_fingerprint": "81920bacdf3e2b2f06d7abb899b545053508de34bcd627ef503b97f4f01f609b"
     }
   ]
