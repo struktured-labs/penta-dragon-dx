@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'scripts/diagnostics')]
 import mister_palette_bridge as bridge
 
-# #54: the source profile now ends with native-stage-records.
-PIN = '050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98323ed4'
+# The source profile now ends with soft-reset-cold-init.
+PIN = '9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095'
 
 
 def state_for(rom, stage=1):

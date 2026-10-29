@@ -167,7 +167,7 @@ def main() -> int:
     expanded = profile.get("expanded_ted") is True
     menu_icons = profile.get("menu_icon_colors") is True
     expected_size = 524288 if expanded else 262144
-    if expanded and profile.get("name") == "stream-release-lock-original-source-v4":
+    if expanded and profile.get("name") == "stream-release-lock-original-source-v5":
         # The release-lock stream source carries the secret-stock 1 MiB
         # expansion (header 0x148 = $05); its builder pins the exact image.
         expected_size = 1048576
@@ -250,7 +250,7 @@ def main() -> int:
             "r534-original-source-v1",
             "r536-original-source-v1",
             "restart-original-source-v1",
-            "stream-release-lock-original-source-v4",
+            "stream-release-lock-original-source-v5",
         }
         else None
     )

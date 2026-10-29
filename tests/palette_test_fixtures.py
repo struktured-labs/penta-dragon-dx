@@ -11,7 +11,7 @@ import zlib
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts/diagnostics'))
-CURRENT='050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98323ed4'
+CURRENT='9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095'
 LEGACY='46eb95a0c0f770fb3cf8c3211b8030a9e881f59077e558b93703ba08da71d3fb'
 
 
