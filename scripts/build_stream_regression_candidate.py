@@ -189,7 +189,9 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
           separate_enemy_projectiles=False, boss_prelude_rearm=False,
           later_lowhealth_timer=False, later_lowhealth_camera=False,
           title_glyph_read_window=False, title_glyph_retry_window=False,
-          native_stage_records=False):
+          native_stage_records=False, soft_reset_cold_init=False):
+    if soft_reset_cold_init and not native_stage_records:
+        raise ValueError('soft-reset cold init requires the native stage-record chain')
     if native_stage_records and not (title_glyph_retry_window and clean_stage_headers):
         raise ValueError('native stage records require the exact title-retry chain')
     if title_glyph_read_window and title_glyph_retry_window:
@@ -370,6 +372,15 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
                             builder=str(Path(native_records.__file__).resolve()),
                             builder_sha256=digest(Path(native_records.__file__).read_bytes())))
         parent = result
+    if soft_reset_cold_init:
+        # Post-ending soft reset: clear DF00-DFEF so the DX cold-boot init reruns.
+        import build_soft_reset_cold_init as soft_reset
+        result = soft_reset.build(parent, stock)
+        records.append(dict(name='soft-reset-cold-init', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(soft_reset.__file__).resolve()),
+                            builder_sha256=digest(Path(soft_reset.__file__).read_bytes())))
+        parent = result
     if source.read_bytes() != source_bytes:
         raise ValueError('palette source changed during construction')
     (output / 'candidate.gb').write_bytes(parent)
@@ -405,6 +416,7 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['experimental_title_glyph_read_window'] = title_glyph_read_window
     receipt['experimental_title_glyph_retry_window'] = title_glyph_retry_window
     receipt['native_stage_records'] = native_stage_records
+    receipt['soft_reset_cold_init'] = soft_reset_cold_init
     if release_lock:
         receipt['deferred_issues'] = [34]
     if secret_sound_alias:
@@ -467,6 +479,8 @@ if __name__ == '__main__':
                         help='requires --later-lowhealth-camera; retry blocked footer predicate while preserving successful-path timing (#8), experimental')
     parser.add_argument('--native-stage-records', action='store_true',
                         help='requires --title-glyph-retry-window; restore the native bank-1 stage records/loader and move the colliding helpers (#54)')
+    parser.add_argument('--soft-reset-cold-init', action='store_true',
+                        help='requires --native-stage-records; clear DF00-DFEF on the post-ending soft reset so DX cold init reruns')
     args = parser.parse_args()
     print(json.dumps(build(args.output, presentation=args.presentation, arena_alias=args.arena_alias,
                            arena_completion_safe=args.arena_completion_safe,
@@ -482,4 +496,5 @@ if __name__ == '__main__':
                            later_lowhealth_camera=args.later_lowhealth_camera,
                            title_glyph_read_window=args.title_glyph_read_window,
                            title_glyph_retry_window=args.title_glyph_retry_window,
-                           native_stage_records=args.native_stage_records), indent=2))
+                           native_stage_records=args.native_stage_records,
+                           soft_reset_cold_init=args.soft_reset_cold_init), indent=2))

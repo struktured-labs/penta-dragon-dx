@@ -38,6 +38,9 @@ TITLE_RETRY_LAYOUT_PIN = 'f2a14a38e0fec9f8c1c7372d4a5ef65ad7465a06bbd544bc2ed4f5
 # #54: title-retry plus native bank-1 stage records; same palette rows/owners.
 NATIVE_RECORDS_PIN = '050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98323ed4'
 NATIVE_RECORDS_LAYOUT_PIN = 'afad4e84538fde4a46ac8c1fb1da846651e8cc14ebb351baacde6e42850783df'
+# Native records plus post-ending soft-reset cold init; same palette rows/owners.
+SOFT_RESET_PIN = '9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095'
+SOFT_RESET_LAYOUT_PIN = '1771e0033a28ea47b825c45d33016edd104dbdcfb88f2190219406c697daddcb'
 # Exact late-return layout with ONLY primary rows/global checksum normalized.
 STAGE1_LAYOUT_PIN = '3521f83aaf36fdf9a5f82fdefd603e7b289fa9a58fa46447c17d441209cf83c2'
 SOURCE = ROOT / 'tmp/stream-tonight/Penta Dragon DX v3.01.gbc'
@@ -101,14 +104,15 @@ def primary_layout_digest(rom):
 
 def stage1_layout_supported(rom):
     return primary_layout_digest(rom) in (STAGE1_LAYOUT_PIN, PLAYTEST_LAYOUT_PIN,
-                                        TITLE_RETRY_LAYOUT_PIN, NATIVE_RECORDS_LAYOUT_PIN)
+                                        TITLE_RETRY_LAYOUT_PIN, NATIVE_RECORDS_LAYOUT_PIN,
+                                        SOFT_RESET_LAYOUT_PIN)
 
 
 def labels_for_rom(rom):
     """Keep stable API keys, but describe this exact layout's projectile roles."""
     labels = list(LABELS)
     if primary_layout_digest(rom) in (PLAYTEST_LAYOUT_PIN, TITLE_RETRY_LAYOUT_PIN,
-                                      NATIVE_RECORDS_LAYOUT_PIN):
+                                      NATIVE_RECORDS_LAYOUT_PIN, SOFT_RESET_LAYOUT_PIN):
         labels[7] = ('Sara’s weapon shots & effects',
                      'OBJ0 · Player weapon primary palette; dragon-shot overrides are separate. Historical API key: EnemyProjectile.')
         labels[10] = ('Enemy bullets & crows',
@@ -222,7 +226,7 @@ class Bridge:
         WORK.mkdir(parents=True, exist_ok=True)
         self.rom = Path(source).read_bytes()
         self.source_pin = sha(self.rom)
-        if self.source_pin not in (PIN, ROW_GUARD_PIN, SARA_ATOMIC_PIN, TED_MENU_PIN, STAR_PIN, RETURN_FADE_PIN, LATE_RETURN_PIN, PLAYTEST_PIN, TITLE_RETRY_PIN, NATIVE_RECORDS_PIN):
+        if self.source_pin not in (PIN, ROW_GUARD_PIN, SARA_ATOMIC_PIN, TED_MENU_PIN, STAR_PIN, RETURN_FADE_PIN, LATE_RETURN_PIN, PLAYTEST_PIN, TITLE_RETRY_PIN, NATIVE_RECORDS_PIN, SOFT_RESET_PIN):
             raise ValueError('Starting ROM does not match an exact supported pin')
         self.stem = 'Penta-Dragon-DX-' + self.source_pin[:12]
         self.history = []
