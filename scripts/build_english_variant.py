@@ -69,7 +69,7 @@ def script(text):
     return bytes(out)
 
 
-# The last line of the ending dialogue (scene 1A): "...MOTHER!!!" + 4c (page wait),
+# The last line of the ending dialogue (scene 1A): "...MOTHER!!!" + 4c (closing quote glyph),
 # then 6c 6c and the epilogue section header.  The credit pages are inserted after
 # that wait so they show in every normal playthrough, right before the staff roll.
 ENDING_LAST = bytes.fromhex('17191e120f1cfbfbfb4c6c6cfe')
@@ -85,7 +85,7 @@ def add_ending_credit(r, original):
         raise ValueError('HTI ending last line not found exactly once')
     if r[SCRIPT_END_FILE:NOISE_END_FILE] != original[SCRIPT_END_FILE:NOISE_END_FILE]:
         raise ValueError('bank-0F fill after the script is not stock')
-    ins = k + 9                    # after "MOTHER!!!" + 4c
+    ins = k + 10                   # after "MOTHER!!!" and its closing quote (4c is the '”' glyph)
     tail = bytes(r[ins:SCRIPT_END_FILE])
     r[ins:ins + len(CREDIT) + len(tail)] = CREDIT + tail
     return len(CREDIT)
