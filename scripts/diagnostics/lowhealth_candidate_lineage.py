@@ -12,7 +12,9 @@ TITLE_RETRY_SHA = '126861281b75edaf8daace834ccbe41e53ed0c9eebb71e50fe3bd6823e8b6
 # #54: the title-retry image plus the final native stage-record stage
 # (build_native_stage_records). It inherits every title/low-health owner.
 NATIVE_RECORDS_SHA = '050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98323ed4'
-TITLE_SHAS = {TITLE_CANDIDATE_SHA, TITLE_RETRY_SHA, NATIVE_RECORDS_SHA}
+# Post-ending soft reset rearms the DX cold-boot init (build_soft_reset_cold_init).
+SOFT_RESET_SHA = '9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095'
+TITLE_SHAS = {TITLE_CANDIDATE_SHA, TITLE_RETRY_SHA, NATIVE_RECORDS_SHA, SOFT_RESET_SHA}
 COMPILER_HEX = (
     'f0fffe04c28d78f0b7d603fe06d28d783e01e070fa80d8fe0b2807'
     '3e03e070c38d783e03e070f0bafe012004afea7fd43e18e0e0'
@@ -46,6 +48,14 @@ def _original():
     return (Path(__file__).resolve().parents[2] / 'rom/Penta Dragon (J).gb').read_bytes()
 
 
+def soft_reset_parent(rom):
+    """Invert only the final soft-reset cold-init stage (exact rebuild)."""
+    if hashlib.sha256(rom).hexdigest() != SOFT_RESET_SHA:
+        raise ValueError('not the exact soft-reset cold-init candidate')
+    import build_soft_reset_cold_init as soft
+    return soft.reconstruct_parent(rom, _original())
+
+
 def native_records_parent(rom):
     """#54: invert only the final native stage-record stage (exact rebuild)."""
     if hashlib.sha256(rom).hexdigest() != NATIVE_RECORDS_SHA:
@@ -56,12 +66,17 @@ def native_records_parent(rom):
 
 def native_records_intersects(start, end):
     import build_native_stage_records as records
-    return any(start < b and a < end for a, b in records.changed_spans(_original()))
+    import build_soft_reset_cold_init as soft
+    spans = records.changed_spans(_original()) + soft.changed_spans(_original())
+    return any(start < b and a < end for a, b in spans)
 
 
 def title_parent(rom):
     """Authenticate the entire footer extension; no runtime substitution."""
     identity = hashlib.sha256(rom).hexdigest()
+    if identity == SOFT_RESET_SHA:
+        rom = soft_reset_parent(rom)
+        identity = hashlib.sha256(rom).hexdigest()
     if identity == NATIVE_RECORDS_SHA:
         rom = native_records_parent(rom)
         identity = hashlib.sha256(rom).hexdigest()
@@ -94,7 +109,7 @@ def authenticated_parent(rom, *ranges):
                 raise ValueError('invalid component range')
             if start < 0x36e00 and 0x36da7 < end:
                 raise ValueError('component intersects title-read delta')
-            if (hashlib.sha256(rom).hexdigest() == NATIVE_RECORDS_SHA
+            if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA)
                     and native_records_intersects(start, end)):
                 raise ValueError('component intersects native stage-record delta')
         return authenticated_parent(title_parent(rom), *ranges)
@@ -130,12 +145,15 @@ def source_replay(rom):
     if hashlib.sha256(rom).hexdigest() == TITLE_CANDIDATE_SHA:
         import build_title_glyph_read_window as glyph
         image = glyph.build(image)
-    elif hashlib.sha256(rom).hexdigest() in (TITLE_RETRY_SHA, NATIVE_RECORDS_SHA):
+    elif hashlib.sha256(rom).hexdigest() in (TITLE_RETRY_SHA, NATIVE_RECORDS_SHA, SOFT_RESET_SHA):
         import build_title_glyph_retry_window as glyph
         image = glyph.build(image)
-        if hashlib.sha256(rom).hexdigest() == NATIVE_RECORDS_SHA:
+        if hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA):
             import build_native_stage_records as records
             image = records.build(image, _original())
+        if hashlib.sha256(rom).hexdigest() == SOFT_RESET_SHA:
+            import build_soft_reset_cold_init as soft
+            image = soft.build(image, _original())
     if image != rom:
         raise ValueError('low-health source replay differs from pinned candidate')
     return parent, image
@@ -148,7 +166,7 @@ def dispatcher_overlay(rom, offset, payload):
     if hashlib.sha256(rom).hexdigest() in TITLE_SHAS:
         if offset < 0x36e00 and 0x36da7 < offset + len(payload):
             raise ValueError('unowned title-read change in dispatcher component')
-        if (hashlib.sha256(rom).hexdigest() == NATIVE_RECORDS_SHA
+        if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA)
                 and native_records_intersects(offset, offset + len(payload))):
             raise ValueError('unowned native stage-record change in dispatcher component')
         return dispatcher_overlay(title_parent(rom), offset, payload)

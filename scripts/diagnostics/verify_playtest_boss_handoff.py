@@ -88,6 +88,9 @@ def broken_control(rom):
             # #54 native stage records; rearm-only reversal of that child.
             lowhealth_candidate_lineage.NATIVE_RECORDS_SHA:
                 "6ba11086f5c91d3beb162b86cfafe1d322c48eadfcead15ac2b557e3ce981184",
+            # Post-ending soft-reset cold init; rearm-only reversal of that child.
+            lowhealth_candidate_lineage.SOFT_RESET_SHA:
+                "0a8dc562f14803e7bdc69a7b166883ee84c8195b5e3e1a027783ddab48f72298",
         }[hashlib.sha256(rom).hexdigest()]
     # The experimental descendant's control retains all low-health changes:
     # revert only prelude rearm. It is not a historical played parent.

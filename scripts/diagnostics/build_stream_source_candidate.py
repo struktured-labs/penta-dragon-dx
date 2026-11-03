@@ -24,6 +24,10 @@ Version4 (#54) appends native-stage-records: the bank-1 stage-record table and
 its native loader are restored to the exact cartridge bytes, the bank-63 mirror
 is retired, and the two helpers that collided with records 7/8 move to fixed
 bank-0 fill with cycle-identical entry jumps.
+
+Version5 appends soft-reset-cold-init: the post-ending soft reset (01:5556)
+clears DF00-DFEF through a fixed-bank stub so the DX cold-boot init reruns
+(opening-story freeze after the ending). Never executed on power-on/attract.
 """
 from __future__ import annotations
 
@@ -59,9 +63,10 @@ FLAGS = {
     "later_lowhealth_camera": True,
     "title_glyph_retry_window": True,
     "native_stage_records": True,
+    "soft_reset_cold_init": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v4",
+    "schema": "penta-stream-release-lock-original-source-build-v5",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -82,6 +87,7 @@ CONTRACT = {
         "later-lowhealth-dispatch", "later-lowhealth-timer-yield",
         "stage7-lowhealth-fastpath", "stage7-lowhealth-camera",
         "title-glyph-retry-window", "native-stage-records",
+        "soft-reset-cold-init",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -90,7 +96,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98323ed4"
+        "9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -195,7 +201,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
             name = "experimental_" + key
         elif key == "release_lock":
             name = "release_lock_chain"
-        elif key == "native_stage_records":
+        elif key in ("native_stage_records", "soft_reset_cold_init"):
             name = key
         else:
             name = key if key.startswith("experimental_") else "experimental_" + key

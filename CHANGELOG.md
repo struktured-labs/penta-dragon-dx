@@ -2,6 +2,19 @@
 
 ## [Unreleased] - Restart fixes
 
+- Fix the post-ending GAME START freeze: the ending's soft reset (`01:5556`
+  `JP $0150`) re-entered boot, which clears only `$C000-$DEFF`, so the DX
+  cold-init sentinels `$DF02`/`$DF08` survived, cold init was skipped, the
+  `$DBC0-$DBFC` runtime stayed zero and `CALL $DBF3` (01:42F5) ran into an
+  RST38 storm. `CALL $428F` is unchanged; the jump now goes to a 14-byte stub in
+  unreferenced fixed-bank fill `$00E2` (DI, zero `$DF00-$DFEF`, `JP $0150`), so
+  the reset re-runs cold init exactly as power-on. `$DF00-$DFEF` holds only DX
+  cold-boot state (the original game uses `$DFxx` solely as stack, set by
+  `LD SP,$DFFF` before any use). Never executed on power-on, attract or
+  gameplay: attract lockstep 0-26000 (WRAM/VRAM/OAM/HRAM/regs) and Stage-7
+  patrol identical to 05020905. Natural post-ending GAME START reaches Stage 1.
+  New final chain stage `soft-reset-cold-init`, profile v5. Candidate:
+  `9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095`.
 - Fix #54 native stage records 7/8: move the Ted bank-16 trampoline tail and
   the death final-publication return out of bank-1 records 7/8 into unused
   fixed-bank fill (`$00D0`/`$00D9`), retarget their two `JP`s, and restore the
