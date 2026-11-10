@@ -28,6 +28,11 @@ bank-0 fill with cycle-identical entry jumps.
 Version5 appends soft-reset-cold-init: the post-ending soft reset (01:5556)
 clears DF00-DFEF through a fixed-bank stub so the DX cold-boot init reruns
 (opening-story freeze after the ending). Never executed on power-on/attract.
+
+Version6 appends transition-palette-blanking (#55, #83): the stage fade-in
+installs the stage deck before the screen appears, and the secret entry blacks
+out CGB palette RAM until the STAGE ?? card flips in one VBlank. Gameplay-only
+sites; attract never executes them.
 """
 from __future__ import annotations
 
@@ -64,9 +69,10 @@ FLAGS = {
     "title_glyph_retry_window": True,
     "native_stage_records": True,
     "soft_reset_cold_init": True,
+    "transition_palette_blanking": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v5",
+    "schema": "penta-stream-release-lock-original-source-build-v6",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -87,7 +93,7 @@ CONTRACT = {
         "later-lowhealth-dispatch", "later-lowhealth-timer-yield",
         "stage7-lowhealth-fastpath", "stage7-lowhealth-camera",
         "title-glyph-retry-window", "native-stage-records",
-        "soft-reset-cold-init",
+        "soft-reset-cold-init", "transition-palette-blanking",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -96,7 +102,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095"
+        "91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -201,7 +207,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
             name = "experimental_" + key
         elif key == "release_lock":
             name = "release_lock_chain"
-        elif key in ("native_stage_records", "soft_reset_cold_init"):
+        elif key in ("native_stage_records", "soft_reset_cold_init", "transition_palette_blanking"):
             name = key
         else:
             name = key if key.startswith("experimental_") else "experimental_" + key

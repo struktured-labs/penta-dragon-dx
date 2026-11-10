@@ -33,22 +33,22 @@ class StreamSourceProfileTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, 2)
 
     def test_profile_and_contract_pins(self):
-        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v5")
+        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v6")
         self.assertTrue(profile.PROFILE["expanded_ted"])
         self.assertEqual(builder.CONTRACT["candidate_sha256"],
-                         "9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095")
-        self.assertEqual(builder.CONTRACT['construction_order'][-12:], [
+                         "91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18")
+        self.assertEqual(builder.CONTRACT['construction_order'][-13:], [
             'clean-stage-headers', 'score-oam-publish', 'score-attribute-clear',
             'enemy-projectile-palette', 'boss-prelude-rearm',
             'later-lowhealth-dispatch', 'later-lowhealth-timer-yield',
             'stage7-lowhealth-fastpath', 'stage7-lowhealth-camera',
             'title-glyph-retry-window', 'native-stage-records',
-            'soft-reset-cold-init'])
+            'soft-reset-cold-init', 'transition-palette-blanking'])
         for flag in ('clean_stage_headers', 'score_card_cleanup',
                      'separate_enemy_projectiles', 'boss_prelude_rearm',
                      'later_lowhealth_timer', 'later_lowhealth_camera',
                      'title_glyph_retry_window', 'native_stage_records',
-                     'soft_reset_cold_init'):
+                     'soft_reset_cold_init', 'transition_palette_blanking'):
             self.assertIs(builder.FLAGS[flag], True)
         self.assertTrue(builder.CONTRACT["chain_flags"]["release_lock"])
         self.assertEqual(builder.CONTRACT["deferred_issues"], [34])

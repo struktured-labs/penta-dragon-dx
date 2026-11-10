@@ -1,9 +1,9 @@
 {
   "schema": "penta-dragon-dx-deterministic-suite-v1",
   "status": "passed",
-  "generated_at": "2026-10-29T20:40:40.922187+00:00",
-  "git_head_at_run": "90b2b759b248b7a6aca054c83a3818676102305c",
-  "source_fingerprint": "81920bacdf3e2b2f06d7abb899b545053508de34bcd627ef503b97f4f01f609b",
+  "generated_at": "2026-11-10T06:30:12.628787+00:00",
+  "git_head_at_run": "354f32a2f2a199717d50f0d3b7844275bd0d561d",
+  "source_fingerprint": "1ffe974ad414dd0ca2c96ce183de95e416f5d28161c65c581f6d1848fd1b5845",
   "source_inputs": [
     {
       "path": ".claude/settings.json",
@@ -157,8 +157,8 @@
     },
     {
       "path": "scripts/build_stream_regression_candidate.py",
-      "sha256": "5d10dcf0b0f37e901dec95077303d32f9f9df10498f0e5d38f6adc01cc8eb768",
-      "size": 31291
+      "sha256": "aee626ffaecebff90c33e7b7aa9b137410e72bdaabeae3359cfed1ba31749b98",
+      "size": 32448
     },
     {
       "path": "scripts/build_ted_expanded_candidate.py",
@@ -2022,8 +2022,8 @@
     },
     {
       "path": "scripts/diagnostics/build_stream_source_candidate.py",
-      "sha256": "874920cb99220ff777e4a7090870f04c86153effc8ec85409b0ed7a3dd86f75a",
-      "size": 13019
+      "sha256": "cc83ff203fe5a5dd3985a9b2eb5364acfdd4b4bf09feac8e95ccc4f9e6864eca",
+      "size": 13392
     },
     {
       "path": "scripts/diagnostics/build_tail_coordinate_wait_r433.py",
@@ -2084,6 +2084,11 @@
       "path": "scripts/diagnostics/build_title_tile_retire_trial_r535.py",
       "sha256": "04aed9bc4935945daad6ae7e3026bbfbf6c6ba298a0fa8cda9607ee3ede5ddf6",
       "size": 2588
+    },
+    {
+      "path": "scripts/diagnostics/build_transition_palette_blanking.py",
+      "sha256": "20ec85aeab584eef6e64fdd59c95ce821570a6f359ed8c557f4d60373c6b43f6",
+      "size": 22191
     },
     {
       "path": "scripts/diagnostics/build_vblank_tile_copy_r376.py",
@@ -2657,8 +2662,8 @@
     },
     {
       "path": "scripts/diagnostics/lowhealth_candidate_lineage.py",
-      "sha256": "29a606ea0f064eeb91cd4188d29246b48b4b65ec6ad08c8f305f8b113c564631",
-      "size": 9628
+      "sha256": "61d21b4e5c6c05319dbda63752720a2eec6dc25389e8c773bfa8637fa4751da3",
+      "size": 12088
     },
     {
       "path": "scripts/diagnostics/make_cgb_test_rom.py",
@@ -3852,7 +3857,7 @@
     },
     {
       "path": "scripts/diagnostics/stream_source_profile.py",
-      "sha256": "c94e294f1f98fdf86442b8d6c80d3de384e844ee1c3ca4b1bfbadacaf12eb99c",
+      "sha256": "b39cfbda79fe770d2296445fd7bff943a0db3eda363657fb969c45ecf543098f",
       "size": 1830
     },
     {
@@ -3927,8 +3932,8 @@
     },
     {
       "path": "scripts/diagnostics/test_stream_source_profile.py",
-      "sha256": "0699b19bb3ec43e104c23658792d5699f8435b098bb797b5f0f64cee32ffd6cb",
-      "size": 4464
+      "sha256": "dc0901ab49f2125de42480c2f75d14aeefc9c9831cff19aeb85cb2f121c142df",
+      "size": 4526
     },
     {
       "path": "scripts/diagnostics/title_color_shot.lua",
@@ -4257,8 +4262,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_playtest_boss_handoff.py",
-      "sha256": "e7ca62e2112f7cfcdb7b573879b924b1ae1e542290b129fa499531b832729fee",
-      "size": 12128
+      "sha256": "480e595ef31fcafc0b4c51934c1ed1e73e7ccf82ff7d62106d3e1133469eea03",
+      "size": 12354
     },
     {
       "path": "scripts/diagnostics/verify_playtest_header_regression.py",
@@ -4487,8 +4492,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage1_visual_contract_controls.py",
-      "sha256": "cff612efd250d650c8ed60be2bcd999206dc11017cd6c3ac454ec13ed5930f7f",
-      "size": 31883
+      "sha256": "448e9cd6882102baf38e6234fbef1f5f7998afbad3381c5c379a2db9ac3280b4",
+      "size": 33501
     },
     {
       "path": "scripts/diagnostics/verify_stage2_flip_attributes.py",
@@ -4607,8 +4612,8 @@
     },
     {
       "path": "scripts/diagnostics/verify_stage_card_stability.py",
-      "sha256": "22f0b913b74a53cb3d6e6d0882859e35ca1c7206e7647e4b4e721d55ca7cab3b",
-      "size": 39673
+      "sha256": "81887df7b1cd571c34caa099f1e4fa16000cebd78200e167512b1044841299d8",
+      "size": 42013
     },
     {
       "path": "scripts/diagnostics/verify_stage_speed_matrix.py",
@@ -4632,7 +4637,7 @@
     },
     {
       "path": "scripts/diagnostics/verify_suite_receipt.py",
-      "sha256": "cce202f302068509aac985b716e70a52f6072453372b95f94d1b62d92469ef7b",
+      "sha256": "8a767424f947401a5d0993ff8c5c50108b7f81ae58af63118ccc457f20d295d0",
       "size": 11807
     },
     {
@@ -5082,7 +5087,7 @@
     }
   ],
   "build_profile": {
-    "name": "stream-release-lock-original-source-v5",
+    "name": "stream-release-lock-original-source-v6",
     "expanded_ted": true,
     "native_sparse": true,
     "native_pose_table": true,
@@ -5090,177 +5095,177 @@
   },
   "candidate": {
     "size": 1048576,
-    "md5": "d9f236689cc69d165a501914cddc1d09",
-    "sha256": "9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095"
+    "md5": "5eeb197430c3ea0cddf963f58c0aa95e",
+    "sha256": "91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18"
   },
   "deterministic_build": {
     "passes": 2,
     "byte_identical": true,
-    "build_a_sha256": "9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095",
-    "build_b_sha256": "9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095"
+    "build_a_sha256": "91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18",
+    "build_b_sha256": "91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18"
   },
   "matrix": {
     "status": "emulator-pass",
     "scope": "full",
     "gate_count": 98,
     "failures": 0,
-    "manifest_sha256": "3630f4a57c4244e48cf2d4759be3ccc93fd122b1058d9d0dd90f2289927c305d",
+    "manifest_sha256": "fed893d667cc5b43bb61b80b6a72102b0b9975dddff7518c80b5131e27b6bf13",
     "results": [
       {
         "name": "emulator_singleflight_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.316
+        "duration_seconds": 0.315
       },
       {
         "name": "stage1_visual_contract_controls",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.315
+        "duration_seconds": 0.314
       },
       {
         "name": "release_matrix_resume_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.033
+        "duration_seconds": 0.065
       },
       {
         "name": "playtest_header_data_and_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 48.697
+        "duration_seconds": 41.861
       },
       {
         "name": "playtest_secret_boss_handoff",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 35.928
+        "duration_seconds": 33.819
       },
       {
         "name": "native_stage_records",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 46.868
+        "duration_seconds": 41.935
       },
       {
         "name": "title_footer_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.466
+        "duration_seconds": 0.515
       },
       {
         "name": "title_animation_frames",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.017
+        "duration_seconds": 1.168
       },
       {
         "name": "flash_attribution",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.368
+        "duration_seconds": 0.316
       },
       {
         "name": "title_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.139
+        "duration_seconds": 15.345
       },
       {
         "name": "title_showcase",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.97
+        "duration_seconds": 2.669
       },
       {
         "name": "title_visual_receipts",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.876
+        "duration_seconds": 5.473
       },
       {
         "name": "title_cursor",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.869
+        "duration_seconds": 2.822
       },
       {
         "name": "stage_intro_timing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.272
+        "duration_seconds": 5.125
       },
       {
         "name": "menu_hud_and_combo",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.327
+        "duration_seconds": 4.727
       },
       {
         "name": "menu_icon_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.934
+        "duration_seconds": 3.42
       },
       {
         "name": "menu_window_publish_order",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.477
+        "duration_seconds": 2.117
       },
       {
         "name": "stage1_captured_menu_stationary",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.675
+        "duration_seconds": 4.172
       },
       {
         "name": "stale_gameplay_window",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.126
+        "duration_seconds": 1.619
       },
       {
         "name": "stage_card_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 21.562
+        "duration_seconds": 19.246
       },
       {
         "name": "game_start_routes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 115.556
+        "duration_seconds": 116.019
       },
       {
         "name": "game_start_after_attract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.323
+        "duration_seconds": 5.022
       },
       {
         "name": "opening_to_stage1_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.035
+        "duration_seconds": 11.081
       },
       {
         "name": "gameplay_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 175.39
+        "duration_seconds": 166.31
       },
       {
         "name": "gameplay_movement_stress",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 375.217
+        "duration_seconds": 362.253
       },
       {
         "name": "gameplay_bg_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 19.898
+        "duration_seconds": 19.15
       },
       {
         "name": "pickup_class_palettes",
@@ -5272,430 +5277,430 @@
         "name": "attract_pickup_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.477
+        "duration_seconds": 7.174
       },
       {
         "name": "stage1_current_hazard_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.726
+        "duration_seconds": 3.519
       },
       {
         "name": "stage1_current_hazard_menu",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 118.251
+        "duration_seconds": 115.821
       },
       {
         "name": "stage1_current_hazard_mutations",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 12.703
+        "duration_seconds": 11.935
       },
       {
         "name": "stage1_exact_destination_mutation",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 20.515
+        "duration_seconds": 18.444
       },
       {
         "name": "stage1_current_pickup_state",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 2.12
+        "duration_seconds": 1.867
       },
       {
         "name": "stage1_current_pickup_host_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 31.498
+        "duration_seconds": 28.015
       },
       {
         "name": "pickup_live_retry_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.166
+        "duration_seconds": 0.165
       },
       {
         "name": "pickup_live_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 28.489
+        "duration_seconds": 25.063
       },
       {
         "name": "stage1_pickup_art",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.921
+        "duration_seconds": 1.769
       },
       {
         "name": "bonus_stage_live",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.718
+        "duration_seconds": 1.567
       },
       {
         "name": "stage1_no_color_bleed",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 50.193
+        "duration_seconds": 47.83
       },
       {
         "name": "stage1_tilemap_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.354
+        "duration_seconds": 21.253
       },
       {
         "name": "stage1_north_route_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.384
+        "duration_seconds": 8.529
       },
       {
         "name": "gameplay_obj_palettes",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 22.815
+        "duration_seconds": 19.808
       },
       {
         "name": "frame_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 69.33
+        "duration_seconds": 65.556
       },
       {
         "name": "low_health_flicker",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 10.934
+        "duration_seconds": 10.43
       },
       {
         "name": "low_health_scene0b_publication",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 10.985
+        "duration_seconds": 10.332
       },
       {
         "name": "pocket_stage1_visual_incident",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.867
+        "duration_seconds": 0.765
       },
       {
         "name": "miniboss_color",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.431
+        "duration_seconds": 8.485
       },
       {
         "name": "stage1_miniboss_continue_palette",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 6.829
+        "duration_seconds": 6.076
       },
       {
         "name": "sara_overhang_priority",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.825
+        "duration_seconds": 3.42
       },
       {
         "name": "later_stage_integrity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 1.37
+        "duration_seconds": 1.373
       },
       {
         "name": "later_stage_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 57.864
+        "duration_seconds": 55.849
       },
       {
         "name": "stage2_stream_soak",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.482
+        "duration_seconds": 9.378
       },
       {
         "name": "stage_side_by_side_all7",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 41.968
+        "duration_seconds": 37.627
       },
       {
         "name": "boss_atomic_attr_contract",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.934
+        "duration_seconds": 12.431
       },
       {
         "name": "ted_expanded_integration",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 11.434
+        "duration_seconds": 12.082
       },
       {
         "name": "boss_arenas",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 34.76
+        "duration_seconds": 30.875
       },
       {
         "name": "ted_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.924
+        "duration_seconds": 3.521
       },
       {
         "name": "ted_og_entry",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.421
+        "duration_seconds": 3.07
       },
       {
         "name": "ted_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 13.989
+        "duration_seconds": 12.834
       },
       {
         "name": "boss_geometry_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.002
+        "duration_seconds": 16.015
       },
       {
         "name": "ted_determinism",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 15.545
+        "duration_seconds": 14.685
       },
       {
         "name": "ted_release_readiness_receipt",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.034
+        "duration_seconds": 0.036
       },
       {
         "name": "ted_candidate_delta",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.034
+        "duration_seconds": 0.032
       },
       {
         "name": "ted_release_readiness",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.033
+        "duration_seconds": 0.032
       },
       {
         "name": "boss_semantic_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 23.731
+        "duration_seconds": 20.351
       },
       {
         "name": "boss_og_states",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 16.505
+        "duration_seconds": 14.339
       },
       {
         "name": "boss_og_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 39.084
+        "duration_seconds": 37.991
       },
       {
         "name": "boss_og_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.116
+        "duration_seconds": 0.115
       },
       {
         "name": "boss_speed_parity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 81.988
+        "duration_seconds": 73.04
       },
       {
         "name": "boss_trajectory_pairing_null",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.538
+        "duration_seconds": 7.428
       },
       {
         "name": "boss_trajectory_pairing",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 95.004
+        "duration_seconds": 84.662
       },
       {
         "name": "boss_publication_cadence",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 80.189
+        "duration_seconds": 70.224
       },
       {
         "name": "current_stage_control_states",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 10.389
+        "duration_seconds": 9.082
       },
       {
         "name": "crystal_dragon_ghost",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.38
+        "duration_seconds": 6.325
       },
       {
         "name": "boss_material_gallery_all9",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 40.386
+        "duration_seconds": 39.187
       },
       {
         "name": "boss_silhouette_gallery",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.116
+        "duration_seconds": 0.114
       },
       {
         "name": "boss_material_side_by_side",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.166
+        "duration_seconds": 0.165
       },
       {
         "name": "death_gameover",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 36.089
+        "duration_seconds": 31.37
       },
       {
         "name": "sara_walking_pose_atomicity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.628
+        "duration_seconds": 7.175
       },
       {
         "name": "sara_firing_pose_atomicity",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 7.68
+        "duration_seconds": 7.225
       },
       {
         "name": "gameover_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.924
+        "duration_seconds": 4.373
       },
       {
         "name": "gameover_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.074
+        "duration_seconds": 4.621
       },
       {
         "name": "gameover_saved_spike_restart",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.973
+        "duration_seconds": 4.674
       },
       {
         "name": "title_idle_reel",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 4.824
+        "duration_seconds": 4.722
       },
       {
         "name": "spotlight_full_roster",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 36.124
+        "duration_seconds": 35.365
       },
       {
         "name": "opening_cutscene",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.973
+        "duration_seconds": 3.77
       },
       {
         "name": "final_cutscene_mgba",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 9.181
+        "duration_seconds": 8.679
       },
       {
         "name": "pre_final_inventory",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 5.323
+        "duration_seconds": 5.122
       },
       {
         "name": "ending_inventory_a",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.382
+        "duration_seconds": 8.176
       },
       {
         "name": "ending_inventory_b",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 8.378
+        "duration_seconds": 8.178
       },
       {
         "name": "ending_discriminators",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.066
+        "duration_seconds": 0.064
       },
       {
         "name": "scroll_stability",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.34
+        "duration_seconds": 46.206
       },
       {
         "name": "phantom_sound",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 45.54
+        "duration_seconds": 46.302
       },
       {
         "name": "live_palette_deck",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 99.277
+        "duration_seconds": 89.528
       },
       {
         "name": "story_attr_production",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 18.562
+        "duration_seconds": 16.297
       },
       {
         "name": "palette_build_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 3.974
+        "duration_seconds": 3.672
       },
       {
         "name": "candidate_ips_roundtrip",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.166
+        "duration_seconds": 0.165
       },
       {
         "name": "mister_reservation_guard",
         "status": "passed",
         "returncode": 0,
-        "duration_seconds": 0.266
+        "duration_seconds": 0.265
       }
     ],
-    "manifest_path": "/home/struktured/projects/penta-dragon-dx-issues/tmp/english-variant/tmp/rl-suite-en-02/matrix/manifest.json"
+    "manifest_path": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-1109/tmp/suite-official-1110/matrix/manifest.json"
   },
   "release_ledger": {
     "schema": "penta-release-ledger-v1",
@@ -5785,8 +5790,8 @@
         "scope": "faze",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8813120414328872,
-        "deviation_percent": 11.868795856711278,
+        "ratio_dx_over_og": 0.8787224859732413,
+        "deviation_percent": 12.127751402675868,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5808,8 +5813,8 @@
         "scope": "penta_dragon",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1400000000000001,
-        "deviation_percent": 14.000000000000012,
+        "ratio_dx_over_og": 1.1285714285714286,
+        "deviation_percent": 12.857142857142856,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5819,8 +5824,8 @@
         "scope": "penta_dragon",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.8812477844735909,
-        "deviation_percent": 11.875221552640912,
+        "ratio_dx_over_og": 0.8846704871060171,
+        "deviation_percent": 11.532951289398286,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5842,8 +5847,8 @@
         "scope": "riff",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.1289398280802292,
-        "deviation_percent": 12.893982808022919,
+        "ratio_dx_over_og": 1.1346704871060171,
+        "deviation_percent": 13.467048710601714,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5865,8 +5870,8 @@
         "scope": "riff",
         "measurement": "publication_event_rate",
         "direction": "faster",
-        "ratio_dx_over_og": 1.0952898806581457,
-        "deviation_percent": 9.52898806581457,
+        "ratio_dx_over_og": 1.0999535492588997,
+        "deviation_percent": 9.995354925889966,
         "accepted_ceiling_ratio": 1.2,
         "policy": "accepted_phase_deviation",
         "evidence": "boss_publication"
@@ -5876,8 +5881,8 @@
         "scope": "shalamar",
         "measurement": "arena_loop_throughput",
         "direction": "faster",
-        "ratio_dx_over_og": 1.0243079323659863,
-        "deviation_percent": 2.4307932365986273,
+        "ratio_dx_over_og": 1.0385756676557862,
+        "deviation_percent": 3.857566765578624,
         "target_percent": 2.0,
         "policy": "accepted_bounded_speedup",
         "evidence": "boss_speed"
@@ -5887,8 +5892,8 @@
         "scope": "shalamar",
         "measurement": "matched_player_facing_transition_cadence",
         "direction": "faster",
-        "ratio_dx_over_og": 0.9548359608010226,
-        "deviation_percent": 4.516403919897738,
+        "ratio_dx_over_og": 0.9573924158500213,
+        "deviation_percent": 4.260758414997867,
         "target_percent": 2.0,
         "pairing_confidence": "deep",
         "policy": "accepted_bounded_speedup",
@@ -5910,8 +5915,8 @@
         "scope": "stage_5",
         "measurement": "input_identical_gameplay_throughput",
         "direction": "slower",
-        "ratio_dx_over_og": 0.9646,
-        "deviation_percent": 3.5399999999999987,
+        "ratio_dx_over_og": 0.9658,
+        "deviation_percent": 3.420000000000001,
         "target_percent": 2.0,
         "accepted_floor_ratio": 0.95,
         "policy": "accepted_slowdown_floor",
@@ -5974,10 +5979,10 @@
         "classification": "paired",
         "matched_transitions": 288,
         "slip_aware_matched": 288,
-        "ratio_dx_over_og_frames_per_iter": 1.025721784776903,
-        "slowdown_percent": 2.57217847769029,
+        "ratio_dx_over_og_frames_per_iter": 1.0272965879265092,
+        "slowdown_percent": 2.729658792650924,
         "within_two_percent": false,
-        "transition_slowdown_percent": 2.572178477690268,
+        "transition_slowdown_percent": 2.729658792650902,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_operator_slowdown",
@@ -5988,10 +5993,10 @@
         "classification": "paired",
         "matched_transitions": 452,
         "slip_aware_matched": 452,
-        "ratio_dx_over_og_frames_per_iter": 0.8832237812190759,
-        "slowdown_percent": -11.677621878092415,
+        "ratio_dx_over_og_frames_per_iter": 0.8806286085024673,
+        "slowdown_percent": -11.937139149753273,
         "within_two_percent": false,
-        "transition_slowdown_percent": -11.868795856711278,
+        "transition_slowdown_percent": -12.127751402675868,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -6000,12 +6005,12 @@
       {
         "boss": "penta_dragon",
         "classification": "paired",
-        "matched_transitions": 509,
-        "slip_aware_matched": 509,
-        "ratio_dx_over_og_frames_per_iter": 0.8812477844735909,
-        "slowdown_percent": -11.875221552640912,
+        "matched_transitions": 503,
+        "slip_aware_matched": 503,
+        "ratio_dx_over_og_frames_per_iter": 0.8846704871060171,
+        "slowdown_percent": -11.532951289398286,
         "within_two_percent": false,
-        "transition_slowdown_percent": -11.875221552640912,
+        "transition_slowdown_percent": -11.532951289398286,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -6030,10 +6035,10 @@
         "classification": "paired",
         "matched_transitions": 425,
         "slip_aware_matched": 425,
-        "ratio_dx_over_og_frames_per_iter": 0.9548359608010226,
-        "slowdown_percent": -4.516403919897738,
+        "ratio_dx_over_og_frames_per_iter": 0.9573924158500212,
+        "slowdown_percent": -4.260758414997879,
         "within_two_percent": false,
-        "transition_slowdown_percent": -4.516403919897738,
+        "transition_slowdown_percent": -4.260758414997867,
         "transition_within_two_percent": false,
         "pairing_confidence": "deep",
         "policy_status": "accepted_bounded_speedup",
@@ -6058,10 +6063,10 @@
         "classification": "paired",
         "matched_transitions": 178,
         "slip_aware_matched": 254,
-        "ratio_dx_over_og_frames_per_iter": 1.0053314639056659,
-        "slowdown_percent": 0.5331463905665856,
+        "ratio_dx_over_og_frames_per_iter": 1.0124334915156743,
+        "slowdown_percent": 1.24334915156743,
         "within_two_percent": true,
-        "transition_slowdown_percent": -0.5747126436781547,
+        "transition_slowdown_percent": 0.0,
         "transition_within_two_percent": true,
         "pairing_confidence": "deep",
         "policy_status": "within_target",
@@ -6079,38 +6084,38 @@
     "evidence": {
       "title_attract": {
         "path": "artifacts/title-idle-reel.summary.json",
-        "sha256": "7089a84ebc4c8b5ef87f78090769137514d38a893864ce52943da9d72306a79a"
+        "sha256": "d948818a3f081f62d8c532747306f50d081011c04c007e0eed73de860226af8c"
       },
       "gameplay_speed": {
         "path": "artifacts/gameplay-speed/manifest.json",
-        "sha256": "bafe49b6a21c6746c3f570732adef8ba85a6a8ce753f3277c01e383a00022c0d"
+        "sha256": "1da40340d4a1dda94d9ccd2134d8c2e7c8335ae46368bd70f25177b96d025dec"
       },
       "gameplay_movement_stress": {
         "path": "artifacts/gameplay-movement-stress/receipt.json",
-        "sha256": "e063e6fe544619d37e9ad1d40c049aa8522b21e36121b7fa0f387a8824fc9788"
+        "sha256": "92cbb6c828c6b8b9993a2c7c09affcf8227d919b61fb3f26eada3223291ffcc4"
       },
       "boss_speed": {
         "path": "artifacts/boss-speed-parity.json",
-        "sha256": "e38b684ccce3c965c02766aebddb608834420914252007cf29d3f48a966d1da1"
+        "sha256": "f5b0fe60205e2a2134471da52a84c449f82b811d252fd5183ea2cfd0a195dde5"
       },
       "boss_publication": {
         "path": "artifacts/boss-publication-cadence.json",
-        "sha256": "f21300e99bec8b639f460dc8acf4eca123bcbbb4d5cfd9e622d9e9ef8ae41a17"
+        "sha256": "fded661e2156166ab54d5fa82b13e152f19443a07156e9470239f3535e817e6b"
       },
       "boss_trajectory": {
         "path": "artifacts/boss-trajectory-pairing.json",
-        "sha256": "f49a3f110edcb034aea17e589845b46aaffcadb32095c1fe77031daa6214d4a1"
+        "sha256": "63b060e9b6b73728d136fa29f8814f14d5988d63d3db739f14ed263b0ebcd026"
       },
       "boss_trajectory_null": {
         "path": "artifacts/boss-trajectory-pairing-null.json",
-        "sha256": "911379c5ab035eb16f214e19ce309785fc6fb1cada1403ba4d57325f228ab093"
+        "sha256": "268dc79b16c5db724d56e8d04569fdbd3d5116b28fad0b754d72bd8098f2941a"
       },
       "ted_readiness": {
         "path": "artifacts/ted-release-readiness/report.json",
-        "sha256": "fd3d17a106bf049a8b997f4942a5d65df7bd9241288af1d77e1d58b1e8edee94"
+        "sha256": "2ac109656b8f96483c0ba9a019ab8d27bb603a4693ab56f0fef868422f4b653f"
       }
     },
-    "profile": "stream-release-lock-original-source-v5",
+    "profile": "stream-release-lock-original-source-v6",
     "stage7_world_position": {
       "classification": "EQUAL_START_WORLD_COMBINED_SEEDS_FLOOR_97",
       "metric": {
@@ -6138,17 +6143,17 @@
         ],
         "minimum_usable_seeds": 7,
         "minimum_combined_half_cycles": 120,
-        "measured_half_cycles": 231,
+        "measured_half_cycles": 226,
         "maximum_uncontested_loop_delta": 20,
         "elapsed_frames": {
-          "original_a": 13624,
-          "original_b": 13624,
-          "dx_a": 13998,
-          "dx_b": 13998
+          "original_a": 13337,
+          "original_b": 13337,
+          "dx_a": 13646,
+          "dx_b": 13646
         },
         "throughput_ratio_by_replay": {
-          "a": 0.9732818974139162,
-          "b": 0.9732818974139162
+          "a": 0.9773560017587571,
+          "b": 0.9773560017587571
         },
         "target_floor": 0.97,
         "target_ceiling": 1.02,
@@ -6159,16 +6164,16 @@
         "per_seed": {
           "0": {
             "usable": true,
-            "measured_half_cycles": 3,
+            "measured_half_cycles": 13,
             "elapsed_frames": {
-              "original_a": 184,
-              "original_b": 184,
-              "dx_a": 187,
-              "dx_b": 187
+              "original_a": 777,
+              "original_b": 777,
+              "dx_a": 811,
+              "dx_b": 811
             },
             "throughput_ratio_by_replay": {
-              "a": 0.983957219251337,
-              "b": 0.983957219251337
+              "a": 0.9580764488286067,
+              "b": 0.9580764488286067
             },
             "contact_affected_half_cycles": [
               26,
@@ -6177,41 +6182,39 @@
               29,
               30,
               31,
-              32,
-              33,
-              34,
               35,
               36,
               37,
               38,
-              39,
+              39
+            ],
+            "settle_half_cycle_by_trace": {
+              "original_a": 22,
+              "original_b": 22,
+              "dx_a": 20,
+              "dx_b": 20
+            }
+          },
+          "10": {
+            "usable": true,
+            "measured_half_cycles": 23,
+            "elapsed_frames": {
+              "original_a": 1364,
+              "original_b": 1364,
+              "dx_a": 1434,
+              "dx_b": 1434
+            },
+            "throughput_ratio_by_replay": {
+              "a": 0.9511854951185496,
+              "b": 0.9511854951185496
+            },
+            "contact_affected_half_cycles": [
               40,
               41,
               42,
               43,
               44
             ],
-            "settle_half_cycle_by_trace": {
-              "original_a": 22,
-              "original_b": 22,
-              "dx_a": 22,
-              "dx_b": 22
-            }
-          },
-          "10": {
-            "usable": true,
-            "measured_half_cycles": 32,
-            "elapsed_frames": {
-              "original_a": 1894,
-              "original_b": 1894,
-              "dx_a": 1911,
-              "dx_b": 1911
-            },
-            "throughput_ratio_by_replay": {
-              "a": 0.9911041339612768,
-              "b": 0.9911041339612768
-            },
-            "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
               "original_a": 20,
               "original_b": 20,
@@ -6221,90 +6224,91 @@
           },
           "20": {
             "usable": true,
-            "measured_half_cycles": 16,
+            "measured_half_cycles": 15,
             "elapsed_frames": {
-              "original_a": 947,
-              "original_b": 947,
-              "dx_a": 986,
-              "dx_b": 986
+              "original_a": 890,
+              "original_b": 890,
+              "dx_a": 937,
+              "dx_b": 937
             },
             "throughput_ratio_by_replay": {
-              "a": 0.960446247464503,
-              "b": 0.960446247464503
+              "a": 0.9498399146211313,
+              "b": 0.9498399146211313
             },
             "contact_affected_half_cycles": [
+              37,
+              38,
+              39,
+              40,
               41,
               42,
               43,
               44,
-              45,
-              46
+              45
             ],
             "settle_half_cycle_by_trace": {
               "original_a": 22,
               "original_b": 22,
-              "dx_a": 24,
-              "dx_b": 24
+              "dx_a": 22,
+              "dx_b": 22
             }
           },
           "30": {
             "usable": true,
-            "measured_half_cycles": 26,
+            "measured_half_cycles": 32,
             "elapsed_frames": {
-              "original_a": 1544,
-              "original_b": 1544,
-              "dx_a": 1552,
-              "dx_b": 1552
+              "original_a": 1899,
+              "original_b": 1899,
+              "dx_a": 1909,
+              "dx_b": 1909
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9948453608247423,
-              "b": 0.9948453608247423
+              "a": 0.9947616553169198,
+              "b": 0.9947616553169198
             },
             "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
               "original_a": 22,
               "original_b": 22,
-              "dx_a": 24,
-              "dx_b": 24
+              "dx_a": 22,
+              "dx_b": 22
             }
           },
           "50": {
             "usable": true,
-            "measured_half_cycles": 37,
+            "measured_half_cycles": 34,
             "elapsed_frames": {
-              "original_a": 2191,
-              "original_b": 2191,
-              "dx_a": 2244,
-              "dx_b": 2244
+              "original_a": 2014,
+              "original_b": 2014,
+              "dx_a": 2028,
+              "dx_b": 2028
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9763814616755794,
-              "b": 0.9763814616755794
+              "a": 0.9930966469428008,
+              "b": 0.9930966469428008
             },
             "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
               "original_a": 20,
               "original_b": 20,
-              "dx_a": 20,
-              "dx_b": 20
+              "dx_a": 22,
+              "dx_b": 22
             }
           },
           "60": {
             "usable": true,
-            "measured_half_cycles": 31,
+            "measured_half_cycles": 33,
             "elapsed_frames": {
-              "original_a": 1826,
-              "original_b": 1826,
-              "dx_a": 1857,
-              "dx_b": 1857
+              "original_a": 1943,
+              "original_b": 1943,
+              "dx_a": 1971,
+              "dx_b": 1971
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9833064081852451,
-              "b": 0.9833064081852451
+              "a": 0.9857940131912735,
+              "b": 0.9857940131912735
             },
-            "contact_affected_half_cycles": [
-              54
-            ],
+            "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
               "original_a": 22,
               "original_b": 22,
@@ -6314,16 +6318,16 @@
           },
           "70": {
             "usable": true,
-            "measured_half_cycles": 23,
+            "measured_half_cycles": 20,
             "elapsed_frames": {
-              "original_a": 1364,
-              "original_b": 1364,
-              "dx_a": 1414,
-              "dx_b": 1414
+              "original_a": 1185,
+              "original_b": 1185,
+              "dx_a": 1204,
+              "dx_b": 1204
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9646393210749646,
-              "b": 0.9646393210749646
+              "a": 0.9842192691029901,
+              "b": 0.9842192691029901
             },
             "contact_affected_half_cycles": [
               29,
@@ -6331,30 +6335,31 @@
               31,
               32,
               33,
-              49,
-              50,
-              51,
-              52
+              35,
+              36,
+              37,
+              38,
+              39
             ],
             "settle_half_cycle_by_trace": {
               "original_a": 20,
               "original_b": 20,
-              "dx_a": 20,
-              "dx_b": 20
+              "dx_a": 22,
+              "dx_b": 22
             }
           },
           "80": {
             "usable": true,
-            "measured_half_cycles": 30,
+            "measured_half_cycles": 33,
             "elapsed_frames": {
-              "original_a": 1749,
-              "original_b": 1749,
-              "dx_a": 1876,
-              "dx_b": 1876
+              "original_a": 1924,
+              "original_b": 1924,
+              "dx_a": 1968,
+              "dx_b": 1968
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9323027718550106,
-              "b": 0.9323027718550106
+              "a": 0.9776422764227642,
+              "b": 0.9776422764227642
             },
             "contact_affected_half_cycles": [],
             "settle_half_cycle_by_trace": {
@@ -6366,18 +6371,24 @@
           },
           "90": {
             "usable": true,
-            "measured_half_cycles": 33,
+            "measured_half_cycles": 23,
             "elapsed_frames": {
-              "original_a": 1925,
-              "original_b": 1925,
-              "dx_a": 1971,
-              "dx_b": 1971
+              "original_a": 1341,
+              "original_b": 1341,
+              "dx_a": 1384,
+              "dx_b": 1384
             },
             "throughput_ratio_by_replay": {
-              "a": 0.9766615930999493,
-              "b": 0.9766615930999493
+              "a": 0.9689306358381503,
+              "b": 0.9689306358381503
             },
-            "contact_affected_half_cycles": [],
+            "contact_affected_half_cycles": [
+              24,
+              25,
+              26,
+              27,
+              28
+            ],
             "settle_half_cycle_by_trace": {
               "original_a": 22,
               "original_b": 22,
@@ -6389,20 +6400,20 @@
       },
       "evidence": "gameplay_movement_stress"
     },
-    "ledger_sha256": "1011a1f99579dbcd19c66a54d9dbacd97b49f2d372d8dca708838735f0632f43"
+    "ledger_sha256": "db1e2ac764399541052fb4b964d250608fdf7e021f7757551582a502e8a77094"
   },
   "rom_committed": false,
   "hardware_status": "pending-reservation-backed-mister",
   "source_builds": [
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/english-variant/tmp/rl-suite-en-02/build/source-a/build-receipt.json",
-      "receipt_sha256": "a4cd639bf6ce28031035a6520cac6195c1e292f0424b2caf77dcd01a75527c4e",
-      "source_fingerprint": "81920bacdf3e2b2f06d7abb899b545053508de34bcd627ef503b97f4f01f609b"
+      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-1109/tmp/suite-official-1110/build/source-a/build-receipt.json",
+      "receipt_sha256": "82c379a81c84e9a195c66ae8a9f3897aaf840106aee2c9a9bd78173452eb1951",
+      "source_fingerprint": "1ffe974ad414dd0ca2c96ce183de95e416f5d28161c65c581f6d1848fd1b5845"
     },
     {
-      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/english-variant/tmp/rl-suite-en-02/build/source-b/build-receipt.json",
-      "receipt_sha256": "29897ee8302eec6df0a4ac39f830bd6b080cdad9ae8756c3d9d7e8df484513f7",
-      "source_fingerprint": "81920bacdf3e2b2f06d7abb899b545053508de34bcd627ef503b97f4f01f609b"
+      "receipt": "/home/struktured/projects/penta-dragon-dx-issues/tmp/fix-1109/tmp/suite-official-1110/build/source-b/build-receipt.json",
+      "receipt_sha256": "2b9110f47569c05c87058dec134404f0ebfe8c8aee06076cf5679bcefd67944e",
+      "source_fingerprint": "1ffe974ad414dd0ca2c96ce183de95e416f5d28161c65c581f6d1848fd1b5845"
     }
   ]
 }

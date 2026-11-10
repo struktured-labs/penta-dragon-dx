@@ -2,6 +2,24 @@
 
 ## [Unreleased] - Restart fixes
 
+- Fix #55 (wrong colours for ~1 s when a stage appears) and #83 (garbled font
+  flash before the Stage 1 secret area). CGB ignores the DMG BGP/OBP blanking
+  the original uses to hide both loads. The native fade-in's frame waits
+  (`00:0F8B`) now install the stage deck's BG1-BG7/OBJ0-7 right after the map
+  flip (46 stale frames -> 1); the remaining frame is allowed by a narrow
+  `stage_card_stability` / `stage1_entry_transition_integrity` carve-out
+  because the flip lives in the attract-shared VBlank ISR, which is not
+  modified. After that first presented frame the remaining fade waits use one
+  native `CALL 4068` so Cameo publication stays on the parent 1.2069 ratio. The secret entry (`00:1494`) blacks out all CGB palettes, and the
+  secret STAGE ?? card (`00:159F`) flips and fills the card map while black,
+  then restores BG0-BG7/OBJ0-7 from the next frame top so the card appears in
+  one frame. Also fix a latent hang in the DX window-enable VBlank wait
+  (`14:7F1D`, exact-LY-edge retry starved by a timer IRQ; the 6-byte patch now accepts any vblank line); the 6-byte change
+  has a narrow bank-20 authentication carve-out in `verify_low_health_flicker`,
+  `arena_bank20_r455`, and `verify_stage1_captured_menu`. Body in bank `$30`,
+  trampoline in unreferenced fill `$00F0`; gameplay-only sites, never run in
+  attract. New final chain stage `transition-palette-blanking`, profile v6.
+  Candidate: `91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18`.
 - Fix the post-ending GAME START freeze: the ending's soft reset (`01:5556`
   `JP $0150`) re-entered boot, which clears only `$C000-$DEFF`, so the DX
   cold-init sentinels `$DF02`/`$DF08` survived, cold init was skipped, the
