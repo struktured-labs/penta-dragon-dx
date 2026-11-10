@@ -44,6 +44,10 @@ SOFT_RESET_LAYOUT_PIN = '1771e0033a28ea47b825c45d33016edd104dbdcfb88f2190219406c
 # #55/#83 transition palette blanking; same primary rows/owners (bank-$30 copy is build-time).
 TRANSITION_PIN = '91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18'
 TRANSITION_LAYOUT_PIN = 'f877eebc31373480f3c9a6604f8abab562e28a91daed8cd42a92c9633ee4b997'
+MENU_HOLD_PIN = '952f9b9f2b3feafb1882282e8ac7e5d0f462a597b79da49e74587469d8f6888a'
+# #81 is a 4-byte hook in bank 20; primary palette rows are unchanged, so the
+# transition layout pin is reused until a measured digest says otherwise.
+MENU_HOLD_LAYOUT_PIN = TRANSITION_LAYOUT_PIN
 # Exact late-return layout with ONLY primary rows/global checksum normalized.
 STAGE1_LAYOUT_PIN = '3521f83aaf36fdf9a5f82fdefd603e7b289fa9a58fa46447c17d441209cf83c2'
 SOURCE = ROOT / 'tmp/stream-tonight/Penta Dragon DX v3.01.gbc'
@@ -108,7 +112,7 @@ def primary_layout_digest(rom):
 def stage1_layout_supported(rom):
     return primary_layout_digest(rom) in (STAGE1_LAYOUT_PIN, PLAYTEST_LAYOUT_PIN,
                                         TITLE_RETRY_LAYOUT_PIN, NATIVE_RECORDS_LAYOUT_PIN,
-                                        SOFT_RESET_LAYOUT_PIN, TRANSITION_LAYOUT_PIN)
+                                        SOFT_RESET_LAYOUT_PIN, TRANSITION_LAYOUT_PIN, MENU_HOLD_LAYOUT_PIN)
 
 
 def labels_for_rom(rom):
@@ -116,7 +120,7 @@ def labels_for_rom(rom):
     labels = list(LABELS)
     if primary_layout_digest(rom) in (PLAYTEST_LAYOUT_PIN, TITLE_RETRY_LAYOUT_PIN,
                                       NATIVE_RECORDS_LAYOUT_PIN, SOFT_RESET_LAYOUT_PIN,
-                                      TRANSITION_LAYOUT_PIN):
+                                      TRANSITION_LAYOUT_PIN, MENU_HOLD_LAYOUT_PIN):
         labels[7] = ('Sara’s weapon shots & effects',
                      'OBJ0 · Player weapon primary palette; dragon-shot overrides are separate. Historical API key: EnemyProjectile.')
         labels[10] = ('Enemy bullets & crows',
@@ -230,7 +234,7 @@ class Bridge:
         WORK.mkdir(parents=True, exist_ok=True)
         self.rom = Path(source).read_bytes()
         self.source_pin = sha(self.rom)
-        if self.source_pin not in (PIN, ROW_GUARD_PIN, SARA_ATOMIC_PIN, TED_MENU_PIN, STAR_PIN, RETURN_FADE_PIN, LATE_RETURN_PIN, PLAYTEST_PIN, TITLE_RETRY_PIN, NATIVE_RECORDS_PIN, SOFT_RESET_PIN, TRANSITION_PIN):
+        if self.source_pin not in (PIN, ROW_GUARD_PIN, SARA_ATOMIC_PIN, TED_MENU_PIN, STAR_PIN, RETURN_FADE_PIN, LATE_RETURN_PIN, PLAYTEST_PIN, TITLE_RETRY_PIN, NATIVE_RECORDS_PIN, SOFT_RESET_PIN, TRANSITION_PIN, MENU_HOLD_PIN):
             raise ValueError('Starting ROM does not match an exact supported pin')
         self.stem = 'Penta-Dragon-DX-' + self.source_pin[:12]
         self.history = []

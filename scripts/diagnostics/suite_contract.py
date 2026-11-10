@@ -73,6 +73,7 @@ GUARDED_ENTRYPOINTS = (
     "scripts/diagnostics/verify_stage1_pickup_art.py",
     "scripts/diagnostics/verify_stage1_spike_palettes.py",
     "scripts/diagnostics/verify_stage_card_stability.py",
+    "scripts/diagnostics/verify_select_roomchange_menu.py",
     "scripts/diagnostics/verify_stage_speed_matrix.py",
     "scripts/diagnostics/verify_story_attr_production.py",
     "scripts/diagnostics/verify_stale_window_state.py",

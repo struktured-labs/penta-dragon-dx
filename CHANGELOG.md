@@ -2,6 +2,19 @@
 
 ## [Unreleased] - Restart fixes
 
+- Fix #81 (garbled/double Select menu when opened about 75% through Stage 1).
+  Pressing Select two frames after an `FFBD` room-id change published the
+  inventory to the current window map, after which the packed-map VBlank
+  commit (`0D:7459`, `xor $48`) swapped LCDC.3/.6 and left a second copy on
+  the BG. The gameplay-only menu window-enable hook (`14:7F32`) now clears
+  `FFC4` so that commit is deferred while the menu is up; the attract-shared
+  ISR is unchanged. Mid-room Select and menu close stay a single HUD. Live
+  gate `select_roomchange_menu` covers the Select-2-frames-after-FFBD trigger
+  on JP and on an EN image rebuilt from the committed translation delta.
+  #82 (black on the right entering the 3→1 shaft) is the settled room
+  geometry, not this flip, and is not closed here. New final chain stage
+  `menu-open-map-hold`, profile v7. Candidate:
+  `952f9b9f2b3feafb1882282e8ac7e5d0f462a597b79da49e74587469d8f6888a`.
 - Fix #55 (wrong colours for ~1 s when a stage appears) and #83 (garbled font
   flash before the Stage 1 secret area). CGB ignores the DMG BGP/OBP blanking
   the original uses to hide both loads. The native fade-in's frame waits

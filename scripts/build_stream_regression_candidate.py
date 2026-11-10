@@ -190,7 +190,9 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
           later_lowhealth_timer=False, later_lowhealth_camera=False,
           title_glyph_read_window=False, title_glyph_retry_window=False,
           native_stage_records=False, soft_reset_cold_init=False,
-          transition_palette_blanking=False):
+          transition_palette_blanking=False, menu_open_map_hold=False):
+    if menu_open_map_hold and not transition_palette_blanking:
+        raise ValueError('menu-open map hold requires the transition-palette-blanking chain')
     if transition_palette_blanking and not soft_reset_cold_init:
         raise ValueError('transition palette blanking requires the soft-reset cold-init chain')
     if soft_reset_cold_init and not native_stage_records:
@@ -393,6 +395,16 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
                             builder=str(Path(blanking.__file__).resolve()),
                             builder_sha256=digest(Path(blanking.__file__).read_bytes())))
         parent = result
+    if menu_open_map_hold:
+        # #81: clear FFC4 while the Select menu owns the window so a pending
+        # packed-map commit cannot swap LCDC.3/.6 underneath it.
+        import build_menu_open_map_hold as menu_hold
+        result = menu_hold.build(parent, stock)
+        records.append(dict(name='menu-open-map-hold', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(menu_hold.__file__).resolve()),
+                            builder_sha256=digest(Path(menu_hold.__file__).read_bytes())))
+        parent = result
     if source.read_bytes() != source_bytes:
         raise ValueError('palette source changed during construction')
     (output / 'candidate.gb').write_bytes(parent)
@@ -430,6 +442,7 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['native_stage_records'] = native_stage_records
     receipt['soft_reset_cold_init'] = soft_reset_cold_init
     receipt['transition_palette_blanking'] = transition_palette_blanking
+    receipt['menu_open_map_hold'] = menu_open_map_hold
     if release_lock:
         receipt['deferred_issues'] = [34]
     if secret_sound_alias:
@@ -496,6 +509,8 @@ if __name__ == '__main__':
                         help='requires --native-stage-records; clear DF00-DFEF on the post-ending soft reset so DX cold init reruns')
     parser.add_argument('--transition-palette-blanking', action='store_true',
                         help='requires --soft-reset-cold-init; CGB palette blanking/restore at stage fade-in and secret entry (#55, #83)')
+    parser.add_argument('--menu-open-map-hold', action='store_true',
+                        help='requires --transition-palette-blanking; clear FFC4 while the Select menu owns the window (#81)')
     args = parser.parse_args()
     print(json.dumps(build(args.output, presentation=args.presentation, arena_alias=args.arena_alias,
                            arena_completion_safe=args.arena_completion_safe,
@@ -513,4 +528,5 @@ if __name__ == '__main__':
                            title_glyph_retry_window=args.title_glyph_retry_window,
                            native_stage_records=args.native_stage_records,
                            soft_reset_cold_init=args.soft_reset_cold_init,
-                           transition_palette_blanking=args.transition_palette_blanking), indent=2))
+                           transition_palette_blanking=args.transition_palette_blanking,
+                           menu_open_map_hold=args.menu_open_map_hold), indent=2))
