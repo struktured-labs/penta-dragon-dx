@@ -406,6 +406,15 @@ def stage1_entry_transition_integrity(
     sprite animation and equivalent physical-map page cadence. A one-frame
     cyan, partial-map, or stale-attribute presentation is therefore a third
     state and fails.
+
+    Approved #55 allowance: the map flip lives in the attract-shared VBlank
+    ISR, so gameplay-only deck install cannot run before the first presented
+    post-flip frame. Exactly one transition frame immediately before the
+    first complete dungeon frame may be a stale-deck handoff: either the last
+    card map with the new deck already in CRAM, or the dungeon map still
+    holding the card's leftover palettes. A cyan or partial flash (dungeon
+    tiles whose palettes match neither the card nor the final deck) still
+    fails, as do two or more such frames.
     """
     splash = [row for row in frames if row["d880"] == "18"]
     if not splash or first_gameplay < 0:
@@ -482,28 +491,52 @@ def stage1_entry_transition_integrity(
             frame_int(dungeon, "frame") + 1,
         ))
     )
+    def stale_deck_handoff(row: dict) -> bool:
+        map_keys = ("tile_hash", "attr_hash", "tiles", "attrs")
+        card_map = tuple(str(reference[key]) for key in map_keys)
+        dungeon_map = tuple(str(dungeon[key]) for key in map_keys)
+        row_map = tuple(str(row[key]) for key in map_keys)
+        if row_map == card_map:
+            # Last card map; palettes may already be the stage deck.
+            return True
+        if row_map == dungeon_map:
+            # Dungeon map with leftover palettes. The stock flip arm may
+            # already have written stage BG0, so bg_cram need not match the
+            # card; BG0 must already be the final stage row. A cyan flash
+            # (wrong BG0) is still rejected.
+            return str(row["bg0"]) == str(dungeon["bg0"])
+        return False
+
+    stale_allowance = (
+        len(unexpected) == 1
+        and frame_int(unexpected[0], "frame") == frame_int(dungeon, "frame") - 1
+        and stale_deck_handoff(unexpected[0])
+    )
     if len(terminal_run) < 4:
         reason = "unstable-final-splash"
     elif not transition_consecutive:
         reason = "missing-transition-frame"
-    elif unexpected:
+    elif unexpected and not stale_allowance:
         reason = "third-presentation-state"
     elif len(settled_tail) < 4:
         reason = "short-dungeon-settle-tail"
     elif unstable_tail:
         reason = "unstable-dungeon-tail"
+    elif stale_allowance:
+        reason = "ok-one-frame-stale-deck"
     else:
         reason = "ok"
     return {
         "passed": (
             len(terminal_run) >= 4
             and transition_consecutive
-            and not unexpected
+            and (not unexpected or stale_allowance)
             and presentation_signature(transition[-1]) == dungeon_signature
             and len(settled_tail) >= 4
             and not unstable_tail
         ),
         "reason": reason,
+        "one_frame_stale_deck_allowance": stale_allowance,
         "terminal_splash_first_frame": frame_int(terminal_run[0], "frame"),
         "terminal_splash_last_frame": frame_int(reference, "frame"),
         "terminal_splash_run_frames": len(terminal_run),
@@ -547,16 +580,28 @@ def handoff_is_coherent(splash: list[dict], handoff: list[dict]) -> bool:
     it must never expose a card whose tile attributes are being repurposed for
     the dungeon.  Bind both the rendered pixels and their underlying visible
     map/CRAM state so a partial recolor cannot masquerade as a clean handoff.
+
+    Approved #55 allowance: the last handoff frame (still the card map) may
+    differ in BG0, BG CRAM, and the rendered pixels, because the stage deck
+    can be written at the end of that frame after the attract-shared flip
+    ISR.  Tile/attribute identity must still match the final card; a partial
+    map or mid-run palette change still fails.
     """
     if not splash or not handoff:
         return False
     reference = splash[-1]
-    keys = ("tile_hash", "attr_hash", "bg0", "bg_cram", "tiles", "attrs")
-    return all(
-        row["visual"]["sha256"] == reference["visual"]["sha256"]
-        and all(row[key] == reference[key] for key in keys)
-        for row in handoff
-    )
+    map_keys = ("tile_hash", "attr_hash", "tiles", "attrs")
+    all_keys = ("tile_hash", "attr_hash", "bg0", "bg_cram", "tiles", "attrs")
+    if not all(all(row[key] == reference[key] for key in map_keys) for row in handoff):
+        return False
+
+    def exact(row: dict) -> bool:
+        return (
+            row["visual"]["sha256"] == reference["visual"]["sha256"]
+            and all(row[key] == reference[key] for key in all_keys)
+        )
+
+    return all(exact(row) for row in handoff[:-1])
 
 
 def first_gameplay_map_is_atomic(

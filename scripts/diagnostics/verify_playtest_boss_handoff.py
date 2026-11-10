@@ -91,6 +91,9 @@ def broken_control(rom):
             # Post-ending soft-reset cold init; rearm-only reversal of that child.
             lowhealth_candidate_lineage.SOFT_RESET_SHA:
                 "0a8dc562f14803e7bdc69a7b166883ee84c8195b5e3e1a027783ddab48f72298",
+            # #55/#83 transition palette blanking; rearm-only reversal of that child.
+            lowhealth_candidate_lineage.TRANSITION_SHA:
+                "4ba52c52c2a911a9308a55eb4365248d4c024ab9b2711889d0218f2f7ed37b91",
         }[hashlib.sha256(rom).hexdigest()]
     # The experimental descendant's control retains all low-health changes:
     # revert only prelude rearm. It is not a historical played parent.

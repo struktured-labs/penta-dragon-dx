@@ -189,7 +189,10 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
           separate_enemy_projectiles=False, boss_prelude_rearm=False,
           later_lowhealth_timer=False, later_lowhealth_camera=False,
           title_glyph_read_window=False, title_glyph_retry_window=False,
-          native_stage_records=False, soft_reset_cold_init=False):
+          native_stage_records=False, soft_reset_cold_init=False,
+          transition_palette_blanking=False):
+    if transition_palette_blanking and not soft_reset_cold_init:
+        raise ValueError('transition palette blanking requires the soft-reset cold-init chain')
     if soft_reset_cold_init and not native_stage_records:
         raise ValueError('soft-reset cold init requires the native stage-record chain')
     if native_stage_records and not (title_glyph_retry_window and clean_stage_headers):
@@ -381,6 +384,15 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
                             builder=str(Path(soft_reset.__file__).resolve()),
                             builder_sha256=digest(Path(soft_reset.__file__).read_bytes())))
         parent = result
+    if transition_palette_blanking:
+        # #55/#83: CGB palette blanking/restore at stage fade-in and secret entry.
+        import build_transition_palette_blanking as blanking
+        result = blanking.build(parent, stock)
+        records.append(dict(name='transition-palette-blanking', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(blanking.__file__).resolve()),
+                            builder_sha256=digest(Path(blanking.__file__).read_bytes())))
+        parent = result
     if source.read_bytes() != source_bytes:
         raise ValueError('palette source changed during construction')
     (output / 'candidate.gb').write_bytes(parent)
@@ -417,6 +429,7 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['experimental_title_glyph_retry_window'] = title_glyph_retry_window
     receipt['native_stage_records'] = native_stage_records
     receipt['soft_reset_cold_init'] = soft_reset_cold_init
+    receipt['transition_palette_blanking'] = transition_palette_blanking
     if release_lock:
         receipt['deferred_issues'] = [34]
     if secret_sound_alias:
@@ -481,6 +494,8 @@ if __name__ == '__main__':
                         help='requires --title-glyph-retry-window; restore the native bank-1 stage records/loader and move the colliding helpers (#54)')
     parser.add_argument('--soft-reset-cold-init', action='store_true',
                         help='requires --native-stage-records; clear DF00-DFEF on the post-ending soft reset so DX cold init reruns')
+    parser.add_argument('--transition-palette-blanking', action='store_true',
+                        help='requires --soft-reset-cold-init; CGB palette blanking/restore at stage fade-in and secret entry (#55, #83)')
     args = parser.parse_args()
     print(json.dumps(build(args.output, presentation=args.presentation, arena_alias=args.arena_alias,
                            arena_completion_safe=args.arena_completion_safe,
@@ -497,4 +512,5 @@ if __name__ == '__main__':
                            title_glyph_read_window=args.title_glyph_read_window,
                            title_glyph_retry_window=args.title_glyph_retry_window,
                            native_stage_records=args.native_stage_records,
-                           soft_reset_cold_init=args.soft_reset_cold_init), indent=2))
+                           soft_reset_cold_init=args.soft_reset_cold_init,
+                           transition_palette_blanking=args.transition_palette_blanking), indent=2))

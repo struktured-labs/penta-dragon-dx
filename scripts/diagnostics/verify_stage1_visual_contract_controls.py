@@ -438,6 +438,33 @@ def main() -> int:
     cyan_settle_audit = stage1_entry_transition_integrity(
         cyan_settle_transition, 500
     )
+    stale_card_cram = dict(final_card)
+    stale_card_cram["bg_cram"] = "STAGE1-CRAM"
+    stale_card_cram["visual"] = {"sha256": "CARD-WITH-STAGE-DECK"}
+    stale_card_transition = [dict(row) for row in clean_entry_transition]
+    stale_card_transition[5] = transition_frame(
+        501, "00", "01", stale_card_cram
+    )
+    stale_card_audit = stage1_entry_transition_integrity(
+        stale_card_transition, 500
+    )
+    stale_dungeon = dict(dungeon)
+    stale_dungeon["bg_cram"] = "CRAM"
+    stale_dungeon["visual"] = {"sha256": "DUNGEON-STALE-PALETTES"}
+    stale_map_transition = [dict(row) for row in clean_entry_transition]
+    stale_map_transition[5] = transition_frame(
+        501, "00", "01", stale_dungeon
+    )
+    stale_map_audit = stage1_entry_transition_integrity(
+        stale_map_transition, 500
+    )
+    two_stale_transition = [dict(row) for row in stale_card_transition]
+    two_stale_transition[4] = transition_frame(
+        500, "02", "01", stale_card_cram
+    )
+    two_stale_audit = stage1_entry_transition_integrity(
+        two_stale_transition, 500
+    )
     consecutive_pregame = [
         {"frame": str(frame)} for frame in range(170, 516)
     ]
@@ -578,6 +605,8 @@ def main() -> int:
         "partial colored STAGE-card handoff is rejected": (
             handoff_is_coherent([final_card], [coherent_handoff])
             and not handoff_is_coherent([final_card], [partial_handoff])
+            and handoff_is_coherent([final_card], [final_card, stale_card_cram])
+            and not handoff_is_coherent([final_card], [stale_card_cram, final_card])
         ),
         "partial first dungeon map is rejected": (
             first_gameplay_map_is_atomic(atomic_gameplay, 502, "CARD")
@@ -594,6 +623,12 @@ def main() -> int:
             == "unstable-final-splash"
             and not bool(cyan_settle_audit["passed"])
             and cyan_settle_audit["reason"] == "unstable-dungeon-tail"
+            and bool(stale_card_audit["passed"])
+            and stale_card_audit["reason"] == "ok-one-frame-stale-deck"
+            and bool(stale_map_audit["passed"])
+            and stale_map_audit["reason"] == "ok-one-frame-stale-deck"
+            and not bool(two_stale_audit["passed"])
+            and two_stale_audit["reason"] == "third-presentation-state"
         ),
         "blank-SRAM pregame capture rejects one missing frame": (
             pregame_frames_are_consecutive(consecutive_pregame, 500)
