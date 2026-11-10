@@ -138,6 +138,7 @@ LIVE_GATES = (
     "palette_build_roundtrip",
     "candidate_ips_roundtrip",
     "mister_reservation_guard",
+    "select_roomchange_menu",
 )
 
 

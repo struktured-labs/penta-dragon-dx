@@ -1579,6 +1579,16 @@ def build_gates(
             script("scripts/diagnostics/verify_mister_reservation_guard.py"),
             30,
         ),
+        Gate(
+            "select_roomchange_menu",
+            script(
+                "scripts/diagnostics/verify_select_roomchange_menu.py",
+                r,
+                "--output",
+                str(artifacts / "select-roomchange-menu"),
+            ),
+            180,
+        ),
     ]
     if expanded_candidate:
         legacy_ted_gates = {

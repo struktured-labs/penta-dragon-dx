@@ -94,6 +94,9 @@ def broken_control(rom):
             # #55/#83 transition palette blanking; rearm-only reversal of that child.
             lowhealth_candidate_lineage.TRANSITION_SHA:
                 "4ba52c52c2a911a9308a55eb4365248d4c024ab9b2711889d0218f2f7ed37b91",
+            # #81 menu-open-map-hold; rearm-only reversal of that child.
+            lowhealth_candidate_lineage.MENU_HOLD_SHA:
+                "87ee6c18bd4ec2e15a2693c9264815556e549b04d6d9abbe237bee4d24c17f0a",
         }[hashlib.sha256(rom).hexdigest()]
     # The experimental descendant's control retains all low-health changes:
     # revert only prelude rearm. It is not a historical played parent.

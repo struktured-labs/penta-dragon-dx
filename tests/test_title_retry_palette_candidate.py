@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'scripts/diagnostics')]
 import mister_palette_bridge as bridge
 
-# The source profile now ends with transition-palette-blanking.
-PIN = '91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18'
+# The source profile now ends with menu-open-map-hold.
+PIN = '952f9b9f2b3feafb1882282e8ac7e5d0f462a597b79da49e74587469d8f6888a'
 
 
 def state_for(rom, stage=1):

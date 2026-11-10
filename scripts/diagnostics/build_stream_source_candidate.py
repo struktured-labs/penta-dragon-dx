@@ -33,6 +33,10 @@ Version6 appends transition-palette-blanking (#55, #83): the stage fade-in
 installs the stage deck before the screen appears, and the secret entry blacks
 out CGB palette RAM until the STAGE ?? card flips in one VBlank. Gameplay-only
 sites; attract never executes them.
+
+Version7 appends menu-open-map-hold (#81): the Select window-enable hook
+clears FFC4 so a pending packed-map commit cannot swap LCDC.3/.6 while the
+menu is up. Gameplay-only; the attract-shared VBlank ISR is unchanged.
 """
 from __future__ import annotations
 
@@ -70,9 +74,10 @@ FLAGS = {
     "native_stage_records": True,
     "soft_reset_cold_init": True,
     "transition_palette_blanking": True,
+    "menu_open_map_hold": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v6",
+    "schema": "penta-stream-release-lock-original-source-build-v7",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -94,6 +99,7 @@ CONTRACT = {
         "stage7-lowhealth-fastpath", "stage7-lowhealth-camera",
         "title-glyph-retry-window", "native-stage-records",
         "soft-reset-cold-init", "transition-palette-blanking",
+        "menu-open-map-hold",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -102,7 +108,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18"
+        "952f9b9f2b3feafb1882282e8ac7e5d0f462a597b79da49e74587469d8f6888a"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -207,7 +213,8 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
             name = "experimental_" + key
         elif key == "release_lock":
             name = "release_lock_chain"
-        elif key in ("native_stage_records", "soft_reset_cold_init", "transition_palette_blanking"):
+        elif key in ("native_stage_records", "soft_reset_cold_init", "transition_palette_blanking",
+                    "menu_open_map_hold"):
             name = key
         else:
             name = key if key.startswith("experimental_") else "experimental_" + key

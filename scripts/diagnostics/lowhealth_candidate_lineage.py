@@ -16,8 +16,10 @@ NATIVE_RECORDS_SHA = '050209058633e2723a25c4ad60f92e0a3d54d51dbdd27d449b23069d98
 SOFT_RESET_SHA = '9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe095'
 # #55/#83 transition palette blanking (build_transition_palette_blanking).
 TRANSITION_SHA = '91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18'
+# #81 menu-open-map-hold (build_menu_open_map_hold).
+MENU_HOLD_SHA = '952f9b9f2b3feafb1882282e8ac7e5d0f462a597b79da49e74587469d8f6888a'
 TITLE_SHAS = {TITLE_CANDIDATE_SHA, TITLE_RETRY_SHA, NATIVE_RECORDS_SHA, SOFT_RESET_SHA,
-              TRANSITION_SHA}
+              TRANSITION_SHA, MENU_HOLD_SHA}
 COMPILER_HEX = (
     'f0fffe04c28d78f0b7d603fe06d28d783e01e070fa80d8fe0b2807'
     '3e03e070c38d783e03e070f0bafe012004afea7fd43e18e0e0'
@@ -51,6 +53,14 @@ def _original():
     return (Path(__file__).resolve().parents[2] / 'rom/Penta Dragon (J).gb').read_bytes()
 
 
+def menu_hold_parent(rom):
+    """Invert only the final menu-open-map-hold stage (exact rebuild)."""
+    if hashlib.sha256(rom).hexdigest() != MENU_HOLD_SHA:
+        raise ValueError('not the exact menu-open-map-hold candidate')
+    import build_menu_open_map_hold as hold
+    return hold.reconstruct_parent(rom, _original())
+
+
 def transition_parent(rom):
     """Invert only the final transition-palette-blanking stage (exact rebuild)."""
     if hashlib.sha256(rom).hexdigest() != TRANSITION_SHA:
@@ -79,22 +89,29 @@ def native_records_intersects(start, end):
     import build_native_stage_records as records
     import build_soft_reset_cold_init as soft
     import build_transition_palette_blanking as blanking
+    import build_menu_open_map_hold as hold
     spans = (records.changed_spans(_original()) + soft.changed_spans(_original())
-             + blanking.changed_spans(_original()))
+             + blanking.changed_spans(_original()) + hold.changed_spans(_original()))
     # Approved #83 carve-out (2026-11-09): the 6-byte 14:7F1D LY-window change
     # is owned by transition-palette-blanking and is reverted by
     # reconstruct_parent / title_parent before bank-20 components are
     # authenticated. Do not treat those exact bytes as a foreign delta that
     # blocks verify_low_health_flicker, arena_bank20_r455, or
     # verify_stage1_captured_menu.
+    # #81: the 4-byte 14:7F32 FFC4 clear is owned by menu-open-map-hold and
+    # is similarly inverted before bank-20 authentication.
     wait = (blanking.WAIT_SITE, blanking.WAIT_SITE + 6)
-    spans = [span for span in spans if span != wait]
+    hold_site = (hold.SITE, hold.SITE + len(hold.NEW))
+    spans = [span for span in spans if span not in (wait, hold_site)]
     return any(start < b and a < end for a, b in spans)
 
 
 def title_parent(rom):
     """Authenticate the entire footer extension; no runtime substitution."""
     identity = hashlib.sha256(rom).hexdigest()
+    if identity == MENU_HOLD_SHA:
+        rom = menu_hold_parent(rom)
+        identity = hashlib.sha256(rom).hexdigest()
     if identity == TRANSITION_SHA:
         rom = transition_parent(rom)
         identity = hashlib.sha256(rom).hexdigest()
@@ -133,7 +150,7 @@ def authenticated_parent(rom, *ranges):
                 raise ValueError('invalid component range')
             if start < 0x36e00 and 0x36da7 < end:
                 raise ValueError('component intersects title-read delta')
-            if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA)
+            if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA)
                     and native_records_intersects(start, end)):
                 raise ValueError('component intersects native stage-record delta')
         return authenticated_parent(title_parent(rom), *ranges)
@@ -170,18 +187,21 @@ def source_replay(rom):
         import build_title_glyph_read_window as glyph
         image = glyph.build(image)
     elif hashlib.sha256(rom).hexdigest() in (TITLE_RETRY_SHA, NATIVE_RECORDS_SHA, SOFT_RESET_SHA,
-                                             TRANSITION_SHA):
+                                             TRANSITION_SHA, MENU_HOLD_SHA):
         import build_title_glyph_retry_window as glyph
         image = glyph.build(image)
-        if hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA):
+        if hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA):
             import build_native_stage_records as records
             image = records.build(image, _original())
-        if hashlib.sha256(rom).hexdigest() in (SOFT_RESET_SHA, TRANSITION_SHA):
+        if hashlib.sha256(rom).hexdigest() in (SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA):
             import build_soft_reset_cold_init as soft
             image = soft.build(image, _original())
-        if hashlib.sha256(rom).hexdigest() == TRANSITION_SHA:
+        if hashlib.sha256(rom).hexdigest() in (TRANSITION_SHA, MENU_HOLD_SHA):
             import build_transition_palette_blanking as blanking
             image = blanking.build(image, _original())
+        if hashlib.sha256(rom).hexdigest() == MENU_HOLD_SHA:
+            import build_menu_open_map_hold as hold
+            image = hold.build(image, _original())
     if image != rom:
         raise ValueError('low-health source replay differs from pinned candidate')
     return parent, image
@@ -194,7 +214,7 @@ def dispatcher_overlay(rom, offset, payload):
     if hashlib.sha256(rom).hexdigest() in TITLE_SHAS:
         if offset < 0x36e00 and 0x36da7 < offset + len(payload):
             raise ValueError('unowned title-read change in dispatcher component')
-        if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA)
+        if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA)
                 and native_records_intersects(offset, offset + len(payload))):
             raise ValueError('unowned native stage-record change in dispatcher component')
         return dispatcher_overlay(title_parent(rom), offset, payload)
@@ -220,14 +240,21 @@ def _transition_wait_reverted(rom):
     Those bytes are owned by transition-palette-blanking and are already
     inverted by reconstruct_parent when peeling the candidate. Bank-20
     components are authenticated against this reverted image so the rest of
-    the bank can stay a strict unchanged-inheritance check.
+    the bank can stay a strict unchanged-inheritance check. #81's 14:7F32
+    FFC4 clear is reverted the same way when the tip is menu-open-map-hold.
     """
-    if hashlib.sha256(rom).hexdigest() != TRANSITION_SHA:
+    identity = hashlib.sha256(rom).hexdigest()
+    if identity not in (TRANSITION_SHA, MENU_HOLD_SHA):
         return rom
     import build_transition_palette_blanking as blanking
-    if rom[blanking.WAIT_SITE:blanking.WAIT_SITE + 6] != blanking.WAIT_NEW:
-        raise ValueError('transition wait site differs from the owned 6-byte change')
     out = bytearray(rom)
+    if identity == MENU_HOLD_SHA:
+        import build_menu_open_map_hold as hold
+        if out[hold.SITE:hold.SITE + len(hold.NEW)] != hold.NEW:
+            raise ValueError('menu-open-map-hold site differs from the owned 4-byte change')
+        out[hold.SITE:hold.SITE + len(hold.PRE)] = hold.PRE
+    if out[blanking.WAIT_SITE:blanking.WAIT_SITE + 6] != blanking.WAIT_NEW:
+        raise ValueError('transition wait site differs from the owned 6-byte change')
     out[blanking.WAIT_SITE:blanking.WAIT_SITE + 6] = blanking.WAIT_PRE
     return bytes(out)
 
