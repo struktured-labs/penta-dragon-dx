@@ -1023,7 +1023,7 @@ PATTERNED_FLOOR_TILES = frozenset(
 )
 ROOM_OFFSET = 0x4400 + 0x1A0
 ROOM_SIZE = 24 * 24
-EXPECTED_TABLE = _bg_table()
+EXPECTED_TABLE = _bg_table(factory=False)
 EXPECTED_ATTR_TABLE = bytes(EXPECTED_TABLE)
 EXPECTED_HISTOGRAM = dict(sorted(Counter(EXPECTED_ATTR_TABLE).items()))
 if hashlib.sha256(ROOM01_WALL_FIXTURE.read_bytes()).hexdigest() != (
@@ -1747,9 +1747,12 @@ def live_receipt(
         retarget_rom_identity(normalized, normalized, rom)
 
     exact_semantic_expansion = semantic_expansion_is_exact(observer_rom)
+    # BG5 remains the default hardware / pickup row. The fire body now
+    # shares the Stage-1-only BG7 hazard row (SPIKE_FIRE_PALETTE), so do
+    # not index the default table by the fire-body palette here.
     expected_bg5 = rom_bytes[
-        BG_PALETTE_OFFSET + SPIKE_FIRE_PALETTE * 8:
-        BG_PALETTE_OFFSET + (SPIKE_FIRE_PALETTE + 1) * 8
+        BG_PALETTE_OFFSET + 5 * 8:
+        BG_PALETTE_OFFSET + 6 * 8
     ]
     expected_bg7 = rom_bytes[
         BANK13 + (STAGE1_HAZARD_BG7_SOURCE_ADDR - 0x4000):
@@ -2165,11 +2168,13 @@ def live_receipt(
         colors = list(lower.getdata())
         upper = phase_image.crop((0, 0, 160, 64))
         upper_colors = list(upper.getdata())
+        bronze_rgb = rgb_palette(expected_bg7)[2]
         lower_field_metrics.append({
             "red": colors.count((255, 0, 0)),
             "yellow": colors.count((255, 255, 0)),
             "upper_red": upper_colors.count((255, 0, 0)),
             "upper_yellow": upper_colors.count((255, 255, 0)),
+            "upper_bronze": upper_colors.count(bronze_rgb),
         })
     periodic_paths = sorted(prefix.parent.glob(prefix.name + "-frame*.png"))
     settled_periodic_paths = [
@@ -2694,7 +2699,7 @@ def live_receipt(
             "rendered cylinder phases visibly contain red and gold material": (
                 bool(lower_field_metrics)
                 and all(
-                    item["upper_red"] >= 100 and item["upper_yellow"] >= 100
+                    item["upper_bronze"] >= 100
                     for item in lower_field_metrics
                 )
             ),

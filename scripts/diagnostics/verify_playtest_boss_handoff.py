@@ -103,6 +103,9 @@ def broken_control(rom):
             # #73 menu-frame-reinstall; rearm-only reversal of that child.
             lowhealth_candidate_lineage.MENU_FRAME_SHA:
                 "b6212496b3bdbb7c98669f0eabf2a79fbc671005005ef50af923576e3c0b62f3",
+            # Stage-1 bronze-spike v10; rearm-only reversal of that child.
+            lowhealth_candidate_lineage.BRONZE_SPIKE_SHA:
+                "e721f6a9d243e8d1f8f5f3be087e8f975d55b35d53a4c3c1566f5e6e42ea02d2",
         }[hashlib.sha256(rom).hexdigest()]
     # The experimental descendant's control retains all low-health changes:
     # revert only prelude rearm. It is not a historical played parent.

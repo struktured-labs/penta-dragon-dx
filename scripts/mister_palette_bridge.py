@@ -54,6 +54,9 @@ DEATH_FADE_LAYOUT_PIN = 'ae765defa18558659b1bd19c9a9ec4dc1ce29314b715f9f824e1b85
 # #73 menu-frame-reinstall: 00:1F60 trampoline + 14:5CE2 chrome memcpy/body.
 MENU_FRAME_PIN = '01f8e0b22719a438c9c28f16c09c5bde8ae06f3f8561ffe0c88c08ba02b39d20'
 MENU_FRAME_LAYOUT_PIN = 'a124de7b709e116e13bd6ae142fab4c6301a4dddfe862940878482e124480856'
+# v10 weathered-bronze Stage-1 spike body on BG7; offline pin only.
+BRONZE_SPIKE_PIN = 'db348784914e4470db2878724c41073cd0fe564602e6788598706a3315fdd8af'
+BRONZE_SPIKE_LAYOUT_PIN = '16bd56494b829e847e40add8b6b772bf9119b2cedf273d2ce04bd3738ca7191b'
 # Exact late-return layout with ONLY primary rows/global checksum normalized.
 STAGE1_LAYOUT_PIN = '3521f83aaf36fdf9a5f82fdefd603e7b289fa9a58fa46447c17d441209cf83c2'
 SOURCE = ROOT / 'tmp/stream-tonight/Penta Dragon DX v3.01.gbc'
@@ -119,7 +122,7 @@ def stage1_layout_supported(rom):
     return primary_layout_digest(rom) in (STAGE1_LAYOUT_PIN, PLAYTEST_LAYOUT_PIN,
                                         TITLE_RETRY_LAYOUT_PIN, NATIVE_RECORDS_LAYOUT_PIN,
                                         SOFT_RESET_LAYOUT_PIN, TRANSITION_LAYOUT_PIN, MENU_HOLD_LAYOUT_PIN,
-                                        DEATH_FADE_LAYOUT_PIN, MENU_FRAME_LAYOUT_PIN)
+                                        DEATH_FADE_LAYOUT_PIN, MENU_FRAME_LAYOUT_PIN, BRONZE_SPIKE_LAYOUT_PIN)
 
 
 def labels_for_rom(rom):
@@ -128,7 +131,7 @@ def labels_for_rom(rom):
     if primary_layout_digest(rom) in (PLAYTEST_LAYOUT_PIN, TITLE_RETRY_LAYOUT_PIN,
                                       NATIVE_RECORDS_LAYOUT_PIN, SOFT_RESET_LAYOUT_PIN,
                                       TRANSITION_LAYOUT_PIN, MENU_HOLD_LAYOUT_PIN,
-                                      DEATH_FADE_LAYOUT_PIN, MENU_FRAME_LAYOUT_PIN):
+                                      DEATH_FADE_LAYOUT_PIN, MENU_FRAME_LAYOUT_PIN, BRONZE_SPIKE_LAYOUT_PIN):
         labels[7] = ('Sara’s weapon shots & effects',
                      'OBJ0 · Player weapon primary palette; dragon-shot overrides are separate. Historical API key: EnemyProjectile.')
         labels[10] = ('Enemy bullets & crows',
@@ -242,7 +245,7 @@ class Bridge:
         WORK.mkdir(parents=True, exist_ok=True)
         self.rom = Path(source).read_bytes()
         self.source_pin = sha(self.rom)
-        if self.source_pin not in (PIN, ROW_GUARD_PIN, SARA_ATOMIC_PIN, TED_MENU_PIN, STAR_PIN, RETURN_FADE_PIN, LATE_RETURN_PIN, PLAYTEST_PIN, TITLE_RETRY_PIN, NATIVE_RECORDS_PIN, SOFT_RESET_PIN, TRANSITION_PIN, MENU_HOLD_PIN, DEATH_FADE_PIN, MENU_FRAME_PIN):
+        if self.source_pin not in (PIN, ROW_GUARD_PIN, SARA_ATOMIC_PIN, TED_MENU_PIN, STAR_PIN, RETURN_FADE_PIN, LATE_RETURN_PIN, PLAYTEST_PIN, TITLE_RETRY_PIN, NATIVE_RECORDS_PIN, SOFT_RESET_PIN, TRANSITION_PIN, MENU_HOLD_PIN, DEATH_FADE_PIN, MENU_FRAME_PIN, BRONZE_SPIKE_PIN):
             raise ValueError('Starting ROM does not match an exact supported pin')
         self.stem = 'Penta-Dragon-DX-' + self.source_pin[:12]
         self.history = []

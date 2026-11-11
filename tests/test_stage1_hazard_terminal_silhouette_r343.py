@@ -75,7 +75,7 @@ class Stage1HazardTerminalSilhouetteR343Tests(unittest.TestCase):
         for tile in r343.FREE_TIP_TILES:
             self.assertEqual(
                 table[tile],
-                self.config.terminal_palette,
+                self.config.factory_terminal_palette,
                 f"free-tip tile {tile:02X} can render gray",
             )
             self.assertNotEqual(table[tile], self.config.support_palette)
@@ -85,7 +85,7 @@ class Stage1HazardTerminalSilhouetteR343Tests(unittest.TestCase):
         for tile in r343.WALL_TERMINAL_TILES:
             self.assertEqual(
                 table[tile],
-                self.config.terminal_palette,
+                self.config.factory_terminal_palette,
                 f"wall-contact tile {tile:02X} can render gray",
             )
             self.assertNotEqual(table[tile], self.config.support_palette)

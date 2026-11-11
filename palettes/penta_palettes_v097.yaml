@@ -168,22 +168,24 @@ death_gameover_palette:
 # Stage-local BG rows. These are loaded only for the named scene and do not
 # replace the normal BG palette with the same hardware slot in title, bonus,
 # story, or later-stage play. Edit this row during the livestream to tune the
-# rotating tooth/drill material without changing Python or patching ROM bytes.
+# rotating spike (body, rings, connectors, caps, and teeth) without changing
+# Python or patching ROM bytes.
 stage1_hazard_palettes:
-  # Experimental: affects Stage 1 and its Gargoyle overlay only. Still shared
-  # with Stage-1 power pickups. Keep disabled until transition timing and
-  # death/restart/savestate regressions pass; not supported by the browser yet.
+  # Body/connectors/caps share RotatingSpikeTeeth on BG7. This entry is kept
+  # so tooling can still name the body role; the live editor tunes the row
+  # below. Support stays on BG6 and power pickups stay on BG5.
   RotatingSpikeBody:
     enabled: false
-    slot: 5
-    colors: ["7FFF", "03FF", "001F", "0000"]
+    slot: 7
+    colors: ["7FFF", "7E94", "19B2", "3D4A"]
   RotatingSpikeTeeth:
     slot: 7
-    # Tooth cells share opaque pixels with the Stage-1 floor and cast shadow.
-    # Reserve index 2 for gold and make index 3 the exact Dungeon shadow color
-    # so those background pixels blend. The four-color tradeoff is that tooth
-    # outlines use dark lavender instead of black.
-    colors: ["7FFF", "7E94", "03FF", "3D4A"]  # White, floor blue, gold, floor shadow
+    # Weathered bronze at index 2. Index 1 is the exact Dungeon floor blue and
+    # index 3 is the exact Dungeon shadow so tooth/floor pixels blend. Index 0
+    # stays white and is also the cylinder specular highlight: body pixels that
+    # used the old BG5 yellow are remapped here so they do not render as
+    # floor-blue. Tooth outlines keep the dark-lavender (floor-shadow) tradeoff.
+    colors: ["7FFF", "7E94", "19B2", "3D4A"]  # White, floor blue, weathered bronze, floor shadow
 
 # Crystal Dragon's body/projectile animation crosses the generic OBJ4-OBJ7
 # monster families and intentionally disappears on selected frames to mimic a

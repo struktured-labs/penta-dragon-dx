@@ -775,7 +775,9 @@ def main() -> int:
             # #22 five-point-star: tiles 82/83/92/93 -> palette 5 (reviewed in
             # verify_stage1_tilemap_copy.FIVE_POINT_STAR_LUT_SHA256). The
             # replay grades against this candidate's own LUT bytes.
-            "66b0876cbe0a4a64885655a60d9fa56ca8479c51514e3d60fe4d9a45be15de82"}
+            "66b0876cbe0a4a64885655a60d9fa56ca8479c51514e3d60fe4d9a45be15de82",
+            # v10 bronze-spike body on BG7 (same table as tilemap allowlist).
+            "36149cec4406239bf85d4c119a35fe24c57aeba0199599728cbcbbd2e3f990f0"}
     ):
         parser.error(
             "candidate Stage-1 LUT is not the reviewed canonical semantic "

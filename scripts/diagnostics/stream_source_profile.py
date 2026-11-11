@@ -12,7 +12,7 @@ import build_stream_source_candidate as builder
 
 
 PROFILE = {
-    "name": "stream-release-lock-original-source-v9",
+    "name": "stream-release-lock-original-source-v10",
     "expanded_ted": True,
     "native_sparse": True,
     "native_pose_table": True,

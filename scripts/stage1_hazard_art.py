@@ -30,6 +30,12 @@ class Stage1HazardConfig:
     connector_palette: int
     terminal_palette: int
     support_palette: int
+    factory_tooth_palette: int
+    factory_ring_palette: int
+    factory_body_palette: int
+    factory_connector_palette: int
+    factory_terminal_palette: int
+    factory_support_palette: int
     semantic_base_tiles: Mapping[int, int]
     environment_remap: tuple[int, int, int, int]
     hazard_remap: tuple[int, int, int, int]
@@ -93,18 +99,19 @@ def load_stage1_hazard_config(
     raw = data["stage1_hazard_art"]["rotating_spike"]
     roles = raw["palette_categories"]
 
-    def role(name: str) -> tuple[frozenset[int], int]:
+    def role(name: str) -> tuple[frozenset[int], int, int]:
         category = named[roles[name]]
         palette = int(category["palette"])
-        if not 0 <= palette <= 7:
-            raise ValueError(f"{category['name']} has invalid palette {palette}")
-        return _category_tiles(category), palette
+        factory_palette = int(category.get("factory_palette", palette))
+        if not 0 <= palette <= 7 or not 0 <= factory_palette <= 7:
+            raise ValueError(f"{category['name']} has invalid palette {palette}/{factory_palette}")
+        return _category_tiles(category), palette, factory_palette
 
-    tooth_tiles, tooth_palette = role("tooth")
-    fire_tiles, fire_palette = role("fire_body")
-    connector_tiles, connector_palette = role("wall_connector")
-    terminal_tiles, terminal_palette = role("terminal_caps")
-    support_tiles, support_palette = role("support")
+    tooth_tiles, tooth_palette, factory_tooth_palette = role("tooth")
+    fire_tiles, fire_palette, factory_fire_palette = role("fire_body")
+    connector_tiles, connector_palette, factory_connector_palette = role("wall_connector")
+    terminal_tiles, terminal_palette, factory_terminal_palette = role("terminal_caps")
+    support_tiles, support_palette, factory_support_palette = role("support")
     ring_tiles = frozenset(int(tile) for tile in raw["ring_tiles"])
     body_tiles = frozenset(int(tile) for tile in raw["body_tiles"])
     if fire_tiles != ring_tiles | body_tiles:
@@ -136,6 +143,12 @@ def load_stage1_hazard_config(
         connector_palette=connector_palette,
         terminal_palette=terminal_palette,
         support_palette=support_palette,
+        factory_tooth_palette=factory_tooth_palette,
+        factory_ring_palette=factory_fire_palette,
+        factory_body_palette=factory_fire_palette,
+        factory_connector_palette=factory_connector_palette,
+        factory_terminal_palette=factory_terminal_palette,
+        factory_support_palette=factory_support_palette,
         semantic_base_tiles=semantic,
         environment_remap=tuple(int(item) for item in raw["environment_remap"]),
         hazard_remap=tuple(int(item) for item in raw["hazard_remap"]),

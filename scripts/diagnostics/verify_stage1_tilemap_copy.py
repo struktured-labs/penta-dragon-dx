@@ -103,10 +103,16 @@ COMPILED_TOOTH_BANK_LUT_SHA256 = (
 FIVE_POINT_STAR_LUT_SHA256 = (
     "66b0876cbe0a4a64885655a60d9fa56ca8479c51514e3d60fe4d9a45be15de82"
 )
+# v10 weathered-bronze spike body: the #22 star table with body/ring/
+# connector/cap cells moved from BG5 to BG7.
+BRONZE_SPIKE_LUT_SHA256 = (
+    "36149cec4406239bf85d4c119a35fe24c57aeba0199599728cbcbbd2e3f990f0"
+)
 REVIEWED_STAGE1_LUT_SHA256S = frozenset({
     CANONICAL_STAGE1_LUT_SHA256,
     COMPILED_TOOTH_BANK_LUT_SHA256,
     FIVE_POINT_STAR_LUT_SHA256,
+    BRONZE_SPIKE_LUT_SHA256,
 })
 PUBLICATION_ORACLE_SCHEMA = "penta-stage1-tilemap-publication-oracle-v1"
 RECEIPT_SCHEMA = "penta-stage1-tilemap-publication-receipt-v2"

@@ -34,11 +34,15 @@ class Stage1HazardTerminalPaletteTests(unittest.TestCase):
         self.assertTrue(TERMINAL_TILES.isdisjoint(self.config.support_tiles))
 
     def test_exact_terminal_cells_select_fire_material(self) -> None:
+        # The r534 factory table still emits pal 5; the release YAML slot is 7
+        # and is applied by the v10 stream stage.
         table = bytes(_bg_table())
         self.assertEqual(
             {tile: table[tile] for tile in sorted(TERMINAL_TILES)},
             {tile: 5 for tile in sorted(TERMINAL_TILES)},
         )
+        self.assertEqual(self.config.terminal_palette, 7)
+        self.assertEqual(self.config.body_palette, 7)
 
     def test_terminal_recolor_preserves_native_cap_art(self) -> None:
         variants = compile_stage1_hazard_variants(self.stock, self.config)

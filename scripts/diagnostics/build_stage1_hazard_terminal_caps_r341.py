@@ -70,7 +70,9 @@ def construct(source: bytes) -> tuple[bytes, dict[str, object]]:
         raise AssertionError("r341 base is not the exact accepted r336 candidate")
 
     config = load_stage1_hazard_config()
-    if config.terminal_tiles != TERMINAL_TILES or config.terminal_palette != 5:
+    # Release YAML may now set palette 7 (v10 bronze row). This overlay still
+    # compiles the factory table at palette 5.
+    if config.terminal_tiles != TERMINAL_TILES or config.factory_terminal_palette != 5:
         raise AssertionError("terminal-cap YAML contract changed")
 
     rom = bytearray(source)

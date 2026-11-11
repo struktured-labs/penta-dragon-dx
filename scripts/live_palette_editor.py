@@ -268,7 +268,7 @@ def load_yaml_palettes() -> dict:
     obj_keys = ['EnemyProjectile', 'SaraDragon', 'SaraWitch',
                 'SaraProjectileAndCrow', 'Hornets', 'OrcGround',
                 'Humanoid', 'Catfish']
-    palettes = {"BG": {}, "OBJ": {}, "BOSS": {}, "JET": {}, "POWER": {}}
+    palettes = {"BG": {}, "OBJ": {}, "BOSS": {}, "JET": {}, "POWER": {}, "HAZARD": {}}
     for i, k in enumerate(bg_keys):
         entry = data.get('bg_palettes', {}).get(k, {})
         palettes["BG"][i] = entry.get('colors', ["7FFF", "5294", "2108", "0000"])
@@ -293,6 +293,9 @@ def load_yaml_palettes() -> dict:
     palettes["ARENA"] = abp.parse_arena_bg_palettes(data)
     palettes["BG_labels"] = bg_keys
     palettes["OBJ_labels"] = obj_keys
+    hazard = data.get("stage1_hazard_palettes", {}).get("RotatingSpikeTeeth", {})
+    palettes["HAZARD"][7] = hazard.get("colors", ["7FFF", "7E94", "19B2", "3D4A"])
+    palettes["HAZARD_labels"] = {7: "RotatingSpikeTeeth"}
     return palettes
 
 
@@ -369,6 +372,13 @@ def write_live_file(
                 for ci, color in enumerate(colors)
             )
             lines.append(f"POWER{power}:{entries}")
+        if 7 in dirty.get("HAZARD", ()):
+            colors = state["HAZARD"][7]
+            entries = ",".join(
+                f"{ci}={color.upper()}"
+                for ci, color in enumerate(colors)
+            )
+            lines.append(f"HAZARD:{entries}")
         # Arena rows come after the global BG rows: Lua applies writes in
         # file order, so inside the matching arena they win over a global
         # edit of the same row, and outside it only the global row applies.
@@ -394,6 +404,7 @@ DIRTY: dict[str, set[int]] = {
     "BOSS": set(),
     "JET": set(),
     "POWER": set(),
+    "HAZARD": set(),
 }
 write_live_file(STATE, DIRTY)
 
@@ -564,6 +575,36 @@ Make sure mGBA was launched with <code>--script scripts/lua/live_palettes.lua</c
         html_parts.append("</details>")
         html_parts.append("</details>")
     html_parts.append("</div>")
+
+    html_parts.append(
+        '<div class="section"><h2>Stage 1 Rotating Spike (weathered bronze)</h2>'
+    )
+    html_parts.append(
+        '<p style="font-size:0.85em;color:#888;">'
+        'This is the Stage-1-only BG7 material row from '
+        '<code>stage1_hazard_palettes.RotatingSpikeTeeth</code>. '
+        'It colors the rotating cylinder body, rings, connectors, caps, and '
+        'teeth while <code>FFD0=0</code>. Index 1 must stay the Dungeon floor '
+        'blue and index 3 the Dungeon shadow for floor blending. Normal YAML '
+        'BG7 is left alone in other scenes. Use the Catfish / moth / hazards '
+        'scene button to preview.</p>'
+    )
+    colors = STATE["HAZARD"][7]
+    html_parts.append(
+        '<div class="pal">'
+        '<div class="pal-name">RotatingSpikeTeeth → BG7 (Stage 1 only)</div>'
+        '<div class="color-row">'
+    )
+    for color_index, color in enumerate(colors):
+        rgb = bgr555_to_rgb888(int(color, 16))
+        html_parts.append(
+            f'<div><input type="color" value="{rgb}" '
+            f'data-kind="HAZARD" data-pal="7" '
+            f'data-color="{color_index}" onchange="updateColor(this)">'
+            f'<div class="bgr" id="bgr-HAZARD-7-{color_index}">'
+            f'{color.upper()}</div></div>'
+        )
+    html_parts.append("</div></div></div>")
 
     html_parts.append(
         '<div class="section"><h2>Miniboss / Boss Override Palettes</h2>'
@@ -801,9 +842,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pal = int(data["pal"])
                 color = int(data["color"])
                 bgr = data["bgr"].upper()
-                if kind not in ("BG", "OBJ", "BOSS", "JET", "POWER", "ARENA"):
+                if kind not in ("BG", "OBJ", "BOSS", "JET", "POWER", "ARENA", "HAZARD"):
                     raise ValueError(
-                        "kind must be BG, OBJ, BOSS, JET, POWER, or ARENA, "
+                        "kind must be BG, OBJ, BOSS, JET, POWER, ARENA, or HAZARD, "
                         f"got {kind!r}"
                     )
                 arena = None
@@ -818,6 +859,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "JET": range(1, 3),
                     "POWER": range(1, 4),
                     "ARENA": range(8),
+                    "HAZARD": (7,),
                 }[kind]
                 if pal not in valid_palettes:
                     expected = {
@@ -827,6 +869,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "JET": "1-2",
                         "POWER": "1-3",
                         "ARENA": "0-7",
+                        "HAZARD": "7",
                     }[kind]
                     raise ValueError(f"{kind} palette must be {expected}, got {pal}")
                 if color not in range(4):
@@ -943,6 +986,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             replacements[("obj_palettes", yaml_key)] = STATE["JET"][slot]
         for power, yaml_key in POWERUP_PAL_ENTRIES:
             replacements[("powerup_palettes", yaml_key)] = STATE["POWER"][power]
+        replacements[("stage1_hazard_palettes", "RotatingSpikeTeeth")] = STATE["HAZARD"][7]
 
         lines = text.splitlines(keepends=True)
         section = None
