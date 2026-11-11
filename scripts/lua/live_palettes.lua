@@ -224,6 +224,7 @@ local function load_palettes(path)
                 line:match("^BOSS(%d)@(%d):(.+)$")
             local jet_slot, jet_colors = line:match("^JET(%d):(.+)$")
             local power_idx, power_colors = line:match("^POWER(%d):(.+)$")
+            local hazard_colors = line:match("^HAZARD:(.+)$")
             local arena_scene, arena_row, arena_colors =
                 line:match("^ARENA(%x%x)%.BG([0-7]):(.+)$")
             local kind, pal_idx, colors = line:match("^(OBJ)(%d):(.+)$")
@@ -236,6 +237,8 @@ local function load_palettes(path)
                 kind, pal_idx, colors = "JET", jet_slot, jet_colors
             elseif power_idx then
                 kind, pal_idx, colors = "POWER", 0, power_colors
+            elseif hazard_colors then
+                kind, pal_idx, colors = "BG", 7, hazard_colors
             elseif arena_scene then
                 kind, pal_idx, colors = "BG", arena_row, arena_colors
             end
@@ -254,6 +257,7 @@ local function load_palettes(path)
                             boss = boss_idx and tonumber(boss_idx) or nil,
                             jet = jet_slot and tonumber(jet_slot) or nil,
                             power = power_idx and tonumber(power_idx) or nil,
+                            hazard = hazard_colors and true or nil,
                             arena = arena_scene and tonumber(arena_scene, 16)
                                 or nil,
                         })
@@ -272,6 +276,7 @@ local function apply_writes(writes)
             (not w.boss or emu:read8(0xFFBF) == w.boss)
             and (not w.jet or emu:read8(0xFFD0) == 1)
             and (not w.power or emu:read8(0xFFC0) == w.power)
+            and (not w.hazard or emu:read8(0xFFD0) == 0)
             and (not w.arena or game_read(0xD880) == w.arena)
         )
         if active then

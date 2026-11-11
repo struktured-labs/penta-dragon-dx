@@ -83,7 +83,7 @@ class PaletteTests(unittest.TestCase):
 
     def test_supported_sources_get_distinct_stems_without_hardware_calls(self):
         for pin in (m.PIN, m.ROW_GUARD_PIN, m.SARA_ATOMIC_PIN, m.TED_MENU_PIN, m.STAR_PIN, m.RETURN_FADE_PIN,
-                    m.MENU_HOLD_PIN, m.DEATH_FADE_PIN, m.MENU_FRAME_PIN):
+                    m.MENU_HOLD_PIN, m.DEATH_FADE_PIN, m.MENU_FRAME_PIN, m.BRONZE_SPIKE_PIN):
             with patch.object(Path, 'read_bytes', return_value=b'fixture'), \
                  patch.object(m, 'sha', return_value=pin), \
                  patch.object(m.Bridge, 'ssh', side_effect=AssertionError('hardware access')):
@@ -363,9 +363,12 @@ class PaletteTests(unittest.TestCase):
         self.assertEqual(m.DEATH_FADE_LAYOUT_PIN, 'ae765defa18558659b1bd19c9a9ec4dc1ce29314b715f9f824e1b85964754e6b')
         self.assertEqual(m.MENU_FRAME_PIN, '01f8e0b22719a438c9c28f16c09c5bde8ae06f3f8561ffe0c88c08ba02b39d20')
         self.assertEqual(m.MENU_FRAME_LAYOUT_PIN, 'a124de7b709e116e13bd6ae142fab4c6301a4dddfe862940878482e124480856')
+        self.assertEqual(m.BRONZE_SPIKE_PIN, 'db348784914e4470db2878724c41073cd0fe564602e6788598706a3315fdd8af')
+        self.assertEqual(m.BRONZE_SPIKE_LAYOUT_PIN, '16bd56494b829e847e40add8b6b772bf9119b2cedf273d2ce04bd3738ca7191b')
         for label, path, pin, layout in (
             ('death-fade', m.ROOT/'tmp/death-fade-white-en/JP.gb', m.DEATH_FADE_PIN, m.DEATH_FADE_LAYOUT_PIN),
             ('menu-frame', m.ROOT/'tmp/menu-frame-trial-1110/candidate.gb', m.MENU_FRAME_PIN, m.MENU_FRAME_LAYOUT_PIN),
+            ('bronze-spike', m.ROOT/'tmp/bronze-v10-first/candidate.gb', m.BRONZE_SPIKE_PIN, m.BRONZE_SPIKE_LAYOUT_PIN),
         ):
             if not path.is_file():
                 continue
@@ -384,6 +387,10 @@ class PaletteTests(unittest.TestCase):
              patch.object(m, 'sha', return_value=m.MENU_FRAME_PIN), \
              patch.object(m.Bridge, 'ssh', side_effect=AssertionError('hardware access')):
             self.assertEqual(m.Bridge(Path('menu-frame.gbc')).source_pin, m.MENU_FRAME_PIN)
+        with patch.object(Path, 'read_bytes', return_value=b'fixture'), \
+             patch.object(m, 'sha', return_value=m.BRONZE_SPIKE_PIN), \
+             patch.object(m.Bridge, 'ssh', side_effect=AssertionError('hardware access')):
+            self.assertEqual(m.Bridge(Path('bronze-spike.gbc')).source_pin, m.BRONZE_SPIKE_PIN)
 
 
 

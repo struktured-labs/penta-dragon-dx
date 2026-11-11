@@ -171,7 +171,7 @@ PICKUPS = (
     ),
 )
 
-EXPECTED_TABLE = bytes(_bg_table())
+EXPECTED_TABLE = bytes(_bg_table(factory=False))
 EXPECTED_TABLE_HISTOGRAM = dict(sorted(Counter(EXPECTED_TABLE).items()))
 
 

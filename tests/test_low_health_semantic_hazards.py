@@ -17,7 +17,8 @@ class SemanticHazardCrosscheck(unittest.TestCase):
         from stage1_hazard_art import load_stage1_hazard_config
         config = load_stage1_hazard_config()
         self.assertEqual(actual, config.ring_tiles | config.body_tiles | config.connector_tiles | config.terminal_tiles)
-        self.assertEqual(config.terminal_palette, 5)
+        self.assertEqual(config.factory_terminal_palette, 5)
+        self.assertEqual(config.terminal_palette, 7)
 
     def test_materials_and_negative_controls(self):
         self.assertEqual([expected(t) for t in (1,0x64,0x75,0x6B,0x7F,0x6A)], [0,15,15,5,5,6])

@@ -40,8 +40,13 @@ from create_vblank_colorizer_v288 import create_conditional_palette_cached
 from build_v296_phantomsafe import create_bg_sweep_viewport_gated
 
 
-def _bg_table() -> bytes:
-    """Compile the canonical Stage 1 tile-to-palette YAML table."""
+def _bg_table(*, factory: bool = True) -> bytes:
+    """Compile the Stage 1 tile-to-palette YAML table.
+
+    factory=True keeps historical r341/v301 palettes (factory_palette when
+    present). factory=False uses the release `palette` field, including the
+    v10 bronze-spike body/connectors/caps on BG7.
+    """
     source = (
         Path(__file__).parent.parent
         / "palettes"
@@ -55,7 +60,14 @@ def _bg_table() -> bytes:
     table = bytearray([default] * size)
 
     for category in data.get("categories", []):
-        palette = int(category["palette"])
+        # Historical factory / r341 overlays must keep emitting the pre-v10
+        # palettes when a category records factory_palette. Release palettes
+        # live in `palette` and are applied by the v10 stream stage.
+        palette = int(
+            category.get("factory_palette", category["palette"])
+            if factory
+            else category["palette"]
+        )
         assert 0 <= palette <= 7, category["name"]
         tile_ids = [int(tile) for tile in category.get("tiles", [])]
         for low, high in category.get("tile_ranges", []):

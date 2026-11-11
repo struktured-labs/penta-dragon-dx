@@ -31,9 +31,9 @@ bg_table:
     2: "rare, life, score, and wildcard pickups (purple)"
     3: "status-cure pickups (green)"
     4: "shield, arrow, and teleport pickups (cyan)"
-    5: "attack/form-power pickups + spike rings/body/wall connector (gold/red); later scenes reuse the slot for lava"
+    5: "attack/form-power pickups (gold/red); later scenes reuse the slot for lava"
     6: "walls + unpainted spike shadows (slate/gunmetal metallic ramp)"
-    7: "Stage-1 rotating teeth; scene-local colors come from penta_palettes_v097.yaml and normal BG7 is restored elsewhere"
+    7: "Stage-1 rotating spike (body, rings, connectors, caps, and teeth); scene-local weathered bronze from penta_palettes_v097.yaml, and normal BG7 is restored elsewhere"
 
   categories:
     - name: wall_edge
@@ -78,32 +78,35 @@ bg_table:
         - [0x74, 0x79]
 
     - name: hazard_spike_fire_body
-      palette: 5
+      palette: 7
+      # Historical r534 factory / r341 overlays still have to emit pal 5.
+      factory_palette: 5
       description: |
         Four rotating rings plus the four continuous cylinder/end-cap cells.
-        Their reviewed semantic art uses BG5 yellow/red without painting the
-        embedded floor or the 63/73 cast-shadow column.
+        Release maps them to the Stage-1-only BG7 weathered-bronze row, sharing
+        it with the teeth. Highlight pixels use white (index 0) so they do not
+        render as floor-blue. The 63/73 cast-shadow column stays on support/BG6.
       tiles: [0x61, 0x62, 0x6C, 0x6D, 0x6E, 0x71, 0x72, 0x7C, 0x7D, 0x7E]
 
     - name: hazard_spike_wall_connector
-      palette: 5
+      palette: 7
+      factory_palette: 5
       description: |
         The upper/lower mixed cells where the rotating cylinder enters its
-        left wall. Reviewed masks extend the gold/red material to the black
-        cylinder outline while collapsing only the tiny wall-side remainder
-        to neutral white/black, avoiding the old five-pixel gray collar.
+        left wall. Release uses the Stage-1 BG7 bronze row. Masks still extend
+        the material to the outline and collapse the tiny wall-side remainder
+        to neutral white, avoiding the old five-pixel gray collar.
       tiles: [0x60, 0x70]
 
     - name: hazard_spike_terminal_caps
-      palette: 5
+      palette: 7
+      factory_palette: 5
       description: |
         The exact four cap cells at the free and wall ends of the first
-        right-wall cylinder. Pocket and rendered-frame review proved that
-        leaving these cells in the generic support class creates gray end
-        patches around an otherwise red/gold shaft. The wall-side cells retain
-        native art. Free-tip cells 6B/7B use the reviewed diagonal silhouette
-        below so native floor-shade pixels outside the black outline cannot
-        turn into detached yellow artifacts under BG5.
+        right-wall cylinder. Release uses the Stage-1 BG7 bronze row. Wall-side
+        cells keep native outlines; free-tip cells 6B/7B keep the reviewed
+        diagonal silhouette so floor-shade pixels outside the outline stay
+        white instead of picking up the material color.
       tiles: [0x6B, 0x6F, 0x7B, 0x7F]
 
     - name: hazard_spike_support
@@ -196,7 +199,7 @@ bg_table:
       tiles: [0xFF]
 
   notes:
-    - "Stage 1 maps teeth 0x64-0x69/0x74-0x79 to scene-local BG7, rings/body 61/62/6C/6D/6E/71/72/7C/7D/7E to BG5, and unclassified supports to BG6. Title/menu, the secret jet stage, and later-stage reuse retain their normal palette paths."
+    - "Stage 1 maps teeth 0x64-0x69/0x74-0x79 and body/rings/connectors/caps to scene-local BG7 (weathered bronze), and unclassified supports to BG6. Title/menu, the secret jet stage, and later-stage reuse retain their normal palette paths. The r534 factory still emits factory_palette 5 for the body group; the v10 stream stage applies palette 7."
     - "Pal 5 is attack-power gold/red in Stage 1; Stage 5/7 scene-specific tables reuse the hardware slot for lava."
     - "The base build still aliases BG7 to BG0 for boot/title safety. The release loader selects the Stage-1-only tooth row when the active FFD0 stage flag is 00, and restores normal YAML BG7 in the bonus and later stages."
 

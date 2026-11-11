@@ -119,7 +119,10 @@ YAML under `tmp/palette_session/backups/` as a hash-named
 the current release candidate to bake the selected colors in:
 
 ```bash
-python3 scripts/build_v302_title_fix.py
+python3 scripts/diagnostics/build_stream_source_candidate.py --out-dir tmp/palette-rebuild
+# Official builds are SHA-pinned to the reviewed YAML. A new color scheme
+# needs a source-chain stage (see the v10 bronze-spike row) rather than this
+# legacy builder.
 ```
 
 The rebuilt ROM now has your tuned colors permanently. Until this save and
@@ -168,7 +171,7 @@ matching the patterns above.
 | BG 4 | BG4 | (decorative) |
 | BG 5 | BG5 | (decorative) |
 | BG 6 | BG6 | Walls (slate gray) |
-| BG 7 | BG7 | (mystery/special) |
+| BG 7 | BG7 | Normal YAML BG7 outside Stage 1; Stage 1 uses the RotatingSpikeTeeth row (weathered bronze body + teeth) |
 | OBJ 0 | EnemyProjectile | Enemy projectiles + effects |
 | OBJ 1 | SaraDragon | Sara in Dragon form |
 | OBJ 2 | SaraWitch | Sara in Witch form |

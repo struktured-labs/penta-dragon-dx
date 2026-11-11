@@ -780,17 +780,13 @@ local function expected_semantic_attr(tile)
   -- callback can observe a partially replaced page during the $02->$0A
   -- low-health/miniboss handoff. More importantly, trusting C600 here would
   -- let an implementation bug redefine the expected answer. The reviewed
-  -- Stage-1 hazard schema is the independent authority.
+  -- Stage-1 hazard schema is the independent authority. Body, rings,
+  -- connectors, and caps follow the immutable YAML table so a release
+  -- ROM can place the fire family on BG7 without a second hardcoded list.
   if tile >= 0x01 and tile <= 0x04 then return 0x00 end
-  if tile == 0x60 or tile == 0x61 or tile == 0x62
-      or tile == 0x6B or tile == 0x6F
-      or tile == 0x6C or tile == 0x6D or tile == 0x6E
-      or tile == 0x70 or tile == 0x71 or tile == 0x72
-      or tile == 0x7B or tile == 0x7F
-      or tile == 0x7C or tile == 0x7D or tile == 0x7E then
-    return 0x05
+  if tile >= 0x60 and tile <= 0x7F then
+    return immutable_tile_attr(tile) & 0x07
   end
-  if tile >= 0x60 and tile <= 0x7F then return 0x06 end
   return immutable_tile_attr(tile)
 end
 
@@ -1104,17 +1100,8 @@ if trace_writers then
 end
 
 local function expected_palette(tile)
-  local tooth =
-    (tile >= 0x64 and tile <= 0x69) or
-    (tile >= 0x74 and tile <= 0x79)
-  local fire =
-    tile == 0x60 or tile == 0x61 or tile == 0x62 or
-    tile == 0x6B or tile == 0x6F or
-    tile == 0x6C or tile == 0x6D or tile == 0x6E or
-    tile == 0x70 or tile == 0x71 or tile == 0x72 or
-    tile == 0x7B or tile == 0x7F or
-    tile == 0x7C or tile == 0x7D or tile == 0x7E
-  return tooth and 7 or (fire and 5 or 6)
+  -- YAML material split, including the release BG7 fire body.
+  return expected_semantic_attr(tile) & 7
 end
 
 
@@ -1472,7 +1459,7 @@ local function inspect_map(base)
       end
       if terminal then
         terminal_found = terminal_found + 1
-        if actual == 5 then terminal_matched = terminal_matched + 1 end
+        if actual == expected then terminal_matched = terminal_matched + 1 end
       end
     end
   end

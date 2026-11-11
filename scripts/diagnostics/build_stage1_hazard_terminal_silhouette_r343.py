@@ -194,7 +194,7 @@ def construct(source: bytes, *, stock: bytes) -> tuple[bytes, dict[str, object]]
         "wall_terminal_tiles_preserved": [
             f"{tile:02X}" for tile in WALL_TERMINAL_TILES
         ],
-        "terminal_palette": config.terminal_palette,
+        "terminal_palette": config.factory_terminal_palette,
         "outside_silhouette_index": 0,
         "source_art_changed_bytes": sum(
             before != after

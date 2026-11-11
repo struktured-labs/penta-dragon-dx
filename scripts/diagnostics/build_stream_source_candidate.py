@@ -43,6 +43,10 @@ title-return fade-outs (01:4A5C, 01:4AC8, 01:745A) far-call the existing
 00F0 trampoline so that when BGP hits 00, all 16 CGB palettes are written
 white in vblank. 00:0F33 and the attract-shared ISR are unchanged.
 
+Version10 appends stage1-bronze-spike: the Stage-1 rotating-spike body,
+connectors and caps move from BG5 (shared with power pickups) onto the
+Stage-1-only BG7 weathered-bronze row already used by the teeth. Data-only.
+
 Version9 appends menu-frame-reinstall (#73): a gameplay-only 00F0-style
 trampoline at 00:1F60 maps bank $14, memcpy's the stock 00:212E chrome into
 C4E0, then runs the original 1F60 body. Attract never calls 1F60; 00F0,
@@ -87,9 +91,10 @@ FLAGS = {
     "menu_open_map_hold": True,
     "death_fade_white": True,
     "menu_frame_reinstall": True,
+    "stage1_bronze_spike": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v9",
+    "schema": "penta-stream-release-lock-original-source-build-v10",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -112,6 +117,7 @@ CONTRACT = {
         "title-glyph-retry-window", "native-stage-records",
         "soft-reset-cold-init", "transition-palette-blanking",
         "menu-open-map-hold", "death-fade-white", "menu-frame-reinstall",
+        "stage1-bronze-spike",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -120,7 +126,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "01f8e0b22719a438c9c28f16c09c5bde8ae06f3f8561ffe0c88c08ba02b39d20"
+        "db348784914e4470db2878724c41073cd0fe564602e6788598706a3315fdd8af"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -226,7 +232,8 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
         elif key == "release_lock":
             name = "release_lock_chain"
         elif key in ("native_stage_records", "soft_reset_cold_init", "transition_palette_blanking",
-                    "menu_open_map_hold", "death_fade_white", "menu_frame_reinstall"):
+                    "menu_open_map_hold", "death_fade_white", "menu_frame_reinstall",
+                    "stage1_bronze_spike"):
             name = key
         else:
             name = key if key.startswith("experimental_") else "experimental_" + key

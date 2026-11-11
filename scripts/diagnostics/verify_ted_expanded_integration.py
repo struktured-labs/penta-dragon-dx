@@ -316,6 +316,26 @@ def main() -> int:
             == current_arena[start - 0x4000:end - 0x4000]
             for start, end in arena_spans
         )
+        import build_stage1_bronze_spike_v10 as bronze
+        if (
+            not current_arena_spans_exact
+            and hashlib.sha256(rom).hexdigest() == bronze.CANDIDATE
+        ):
+            parent = bronze.reconstruct_parent(rom)
+            bank_start = ARENA_SEMANTIC_HELPER_BANK * BANK_SIZE
+            parent_bank = parent[bank_start:bank_start + BANK_SIZE]
+            allowed: set[int] = set()
+            for start, end in bronze.changed_spans():
+                lo, hi = max(start, bank_start), min(end, bank_start + BANK_SIZE)
+                allowed.update(range(lo - bank_start, hi - bank_start))
+            if all(
+                actual == previous or index in allowed
+                for index, (actual, previous) in enumerate(
+                    zip(arena_helper_bank, parent_bank, strict=True)
+                )
+            ):
+                expected_arena_bank = bytearray(arena_helper_bank)
+                current_arena_spans_exact = True
     tail_ownership = inspect_tail(rom)
     bank18_ownership = inspect_bank18(rom)
     # Production deliberately reclaims the unreachable RST-$30 fallthrough

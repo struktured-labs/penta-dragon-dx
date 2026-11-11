@@ -191,13 +191,16 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
           title_glyph_read_window=False, title_glyph_retry_window=False,
           native_stage_records=False, soft_reset_cold_init=False,
           transition_palette_blanking=False, menu_open_map_hold=False,
-          death_fade_white=False, menu_frame_reinstall=False):
+          death_fade_white=False, menu_frame_reinstall=False,
+          stage1_bronze_spike=False):
     if menu_open_map_hold and not transition_palette_blanking:
         raise ValueError('menu-open map hold requires the transition-palette-blanking chain')
     if death_fade_white and not menu_open_map_hold:
         raise ValueError('death-fade white requires the menu-open-map-hold chain')
     if menu_frame_reinstall and not death_fade_white:
         raise ValueError('menu-frame reinstall requires the death-fade-white chain')
+    if stage1_bronze_spike and not menu_frame_reinstall:
+        raise ValueError('stage1 bronze spike requires the menu-frame-reinstall chain')
     if transition_palette_blanking and not soft_reset_cold_init:
         raise ValueError('transition palette blanking requires the soft-reset cold-init chain')
     if soft_reset_cold_init and not native_stage_records:
@@ -248,7 +251,11 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
         raise ValueError('palette source differs from the reviewed color fix')
     document['death_gameover_palette']['gameover_colors'] = ['7FFF', '7FFF', '56B5', '294A']
     legacy_palette = ROOT / 'palettes/penta_palettes_restart_parent.yaml'
-    if yaml.safe_load(legacy_palette.read_bytes()) != document:
+    parent_document = yaml.safe_load(legacy_palette.read_bytes())
+    # Release v10 retunes the Stage-1 hazard row in v097 only; the restart
+    # parent keeps the gold factory colors so r534 identity is unchanged.
+    document['stage1_hazard_palettes'] = parent_document['stage1_hazard_palettes']
+    if parent_document != document:
         raise ValueError('historical source profile differs outside the explicit Game Over row')
     output.mkdir(parents=True)
     parent_output = output / 'restart-source'
@@ -428,6 +435,15 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
                             builder=str(Path(menu_frame.__file__).resolve()),
                             builder_sha256=digest(Path(menu_frame.__file__).read_bytes())))
         parent = result
+    if stage1_bronze_spike:
+        # Stage-1 body/connectors/caps join the weathered-bronze BG7 teeth row.
+        import build_stage1_bronze_spike_v10 as bronze_spike
+        result = bronze_spike.build(parent, stock)
+        records.append(dict(name='stage1-bronze-spike', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(bronze_spike.__file__).resolve()),
+                            builder_sha256=digest(Path(bronze_spike.__file__).read_bytes())))
+        parent = result
     if source.read_bytes() != source_bytes:
         raise ValueError('palette source changed during construction')
     (output / 'candidate.gb').write_bytes(parent)
@@ -435,7 +451,7 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
                    candidate_sha256=digest(parent), original_sha256=digest(stock),
                    palette_source=str(source), palette_sha256=digest(source_bytes),
                    derived_parent_palette_sha256=digest(legacy_palette.read_bytes()),
-                   historical_palette_change='only gameover_colors reset to exact gray parent before final purple overlay',
+                   historical_palette_change='gameover_colors reset to exact gray parent before final purple overlay; stage1_hazard_palettes keep the gold factory parent, with the v10 bronze overlay applied after menu-frame-reinstall',
                    restart_receipt_sha256=digest((parent_output / 'build-receipt.json').read_bytes()),
                    stages=records, retained_candidate_inputs=False, release_qualified=False)
     # Includes transitive assembler/overlay helpers, not just direct imports.
@@ -468,6 +484,7 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['menu_open_map_hold'] = menu_open_map_hold
     receipt['death_fade_white'] = death_fade_white
     receipt['menu_frame_reinstall'] = menu_frame_reinstall
+    receipt['stage1_bronze_spike'] = stage1_bronze_spike
     if release_lock:
         receipt['deferred_issues'] = [34]
     if secret_sound_alias:
@@ -540,6 +557,8 @@ if __name__ == '__main__':
                         help='requires --menu-open-map-hold; white CGB palettes when the gameplay death fade hits BGP=00 (#74)')
     parser.add_argument('--menu-frame-reinstall', action='store_true',
                         help='requires --death-fade-white; reinstall the static pause-menu chrome before 1F60 (#73)')
+    parser.add_argument('--stage1-bronze-spike', action='store_true',
+                        help='requires --menu-frame-reinstall; Stage-1 spike body/connectors/caps use the weathered-bronze BG7 row')
     args = parser.parse_args()
     print(json.dumps(build(args.output, presentation=args.presentation, arena_alias=args.arena_alias,
                            arena_completion_safe=args.arena_completion_safe,
@@ -560,4 +579,5 @@ if __name__ == '__main__':
                            transition_palette_blanking=args.transition_palette_blanking,
                            menu_open_map_hold=args.menu_open_map_hold,
                            death_fade_white=args.death_fade_white,
-                           menu_frame_reinstall=args.menu_frame_reinstall), indent=2))
+                           menu_frame_reinstall=args.menu_frame_reinstall,
+                           stage1_bronze_spike=args.stage1_bronze_spike), indent=2))

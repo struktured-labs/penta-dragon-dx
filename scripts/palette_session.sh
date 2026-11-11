@@ -134,7 +134,10 @@ case "$cmd" in
         python3 "$PROJECT_DIR/$STORY_STATE_GENERATOR" "$rom"
         # 1. Python editor in background
         cd "$PROJECT_DIR"
-        nohup python3 "$EDITOR_SCRIPT" --bind 127.0.0.1 --port "$PORT" \
+        # PENTA_PALETTE_BIND defaults to loopback. Set it to the tailnet IP
+        # (or 0.0.0.0) to open the UI from another machine.
+        PALETTE_BIND="${PENTA_PALETTE_BIND:-127.0.0.1}"
+        nohup python3 "$EDITOR_SCRIPT" --bind "$PALETTE_BIND" --port "$PORT" \
             > "$EDITOR_LOG" 2>&1 &
         editor_pid=$!
         echo "$editor_pid" > "$EDITOR_PID_FILE"
