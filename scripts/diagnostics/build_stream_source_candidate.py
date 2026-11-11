@@ -42,6 +42,11 @@ Version8 appends death-fade-white (#74): the gameplay death / Game Over
 title-return fade-outs (01:4A5C, 01:4AC8, 01:745A) far-call the existing
 00F0 trampoline so that when BGP hits 00, all 16 CGB palettes are written
 white in vblank. 00:0F33 and the attract-shared ISR are unchanged.
+
+Version9 appends menu-frame-reinstall (#73): a gameplay-only 00F0-style
+trampoline at 00:1F60 maps bank $14, memcpy's the stock 00:212E chrome into
+C4E0, then runs the original 1F60 body. Attract never calls 1F60; 00F0,
+00:0F33 and the attract-shared ISR are unchanged.
 """
 from __future__ import annotations
 
@@ -81,9 +86,10 @@ FLAGS = {
     "transition_palette_blanking": True,
     "menu_open_map_hold": True,
     "death_fade_white": True,
+    "menu_frame_reinstall": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v8",
+    "schema": "penta-stream-release-lock-original-source-build-v9",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -105,7 +111,7 @@ CONTRACT = {
         "stage7-lowhealth-fastpath", "stage7-lowhealth-camera",
         "title-glyph-retry-window", "native-stage-records",
         "soft-reset-cold-init", "transition-palette-blanking",
-        "menu-open-map-hold", "death-fade-white",
+        "menu-open-map-hold", "death-fade-white", "menu-frame-reinstall",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -114,7 +120,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "23aa5f44f604d120877169f7dfa32186c3b089afbbadae4618b5cd06e7cb7d6c"
+        "01f8e0b22719a438c9c28f16c09c5bde8ae06f3f8561ffe0c88c08ba02b39d20"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -220,7 +226,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
         elif key == "release_lock":
             name = "release_lock_chain"
         elif key in ("native_stage_records", "soft_reset_cold_init", "transition_palette_blanking",
-                    "menu_open_map_hold", "death_fade_white"):
+                    "menu_open_map_hold", "death_fade_white", "menu_frame_reinstall"):
             name = key
         else:
             name = key if key.startswith("experimental_") else "experimental_" + key

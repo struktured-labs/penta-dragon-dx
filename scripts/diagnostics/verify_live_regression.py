@@ -139,6 +139,7 @@ LIVE_GATES = (
     "candidate_ips_roundtrip",
     "mister_reservation_guard",
     "select_roomchange_menu",
+    "ted_select_menu",
 )
 
 

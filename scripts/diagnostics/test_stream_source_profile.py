@@ -33,24 +33,25 @@ class StreamSourceProfileTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, 2)
 
     def test_profile_and_contract_pins(self):
-        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v8")
+        self.assertEqual(profile.PROFILE["name"], "stream-release-lock-original-source-v9")
         self.assertTrue(profile.PROFILE["expanded_ted"])
         self.assertEqual(builder.CONTRACT["candidate_sha256"],
-                         "23aa5f44f604d120877169f7dfa32186c3b089afbbadae4618b5cd06e7cb7d6c")
-        self.assertEqual(builder.CONTRACT['construction_order'][-15:], [
+                         "01f8e0b22719a438c9c28f16c09c5bde8ae06f3f8561ffe0c88c08ba02b39d20")
+        self.assertEqual(builder.CONTRACT['construction_order'][-16:], [
             'clean-stage-headers', 'score-oam-publish', 'score-attribute-clear',
             'enemy-projectile-palette', 'boss-prelude-rearm',
             'later-lowhealth-dispatch', 'later-lowhealth-timer-yield',
             'stage7-lowhealth-fastpath', 'stage7-lowhealth-camera',
             'title-glyph-retry-window', 'native-stage-records',
             'soft-reset-cold-init', 'transition-palette-blanking',
-            'menu-open-map-hold', 'death-fade-white'])
+            'menu-open-map-hold', 'death-fade-white', 'menu-frame-reinstall'])
         for flag in ('clean_stage_headers', 'score_card_cleanup',
                      'separate_enemy_projectiles', 'boss_prelude_rearm',
                      'later_lowhealth_timer', 'later_lowhealth_camera',
                      'title_glyph_retry_window', 'native_stage_records',
                      'soft_reset_cold_init', 'transition_palette_blanking',
-                     'menu_open_map_hold', 'death_fade_white'):
+                     'menu_open_map_hold', 'death_fade_white',
+                     'menu_frame_reinstall'):
             self.assertIs(builder.FLAGS[flag], True)
         self.assertTrue(builder.CONTRACT["chain_flags"]["release_lock"])
         self.assertEqual(builder.CONTRACT["deferred_issues"], [34])

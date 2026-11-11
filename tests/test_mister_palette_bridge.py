@@ -82,7 +82,8 @@ class PaletteTests(unittest.TestCase):
                         self.assertEqual((bridge.rom,bridge.stem,bridge.history),(rom,'original',[]))
 
     def test_supported_sources_get_distinct_stems_without_hardware_calls(self):
-        for pin in (m.PIN, m.ROW_GUARD_PIN, m.SARA_ATOMIC_PIN, m.TED_MENU_PIN, m.STAR_PIN, m.RETURN_FADE_PIN):
+        for pin in (m.PIN, m.ROW_GUARD_PIN, m.SARA_ATOMIC_PIN, m.TED_MENU_PIN, m.STAR_PIN, m.RETURN_FADE_PIN,
+                    m.MENU_HOLD_PIN, m.DEATH_FADE_PIN, m.MENU_FRAME_PIN):
             with patch.object(Path, 'read_bytes', return_value=b'fixture'), \
                  patch.object(m, 'sha', return_value=pin), \
                  patch.object(m.Bridge, 'ssh', side_effect=AssertionError('hardware access')):
@@ -354,6 +355,37 @@ class PaletteTests(unittest.TestCase):
             with patch.object(Path,'read_bytes',return_value=bytes(unknown)):
                 with self.assertRaisesRegex(ValueError,'exact supported pin'):
                     m.Bridge(path)
+
+
+    def test_death_fade_and_menu_frame_pins_are_accepted(self):
+        """#19: current official tip and its death-fade parent are supported pins."""
+        self.assertEqual(m.DEATH_FADE_PIN, '23aa5f44f604d120877169f7dfa32186c3b089afbbadae4618b5cd06e7cb7d6c')
+        self.assertEqual(m.DEATH_FADE_LAYOUT_PIN, 'ae765defa18558659b1bd19c9a9ec4dc1ce29314b715f9f824e1b85964754e6b')
+        self.assertEqual(m.MENU_FRAME_PIN, '01f8e0b22719a438c9c28f16c09c5bde8ae06f3f8561ffe0c88c08ba02b39d20')
+        self.assertEqual(m.MENU_FRAME_LAYOUT_PIN, 'a124de7b709e116e13bd6ae142fab4c6301a4dddfe862940878482e124480856')
+        for label, path, pin, layout in (
+            ('death-fade', m.ROOT/'tmp/death-fade-white-en/JP.gb', m.DEATH_FADE_PIN, m.DEATH_FADE_LAYOUT_PIN),
+            ('menu-frame', m.ROOT/'tmp/menu-frame-trial-1110/candidate.gb', m.MENU_FRAME_PIN, m.MENU_FRAME_LAYOUT_PIN),
+        ):
+            if not path.is_file():
+                continue
+            rom = path.read_bytes()
+            self.assertEqual(m.sha(rom), pin, label)
+            self.assertEqual(m.primary_layout_digest(rom), layout, label)
+            with patch.object(m.subprocess, 'run', side_effect=AssertionError('device access')), \
+                 patch.object(Path, 'mkdir', return_value=None):
+                self.assertEqual(m.Bridge(path).source_pin, pin)
+                self.assertTrue(m.stage1_layout_supported(rom))
+        with patch.object(Path, 'read_bytes', return_value=b'fixture'), \
+             patch.object(m, 'sha', return_value=m.DEATH_FADE_PIN), \
+             patch.object(m.Bridge, 'ssh', side_effect=AssertionError('hardware access')):
+            self.assertEqual(m.Bridge(Path('death-fade.gbc')).source_pin, m.DEATH_FADE_PIN)
+        with patch.object(Path, 'read_bytes', return_value=b'fixture'), \
+             patch.object(m, 'sha', return_value=m.MENU_FRAME_PIN), \
+             patch.object(m.Bridge, 'ssh', side_effect=AssertionError('hardware access')):
+            self.assertEqual(m.Bridge(Path('menu-frame.gbc')).source_pin, m.MENU_FRAME_PIN)
+
+
 
 
 if __name__ == '__main__':
