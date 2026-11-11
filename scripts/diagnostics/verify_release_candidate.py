@@ -1589,6 +1589,19 @@ def build_gates(
             ),
             180,
         ),
+        Gate(
+            "ted_select_menu",
+            script(
+                "scripts/diagnostics/verify_ted_select_menu.py",
+                r,
+                "--state",
+                str(artifacts / "ted-entry/boss4_ted.ss0"),
+                "--output",
+                str(artifacts / "ted-select-menu"),
+            ),
+            180,
+            dependencies=("ted_entry",),
+        ),
     ]
     if expanded_candidate:
         legacy_ted_gates = {

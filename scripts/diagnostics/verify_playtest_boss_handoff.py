@@ -100,6 +100,9 @@ def broken_control(rom):
             # #74 death-fade-white; rearm-only reversal of that child.
             lowhealth_candidate_lineage.DEATH_FADE_SHA:
                 "d4a54ea62e788da14ef1652c9851d5fb658595bdfb1a20ffffd1b3a0336bc754",
+            # #73 menu-frame-reinstall; rearm-only reversal of that child.
+            lowhealth_candidate_lineage.MENU_FRAME_SHA:
+                "b6212496b3bdbb7c98669f0eabf2a79fbc671005005ef50af923576e3c0b62f3",
         }[hashlib.sha256(rom).hexdigest()]
     # The experimental descendant's control retains all low-health changes:
     # revert only prelude rearm. It is not a historical played parent.

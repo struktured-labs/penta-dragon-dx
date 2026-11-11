@@ -191,11 +191,13 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
           title_glyph_read_window=False, title_glyph_retry_window=False,
           native_stage_records=False, soft_reset_cold_init=False,
           transition_palette_blanking=False, menu_open_map_hold=False,
-          death_fade_white=False):
+          death_fade_white=False, menu_frame_reinstall=False):
     if menu_open_map_hold and not transition_palette_blanking:
         raise ValueError('menu-open map hold requires the transition-palette-blanking chain')
     if death_fade_white and not menu_open_map_hold:
         raise ValueError('death-fade white requires the menu-open-map-hold chain')
+    if menu_frame_reinstall and not death_fade_white:
+        raise ValueError('menu-frame reinstall requires the death-fade-white chain')
     if transition_palette_blanking and not soft_reset_cold_init:
         raise ValueError('transition palette blanking requires the soft-reset cold-init chain')
     if soft_reset_cold_init and not native_stage_records:
@@ -417,6 +419,15 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
                             builder=str(Path(death_fade.__file__).resolve()),
                             builder_sha256=digest(Path(death_fade.__file__).read_bytes())))
         parent = result
+    if menu_frame_reinstall:
+        # #73: reinstall the static 00:212E pause-menu chrome into C4E0 before 1F60.
+        import build_menu_frame_reinstall as menu_frame
+        result = menu_frame.build(parent, stock)
+        records.append(dict(name='menu-frame-reinstall', parent_sha256=digest(parent),
+                            candidate_sha256=digest(result),
+                            builder=str(Path(menu_frame.__file__).resolve()),
+                            builder_sha256=digest(Path(menu_frame.__file__).read_bytes())))
+        parent = result
     if source.read_bytes() != source_bytes:
         raise ValueError('palette source changed during construction')
     (output / 'candidate.gb').write_bytes(parent)
@@ -456,6 +467,7 @@ def build(output, presentation=False, arena_alias=False, arena_completion_safe=F
     receipt['transition_palette_blanking'] = transition_palette_blanking
     receipt['menu_open_map_hold'] = menu_open_map_hold
     receipt['death_fade_white'] = death_fade_white
+    receipt['menu_frame_reinstall'] = menu_frame_reinstall
     if release_lock:
         receipt['deferred_issues'] = [34]
     if secret_sound_alias:
@@ -526,6 +538,8 @@ if __name__ == '__main__':
                         help='requires --transition-palette-blanking; clear FFC4 while the Select menu owns the window (#81)')
     parser.add_argument('--death-fade-white', action='store_true',
                         help='requires --menu-open-map-hold; white CGB palettes when the gameplay death fade hits BGP=00 (#74)')
+    parser.add_argument('--menu-frame-reinstall', action='store_true',
+                        help='requires --death-fade-white; reinstall the static pause-menu chrome before 1F60 (#73)')
     args = parser.parse_args()
     print(json.dumps(build(args.output, presentation=args.presentation, arena_alias=args.arena_alias,
                            arena_completion_safe=args.arena_completion_safe,
@@ -545,4 +559,5 @@ if __name__ == '__main__':
                            soft_reset_cold_init=args.soft_reset_cold_init,
                            transition_palette_blanking=args.transition_palette_blanking,
                            menu_open_map_hold=args.menu_open_map_hold,
-                           death_fade_white=args.death_fade_white), indent=2))
+                           death_fade_white=args.death_fade_white,
+                           menu_frame_reinstall=args.menu_frame_reinstall), indent=2))

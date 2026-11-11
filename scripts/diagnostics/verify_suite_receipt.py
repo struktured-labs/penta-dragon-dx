@@ -171,6 +171,7 @@ def main() -> int:
         "stream-release-lock-original-source-v6",
         "stream-release-lock-original-source-v7",
         "stream-release-lock-original-source-v8",
+        "stream-release-lock-original-source-v9",
     }:
         # The release-lock stream source carries the secret-stock 1 MiB
         # expansion (header 0x148 = $05); its builder pins the exact image.
@@ -257,6 +258,7 @@ def main() -> int:
             "stream-release-lock-original-source-v6",
             "stream-release-lock-original-source-v7",
             "stream-release-lock-original-source-v8",
+            "stream-release-lock-original-source-v9",
         }
         else None
     )
