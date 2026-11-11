@@ -18,8 +18,10 @@ SOFT_RESET_SHA = '9642170ac94ebcf8b278eaffd6afea1d3545d851123b33233f08fa69a14fe0
 TRANSITION_SHA = '91d58599d3df5dde80131ce20d0a639d7056d015dc91cedd2e699b66a141ba18'
 # #81 menu-open-map-hold (build_menu_open_map_hold).
 MENU_HOLD_SHA = '952f9b9f2b3feafb1882282e8ac7e5d0f462a597b79da49e74587469d8f6888a'
+# #74 death-fade-white (build_death_fade_white).
+DEATH_FADE_SHA = '23aa5f44f604d120877169f7dfa32186c3b089afbbadae4618b5cd06e7cb7d6c'
 TITLE_SHAS = {TITLE_CANDIDATE_SHA, TITLE_RETRY_SHA, NATIVE_RECORDS_SHA, SOFT_RESET_SHA,
-              TRANSITION_SHA, MENU_HOLD_SHA}
+              TRANSITION_SHA, MENU_HOLD_SHA, DEATH_FADE_SHA}
 COMPILER_HEX = (
     'f0fffe04c28d78f0b7d603fe06d28d783e01e070fa80d8fe0b2807'
     '3e03e070c38d783e03e070f0bafe012004afea7fd43e18e0e0'
@@ -51,6 +53,14 @@ def is_candidate(rom):
 def _original():
     from pathlib import Path
     return (Path(__file__).resolve().parents[2] / 'rom/Penta Dragon (J).gb').read_bytes()
+
+
+def death_fade_parent(rom):
+    """Invert only the final death-fade-white stage (exact rebuild)."""
+    if hashlib.sha256(rom).hexdigest() != DEATH_FADE_SHA:
+        raise ValueError('not the exact death-fade-white candidate')
+    import build_death_fade_white as fade
+    return fade.reconstruct_parent(rom, _original())
 
 
 def menu_hold_parent(rom):
@@ -90,8 +100,10 @@ def native_records_intersects(start, end):
     import build_soft_reset_cold_init as soft
     import build_transition_palette_blanking as blanking
     import build_menu_open_map_hold as hold
+    import build_death_fade_white as fade
     spans = (records.changed_spans(_original()) + soft.changed_spans(_original())
-             + blanking.changed_spans(_original()) + hold.changed_spans(_original()))
+             + blanking.changed_spans(_original()) + hold.changed_spans(_original())
+             + fade.changed_spans(_original()))
     # Approved #83 carve-out (2026-11-09): the 6-byte 14:7F1D LY-window change
     # is owned by transition-palette-blanking and is reverted by
     # reconstruct_parent / title_parent before bank-20 components are
@@ -109,6 +121,9 @@ def native_records_intersects(start, end):
 def title_parent(rom):
     """Authenticate the entire footer extension; no runtime substitution."""
     identity = hashlib.sha256(rom).hexdigest()
+    if identity == DEATH_FADE_SHA:
+        rom = death_fade_parent(rom)
+        identity = hashlib.sha256(rom).hexdigest()
     if identity == MENU_HOLD_SHA:
         rom = menu_hold_parent(rom)
         identity = hashlib.sha256(rom).hexdigest()
@@ -150,7 +165,7 @@ def authenticated_parent(rom, *ranges):
                 raise ValueError('invalid component range')
             if start < 0x36e00 and 0x36da7 < end:
                 raise ValueError('component intersects title-read delta')
-            if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA)
+            if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA, DEATH_FADE_SHA)
                     and native_records_intersects(start, end)):
                 raise ValueError('component intersects native stage-record delta')
         return authenticated_parent(title_parent(rom), *ranges)
@@ -187,21 +202,24 @@ def source_replay(rom):
         import build_title_glyph_read_window as glyph
         image = glyph.build(image)
     elif hashlib.sha256(rom).hexdigest() in (TITLE_RETRY_SHA, NATIVE_RECORDS_SHA, SOFT_RESET_SHA,
-                                             TRANSITION_SHA, MENU_HOLD_SHA):
+                                             TRANSITION_SHA, MENU_HOLD_SHA, DEATH_FADE_SHA):
         import build_title_glyph_retry_window as glyph
         image = glyph.build(image)
-        if hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA):
+        if hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA, DEATH_FADE_SHA):
             import build_native_stage_records as records
             image = records.build(image, _original())
-        if hashlib.sha256(rom).hexdigest() in (SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA):
+        if hashlib.sha256(rom).hexdigest() in (SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA, DEATH_FADE_SHA):
             import build_soft_reset_cold_init as soft
             image = soft.build(image, _original())
-        if hashlib.sha256(rom).hexdigest() in (TRANSITION_SHA, MENU_HOLD_SHA):
+        if hashlib.sha256(rom).hexdigest() in (TRANSITION_SHA, MENU_HOLD_SHA, DEATH_FADE_SHA):
             import build_transition_palette_blanking as blanking
             image = blanking.build(image, _original())
-        if hashlib.sha256(rom).hexdigest() == MENU_HOLD_SHA:
+        if hashlib.sha256(rom).hexdigest() in (MENU_HOLD_SHA, DEATH_FADE_SHA):
             import build_menu_open_map_hold as hold
             image = hold.build(image, _original())
+        if hashlib.sha256(rom).hexdigest() == DEATH_FADE_SHA:
+            import build_death_fade_white as fade
+            image = fade.build(image, _original())
     if image != rom:
         raise ValueError('low-health source replay differs from pinned candidate')
     return parent, image
@@ -214,7 +232,7 @@ def dispatcher_overlay(rom, offset, payload):
     if hashlib.sha256(rom).hexdigest() in TITLE_SHAS:
         if offset < 0x36e00 and 0x36da7 < offset + len(payload):
             raise ValueError('unowned title-read change in dispatcher component')
-        if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA)
+        if (hashlib.sha256(rom).hexdigest() in (NATIVE_RECORDS_SHA, SOFT_RESET_SHA, TRANSITION_SHA, MENU_HOLD_SHA, DEATH_FADE_SHA)
                 and native_records_intersects(offset, offset + len(payload))):
             raise ValueError('unowned native stage-record change in dispatcher component')
         return dispatcher_overlay(title_parent(rom), offset, payload)
@@ -244,10 +262,14 @@ def _transition_wait_reverted(rom):
     FFC4 clear is reverted the same way when the tip is menu-open-map-hold.
     """
     identity = hashlib.sha256(rom).hexdigest()
-    if identity not in (TRANSITION_SHA, MENU_HOLD_SHA):
+    if identity not in (TRANSITION_SHA, MENU_HOLD_SHA, DEATH_FADE_SHA):
         return rom
     import build_transition_palette_blanking as blanking
     out = bytearray(rom)
+    if identity == DEATH_FADE_SHA:
+        import build_death_fade_white as fade
+        out = bytearray(fade.reconstruct_parent(bytes(out), _original()))
+        identity = hashlib.sha256(bytes(out)).hexdigest()
     if identity == MENU_HOLD_SHA:
         import build_menu_open_map_hold as hold
         if out[hold.SITE:hold.SITE + len(hold.NEW)] != hold.NEW:

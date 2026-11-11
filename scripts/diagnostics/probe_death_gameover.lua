@@ -37,6 +37,7 @@ local window_begin = nil
 local gameover = nil
 local fade = nil
 local fade_entered = -1
+local fade00_count = 0
 local state_loaded = false
 
 local function bg0_hex()
@@ -245,9 +246,11 @@ local function finish(status, message)
     end
     if fade then
         report:write(string.format(
-            "fade_bgp=%02X fade_bg_cram=%s\n",
-            fade.bgp, fade.bg_cram
+            "fade_bgp=%02X fade_bg_cram=%s fade_bgp00_frames=%d\n",
+            fade.bgp, fade.bg_cram, fade00_count
         ))
+    else
+        report:write(string.format("fade_bgp00_frames=%d\n", fade00_count))
     end
     report:close()
     os.exit(status == "ok" and 0 or 2)
@@ -301,6 +304,11 @@ callbacks:add("frame", function()
         end
         if emu:read8(0xFF47) == 0 and fade_entered < 0 then
             fade_entered = frame
+        end
+        -- #74: every scene-17 BGP=00 frame must be the exact white fade.
+        if emu:read8(0xFF47) == 0 then
+            fade00_count = fade00_count + 1
+            emu:screenshot(OUT .. string.format(".fade-00-%03d.png", fade00_count))
         end
         if (
             fade_entered >= 0

@@ -448,13 +448,23 @@ def main() -> int:
                     or art_visual["dark"] < MIN_DEATH_ART_DARK_PIXELS
                     or fade_visual["rgb_sha256"] != FADE_WHITE_RGB_SHA256
                     or gameover_visual["rgb_sha256"] != gameover_rgb_sha256_for_rom(rom.read_bytes())
+                    or int(result.get("fade_bgp00_frames") or 0) < 8
+                    or any(
+                        image_metrics(path)["rgb_sha256"] != FADE_WHITE_RGB_SHA256
+                        for path in sorted(
+                            output.glob(state.stem + ".fade-00-*.png")
+                        )
+                    )
+                    or len(list(output.glob(state.stem + ".fade-00-*.png")))
+                    != int(result.get("fade_bgp00_frames") or 0)
                 ):
                     failures.append(
                         f"{state.name}: death/GAME OVER lost full source "
                         "publication/stock viewport, Shalamar lower body, "
                         "meaningful chromatic art, "
                         "coherent YAML "
-                        "palette, white fade, or stable GAME OVER text"
+                        "palette, white fade, every-BGP=00-frame white, "
+                        "or stable GAME OVER text"
                     )
 
         if failures:
@@ -474,8 +484,8 @@ def main() -> int:
             "variants published all 576 phase-specific stock-art cells, kept "
             "noncollapsed viewports and Shalamar's lower body, retained "
             "meaningful chromatic artwork, used one coherent YAML palette, "
-            "preserved the exact white fade and GAME OVER screen, and kept "
-            "the original control-flow guard."
+            "preserved the exact white fade on every BGP=00 frame and the "
+            "GAME OVER screen, and kept the original control-flow guard."
         )
         if args.output:
             print(f"Artifacts: {output}")

@@ -170,6 +170,7 @@ def main() -> int:
     if expanded and profile.get("name") in {
         "stream-release-lock-original-source-v6",
         "stream-release-lock-original-source-v7",
+        "stream-release-lock-original-source-v8",
     }:
         # The release-lock stream source carries the secret-stock 1 MiB
         # expansion (header 0x148 = $05); its builder pins the exact image.
@@ -255,6 +256,7 @@ def main() -> int:
             "restart-original-source-v1",
             "stream-release-lock-original-source-v6",
             "stream-release-lock-original-source-v7",
+            "stream-release-lock-original-source-v8",
         }
         else None
     )

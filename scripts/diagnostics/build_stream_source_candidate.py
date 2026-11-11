@@ -37,6 +37,11 @@ sites; attract never executes them.
 Version7 appends menu-open-map-hold (#81): the Select window-enable hook
 clears FFC4 so a pending packed-map commit cannot swap LCDC.3/.6 while the
 menu is up. Gameplay-only; the attract-shared VBlank ISR is unchanged.
+
+Version8 appends death-fade-white (#74): the gameplay death / Game Over
+title-return fade-outs (01:4A5C, 01:4AC8, 01:745A) far-call the existing
+00F0 trampoline so that when BGP hits 00, all 16 CGB palettes are written
+white in vblank. 00:0F33 and the attract-shared ISR are unchanged.
 """
 from __future__ import annotations
 
@@ -75,9 +80,10 @@ FLAGS = {
     "soft_reset_cold_init": True,
     "transition_palette_blanking": True,
     "menu_open_map_hold": True,
+    "death_fade_white": True,
 }
 CONTRACT = {
-    "schema": "penta-stream-release-lock-original-source-build-v7",
+    "schema": "penta-stream-release-lock-original-source-build-v8",
     "status": "source-build-pass",
     "source_parent_profile": restart.CONTRACT["schema"],
     "source_parent_sha256": restart.CONTRACT["candidate_sha256"],
@@ -99,7 +105,7 @@ CONTRACT = {
         "stage7-lowhealth-fastpath", "stage7-lowhealth-camera",
         "title-glyph-retry-window", "native-stage-records",
         "soft-reset-cold-init", "transition-palette-blanking",
-        "menu-open-map-hold",
+        "menu-open-map-hold", "death-fade-white",
     ],
     "historical_evidence_consumed": False,
     "retained_candidate_roms_read": False,
@@ -108,7 +114,7 @@ CONTRACT = {
     "release_qualification": False,
     "deferred_issues": [34],
     "candidate_sha256": (
-        "952f9b9f2b3feafb1882282e8ac7e5d0f462a597b79da49e74587469d8f6888a"
+        "23aa5f44f604d120877169f7dfa32186c3b089afbbadae4618b5cd06e7cb7d6c"
     ),
 }
 RECEIPT_KEYS = set(CONTRACT) | {
@@ -214,7 +220,7 @@ def verify_receipt(path: Path, expected_rom: bytes, palette: Path = DEFAULT_PALE
         elif key == "release_lock":
             name = "release_lock_chain"
         elif key in ("native_stage_records", "soft_reset_cold_init", "transition_palette_blanking",
-                    "menu_open_map_hold"):
+                    "menu_open_map_hold", "death_fade_white"):
             name = key
         else:
             name = key if key.startswith("experimental_") else "experimental_" + key
